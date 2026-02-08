@@ -406,17 +406,39 @@ impl PlaybackSessionManager {
         Ok(())
     }
 
-    /// Handle command from remote device (stub - remote control not yet implemented).
+    /// Handle command from one device targeting another device.
+    ///
+    /// Validates the target device is connected and forwards the command to it.
+    /// The forwarded message is `playback.command` with only `command` and `payload`
+    /// (no `target_device_id`).
     pub async fn handle_command(
         &self,
-        _user_id: usize,
-        _from_device_id: usize,
-        _command: &str,
-        _payload: serde_json::Value,
+        user_id: usize,
+        from_device_id: usize,
+        target_device_id: usize,
+        command: &str,
+        payload: serde_json::Value,
     ) -> Result<(), PlaybackError> {
-        Err(PlaybackError::CommandFailed(
-            "remote control not implemented yet".to_string(),
-        ))
+        info!(
+            "[playback] handle_command: user={} from={} target={} command={:?}",
+            user_id, from_device_id, target_device_id, command
+        );
+
+        // Build the forwarded command message (without target_device_id)
+        let forwarded = ServerMessage::new(
+            msg_types::PLAYBACK_COMMAND,
+            PlaybackCommandPayload {
+                command: command.to_string(),
+                payload,
+                target_device_id: None,
+            },
+        );
+
+        // Send to target device - returns NotConnected if not found
+        self.connection_manager
+            .send_to_device(user_id, target_device_id, forwarded)
+            .await
+            .map_err(|_| PlaybackError::DeviceNotFound)
     }
 
     /// Handle queue sync request - returns combined queue from all devices.
@@ -628,6 +650,7 @@ pub struct DeviceSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::sync::mpsc;
 
     async fn setup() -> (Arc<ConnectionManager>, PlaybackSessionManager) {
         let conn_manager = Arc::new(ConnectionManager::new());
@@ -846,14 +869,88 @@ mod tests {
         assert!(matches!(result, Err(PlaybackError::QueueLimitExceeded)));
     }
 
-    #[tokio::test]
-    async fn command_returns_not_implemented() {
-        let (_, manager) = setup().await;
+    /// Drain all pending messages from a receiver, returning the last one received.
+    async fn drain_messages(rx: &mut mpsc::Receiver<ServerMessage>) {
+        while rx.try_recv().is_ok() {}
+    }
 
-        let result = manager
-            .handle_command(1, 100, "play", serde_json::Value::Null)
+    #[tokio::test]
+    async fn command_forwards_to_target_device() {
+        let (conn_manager, manager) = setup().await;
+
+        // Register two devices
+        let _rx_sender = conn_manager.register(1, 100, "web".to_string()).await;
+        let mut rx_target = conn_manager.register(1, 200, "android".to_string()).await;
+
+        let _ = manager
+            .handle_hello(1, 100, "Chrome".to_string(), DeviceType::Web)
             .await;
-        assert!(matches!(result, Err(PlaybackError::CommandFailed(_))));
+        let _ = manager
+            .handle_hello(1, 200, "Phone".to_string(), DeviceType::Android)
+            .await;
+
+        // Drain hello broadcast messages
+        drain_messages(&mut rx_target).await;
+
+        // Send command from device 100 targeting device 200
+        let result = manager
+            .handle_command(1, 100, 200, "play", serde_json::Value::Null)
+            .await;
+        assert!(result.is_ok());
+
+        // Verify target device received the command
+        let msg = rx_target.recv().await.unwrap();
+        assert_eq!(msg.msg_type, "playback.command");
+        let payload: PlaybackCommandPayload =
+            serde_json::from_value(msg.payload).unwrap();
+        assert_eq!(payload.command, "play");
+        assert!(payload.target_device_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn command_returns_device_not_found_for_unknown_target() {
+        let (conn_manager, manager) = setup().await;
+
+        let _rx = conn_manager.register(1, 100, "web".to_string()).await;
+        let _ = manager
+            .handle_hello(1, 100, "Chrome".to_string(), DeviceType::Web)
+            .await;
+
+        // Target device 999 doesn't exist
+        let result = manager
+            .handle_command(1, 100, 999, "play", serde_json::Value::Null)
+            .await;
+        assert!(matches!(result, Err(PlaybackError::DeviceNotFound)));
+    }
+
+    #[tokio::test]
+    async fn command_forwards_payload_to_target() {
+        let (conn_manager, manager) = setup().await;
+
+        let _rx_sender = conn_manager.register(1, 100, "web".to_string()).await;
+        let mut rx_target = conn_manager.register(1, 200, "android".to_string()).await;
+
+        let _ = manager
+            .handle_hello(1, 100, "Chrome".to_string(), DeviceType::Web)
+            .await;
+        let _ = manager
+            .handle_hello(1, 200, "Phone".to_string(), DeviceType::Android)
+            .await;
+
+        // Drain hello broadcast messages
+        drain_messages(&mut rx_target).await;
+
+        let seek_payload = serde_json::json!({"position": 45.5});
+        let result = manager
+            .handle_command(1, 100, 200, "seek", seek_payload)
+            .await;
+        assert!(result.is_ok());
+
+        let msg = rx_target.recv().await.unwrap();
+        let payload: PlaybackCommandPayload =
+            serde_json::from_value(msg.payload).unwrap();
+        assert_eq!(payload.command, "seek");
+        assert_eq!(payload.payload["position"], 45.5);
     }
 
     #[tokio::test]

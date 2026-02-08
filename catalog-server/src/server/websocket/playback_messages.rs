@@ -92,6 +92,8 @@ pub struct PlaybackCommandPayload {
     pub command: String,
     #[serde(default)]
     pub payload: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_device_id: Option<usize>,
 }
 
 /// Payload for playback.queue_update message.
@@ -291,5 +293,26 @@ mod tests {
 
         assert_eq!(payload.command, "seek");
         assert_eq!(payload.payload["position"], 45.5);
+        assert!(payload.target_device_id.is_none());
+    }
+
+    #[test]
+    fn command_payload_deserializes_with_target_device_id() {
+        let json = r#"{"command":"play","target_device_id":42}"#;
+        let payload: PlaybackCommandPayload = serde_json::from_str(json).unwrap();
+
+        assert_eq!(payload.command, "play");
+        assert_eq!(payload.target_device_id, Some(42));
+    }
+
+    #[test]
+    fn command_payload_serializes_without_target_device_id_when_none() {
+        let payload = PlaybackCommandPayload {
+            command: "play".to_string(),
+            payload: serde_json::Value::Null,
+            target_device_id: None,
+        };
+        let json = serde_json::to_string(&payload).unwrap();
+        assert!(!json.contains("target_device_id"));
     }
 }

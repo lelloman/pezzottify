@@ -92,14 +92,16 @@
           <div v-if="device.state?.current_track" class="controlsRow">
             <div
               class="controlBtn scaleClickFeedback"
-              @click="sendCmd('prev')"
+              @click="sendCmd('prev', device.id)"
               title="Previous"
             >
               <SkipPrevious />
             </div>
             <div
               class="controlBtn playPauseBtn scaleClickFeedback"
-              @click="sendCmd(device.state.is_playing ? 'pause' : 'play')"
+              @click="
+                sendCmd(device.state.is_playing ? 'pause' : 'play', device.id)
+              "
               :title="device.state.is_playing ? 'Pause' : 'Play'"
             >
               <PauseIcon v-if="device.state.is_playing" />
@@ -107,7 +109,7 @@
             </div>
             <div
               class="controlBtn scaleClickFeedback"
-              @click="sendCmd('next')"
+              @click="sendCmd('next', device.id)"
               title="Next"
             >
               <SkipNext />
@@ -117,6 +119,9 @@
             <ProgressBar
               class="deviceProgressBar"
               :progress="remoteProgress(device.state)"
+              @update:progress="
+                (p) => onRemoteSeek(p, device.id, device.state)
+              "
             />
             <span class="progressTime"
               >{{ formatSec(device.state.position) }} /
@@ -187,8 +192,15 @@ function formatMs(ms) {
   return formatSec((ms || 0) / 1000);
 }
 
-function sendCmd(command) {
-  sessionStore.sendCommand(command);
+function sendCmd(command, deviceId) {
+  sessionStore.sendCommand(command, {}, deviceId);
+}
+
+function onRemoteSeek(progress, deviceId, state) {
+  const durationMs = state?.current_track?.duration || 0;
+  if (durationMs <= 0) return;
+  const positionSec = progress * (durationMs / 1000);
+  sessionStore.sendCommand("seek", { position: positionSec }, deviceId);
 }
 
 // Build a unified list of all devices with enriched state
