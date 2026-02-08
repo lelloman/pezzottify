@@ -19,6 +19,7 @@ use crate::background_jobs::{
     JobAuditLogger,
 };
 use crate::catalog_store::SearchableContentType;
+use crate::config::PopularContentJobSettings;
 use crate::search::HashedItemType;
 use crate::user::user_models::{PopularAlbum, PopularArtist, PopularContent};
 use std::collections::HashMap;
@@ -38,6 +39,8 @@ const SPOTIFY_WEIGHT: f64 = 0.05;
 /// the most popular albums and artists, and computes composite
 /// popularity scores for search ranking.
 pub struct PopularContentJob {
+    /// Interval in hours between runs
+    interval_hours: u64,
     /// Number of top albums to compute
     albums_limit: usize,
     /// Number of top artists to compute
@@ -53,18 +56,26 @@ pub struct PopularContentJob {
 impl PopularContentJob {
     /// Create a new PopularContentJob with default settings.
     pub fn new() -> Self {
+        Self::from_settings(&PopularContentJobSettings::default())
+    }
+
+    /// Create a new PopularContentJob from settings.
+    pub fn from_settings(settings: &PopularContentJobSettings) -> Self {
         Self {
-            albums_limit: 20,
-            artists_limit: 20,
-            lookback_days: 30,
-            impression_lookback_days: 365,
-            impression_retention_days: 365,
+            interval_hours: settings.interval_hours,
+            albums_limit: settings.albums_limit,
+            artists_limit: settings.artists_limit,
+            lookback_days: settings.lookback_days,
+            impression_lookback_days: settings.impression_lookback_days,
+            impression_retention_days: settings.impression_retention_days,
         }
     }
 
-    /// Create a new PopularContentJob with custom settings.
+    /// Create a new PopularContentJob with custom settings (deprecated: use from_settings).
+    #[deprecated(note = "Use from_settings instead for better configurability")]
     pub fn with_config(albums_limit: usize, artists_limit: usize, lookback_days: u32) -> Self {
         Self {
+            interval_hours: 6,
             albums_limit,
             artists_limit,
             lookback_days,
@@ -175,10 +186,10 @@ impl BackgroundJob for PopularContentJob {
     }
 
     fn schedule(&self) -> JobSchedule {
-        // Run on startup and every 6 hours
+        // Run on startup and every configured interval
         JobSchedule::Combined {
             cron: None,
-            interval: Some(Duration::from_secs(6 * 60 * 60)), // 6 hours
+            interval: Some(Duration::from_secs(self.interval_hours * 60 * 60)),
             hooks: vec![HookEvent::OnStartup],
         }
     }

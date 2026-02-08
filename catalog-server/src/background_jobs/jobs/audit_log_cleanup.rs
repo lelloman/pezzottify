@@ -8,6 +8,7 @@ use crate::background_jobs::{
     job::{BackgroundJob, JobError, JobSchedule, ShutdownBehavior},
     JobAuditLogger,
 };
+use crate::config::AuditLogCleanupJobSettings;
 use crate::download_manager::DownloadQueueStore;
 use std::sync::Arc;
 use std::time::Duration;
@@ -15,19 +16,29 @@ use tracing::info;
 
 /// Background job that cleans up old audit log entries.
 ///
-/// This job runs daily to delete audit log entries older than
-/// the configured retention period.
+/// This job runs at a configured interval to delete audit log entries
+/// older than the configured retention period.
 pub struct AuditLogCleanupJob {
     queue_store: Arc<dyn DownloadQueueStore>,
+    interval_hours: u64,
     retention_days: u64,
 }
 
 impl AuditLogCleanupJob {
     /// Create a new AuditLogCleanupJob.
     pub fn new(queue_store: Arc<dyn DownloadQueueStore>, retention_days: u64) -> Self {
+        Self::from_settings(queue_store, &AuditLogCleanupJobSettings {
+            interval_hours: 24,
+            retention_days,
+        })
+    }
+
+    /// Create a new AuditLogCleanupJob from settings.
+    pub fn from_settings(queue_store: Arc<dyn DownloadQueueStore>, settings: &AuditLogCleanupJobSettings) -> Self {
         Self {
             queue_store,
-            retention_days,
+            interval_hours: settings.interval_hours,
+            retention_days: settings.retention_days,
         }
     }
 }
@@ -46,8 +57,8 @@ impl BackgroundJob for AuditLogCleanupJob {
     }
 
     fn schedule(&self) -> JobSchedule {
-        // Run every 24 hours (no startup run needed)
-        JobSchedule::Interval(Duration::from_secs(24 * 60 * 60))
+        // Run at configured interval (no startup run needed)
+        JobSchedule::Interval(Duration::from_secs(self.interval_hours * 60 * 60))
     }
 
     fn shutdown_behavior(&self) -> ShutdownBehavior {
