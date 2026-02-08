@@ -16,6 +16,7 @@
     <UserRequests v-else-if="isRequestsRoute" />
     <GenreList v-else-if="isGenresRoute" />
     <GenreDetail v-else-if="genreName" :genreName="genreName" />
+    <DevicesView v-else-if="isDevicesRoute" />
     <HomePage v-else />
   </main>
 </template>
@@ -31,6 +32,7 @@ import UserRequests from "@/components/content/UserRequests.vue";
 import HomePage from "@/components/content/HomePage.vue";
 import GenreList from "@/components/content/GenreList.vue";
 import GenreDetail from "@/components/content/GenreDetail.vue";
+import DevicesView from "@/components/content/DevicesView.vue";
 import { useRoute } from "vue-router";
 import { useDebugStore } from "@/store/debug";
 import { storeToRefs } from "pinia";
@@ -55,6 +57,7 @@ const playlistId = ref(route.params.playlistId || "");
 const isSettingsRoute = computed(() => route.name === "settings");
 const isRequestsRoute = computed(() => route.name === "requests");
 const isGenresRoute = computed(() => route.name === "genres");
+const isDevicesRoute = computed(() => route.name === "devices");
 const genreName = ref(route.params.genreName || "");
 
 const fetchCatalogResults = async (query, filters) => {
