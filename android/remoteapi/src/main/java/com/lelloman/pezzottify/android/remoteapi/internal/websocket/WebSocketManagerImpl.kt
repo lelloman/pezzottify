@@ -24,7 +24,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.encodeToJsonElement
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -164,26 +168,31 @@ internal class WebSocketManagerImpl(
             return
         }
 
-        val jsonPayload = when (payload) {
-            null -> JsonNull
-            is String -> json.encodeToJsonElement(payload)
-            is Int -> json.encodeToJsonElement(payload)
-            is Long -> json.encodeToJsonElement(payload)
-            is Boolean -> json.encodeToJsonElement(payload)
-            is Map<*, *> -> {
-                @Suppress("UNCHECKED_CAST")
-                json.encodeToJsonElement(payload as Map<String, Any?>)
-            }
-            else -> {
-                logger.warn("Unsupported payload type: ${payload::class.simpleName}")
-                JsonNull
-            }
-        }
+        val jsonPayload = anyToJsonElement(payload)
 
         val message = ClientMessage(type = type, payload = jsonPayload)
         val messageJson = json.encodeToString(message)
         logger.debug("Sending message: $messageJson")
         ws.send(messageJson)
+    }
+
+    private fun anyToJsonElement(value: Any?): JsonElement = when (value) {
+        null -> JsonNull
+        is JsonElement -> value
+        is String -> JsonPrimitive(value)
+        is Int -> JsonPrimitive(value)
+        is Long -> JsonPrimitive(value)
+        is Double -> JsonPrimitive(value)
+        is Float -> JsonPrimitive(value)
+        is Boolean -> JsonPrimitive(value)
+        is Map<*, *> -> JsonObject(value.entries.associate { (k, v) ->
+            (k as String) to anyToJsonElement(v)
+        })
+        is List<*> -> JsonArray(value.map { anyToJsonElement(it) })
+        else -> {
+            logger.warn("Unsupported payload type: ${value::class.simpleName}")
+            JsonNull
+        }
     }
 
     override fun registerHandler(prefix: String, handler: MessageHandler) {
