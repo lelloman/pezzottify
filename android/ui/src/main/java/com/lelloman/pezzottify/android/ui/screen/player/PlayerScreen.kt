@@ -192,7 +192,7 @@ private fun PlayerScreenContent(
                             )
                             if (state.remoteDeviceName != null) {
                                 Text(
-                                    text = "Controlling ${state.remoteDeviceName}",
+                                    text = stringResource(R.string.controlling_device, state.remoteDeviceName),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.tertiary,
                                     maxLines = 1,

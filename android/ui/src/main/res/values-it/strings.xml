@@ -445,4 +445,54 @@
     <string name="my_requests_time_years_ago">%1$d anni fa</string>
     <string name="my_requests_load_more">Carica altri</string>
     <!-- MY REQUESTS SCREEN -->
+
+    <!-- DEVICES SCREEN -->
+    <string name="device_sharing_this_device">Condivisione dispositivo (Questo dispositivo)</string>
+    <string name="saving">Salvataggio…</string>
+    <string name="deny_everyone">Nega a tutti</string>
+    <string name="allow_everyone">Consenti a tutti</string>
+    <string name="custom">Personalizzato</string>
+    <string name="allow_users_ids">Consenti utenti (ID)</string>
+    <string name="deny_users_ids">Nega utenti (ID)</string>
+    <string name="allow_admin">Consenti Admin</string>
+    <string name="allow_regular">Consenti Regular</string>
+    <string name="disconnect">Disconnetti</string>
+    <string name="control_this_device">Controlla questo dispositivo</string>
+    <string name="no_devices_connected">Nessun dispositivo connesso</string>
+    <string name="this_device_label">questo dispositivo</string>
+    <string name="not_playing">Non in riproduzione</string>
+    <string name="controlling_device">Controllo %1$s</string>
+    <string name="save_policy">Salva politica</string>
+    <string name="tap_to_collapse">Tocca per comprimere</string>
+    <string name="tap_to_configure">Tocca per configurare</string>
+    <string name="device_type_web">Web</string>
+    <string name="device_type_tv">TV</string>
+    <string name="device_type_phone">Telefono</string>
+    <!-- DEVICES SCREEN -->
+
+    <!-- TV SCREENS -->
+    <string name="sign_in">Accedi</string>
+    <string name="invalid_url_message">URL non valido</string>
+    <string name="waiting_for_playback">In attesa della riproduzione…</string>
+    <string name="websocket_status">WebSocket: %1$s</string>
+    <string name="signed_in_as">Accesso effettuato come %1$s</string>
+    <string name="device_info">%1$s (%2$s)</string>
+    <!-- TV SCREENS -->
+
+    <!-- WHATS NEW SCREEN -->
+    <string name="no_updates_yet">Nessun aggiornamento ancora</string>
+    <string name="new_albums">Nuovi album</string>
+    <!-- WHATS NEW SCREEN -->
+
+    <!-- GENRE SCREENS -->
+    <string name="shuffle_play">Riproduzione casuale</string>
+    <string name="no_genres_available">Nessun genere disponibile</string>
+    <!-- GENRE SCREENS -->
+
+    <!-- PLAYLIST -->
+    <plurals name="playlist_track_count">
+        <item quantity="one">%1$d brano</item>
+        <item quantity="other">%1$d brani</item>
+    </plurals>
+    <!-- PLAYLIST -->
 </resources>

@@ -152,7 +152,7 @@ private fun GenreListScreenContent(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "No genres available",
+                            text = stringResource(R.string.no_genres_available),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

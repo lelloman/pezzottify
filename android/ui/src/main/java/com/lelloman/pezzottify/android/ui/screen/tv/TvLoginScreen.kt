@@ -31,8 +31,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.screen.login.LoginScreenEvents
 import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
 import com.lelloman.pezzottify.android.ui.tv.fromTvLoginToNowPlaying
@@ -85,7 +87,7 @@ fun TvLoginScreen(navController: NavController) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = "Sign in",
+                text = stringResource(R.string.sign_in),
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier
@@ -97,14 +99,14 @@ fun TvLoginScreen(navController: NavController) {
                 enabled = !state.isLoading,
                 value = state.host,
                 onValueChange = viewModel::updateHost,
-                label = { Text("Server URL") },
+                label = { Text(stringResource(R.string.server_url)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 72.dp)
                     .padding(bottom = 16.dp),
                 isError = state.hostErrorRes != null,
-                supportingText = state.hostErrorRes?.let { { Text("Invalid URL") } },
+                supportingText = state.hostErrorRes?.let { { Text(stringResource(R.string.invalid_url_message)) } },
                 colors = textFieldColors,
             )
 
@@ -112,7 +114,7 @@ fun TvLoginScreen(navController: NavController) {
                 enabled = !state.isLoading,
                 value = state.email,
                 onValueChange = viewModel::updateEmail,
-                label = { Text("Email") },
+                label = { Text(stringResource(R.string.email)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -125,7 +127,7 @@ fun TvLoginScreen(navController: NavController) {
                 enabled = !state.isLoading,
                 value = state.password,
                 onValueChange = viewModel::updatePassword,
-                label = { Text("Password") },
+                label = { Text(stringResource(R.string.password)) },
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 modifier = Modifier
