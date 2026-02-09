@@ -100,7 +100,9 @@ pub const SERVER_READY_POLL_INTERVAL_MS: u64 = 50;
 // ============================================================================
 
 /// Expected size of test audio file (bytes)
+#[allow(dead_code)]
 pub const TEST_AUDIO_SIZE_BYTES: usize = 8400; // ~8.2 KB
 
 /// Expected size of test image file (bytes)
+#[allow(dead_code)]
 pub const TEST_IMAGE_SIZE_BYTES: usize = 224;

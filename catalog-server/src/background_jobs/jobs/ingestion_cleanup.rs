@@ -388,9 +388,13 @@ mod tests {
     }
 
     #[test]
-    fn test_with_min_age() {
+    fn test_from_settings() {
         let store: Arc<dyn IngestionStore> = Arc::new(MockIngestionStore { active_ids: vec![] });
-        let job = IngestionCleanupJob::new(store, PathBuf::from("/tmp/test")).with_min_age(600);
+        let settings = crate::config::IngestionCleanupJobSettings {
+            interval_hours: 1,
+            min_age_secs: 600,
+        };
+        let job = IngestionCleanupJob::from_settings(store, PathBuf::from("/tmp/test"), &settings);
 
         assert_eq!(job.min_age_secs, 600);
     }

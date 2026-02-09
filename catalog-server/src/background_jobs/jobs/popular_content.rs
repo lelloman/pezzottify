@@ -596,7 +596,15 @@ mod tests {
 
     #[test]
     fn test_custom_config() {
-        let job = PopularContentJob::with_config(10, 15, 7);
+        let settings = crate::config::PopularContentJobSettings {
+            interval_hours: 6,
+            albums_limit: 10,
+            artists_limit: 15,
+            lookback_days: 7,
+            impression_lookback_days: 365,
+            impression_retention_days: 365,
+        };
+        let job = PopularContentJob::from_settings(&settings);
 
         assert_eq!(job.albums_limit, 10);
         assert_eq!(job.artists_limit, 15);
@@ -608,7 +616,15 @@ mod tests {
 
     #[test]
     fn test_date_range_computation() {
-        let job = PopularContentJob::with_config(10, 10, 30);
+        let settings = crate::config::PopularContentJobSettings {
+            interval_hours: 6,
+            albums_limit: 10,
+            artists_limit: 10,
+            lookback_days: 30,
+            impression_lookback_days: 365,
+            impression_retention_days: 365,
+        };
+        let job = PopularContentJob::from_settings(&settings);
         let (start, end) = job.compute_date_range();
 
         // Basic sanity check - end should be >= start

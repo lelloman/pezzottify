@@ -1266,8 +1266,6 @@ mod tests {
 
     #[test]
     fn test_catalog_event_cleanup() {
-        use crate::server_store::{CatalogContentType, CatalogEventType};
-
         let test = create_test_store();
         let store = &test.store;
 

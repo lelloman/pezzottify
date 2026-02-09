@@ -268,6 +268,7 @@ pub fn create_user_with_password_and_role(
 
 /// Creates a combined test setup with both catalog and users.
 /// Returns (temp_dir, catalog_db_path, user_db_path, media_path).
+#[allow(dead_code)]
 pub fn create_combined_test_setup() -> Result<(TempDir, PathBuf, PathBuf, PathBuf)> {
     let (temp_dir, catalog_db_path, media_path) = create_test_catalog()?;
 

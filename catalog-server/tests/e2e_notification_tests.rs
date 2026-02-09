@@ -177,7 +177,6 @@ async fn test_notification_created_event_in_sync_events() {
 
     // Create a notification and log the event
     use pezzottify_catalog_server::user::sync_events::UserEvent;
-    use pezzottify_catalog_server::user::UserEventStore;
 
     let notification = server
         .user_store

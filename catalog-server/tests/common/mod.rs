@@ -30,6 +30,7 @@ pub use client::TestClient;
 pub use server::TestServer;
 
 // Re-export constants for test convenience
+#[allow(unused_imports)]
 pub use constants::*;
 
 // Keep fixtures internal - only accessed via TestServer::spawn()
