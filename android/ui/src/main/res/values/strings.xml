@@ -56,6 +56,7 @@
 
     <!-- CONNECTION STATUS -->
     <string name="back_online">Back online</string>
+    <string name="another_device_connected">Another device connected</string>
     <string name="offline">Offline</string>
     <string name="connecting">Connecting</string>
     <!-- CONNECTION STATUS -->

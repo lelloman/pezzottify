@@ -28,6 +28,7 @@ data class PlayerScreenState(
     val repeatMode: RepeatModeUi = RepeatModeUi.OFF,
     val playerError: PlayerErrorUi? = null,
     val remoteDeviceName: String? = null,
+    val hasOtherDeviceConnected: Boolean = false,
 )
 
 data class PlayerErrorUi(

@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Laptop
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.lelloman.pezzottify.android.ui.R
+import com.lelloman.pezzottify.android.ui.Screen
 import com.lelloman.pezzottify.android.ui.component.LoadingScreen
 import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImagePlaceholder
@@ -209,6 +211,18 @@ private fun PlayerScreenContent(
                         }
                     },
                     actions = {
+                        if (state.hasOtherDeviceConnected) {
+                            IconButton(onClick = {
+                                dismiss()
+                                navController.navigate(Screen.Main.Devices)
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Laptop,
+                                    contentDescription = stringResource(R.string.devices),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
                         if (state.remoteDeviceName != null) {
                             IconButton(onClick = { actions.exitRemoteMode(); dismiss() }) {
                                 Icon(

@@ -261,6 +261,7 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                         navController = navController,
                         onOpenProfileDrawer = { drawerScope.launch { drawerState.open() } },
                         notificationUnreadCount = state.notificationUnreadCount,
+                        hasOtherDeviceConnected = state.hasOtherDeviceConnected,
                     )
                 }
                 composable<Screen.Main.Search> { SearchScreen(navController) }
@@ -354,6 +355,7 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                     state = state.bottomPlayer,
                     actions = actions,
                     remoteDeviceName = state.remoteDeviceName,
+                    hasOtherDeviceConnected = state.hasOtherDeviceConnected,
                     onClickPlayer = { navController.toPlayer() },
                 )
             }
@@ -395,6 +397,7 @@ private fun BottomPlayer(
     state: MainScreenState.BottomPlayer,
     actions: MainScreenActions,
     remoteDeviceName: String? = null,
+    hasOtherDeviceConnected: Boolean = false,
     onClickPlayer: () -> Unit,
 ) {
     // Build the list of tracks for the pager: [previous?, current, next?]
@@ -446,8 +449,11 @@ private fun BottomPlayer(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                if (remoteDeviceName != null) MaterialTheme.colorScheme.tertiaryContainer
-                else MaterialTheme.colorScheme.surfaceContainer
+                if (remoteDeviceName != null || hasOtherDeviceConnected) {
+                    MaterialTheme.colorScheme.tertiaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainer
+                }
             )
     ) {
         Column {
@@ -468,6 +474,20 @@ private fun BottomPlayer(
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "Controlling $remoteDeviceName",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    )
+                }
+            } else if (hasOtherDeviceConnected) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Text(
+                        text = stringResource(R.string.another_device_connected),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onTertiaryContainer,
                     )
