@@ -396,26 +396,42 @@ class PlayerImpl(
                 return@runOnPlayerThread
             }
 
-            val newTracksIds = currentPlaylist.tracksIds.toMutableList().apply {
-                removeAt(trackIndex)
-            }
-
-            // Update context to reflect the playlist has been modified
-            val newContext = when (val ctx = currentPlaylist.context) {
-                is PlaybackPlaylistContext.Album -> PlaybackPlaylistContext.UserMix
-                is PlaybackPlaylistContext.UserPlaylist -> ctx.copy(isEdited = true)
-                is PlaybackPlaylistContext.UserMix -> ctx
-            }
-
-            mutablePlaybackPlaylist.value = PlaybackPlaylist(
-                context = newContext,
-                tracksIds = newTracksIds,
-            )
-
-            // Remove from platform player
-            platformPlayer.removeMediaItem(trackIndex)
-            logger.info("Removed track $trackId (index $trackIndex) from playlist")
+            removeTrackAtIndexInternal(trackIndex)
         }
+    }
+
+    override fun removeTrackAtIndex(index: Int) {
+        runOnPlayerThread {
+            val currentPlaylist = mutablePlaybackPlaylist.value ?: return@runOnPlayerThread
+            if (index !in currentPlaylist.tracksIds.indices) {
+                logger.warn("Track index $index out of bounds, cannot remove")
+                return@runOnPlayerThread
+            }
+            removeTrackAtIndexInternal(index)
+        }
+    }
+
+    private fun removeTrackAtIndexInternal(trackIndex: Int) {
+        val currentPlaylist = mutablePlaybackPlaylist.value ?: return
+        val newTracksIds = currentPlaylist.tracksIds.toMutableList().apply {
+            removeAt(trackIndex)
+        }
+
+        // Update context to reflect the playlist has been modified
+        val newContext = when (val ctx = currentPlaylist.context) {
+            is PlaybackPlaylistContext.Album -> PlaybackPlaylistContext.UserMix
+            is PlaybackPlaylistContext.UserPlaylist -> ctx.copy(isEdited = true)
+            is PlaybackPlaylistContext.UserMix -> ctx
+        }
+
+        mutablePlaybackPlaylist.value = PlaybackPlaylist(
+            context = newContext,
+            tracksIds = newTracksIds,
+        )
+
+        // Remove from platform player
+        platformPlayer.removeMediaItem(trackIndex)
+        logger.info("Removed track at index $trackIndex from playlist")
     }
 
     override fun clearSession() {

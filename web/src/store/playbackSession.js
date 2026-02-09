@@ -250,8 +250,21 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
   }
 
   function handleQueueSync(payload) {
-    // Queue sync response - currently not used in new model but kept for compatibility
-    console.log("[PlaybackSession] Queue sync received:", payload);
+    const targetDeviceId = payload.device_id;
+    if (!targetDeviceId) {
+      console.log("[PlaybackSession] Queue sync received without device id:", payload);
+      return;
+    }
+
+    const existing = otherDeviceStates.value[targetDeviceId] || {};
+    otherDeviceStates.value = {
+      ...otherDeviceStates.value,
+      [targetDeviceId]: {
+        ...existing,
+        queue: payload.queue,
+        queueVersion: payload.queue_version,
+      },
+    };
   }
 
   function handleCommand(payload) {
@@ -345,6 +358,8 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
       case "removeTrack":
         if (cmdPayload?.index != null) {
           _playbackStore.removeTrackFromPlaylist(cmdPayload.index);
+        } else {
+          console.log("[PlaybackSession] removeTrack command missing index");
         }
         break;
       case "moveTrack":
@@ -381,9 +396,11 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
   }
 
   function notifyQueueChanged() {
-    if (isBroadcasting.value) {
-      broadcastQueue();
+    if (!isBroadcasting.value) {
+      isBroadcasting.value = true;
+      startStateBroadcast();
     }
+    broadcastQueue();
   }
 
   function notifyStopped() {

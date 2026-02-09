@@ -7,7 +7,7 @@ interface QueueScreenActions {
 
     fun clickOnTrack(index: Int)
     fun moveTrack(fromIndex: Int, toIndex: Int)
-    fun removeTrack(trackId: String)
+    fun removeTrack(index: Int)
     fun clickOnSaveAsPlaylist()
 
     // Track actions bottom sheet

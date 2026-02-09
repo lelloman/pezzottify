@@ -96,6 +96,13 @@ pub struct PlaybackCommandPayload {
     pub target_device_id: Option<usize>,
 }
 
+/// Payload for playback.request_queue message.
+#[derive(Debug, Clone, Deserialize)]
+pub struct RequestQueuePayload {
+    #[serde(default)]
+    pub target_device_id: Option<usize>,
+}
+
 /// Payload for playback.queue_update message.
 #[derive(Debug, Clone, Deserialize)]
 pub struct QueueUpdatePayload {
@@ -150,6 +157,7 @@ pub struct DeviceChange {
 /// Payload for playback.queue_sync message.
 #[derive(Debug, Clone, Serialize)]
 pub struct QueueSyncPayload {
+    pub device_id: usize,
     pub queue: Vec<QueueItem>,
     pub queue_version: u64,
 }

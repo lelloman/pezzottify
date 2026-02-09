@@ -68,6 +68,7 @@ class RemotePlaybackMetadataProvider internal constructor(
     override val queueState: StateFlow<PlaybackQueueState?> = _queueState.asStateFlow()
 
     private var currentQueueTrackIds: List<String>? = null
+    private var currentRemoteDeviceId: Int? = null
     private var metadataLoadJob: Job? = null
 
     init {
@@ -80,12 +81,19 @@ class RemotePlaybackMetadataProvider internal constructor(
                     ) { states, queues ->
                         val state = states[mode.deviceId]
                         val queue = queues[mode.deviceId]
-                        state to queue
+                        Triple(mode.deviceId, state, queue)
                     }
-                    is PlaybackMode.Local -> flowOf(null to null)
+                    is PlaybackMode.Local -> flowOf(Triple(null, null, null))
                 }
-            }.collect { (remoteState, queueTrackIds) ->
-                if (remoteState == null) {
+            }.collect { (deviceId, remoteState, queueTrackIds) ->
+                if (deviceId != currentRemoteDeviceId) {
+                    currentRemoteDeviceId = deviceId
+                    currentQueueTrackIds = null
+                    metadataLoadJob?.cancel()
+                    metadataLoadJob = null
+                }
+
+                if (remoteState == null && queueTrackIds == null) {
                     _queueState.value = null
                     currentQueueTrackIds = null
                     metadataLoadJob?.cancel()
@@ -98,19 +106,33 @@ class RemotePlaybackMetadataProvider internal constructor(
                     metadataLoadJob?.cancel()
 
                     // Emit loading state with current track immediately
-                    _queueState.value = buildQueueFromCurrentTrackOnly(remoteState)
-                        ?.copy(loadingState = QueueLoadingState.LOADING)
+                    _queueState.value = remoteState?.let {
+                        buildQueueFromCurrentTrackOnly(it)?.copy(loadingState = QueueLoadingState.LOADING)
+                    }
 
                     metadataLoadJob = scope.launch {
-                        resolveQueueMetadata(queueTrackIds, remoteState)
+                        resolveQueueMetadata(
+                            queueTrackIds,
+                            remoteState ?: RemotePlaybackState(
+                                currentTrack = null,
+                                position = 0.0,
+                                isPlaying = false,
+                                volume = 1.0f,
+                                muted = false,
+                                shuffle = false,
+                                repeat = "off",
+                                timestamp = 0L,
+                                queuePosition = 0,
+                            ),
+                        )
                     }
-                } else if (queueTrackIds != null && queueTrackIds == currentQueueTrackIds) {
+                } else if (queueTrackIds != null && queueTrackIds == currentQueueTrackIds && remoteState != null) {
                     // Same queue, just update currentIndex from state
                     val current = _queueState.value
                     if (current != null && current.loadingState == QueueLoadingState.LOADED) {
                         _queueState.value = current.copy(currentIndex = remoteState.queuePosition)
                     }
-                } else {
+                } else if (remoteState != null) {
                     // No queue data - fall back to current track only
                     _queueState.value = buildQueueFromCurrentTrackOnly(remoteState)
                 }

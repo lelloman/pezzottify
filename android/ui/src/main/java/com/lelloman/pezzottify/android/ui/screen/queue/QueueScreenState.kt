@@ -27,6 +27,7 @@ data class QueueTrackItem(
 data class QueueScreenState(
     val isLoading: Boolean = true,
     val isError: Boolean = false,
+    val isRemote: Boolean = false,
     val contextName: String = "",
     val contextType: QueueContextType = QueueContextType.Unknown,
     val tracks: List<QueueTrackItem> = emptyList(),

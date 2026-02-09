@@ -1133,7 +1133,6 @@ class InteractorsModule {
                 playbackMetadataProvider.queueState
                     .combine(player.isPlaying) { queueState, isPlaying -> queueState to isPlaying }
                     .combine(player.currentTrackPercent) { (queueState, isPlaying), trackPercent ->
-                        logger.debug("Combining queueState: track=${queueState?.currentTrack?.trackName}, isLoading=${queueState?.isLoading}, isPlaying=$isPlaying")
                         val currentTrack = queueState?.currentTrack
                         when {
                             currentTrack != null -> {
@@ -1430,34 +1429,51 @@ class InteractorsModule {
     fun provideQueueScreenInteractor(
         player: PezzottifyPlayer,
         playbackMetadataProvider: com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider,
+        playbackModeManager: com.lelloman.pezzottify.android.domain.player.PlaybackModeManager,
         userPlaylistStore: UserPlaylistStore,
         getLikedStateUseCase: GetLikedStateUseCase,
         toggleLikeUseCase: ToggleLikeUseCase,
         playlistSynchronizer: PlaylistSynchronizer,
     ): QueueScreenViewModel.Interactor =
         object : QueueScreenViewModel.Interactor {
+            override fun getIsRemote(): Flow<Boolean> =
+                playbackModeManager.mode.map { mode ->
+                    mode is com.lelloman.pezzottify.android.domain.player.PlaybackMode.Remote
+                }
+
             override fun getQueueState(): Flow<QueueScreenViewModel.Interactor.QueueState?> =
                 playbackMetadataProvider.queueState
                     .combine(player.playbackPlaylist) { queueState, playlist ->
-                        if (queueState != null && playlist != null) {
-                            val playlistContext = playlist.context
-                            val (contextType, contextName, canSave) = when (playlistContext) {
-                                is com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext.Album -> Triple(
-                                    com.lelloman.pezzottify.android.ui.screen.queue.QueueContextType.Album,
-                                    playlistContext.albumId,
-                                    false
-                                )
+                        queueState to playlist
+                    }
+                    .combine(playbackModeManager.mode) { (queueState, playlist), mode ->
+                        if (queueState != null && (playlist != null || mode is com.lelloman.pezzottify.android.domain.player.PlaybackMode.Remote)) {
+                            val (contextType, contextName, canSave) = if (playlist != null) {
+                                val playlistContext = playlist.context
+                                when (playlistContext) {
+                                    is com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext.Album -> Triple(
+                                        com.lelloman.pezzottify.android.ui.screen.queue.QueueContextType.Album,
+                                        playlistContext.albumId,
+                                        false
+                                    )
 
-                                is com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext.UserPlaylist -> Triple(
-                                    com.lelloman.pezzottify.android.ui.screen.queue.QueueContextType.UserPlaylist,
-                                    playlistContext.userPlaylistId,
-                                    playlistContext.isEdited
-                                )
+                                    is com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext.UserPlaylist -> Triple(
+                                        com.lelloman.pezzottify.android.ui.screen.queue.QueueContextType.UserPlaylist,
+                                        playlistContext.userPlaylistId,
+                                        playlistContext.isEdited
+                                    )
 
-                                is com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext.UserMix -> Triple(
-                                    com.lelloman.pezzottify.android.ui.screen.queue.QueueContextType.UserMix,
-                                    "user_mix",
-                                    true
+                                    is com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext.UserMix -> Triple(
+                                        com.lelloman.pezzottify.android.ui.screen.queue.QueueContextType.UserMix,
+                                        "user_mix",
+                                        true
+                                    )
+                                }
+                            } else {
+                                Triple(
+                                    com.lelloman.pezzottify.android.ui.screen.queue.QueueContextType.Unknown,
+                                    "",
+                                    false,
                                 )
                             }
                             QueueScreenViewModel.Interactor.QueueState(
@@ -1491,7 +1507,7 @@ class InteractorsModule {
             override fun moveTrack(fromIndex: Int, toIndex: Int) =
                 player.moveTrack(fromIndex, toIndex)
 
-            override fun removeTrack(trackId: String) = player.removeTrackFromPlaylist(trackId)
+            override fun removeTrack(index: Int) = player.removeTrackAtIndex(index)
 
             override fun playTrackDirectly(trackId: String) = player.loadSingleTrack(trackId)
 
@@ -2003,6 +2019,7 @@ class InteractorsModule {
 
         override fun enterRemoteMode(deviceId: Int, deviceName: String) {
             playbackModeManager.enterRemoteMode(deviceId, deviceName)
+            playbackSessionHandler.requestQueue(deviceId)
         }
 
         override fun exitRemoteMode() {

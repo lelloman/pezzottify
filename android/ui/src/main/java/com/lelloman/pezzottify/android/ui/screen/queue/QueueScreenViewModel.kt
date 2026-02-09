@@ -7,6 +7,7 @@ import com.lelloman.pezzottify.android.ui.screen.main.library.UiUserPlaylist
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -18,7 +19,7 @@ class QueueScreenViewModel @Inject constructor(
 ) : ViewModel(), QueueScreenActions {
 
     val state = interactor.getQueueState()
-        .map { queueState ->
+        .combine(interactor.getIsRemote()) { queueState, isRemote ->
             if (queueState != null) {
                 val tracks = queueState.tracks.map { track ->
                     QueueTrackItem(
@@ -33,6 +34,7 @@ class QueueScreenViewModel @Inject constructor(
                 QueueScreenState(
                     isLoading = false,
                     isError = false,
+                    isRemote = isRemote,
                     contextName = queueState.contextName,
                     contextType = queueState.contextType,
                     tracks = tracks,
@@ -40,7 +42,7 @@ class QueueScreenViewModel @Inject constructor(
                     canSaveAsPlaylist = queueState.canSaveAsPlaylist,
                 )
             } else {
-                QueueScreenState(isLoading = false, isError = true)
+                QueueScreenState(isLoading = false, isError = true, isRemote = isRemote)
             }
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, QueueScreenState())
@@ -53,8 +55,8 @@ class QueueScreenViewModel @Inject constructor(
         interactor.moveTrack(fromIndex, toIndex)
     }
 
-    override fun removeTrack(trackId: String) {
-        interactor.removeTrack(trackId)
+    override fun removeTrack(index: Int) {
+        interactor.removeTrack(index)
     }
 
     override fun clickOnSaveAsPlaylist() {
@@ -94,9 +96,10 @@ class QueueScreenViewModel @Inject constructor(
 
     interface Interactor {
         fun getQueueState(): Flow<QueueState?>
+        fun getIsRemote(): Flow<Boolean>
         fun playTrackAtIndex(index: Int)
         fun moveTrack(fromIndex: Int, toIndex: Int)
-        fun removeTrack(trackId: String)
+        fun removeTrack(index: Int)
 
         // Track actions bottom sheet
         fun playTrackDirectly(trackId: String)

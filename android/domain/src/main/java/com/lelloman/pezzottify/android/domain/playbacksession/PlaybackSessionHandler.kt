@@ -315,6 +315,10 @@ class PlaybackSessionHandler internal constructor(
                 if (payload != null) handleDeviceQueue(payload)
             }
 
+            "$PREFIX.queue_sync" -> {
+                if (payload != null) handleQueueSync(payload)
+            }
+
             "$PREFIX.device_stopped" -> {
                 if (payload != null) handleDeviceStopped(payload)
             }
@@ -419,6 +423,25 @@ class PlaybackSessionHandler internal constructor(
             logger.debug("Received device queue update for device $deviceId with ${trackIds.size} tracks")
         } catch (e: Exception) {
             logger.error("Failed to parse device queue", e)
+        }
+    }
+
+    private fun handleQueueSync(payloadString: String) {
+        try {
+            val payloadJson = json.parseToJsonElement(payloadString).jsonObject
+            val deviceId = payloadJson["device_id"]?.jsonPrimitive?.int
+                ?: (playbackModeManager.mode.value as? PlaybackMode.Remote)?.deviceId
+                ?: return
+            if (deviceId == _myDeviceId.value) return
+
+            val queueArray = payloadJson["queue"]?.jsonArray ?: return
+            val trackIds = queueArray.mapNotNull { item ->
+                item.jsonObject["id"]?.jsonPrimitive?.content
+            }
+            _otherDeviceQueues.value = _otherDeviceQueues.value + (deviceId to trackIds)
+            logger.debug("Received queue sync for device $deviceId with ${trackIds.size} tracks")
+        } catch (e: Exception) {
+            logger.error("Failed to parse queue sync", e)
         }
     }
 
@@ -643,14 +666,7 @@ class PlaybackSessionHandler internal constructor(
         if (trackId != null) {
             player.removeTrackFromPlaylist(trackId)
         } else if (index != null) {
-            // Lookup trackId from playlist by index
-            val playlist = player.playbackPlaylist.value
-            val trackIdAtIndex = playlist?.tracksIds?.getOrNull(index)
-            if (trackIdAtIndex != null) {
-                player.removeTrackFromPlaylist(trackIdAtIndex)
-            } else {
-                logger.warn("removeTrack: index $index out of bounds")
-            }
+            player.removeTrackAtIndex(index)
         } else {
             logger.warn("removeTrack command missing trackId or index")
         }
@@ -686,6 +702,14 @@ class PlaybackSessionHandler internal constructor(
         )
         webSocketManager.send("$PREFIX.command", msg)
         logger.debug("Sent command '$command' to device $targetDeviceId")
+    }
+
+    fun requestQueue(targetDeviceId: Int) {
+        val msg = mapOf<String, Any?>(
+            "target_device_id" to targetDeviceId,
+        )
+        webSocketManager.send("$PREFIX.request_queue", msg)
+        logger.debug("Requested queue for device $targetDeviceId")
     }
 
     companion object {

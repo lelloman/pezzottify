@@ -34,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
@@ -123,6 +124,24 @@ private fun QueueScreenContent(
         }
     }
 
+    fun removeTrackWithUndo(index: Int, trackItem: QueueTrackItem) {
+        val originalSize = state.tracks.size
+        actions.removeTrack(index)
+        scope.launch {
+            val result = snackbarHostState.showSnackbar(
+                message = context.getString(R.string.removed_from_queue),
+                actionLabel = context.getString(R.string.undo),
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                actions.addTrackToQueue(trackItem.trackId)
+                val fromIndex = originalSize - 1
+                if (fromIndex >= 0 && index <= fromIndex) {
+                    actions.moveTrack(fromIndex, index)
+                }
+            }
+        }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
@@ -173,6 +192,7 @@ private fun QueueScreenContent(
                     selectedTrackIndex = index
                     selectedTrackItem = trackItem
                 },
+                onRemoveTrack = { index, trackItem -> removeTrackWithUndo(index, trackItem) },
                 modifier = Modifier.padding(innerPadding),
             )
         }
@@ -280,6 +300,7 @@ private fun QueueList(
     currentTrackIndex: Int?,
     actions: QueueScreenActions,
     onTrackClick: (Int, QueueTrackItem) -> Unit,
+    onRemoveTrack: (Int, QueueTrackItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -306,13 +327,11 @@ private fun QueueList(
                 trackItem = trackItem,
                 isCurrentTrack = index == currentTrackIndex,
                 onClick = { onTrackClick(index, trackItem) },
-                onRemoveTrack = { actions.removeTrack(trackItem.trackId) },
+                onRemoveTrack = { onRemoveTrack(index, trackItem) },
             )
         }
     }
 }
-
-private const val UNDO_TIMEOUT_MS = 5000L
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -323,107 +342,53 @@ private fun SwipeableQueueItem(
     onClick: () -> Unit,
     onRemoveTrack: () -> Unit,
 ) {
-    var isPendingDeletion by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { dismissValue ->
             if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
-                isPendingDeletion = true
-                // Start the countdown to actually delete
-                scope.launch {
-                    delay(UNDO_TIMEOUT_MS)
-                    if (isPendingDeletion) {
-                        onRemoveTrack()
-                    }
-                }
-                false // Don't dismiss, we'll show the undo UI instead
+                onRemoveTrack()
+                true
             } else {
                 false
             }
         }
     )
 
-    // Reset dismiss state when undo UI is shown
-    LaunchedEffect(isPendingDeletion) {
-        if (isPendingDeletion) {
-            dismissState.reset()
-        }
-    }
-
-    if (isPendingDeletion) {
-        // Show undo placeholder
-        PendingDeletionItem(
-            trackName = trackItem.trackName,
-            onUndo = { isPendingDeletion = false }
-        )
-    } else {
-        SwipeToDismissBox(
-            state = dismissState,
-            enableDismissFromStartToEnd = false,
-            backgroundContent = {
-                val color by animateColorAsState(
-                    when (dismissState.targetValue) {
-                        SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.errorContainer
-                        else -> Color.Transparent
-                    },
-                    label = "dismissBackground"
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(color)
-                        .padding(horizontal = 20.dp),
-                    contentAlignment = Alignment.CenterEnd,
-                ) {
-                    if (dismissState.targetValue == SwipeToDismissBoxValue.EndToStart) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = stringResource(R.string.remove_from_queue),
-                            tint = MaterialTheme.colorScheme.onErrorContainer,
-                        )
-                    }
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = false,
+        backgroundContent = {
+            val color by animateColorAsState(
+                when (dismissState.targetValue) {
+                    SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.errorContainer
+                    else -> Color.Transparent
+                },
+                label = "dismissBackground"
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(color)
+                    .padding(horizontal = 20.dp),
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                if (dismissState.targetValue == SwipeToDismissBoxValue.EndToStart) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = stringResource(R.string.remove_from_queue),
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                    )
                 }
-            },
-            content = {
-                QueueTrackItemRow(
-                    index = index,
-                    trackItem = trackItem,
-                    isCurrentTrack = isCurrentTrack,
-                    onClick = onClick,
-                )
             }
-        )
-    }
-}
-
-@Composable
-private fun PendingDeletionItem(
-    trackName: String,
-    onUndo: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.errorContainer)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(
-            text = stringResource(R.string.removed_from_queue),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onErrorContainer,
-            modifier = Modifier.weight(1f),
-        )
-        TextButton(onClick = onUndo) {
-            Text(
-                text = stringResource(R.string.undo),
-                color = MaterialTheme.colorScheme.onErrorContainer,
-                style = MaterialTheme.typography.labelLarge,
+        },
+        content = {
+            QueueTrackItemRow(
+                index = index,
+                trackItem = trackItem,
+                isCurrentTrack = isCurrentTrack,
+                onClick = onClick,
             )
         }
-    }
+    )
 }
 
 @Composable

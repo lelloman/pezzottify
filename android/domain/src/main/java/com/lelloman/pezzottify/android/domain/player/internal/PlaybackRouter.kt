@@ -295,6 +295,14 @@ class PlaybackRouter @Inject constructor(
         }
     }
 
+    override fun removeTrackAtIndex(index: Int) {
+        if (isRemote) {
+            sendRemoteCommand("removeTrack", mapOf("index" to index))
+        } else {
+            localPlayer.removeTrackAtIndex(index)
+        }
+    }
+
     override fun removeTrackFromPlaylist(trackId: String) {
         if (isRemote) {
             sendRemoteCommand("removeTrack", mapOf("trackId" to trackId))
