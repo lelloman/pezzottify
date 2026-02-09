@@ -320,6 +320,13 @@ export const usePlaybackStore = defineStore("playback", () => {
   function applyRemoteState(state) {
     if (mode.value !== "remote") return;
 
+    console.debug("[Playback] applyRemoteState", {
+      trackId: state.current_track?.id,
+      isPlaying: state.is_playing,
+      queuePosition: state.queue_position,
+      queueVersion: state.queue_version,
+      timestamp: state.timestamp,
+    });
     isPlaying.value = state.is_playing;
     volume.value = state.volume;
     muted.value = state.muted;
@@ -356,6 +363,9 @@ export const usePlaybackStore = defineStore("playback", () => {
   function applyRemoteQueue(queue) {
     if (mode.value !== "remote") return;
 
+    console.debug("[Playback] applyRemoteQueue", {
+      queueSize: queue.length,
+    });
     const trackIds = queue.map((item) => item.id);
     playlistsHistory.value = [
       {
@@ -372,12 +382,14 @@ export const usePlaybackStore = defineStore("playback", () => {
   // ============================================
 
   function enterRemoteMode() {
+    console.info("[Playback] enterRemoteMode");
     localOutlet.stop();
     mode.value = "remote";
     startInterpolation();
   }
 
   function exitRemoteMode() {
+    console.info("[Playback] exitRemoteMode");
     stopInterpolation();
     mode.value = "local";
     loadPersistedState();
@@ -456,6 +468,9 @@ export const usePlaybackStore = defineStore("playback", () => {
   // ============================================
 
   const setNewPlayingPlaylist = (newPlaylist) => {
+    console.debug("[Playback] setNewPlayingPlaylist", {
+      size: newPlaylist?.tracksIds?.length || 0,
+    });
     let newHistory;
 
     if (
@@ -500,6 +515,11 @@ export const usePlaybackStore = defineStore("playback", () => {
   const loadTrack = (index, seekPercent = null) => {
     if (!currentPlaylist.value) return;
 
+    console.debug("[Playback] loadTrack", {
+      index,
+      trackId: currentPlaylist.value.tracksIds[index],
+      isPlaying: isPlaying.value,
+    });
     currentTrackIndex.value = index;
     const trackId = currentPlaylist.value.tracksIds[index];
     currentTrackId.value = trackId;
@@ -583,6 +603,10 @@ export const usePlaybackStore = defineStore("playback", () => {
       return;
     }
 
+    console.debug("[Playback] play", {
+      currentTrackIndex: currentTrackIndex.value,
+      hasLoadedSound: localOutlet.hasLoadedSound(),
+    });
     const wasIdle = !isPlaying.value && currentTrackIndex.value !== null;
 
     if (currentTrackIndex.value !== null && !localOutlet.hasLoadedSound()) {
@@ -603,6 +627,7 @@ export const usePlaybackStore = defineStore("playback", () => {
       return;
     }
 
+    console.debug("[Playback] pause");
     localOutlet.pause();
     isPlaying.value = false;
     getSessionStore()?.notifyStateChanged();
@@ -617,6 +642,7 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const setIsPlaying = (newIsPlaying) => {
+    console.debug("[Playback] setIsPlaying", { newIsPlaying });
     if (newIsPlaying) {
       play();
     } else {
@@ -630,6 +656,10 @@ export const usePlaybackStore = defineStore("playback", () => {
       return;
     }
 
+    console.debug("[Playback] skipNextTrack", {
+      currentIndex: currentTrackIndex.value,
+      playlistSize: currentPlaylist.value?.tracksIds?.length || 0,
+    });
     const nextIndex = currentTrackIndex.value + 1;
     if (nextIndex >= currentPlaylist.value.tracksIds.length) {
       localOutlet.stop();
@@ -652,6 +682,9 @@ export const usePlaybackStore = defineStore("playback", () => {
       return;
     }
 
+    console.debug("[Playback] skipPreviousTrack", {
+      currentIndex: currentTrackIndex.value,
+    });
     const previousIndex = currentTrackIndex.value - 1;
     if (previousIndex < 0) {
       localOutlet.stop();
