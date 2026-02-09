@@ -396,15 +396,8 @@ impl PlaybackSessionManager {
             .into_iter()
             .filter_map(|(owner_user_id, id)| {
                 let meta = devices.get(&(owner_user_id, id));
-                let meta = if let Some(meta) = meta {
-                    Some((
-                        meta.name.clone(),
-                        meta.device_type,
-                        meta.connected_at,
-                    ))
-                } else {
-                    None
-                };
+                let meta =
+                    meta.map(|meta| (meta.name.clone(), meta.device_type, meta.connected_at));
 
                 meta.map(|(name, device_type, connected_at)| {
                     let is_playing = sessions
@@ -491,15 +484,16 @@ impl PlaybackSessionManager {
                 session.device_states.remove(&device_id);
             } else {
                 was_new = !session.device_states.contains_key(&device_id);
-                let entry = session
-                    .device_states
-                    .entry(device_id)
-                    .or_insert_with(|| DevicePlaybackState {
-                        state: state.clone(),
-                        queue: Vec::new(),
-                        queue_version: 0,
-                        last_update: Instant::now(),
-                    });
+                let entry =
+                    session
+                        .device_states
+                        .entry(device_id)
+                        .or_insert_with(|| DevicePlaybackState {
+                            state: state.clone(),
+                            queue: Vec::new(),
+                            queue_version: 0,
+                            last_update: Instant::now(),
+                        });
                 entry.state = state.clone();
                 entry.last_update = Instant::now();
             }
@@ -559,26 +553,27 @@ impl PlaybackSessionManager {
             let session = sessions.entry(user_id).or_default();
 
             // Update or create device state with queue
-            let entry = session
-                .device_states
-                .entry(device_id)
-                .or_insert_with(|| DevicePlaybackState {
-                    state: PlaybackState {
-                        current_track: None,
-                        queue_position: 0,
-                        queue_version,
-                        position: 0.0,
-                        is_playing: false,
-                        volume: 1.0,
-                        muted: false,
-                        shuffle: false,
-                        repeat: RepeatMode::Off,
-                        timestamp: 0,
-                    },
-                    queue: Vec::new(),
-                    queue_version: 0,
-                    last_update: Instant::now(),
-                });
+            let entry =
+                session
+                    .device_states
+                    .entry(device_id)
+                    .or_insert_with(|| DevicePlaybackState {
+                        state: PlaybackState {
+                            current_track: None,
+                            queue_position: 0,
+                            queue_version,
+                            position: 0.0,
+                            is_playing: false,
+                            volume: 1.0,
+                            muted: false,
+                            shuffle: false,
+                            repeat: RepeatMode::Off,
+                            timestamp: 0,
+                        },
+                        queue: Vec::new(),
+                        queue_version: 0,
+                        last_update: Instant::now(),
+                    });
             entry.queue = queue.clone();
             entry.queue_version = queue_version;
             entry.last_update = Instant::now();
@@ -887,6 +882,7 @@ mod tests {
     }
 
     async fn setup_with_user_manager() -> (
+        tempfile::TempDir,
         Arc<ConnectionManager>,
         PlaybackSessionManager,
         Arc<Mutex<UserManager>>,
@@ -899,7 +895,7 @@ mod tests {
         let user_manager = Arc::new(Mutex::new(UserManager::new(catalog_store, user_store)));
         let session_manager =
             PlaybackSessionManager::new(conn_manager.clone(), user_manager.clone());
-        (conn_manager, session_manager, user_manager)
+        (temp_dir, conn_manager, session_manager, user_manager)
     }
 
     fn make_state(track_title: &str, is_playing: bool) -> PlaybackState {
@@ -930,7 +926,7 @@ mod tests {
 
     #[tokio::test]
     async fn policy_allow_everyone_allows_any_user() {
-        let (_conn, manager, user_manager) = setup_with_user_manager().await;
+        let (_temp, _conn, manager, user_manager) = setup_with_user_manager().await;
 
         let owner_id = user_manager.lock().unwrap().add_user("owner").unwrap();
         let other_id = user_manager.lock().unwrap().add_user("other").unwrap();
@@ -962,7 +958,7 @@ mod tests {
 
     #[tokio::test]
     async fn policy_deny_everyone_denies_non_owner() {
-        let (_conn, manager, user_manager) = setup_with_user_manager().await;
+        let (_temp, _conn, manager, user_manager) = setup_with_user_manager().await;
 
         let owner_id = user_manager.lock().unwrap().add_user("owner").unwrap();
         let other_id = user_manager.lock().unwrap().add_user("other").unwrap();
@@ -995,7 +991,7 @@ mod tests {
 
     #[tokio::test]
     async fn policy_disallow_overrides_allow_user() {
-        let (_conn, manager, user_manager) = setup_with_user_manager().await;
+        let (_temp, _conn, manager, user_manager) = setup_with_user_manager().await;
 
         let owner_id = user_manager.lock().unwrap().add_user("owner").unwrap();
         let other_id = user_manager.lock().unwrap().add_user("other").unwrap();
@@ -1034,7 +1030,7 @@ mod tests {
 
     #[tokio::test]
     async fn policy_allows_by_role_when_not_denied() {
-        let (_conn, manager, user_manager) = setup_with_user_manager().await;
+        let (_temp, _conn, manager, user_manager) = setup_with_user_manager().await;
 
         let owner_id = user_manager.lock().unwrap().add_user("owner").unwrap();
         let other_id = user_manager.lock().unwrap().add_user("other").unwrap();
