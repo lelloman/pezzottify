@@ -12,6 +12,7 @@
     <string name="save">Salva</string>
     <string name="error">Errore</string>
     <string name="undo">Annulla</string>
+    <string name="devices">Dispositivi</string>
     <string name="play">Riproduci</string>
     <string name="play_single_track">Riproduci singola traccia</string>
     <string name="pause">Pausa</string>
