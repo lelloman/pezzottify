@@ -172,7 +172,7 @@ private fun ShufflePlayButton(
                 )
                 Spacer(modifier = Modifier.width(Spacing.Small))
                 Text(
-                    text = "Shuffle Play",
+                    text = stringResource(R.string.shuffle_play),
                     style = MaterialTheme.typography.titleMedium,
                 )
             }

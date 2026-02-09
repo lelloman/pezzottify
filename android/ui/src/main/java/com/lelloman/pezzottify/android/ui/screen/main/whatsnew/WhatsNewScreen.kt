@@ -128,7 +128,7 @@ private fun WhatsNewScreenContent(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "No updates yet",
+                            text = stringResource(R.string.no_updates_yet),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -218,7 +218,7 @@ private fun BatchCard(
                     Column {
                         Spacer(modifier = Modifier.height(Spacing.Medium))
                         Text(
-                            text = "New albums",
+                            text = stringResource(R.string.new_albums),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary,
                         )

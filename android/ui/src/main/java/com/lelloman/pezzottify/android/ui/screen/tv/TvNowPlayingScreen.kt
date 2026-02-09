@@ -42,7 +42,9 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImagePlaceholder
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
@@ -100,22 +102,22 @@ fun TvNowPlayingScreen() {
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(
-                        text = "Waiting for playback…",
+                        text = stringResource(R.string.waiting_for_playback),
                         style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        text = "Signed in as ${statusState.userHandle}",
+                        text = stringResource(R.string.signed_in_as, statusState.userHandle),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        text = "${statusState.deviceName} (${statusState.deviceType})",
+                        text = stringResource(R.string.device_info, statusState.deviceName, statusState.deviceType),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        text = "WebSocket: ${statusState.connectionStatus}",
+                        text = stringResource(R.string.websocket_status, statusState.connectionStatus),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

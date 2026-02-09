@@ -473,7 +473,7 @@ private fun BottomPlayer(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Controlling $remoteDeviceName",
+                        text = stringResource(R.string.controlling_device, remoteDeviceName),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onTertiaryContainer,
                     )

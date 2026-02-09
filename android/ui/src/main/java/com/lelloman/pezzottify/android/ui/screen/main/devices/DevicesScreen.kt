@@ -57,8 +57,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
 
@@ -75,7 +77,7 @@ fun DevicesScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Devices") },
+                title = { Text(stringResource(R.string.devices)) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -102,7 +104,7 @@ fun DevicesScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Text(
-                            text = "No devices connected",
+                            text = stringResource(R.string.no_devices_connected),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -143,12 +145,12 @@ fun DevicesScreen(
                     shape = RoundedCornerShape(16.dp),
                 ) {
                     ListItem(
-                        headlineContent = { Text("Device Sharing (This Device)") },
+                        headlineContent = { Text(stringResource(R.string.device_sharing_this_device)) },
                         supportingContent = {
                             if (sharePolicy.isSaving) {
-                                Text("Saving…")
+                                Text(stringResource(R.string.saving))
                             } else {
-                                Text(if (showPolicyEditor) "Tap to collapse" else "Tap to configure")
+                                Text(if (showPolicyEditor) stringResource(R.string.tap_to_collapse) else stringResource(R.string.tap_to_configure))
                             }
                         },
                         trailingContent = {
@@ -221,34 +223,34 @@ private fun SharePolicyCard(
                     selected = state.mode == "deny_everyone",
                     onClick = { onModeChange("deny_everyone") },
                 )
-                Text("Deny everyone")
+                Text(stringResource(R.string.deny_everyone))
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(
                     selected = state.mode == "allow_everyone",
                     onClick = { onModeChange("allow_everyone") },
                 )
-                Text("Allow everyone")
+                Text(stringResource(R.string.allow_everyone))
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(
                     selected = state.mode == "custom",
                     onClick = { onModeChange("custom") },
                 )
-                Text("Custom")
+                Text(stringResource(R.string.custom))
             }
 
             if (state.mode == "custom") {
                 OutlinedTextField(
                     value = state.allowUsers,
                     onValueChange = onAllowUsersChange,
-                    label = { Text("Allow users (IDs)") },
+                    label = { Text(stringResource(R.string.allow_users_ids)) },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = state.denyUsers,
                     onValueChange = onDenyUsersChange,
-                    label = { Text("Deny users (IDs)") },
+                    label = { Text(stringResource(R.string.deny_users_ids)) },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -256,13 +258,13 @@ private fun SharePolicyCard(
                         checked = state.allowAdmin,
                         onCheckedChange = onAllowAdminChange,
                     )
-                    Text("Allow Admin")
+                    Text(stringResource(R.string.allow_admin))
                     Spacer(modifier = Modifier.width(12.dp))
                     Checkbox(
                         checked = state.allowRegular,
                         onCheckedChange = onAllowRegularChange,
                     )
-                    Text("Allow Regular")
+                    Text(stringResource(R.string.allow_regular))
                 }
             }
 
@@ -272,7 +274,7 @@ private fun SharePolicyCard(
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 modifier = Modifier.align(Alignment.End),
             ) {
-                Text(if (state.isSaving) "Saving…" else "Save Policy")
+                Text(if (state.isSaving) stringResource(R.string.saving) else stringResource(R.string.save_policy))
             }
         }
     }
@@ -338,7 +340,7 @@ private fun DeviceCard(
                 if (device.isThisDevice) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "this device",
+                        text = stringResource(R.string.this_device_label),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -370,13 +372,13 @@ private fun DeviceCard(
                                 contentColor = MaterialTheme.colorScheme.error,
                             ),
                         ) {
-                            Text("Disconnect")
+                            Text(stringResource(R.string.disconnect))
                         }
                     } else {
                         Button(
                             onClick = onControlDevice,
                         ) {
-                            Text("Control this device")
+                            Text(stringResource(R.string.control_this_device))
                         }
                     }
                 }
@@ -520,7 +522,7 @@ private fun DeviceCard(
                 }
             } else {
                 Text(
-                    text = "Not playing",
+                    text = stringResource(R.string.not_playing),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
@@ -530,10 +532,11 @@ private fun DeviceCard(
     }
 }
 
+@Composable
 private fun deviceTypeLabel(deviceType: String): String? = when (deviceType) {
-    "web" -> "Web"
-    "android_tv" -> "TV"
-    "android" -> "Phone"
+    "web" -> stringResource(R.string.device_type_web)
+    "android_tv" -> stringResource(R.string.device_type_tv)
+    "android" -> stringResource(R.string.device_type_phone)
     else -> null
 }
 
