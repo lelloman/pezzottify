@@ -43,6 +43,13 @@ data class DeviceSharePolicyUiState(
     val error: String? = null,
 )
 
+data class DeviceSharePolicyUi(
+    val mode: String,
+    val allowUsers: List<Int>,
+    val denyUsers: List<Int>,
+    val allowRoles: List<String>,
+)
+
 @HiltViewModel
 class DevicesScreenViewModel @Inject constructor(
     private val interactor: Interactor,
@@ -57,6 +64,7 @@ class DevicesScreenViewModel @Inject constructor(
     private var lastBaseState = DevicesScreenState()
     private var interpolationJob: Job? = null
     private var lastPolicyDeviceId: Int? = null
+    private var attemptedPolicyResolve = false
 
     init {
         viewModelScope.launch {
@@ -68,6 +76,9 @@ class DevicesScreenViewModel @Inject constructor(
                 if (deviceId != null && deviceId != lastPolicyDeviceId) {
                     lastPolicyDeviceId = deviceId
                     loadSharePolicy(deviceId)
+                } else if (deviceId == null && !attemptedPolicyResolve) {
+                    attemptedPolicyResolve = true
+                    resolveAndLoadPolicy()
                 }
             }
         }
@@ -146,14 +157,38 @@ class DevicesScreenViewModel @Inject constructor(
     }
 
     fun saveSharePolicy() {
-        val deviceId = lastPolicyDeviceId ?: return
+        val current = mutableSharePolicy.value
         viewModelScope.launch {
-            val current = mutableSharePolicy.value
+            val deviceId = lastPolicyDeviceId ?: run {
+                val resolved = interactor.resolveLocalDeviceId()
+                if (resolved != null) {
+                    lastPolicyDeviceId = resolved
+                    resolved
+                } else {
+                    mutableSharePolicy.value = current.copy(isSaving = false, error = "Unable to identify this device")
+                    return@launch
+                }
+            }
             mutableSharePolicy.value = current.copy(isSaving = true, error = null)
             val response = interactor.updateDeviceSharePolicy(deviceId, current)
             mutableSharePolicy.value = when (response) {
                 is DeviceSharePolicyResult.Success -> mapPolicyToUi(response.policy).copy(isSaving = false)
                 is DeviceSharePolicyResult.Error -> current.copy(isSaving = false, error = response.message)
+            }
+        }
+    }
+
+    private fun resolveAndLoadPolicy() {
+        viewModelScope.launch {
+            val resolved = interactor.resolveLocalDeviceId()
+            if (resolved != null) {
+                lastPolicyDeviceId = resolved
+                loadSharePolicy(resolved)
+            } else {
+                mutableSharePolicy.value = DeviceSharePolicyUiState(
+                    isLoading = false,
+                    error = "Unable to identify this device"
+                )
             }
         }
     }
@@ -169,7 +204,7 @@ class DevicesScreenViewModel @Inject constructor(
         }
     }
 
-    private fun mapPolicyToUi(policy: com.lelloman.pezzottify.android.domain.remoteapi.response.DeviceSharePolicy): DeviceSharePolicyUiState {
+    private fun mapPolicyToUi(policy: DeviceSharePolicyUi): DeviceSharePolicyUiState {
         val roles = policy.allowRoles.toSet()
         return DeviceSharePolicyUiState(
             mode = policy.mode,
@@ -187,6 +222,7 @@ class DevicesScreenViewModel @Inject constructor(
         fun enterRemoteMode(deviceId: Int, deviceName: String)
         fun exitRemoteMode()
         suspend fun fetchDeviceSharePolicy(deviceId: Int): DeviceSharePolicyResult
+        suspend fun resolveLocalDeviceId(): Int?
         suspend fun updateDeviceSharePolicy(
             deviceId: Int,
             state: DeviceSharePolicyUiState
@@ -194,7 +230,7 @@ class DevicesScreenViewModel @Inject constructor(
     }
 
     sealed interface DeviceSharePolicyResult {
-        data class Success(val policy: com.lelloman.pezzottify.android.domain.remoteapi.response.DeviceSharePolicy) : DeviceSharePolicyResult
+        data class Success(val policy: DeviceSharePolicyUi) : DeviceSharePolicyResult
         data class Error(val message: String) : DeviceSharePolicyResult
     }
 

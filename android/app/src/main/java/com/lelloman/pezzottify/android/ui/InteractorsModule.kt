@@ -68,7 +68,9 @@ import com.lelloman.pezzottify.android.domain.playbacksession.PlaybackSessionHan
 import com.lelloman.pezzottify.android.ui.screen.main.devices.DevicesScreenState
 import com.lelloman.pezzottify.android.ui.screen.main.devices.DevicesScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.devices.DeviceUiState
+import com.lelloman.pezzottify.android.ui.screen.main.devices.DeviceSharePolicyUi
 import com.lelloman.pezzottify.android.ui.screen.main.devices.DeviceSharePolicyUiState
+import com.lelloman.pezzottify.android.mapping.toDeviceSharePolicyUi
 import com.lelloman.pezzottify.android.ui.screen.main.genre.GenreListScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.genre.GenreScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreenState
@@ -1949,6 +1951,7 @@ class InteractorsModule {
         configStore: ConfigStore,
         playbackModeManager: com.lelloman.pezzottify.android.domain.player.PlaybackModeManager,
         remoteApiClient: RemoteApiClient,
+        deviceInfoProvider: com.lelloman.pezzottify.android.domain.device.DeviceInfoProvider,
     ): DevicesScreenViewModel.Interactor = object : DevicesScreenViewModel.Interactor {
         override fun observeDevicesScreenState(): Flow<DevicesScreenState> =
             combine(
@@ -2033,7 +2036,9 @@ class InteractorsModule {
                 is com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse.Success -> {
                     val device = response.data.devices.firstOrNull { it.id == deviceId }
                     if (device != null) {
-                        DevicesScreenViewModel.DeviceSharePolicyResult.Success(device.sharePolicy)
+                        DevicesScreenViewModel.DeviceSharePolicyResult.Success(
+                            device.sharePolicy.toDeviceSharePolicyUi()
+                        )
                     } else {
                         DevicesScreenViewModel.DeviceSharePolicyResult.Error("Device not found")
                     }
@@ -2041,6 +2046,16 @@ class InteractorsModule {
                 is com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse.Error -> {
                     DevicesScreenViewModel.DeviceSharePolicyResult.Error("Failed to load policy")
                 }
+            }
+        }
+
+        override suspend fun resolveLocalDeviceId(): Int? {
+            val deviceUuid = deviceInfoProvider.getDeviceInfo().deviceUuid
+            return when (val response = remoteApiClient.getDevices()) {
+                is com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse.Success -> {
+                    response.data.devices.firstOrNull { it.deviceUuid == deviceUuid }?.id
+                }
+                is com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse.Error -> null
             }
         }
 
@@ -2067,7 +2082,9 @@ class InteractorsModule {
 
             return when (val response = remoteApiClient.updateDeviceSharePolicy(deviceId, request)) {
                 is com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse.Success -> {
-                    DevicesScreenViewModel.DeviceSharePolicyResult.Success(response.data)
+                    DevicesScreenViewModel.DeviceSharePolicyResult.Success(
+                        response.data.toDeviceSharePolicyUi()
+                    )
                 }
                 is com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse.Error -> {
                     DevicesScreenViewModel.DeviceSharePolicyResult.Error("Failed to save policy")

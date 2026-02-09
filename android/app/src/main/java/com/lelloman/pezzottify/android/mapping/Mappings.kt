@@ -28,6 +28,8 @@ import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylistContext as UiPla
 import com.lelloman.pezzottify.android.ui.model.PlaybackPlaylist as UiPlaybackPlaylist
 import com.lelloman.pezzottify.android.domain.usercontent.LikedContent as DomainLikedContent
 import com.lelloman.pezzottify.android.ui.model.LikedContent as UiLikedContent
+import com.lelloman.pezzottify.android.domain.remoteapi.response.DeviceSharePolicy as DomainDeviceSharePolicy
+import com.lelloman.pezzottify.android.ui.screen.main.devices.DeviceSharePolicyUi as UiDeviceSharePolicyUi
 
 // Enums
 @DuckMap(DomainThemeMode::class, UiThemeMode::class)
@@ -41,6 +43,7 @@ import com.lelloman.pezzottify.android.ui.model.LikedContent as UiLikedContent
 
 // Data classes
 @DuckMap(DomainStorageInfo::class, UiStorageInfo::class)
+@DuckMap(DomainDeviceSharePolicy::class, UiDeviceSharePolicyUi::class)
 
 // Sealed interfaces
 @DuckMap(DomainConnectionState::class, UiConnectionState::class)

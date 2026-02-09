@@ -77,42 +77,43 @@ fun DevicesScreen(
             )
         }
     ) { paddingValues ->
-        if (state.devices.isEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    text = "No devices connected",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item { Spacer(modifier = Modifier.height(4.dp)) }
+            item {
+                SharePolicyCard(
+                    state = sharePolicy,
+                    onModeChange = viewModel::updatePolicyMode,
+                    onAllowUsersChange = viewModel::updateAllowUsers,
+                    onDenyUsersChange = viewModel::updateDenyUsers,
+                    onAllowAdminChange = viewModel::updateAllowAdmin,
+                    onAllowRegularChange = viewModel::updateAllowRegular,
+                    onSave = viewModel::saveSharePolicy,
                 )
+                Spacer(modifier = Modifier.height(8.dp))
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                item { Spacer(modifier = Modifier.height(4.dp)) }
+            if (state.devices.isEmpty()) {
                 item {
-                    SharePolicyCard(
-                        state = sharePolicy,
-                        onModeChange = viewModel::updatePolicyMode,
-                        onAllowUsersChange = viewModel::updateAllowUsers,
-                        onDenyUsersChange = viewModel::updateDenyUsers,
-                        onAllowAdminChange = viewModel::updateAllowAdmin,
-                        onAllowRegularChange = viewModel::updateAllowRegular,
-                        onSave = viewModel::saveSharePolicy,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            text = "No devices connected",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
+            } else {
                 items(state.devices, key = { it.id }) { device ->
                     val isControlling = state.remoteControlDeviceId == device.id
                     DeviceCard(
@@ -139,8 +140,8 @@ fun DevicesScreen(
                         },
                     )
                 }
-                item { Spacer(modifier = Modifier.height(4.dp)) }
             }
+            item { Spacer(modifier = Modifier.height(4.dp)) }
         }
     }
 }
