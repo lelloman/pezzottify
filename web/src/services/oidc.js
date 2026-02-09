@@ -40,6 +40,32 @@ const OIDC_CONFIG = {
 };
 
 let userManager = null;
+let refreshTimeoutId = null;
+
+function clearRefreshTimeout() {
+  if (refreshTimeoutId) {
+    clearTimeout(refreshTimeoutId);
+    refreshTimeoutId = null;
+  }
+}
+
+function scheduleRefreshForUser(user) {
+  clearRefreshTimeout();
+  if (!user?.expires_at) return;
+
+  const nowSec = Date.now() / 1000;
+  const refreshInSec = user.expires_at - nowSec - 60;
+  const refreshInMs = Math.max(refreshInSec * 1000, 0);
+
+  refreshTimeoutId = setTimeout(async () => {
+    try {
+      console.debug("[OIDC] Scheduled refresh triggered");
+      await refreshTokens();
+    } catch (error) {
+      console.error("[OIDC] Scheduled refresh failed:", error);
+    }
+  }, refreshInMs);
+}
 
 /**
  * Get or create the UserManager instance.
@@ -51,10 +77,12 @@ function getUserManager() {
     // Log events for debugging
     userManager.events.addUserLoaded((user) => {
       console.debug("[OIDC] User loaded:", user?.profile?.preferred_username);
+      scheduleRefreshForUser(user);
     });
 
     userManager.events.addUserUnloaded(() => {
       console.debug("[OIDC] User unloaded");
+      clearRefreshTimeout();
     });
 
     userManager.events.addSilentRenewError((error) => {
@@ -63,10 +91,12 @@ function getUserManager() {
 
     userManager.events.addAccessTokenExpiring(() => {
       console.debug("[OIDC] Access token expiring");
+      refreshTokens();
     });
 
     userManager.events.addAccessTokenExpired(() => {
       console.debug("[OIDC] Access token expired");
+      refreshTokens();
     });
   }
   return userManager;
@@ -196,6 +226,7 @@ export async function handleCallback() {
     if (user?.id_token) {
       setSessionCookie(user.id_token);
     }
+    scheduleRefreshForUser(user);
     return user;
   } catch (error) {
     console.error("[OIDC] Callback error:", error);
@@ -214,6 +245,7 @@ export async function getUser() {
   // Ensure cookie is set if we have a valid user (for WebSocket)
   if (user?.id_token && !user.expired) {
     setSessionCookie(user.id_token);
+    scheduleRefreshForUser(user);
   }
   return user;
 }
@@ -356,6 +388,7 @@ async function performRefresh() {
     if (newUser?.id_token) {
       setSessionCookie(newUser.id_token);
     }
+    scheduleRefreshForUser(newUser);
     return newUser;
   } catch (error) {
     // Check for rate limiting
@@ -445,6 +478,7 @@ export async function logout(redirectToProvider = false) {
 
   // Clear the session cookie
   clearSessionCookie();
+  clearRefreshTimeout();
 
   // Clear rate limit and debounce state so user can log in immediately
   rateLimitedUntil = 0;
@@ -468,6 +502,7 @@ export async function clearStorage() {
   // Reset state
   rateLimitedUntil = 0;
   lastRefreshTime = 0;
+  clearRefreshTimeout();
 }
 
 export default {
