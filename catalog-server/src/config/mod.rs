@@ -3,9 +3,8 @@ mod file_config;
 pub use file_config::{
     AgentConfig, AgentLlmConfig, AuditLogCleanupJobConfig, BackgroundJobsConfig,
     CatalogStoreConfig, DownloadManagerConfig, FileConfig, IngestionCleanupJobConfig,
-    IngestionConfig, IntervalJobConfig, OidcConfig, PopularContentJobConfig,
-    RelatedArtistsConfig, SearchConfig,
-    StreamingSearchConfig as StreamingSearchFileConfig,
+    IngestionConfig, IntervalJobConfig, OidcConfig, PopularContentJobConfig, RelatedArtistsConfig,
+    SearchConfig, StreamingSearchConfig as StreamingSearchFileConfig,
 };
 
 use crate::server::RequestsLoggingLevel;
@@ -197,18 +196,32 @@ impl AppConfig {
         // Popular content job settings
         let pc_file = bg_jobs_file.popular_content.unwrap_or_default();
         let popular_content = PopularContentJobSettings {
-            interval_hours: pc_file.interval_hours.unwrap_or(bg_jobs_defaults.popular_content.interval_hours),
-            albums_limit: pc_file.albums_limit.unwrap_or(bg_jobs_defaults.popular_content.albums_limit),
-            artists_limit: pc_file.artists_limit.unwrap_or(bg_jobs_defaults.popular_content.artists_limit),
-            lookback_days: pc_file.lookback_days.unwrap_or(bg_jobs_defaults.popular_content.lookback_days),
-            impression_lookback_days: pc_file.impression_lookback_days.unwrap_or(bg_jobs_defaults.popular_content.impression_lookback_days),
-            impression_retention_days: pc_file.impression_retention_days.unwrap_or(bg_jobs_defaults.popular_content.impression_retention_days),
+            interval_hours: pc_file
+                .interval_hours
+                .unwrap_or(bg_jobs_defaults.popular_content.interval_hours),
+            albums_limit: pc_file
+                .albums_limit
+                .unwrap_or(bg_jobs_defaults.popular_content.albums_limit),
+            artists_limit: pc_file
+                .artists_limit
+                .unwrap_or(bg_jobs_defaults.popular_content.artists_limit),
+            lookback_days: pc_file
+                .lookback_days
+                .unwrap_or(bg_jobs_defaults.popular_content.lookback_days),
+            impression_lookback_days: pc_file
+                .impression_lookback_days
+                .unwrap_or(bg_jobs_defaults.popular_content.impression_lookback_days),
+            impression_retention_days: pc_file
+                .impression_retention_days
+                .unwrap_or(bg_jobs_defaults.popular_content.impression_retention_days),
         };
 
         // What's new batch job settings
         let wn_file = bg_jobs_file.whatsnew_batch.unwrap_or_default();
         let whatsnew_batch = IntervalJobSettings {
-            interval_hours: wn_file.interval_hours.unwrap_or(bg_jobs_defaults.whatsnew_batch.interval_hours),
+            interval_hours: wn_file
+                .interval_hours
+                .unwrap_or(bg_jobs_defaults.whatsnew_batch.interval_hours),
         };
 
         // Ingestion cleanup job settings (optional - only if configured)
@@ -224,8 +237,12 @@ impl AppConfig {
         let audit_log_cleanup = bg_jobs_file.audit_log_cleanup.map(|alc_file| {
             let alc_defaults = AuditLogCleanupJobSettings::default();
             AuditLogCleanupJobSettings {
-                interval_hours: alc_file.interval_hours.unwrap_or(alc_defaults.interval_hours),
-                retention_days: alc_file.retention_days.unwrap_or(alc_defaults.retention_days),
+                interval_hours: alc_file
+                    .interval_hours
+                    .unwrap_or(alc_defaults.interval_hours),
+                retention_days: alc_file
+                    .retention_days
+                    .unwrap_or(alc_defaults.retention_days),
             }
         });
 

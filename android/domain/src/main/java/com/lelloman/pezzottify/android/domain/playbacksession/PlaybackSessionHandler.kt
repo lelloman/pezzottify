@@ -160,7 +160,7 @@ class PlaybackSessionHandler internal constructor(
             "$PREFIX.hello",
             mapOf(
                 "device_name" to (deviceInfo.deviceName ?: "Android"),
-                "device_type" to "android",
+                "device_type" to deviceInfo.deviceType,
             )
         )
         logger.debug("Sent playback hello")

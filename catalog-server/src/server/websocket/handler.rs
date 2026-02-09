@@ -95,6 +95,7 @@ async fn handle_socket(
         .await;
 
     let (ws_sink, ws_stream) = socket.split();
+    let (raw_tx, raw_rx) = mpsc::channel::<Message>(8);
 
     // Send connected message
     let connected_msg = ServerMessage::new(
@@ -106,10 +107,15 @@ async fn handle_socket(
     );
 
     // Spawn task to forward outgoing messages to WebSocket
-    let outgoing_handle = tokio::spawn(forward_outgoing(ws_sink, outgoing_rx, connected_msg));
+    let outgoing_handle = tokio::spawn(forward_outgoing(
+        ws_sink,
+        outgoing_rx,
+        raw_rx,
+        connected_msg,
+    ));
 
     // Process incoming messages
-    process_incoming(ws_stream, user_id, device_id, &state).await;
+    process_incoming(ws_stream, user_id, device_id, &state, raw_tx).await;
 
     // Cleanup
     debug!(
@@ -134,6 +140,7 @@ async fn handle_socket(
 async fn forward_outgoing(
     mut ws_sink: futures::stream::SplitSink<WebSocket, Message>,
     mut outgoing_rx: mpsc::Receiver<ServerMessage>,
+    mut raw_rx: mpsc::Receiver<Message>,
     initial_msg: ServerMessage,
 ) {
     // Send initial connected message
@@ -144,16 +151,26 @@ async fn forward_outgoing(
     }
 
     // Forward all subsequent messages
-    while let Some(msg) = outgoing_rx.recv().await {
-        match serde_json::to_string(&msg) {
-            Ok(json) => {
-                if ws_sink.send(Message::Text(json.into())).await.is_err() {
+    loop {
+        tokio::select! {
+            Some(msg) = outgoing_rx.recv() => {
+                match serde_json::to_string(&msg) {
+                    Ok(json) => {
+                        if ws_sink.send(Message::Text(json.into())).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to serialize WebSocket message: {}", e);
+                    }
+                }
+            }
+            Some(raw) = raw_rx.recv() => {
+                if ws_sink.send(raw).await.is_err() {
                     break;
                 }
             }
-            Err(e) => {
-                error!("Failed to serialize WebSocket message: {}", e);
-            }
+            else => break,
         }
     }
 }
@@ -164,6 +181,7 @@ async fn process_incoming(
     user_id: usize,
     device_id: usize,
     state: &WsState,
+    raw_tx: mpsc::Sender<Message>,
 ) {
     while let Some(result) = ws_stream.next().await {
         match result {
@@ -192,9 +210,11 @@ async fn process_incoming(
             Ok(Message::Binary(_)) => {
                 debug!("Received binary message, ignoring");
             }
-            Ok(Message::Ping(_)) => {
-                // Axum/tungstenite handles pong automatically
+            Ok(Message::Ping(payload)) => {
                 debug!("Received ping");
+                if raw_tx.try_send(Message::Pong(payload)).is_err() {
+                    debug!("Dropping pong frame because outbound control channel is full");
+                }
             }
             Ok(Message::Pong(_)) => {
                 debug!("Received pong");
@@ -265,7 +285,7 @@ async fn handle_playback_message(
                 let welcome = manager
                     .handle_hello(user_id, device_id, p.device_name, p.device_type)
                     .await;
-                let _ = state
+                let send_result = state
                     .connection_manager
                     .send_to_device(
                         user_id,
@@ -273,6 +293,12 @@ async fn handle_playback_message(
                         ServerMessage::new(msg_types::PLAYBACK_WELCOME, welcome),
                     )
                     .await;
+                if let Err(err) = send_result {
+                    warn!(
+                        "Failed to send playback.welcome to user {} device {}: {:?}",
+                        user_id, device_id, err
+                    );
+                }
                 Ok(())
             }
             Err(e) => Err(PlaybackError::InvalidMessage(format!(
@@ -312,13 +338,7 @@ async fn handle_playback_message(
                 Ok(cmd) => match cmd.target_device_id {
                     Some(target) => {
                         manager
-                            .handle_command(
-                                user_id,
-                                device_id,
-                                target,
-                                &cmd.command,
-                                cmd.payload,
-                            )
+                            .handle_command(user_id, device_id, target, &cmd.command, cmd.payload)
                             .await
                     }
                     None => Err(PlaybackError::InvalidMessage(

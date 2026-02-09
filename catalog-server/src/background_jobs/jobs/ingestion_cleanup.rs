@@ -40,7 +40,11 @@ pub struct IngestionCleanupJob {
 impl IngestionCleanupJob {
     /// Create a new IngestionCleanupJob with default settings.
     pub fn new(ingestion_store: Arc<dyn IngestionStore>, temp_dir: PathBuf) -> Self {
-        Self::from_settings(ingestion_store, temp_dir, &IngestionCleanupJobSettings::default())
+        Self::from_settings(
+            ingestion_store,
+            temp_dir,
+            &IngestionCleanupJobSettings::default(),
+        )
     }
 
     /// Create a new IngestionCleanupJob from settings.

@@ -6,7 +6,9 @@ use crate::sqlite_persistence::{
     Column, ForeignKey, ForeignKeyOnChange, SqlType, Table, VersionedSchema, BASE_DB_VERSION,
     DEFAULT_TIMESTAMP,
 };
-use crate::user::device::{Device, DeviceRegistration, DeviceShareMode, DeviceSharePolicy, DeviceType};
+use crate::user::device::{
+    Device, DeviceRegistration, DeviceShareMode, DeviceSharePolicy, DeviceType,
+};
 use crate::user::permissions::UserRole;
 use crate::user::user_models::{
     BandwidthSummary, BandwidthUsage, CategoryBandwidth, DailyListeningStats, ListeningEvent,
@@ -593,12 +595,7 @@ const DEVICE_SHARE_RULE_TABLE_V_13: Table = Table {
             default_value = Some(DEFAULT_TIMESTAMP)
         ),
     ],
-    unique_constraints: &[&[
-        "device_id",
-        "rule_type",
-        "subject_type",
-        "subject_value",
-    ]],
+    unique_constraints: &[&["device_id", "rule_type", "subject_type", "subject_value"]],
     indices: &[("idx_device_share_rule_device", "device_id")],
 };
 

@@ -46,13 +46,13 @@ async function handlePasswordLogin() {
       if (data.token) {
         localStorage.setItem("auth_token", data.token);
       }
-      // Set user from response
-      authStore.user = {
-        handle: data.user_handle,
-        permissions: data.permissions || [],
-      };
-      authStore.sessionChecked = true;
-      router.push("/");
+      // Ensure session is initialized (sets user, connects WS, initializes playback session)
+      const ok = await authStore.checkSession();
+      if (ok) {
+        router.push("/");
+      } else {
+        error.value = "Login succeeded but session initialization failed";
+      }
     } else {
       const data = await response.json().catch(() => ({}));
       error.value = data.error || "Login failed";

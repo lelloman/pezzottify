@@ -15,6 +15,8 @@ pub const OS_INFO_MAX_LEN: usize = 200;
 pub enum DeviceType {
     Web,
     Android,
+    #[serde(rename = "android_tv")]
+    AndroidTv,
     Ios,
     Unknown,
 }
@@ -24,6 +26,7 @@ impl DeviceType {
         match self {
             Self::Web => "web",
             Self::Android => "android",
+            Self::AndroidTv => "android_tv",
             Self::Ios => "ios",
             Self::Unknown => "unknown",
         }
@@ -34,6 +37,7 @@ impl DeviceType {
         match s.to_lowercase().as_str() {
             "web" => Self::Web,
             "android" => Self::Android,
+            "android_tv" => Self::AndroidTv,
             "ios" => Self::Ios,
             _ => Self::Unknown,
         }
@@ -190,6 +194,7 @@ mod tests {
     fn test_device_type_from_str_valid() {
         assert_eq!(DeviceType::from_str("web"), DeviceType::Web);
         assert_eq!(DeviceType::from_str("android"), DeviceType::Android);
+        assert_eq!(DeviceType::from_str("android_tv"), DeviceType::AndroidTv);
         assert_eq!(DeviceType::from_str("ios"), DeviceType::Ios);
         assert_eq!(DeviceType::from_str("WEB"), DeviceType::Web); // case insensitive
         assert_eq!(DeviceType::from_str("Android"), DeviceType::Android);
@@ -211,6 +216,10 @@ mod tests {
         assert_eq!(
             DeviceType::from_str(DeviceType::Android.as_str()),
             DeviceType::Android
+        );
+        assert_eq!(
+            DeviceType::from_str(DeviceType::AndroidTv.as_str()),
+            DeviceType::AndroidTv
         );
         assert_eq!(
             DeviceType::from_str(DeviceType::Ios.as_str()),

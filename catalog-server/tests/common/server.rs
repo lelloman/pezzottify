@@ -79,12 +79,15 @@ pub struct TestServer {
     pub base_url: String,
 
     /// The port the server is listening on
+    #[allow(dead_code)]
     pub port: u16,
 
     /// User store for direct database access in tests
+    #[allow(dead_code)]
     pub user_store: Arc<dyn FullUserStore>,
 
     /// Server store for direct database access in tests (jobs, catalog events, whatsnew)
+    #[allow(dead_code)]
     pub server_store: Arc<dyn ServerStore>,
 
     // Private fields - keep resources alive until drop

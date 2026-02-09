@@ -87,6 +87,7 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
 
   let _broadcastInterval = null;
   let _playbackStore = null;
+  let _helloRetryInterval = null;
 
   function startStateBroadcast() {
     stopStateBroadcast();
@@ -95,6 +96,26 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
         broadcastState();
       }
     }, BROADCAST_INTERVAL_MS);
+  }
+
+  function startHelloRetry() {
+    if (_helloRetryInterval) return;
+    _helloRetryInterval = setInterval(() => {
+      if (!ws.wsConnected.value) return;
+      if (myDeviceId.value != null) {
+        stopHelloRetry();
+        return;
+      }
+      console.debug("[PlaybackSession] retry hello");
+      sendHello();
+    }, 2000);
+  }
+
+  function stopHelloRetry() {
+    if (_helloRetryInterval) {
+      clearInterval(_helloRetryInterval);
+      _helloRetryInterval = null;
+    }
   }
 
   function stopStateBroadcast() {
@@ -137,6 +158,7 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
   // ============================================
 
   function sendHello() {
+    console.debug("[PlaybackSession] sendHello");
     ws.send("playback.hello", {
       device_name: detectDeviceName(),
       device_type: "web",
@@ -193,6 +215,7 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
   function handleWelcome(payload) {
     myDeviceId.value = payload.device_id;
     devices.value = payload.devices || [];
+    stopHelloRetry();
     console.info("[PlaybackSession] welcome", {
       myDeviceId: myDeviceId.value,
       devices: devices.value.length,
@@ -471,6 +494,7 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
     if (ws.wsConnected.value) {
       sendHello();
     }
+    startHelloRetry();
 
     if (!_connectWatcher) {
       _connectWatcher = watch(ws.wsConnected, (connected) => {
@@ -480,6 +504,7 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
           devices.value = [];
           otherDeviceStates.value = {};
           sendHello();
+          startHelloRetry();
         }
       });
     }
@@ -487,6 +512,7 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
 
   function cleanup() {
     stopStateBroadcast();
+    stopHelloRetry();
     if (_connectWatcher) {
       _connectWatcher();
       _connectWatcher = null;

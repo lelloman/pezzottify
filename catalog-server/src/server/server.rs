@@ -23,9 +23,7 @@ use crate::{
         settings::UserSetting,
         sync_events::UserEvent,
         user_models::LikedContentType,
-        FullUserStore,
-        Permission,
-        UserRole,
+        FullUserStore, Permission, UserRole,
     },
 };
 use axum_extra::extract::cookie::{Cookie, SameSite};
@@ -2712,7 +2710,11 @@ async fn get_user_devices(
     session: Session,
     State(user_manager): State<GuardedUserManager>,
 ) -> Response {
-    let devices = match user_manager.lock().unwrap().get_user_devices(session.user_id) {
+    let devices = match user_manager
+        .lock()
+        .unwrap()
+        .get_user_devices(session.user_id)
+    {
         Ok(devices) => devices,
         Err(err) => {
             error!("Error getting user devices: {}", err);
@@ -4951,7 +4953,10 @@ pub async fn make_app(
         .with_state(state.clone());
 
     let device_write_routes: Router = Router::new()
-        .route("/devices/{device_id}/share_policy", put(put_device_share_policy))
+        .route(
+            "/devices/{device_id}/share_policy",
+            put(put_device_share_policy),
+        )
         .layer(GovernorLayer::new(write_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),

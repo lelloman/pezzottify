@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.ui
 
 import android.content.Intent
+import com.lelloman.pezzottify.android.BuildConfig
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.auth.oidc.OidcAuthManager
@@ -78,6 +79,7 @@ import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.home.PopularAlbumState
 import com.lelloman.pezzottify.android.ui.screen.main.home.PopularArtistState
 import com.lelloman.pezzottify.android.ui.screen.main.home.PopularContentState
+import com.lelloman.pezzottify.android.ui.screen.tv.TvNowPlayingStatusViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.home.ViewedContentType
 import com.lelloman.pezzottify.android.ui.screen.main.library.LibraryScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.library.UiUserPlaylist
@@ -113,6 +115,7 @@ import dagger.hilt.android.components.ViewModelComponent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -200,9 +203,17 @@ class InteractorsModule {
                 PerformLogin.LoginResult.Error -> LoginViewModel.Interactor.LoginResult.Failure.Unknown
             }
 
-        override fun oidcCallbacks(): SharedFlow<Intent> = oidcCallbackHandler.callbacks
+        override fun oidcCallbacks(): SharedFlow<Intent> =
+            if (BuildConfig.IS_TV) {
+                MutableSharedFlow()
+            } else {
+                oidcCallbackHandler.callbacks
+            }
 
         override suspend fun createOidcAuthIntent(): LoginViewModel.Interactor.OidcIntentResult {
+            if (BuildConfig.IS_TV) {
+                return LoginViewModel.Interactor.OidcIntentResult.Error("OIDC disabled on TV")
+            }
             // Clear processed state when starting a new auth flow
             oidcCallbackHandler.clearProcessedState()
             val deviceInfo = deviceInfoProvider.getDeviceInfo()
@@ -217,6 +228,9 @@ class InteractorsModule {
         }
 
         override suspend fun handleOidcCallback(intent: Intent): LoginViewModel.Interactor.OidcLoginResult {
+            if (BuildConfig.IS_TV) {
+                return LoginViewModel.Interactor.OidcLoginResult.Error("OIDC disabled on TV")
+            }
             // Prevent duplicate processing of the same callback
             if (oidcCallbackHandler.isAlreadyProcessed(intent)) {
                 return LoginViewModel.Interactor.OidcLoginResult.Cancelled
@@ -236,6 +250,39 @@ class InteractorsModule {
             }
         }
     }
+
+    @Provides
+    fun provideTvNowPlayingStatusInteractor(
+        authStore: AuthStore,
+        webSocketManager: WebSocketManager,
+        deviceInfoProvider: DeviceInfoProvider,
+    ): TvNowPlayingStatusViewModel.Interactor =
+        object : TvNowPlayingStatusViewModel.Interactor {
+            override fun userHandle(): Flow<String?> =
+                authStore.getAuthState().map { state ->
+                    when (state) {
+                        is AuthState.LoggedIn -> state.userHandle
+                        else -> authStore.getLastUsedHandle()
+                    }
+                }
+
+            override fun connectionStatus(): Flow<String> =
+                webSocketManager.connectionState.map { state ->
+                    when (state) {
+                        is com.lelloman.pezzottify.android.domain.websocket.ConnectionState.Connected -> "Connected"
+                        is com.lelloman.pezzottify.android.domain.websocket.ConnectionState.Connecting -> "Connecting"
+                        is com.lelloman.pezzottify.android.domain.websocket.ConnectionState.Error ->
+                            "Error: ${state.message}"
+                        com.lelloman.pezzottify.android.domain.websocket.ConnectionState.Disconnected -> "Disconnected"
+                    }
+                }
+
+            override fun deviceName(): Flow<String?> =
+                kotlinx.coroutines.flow.flowOf(deviceInfoProvider.getDeviceInfo().deviceName)
+
+            override fun deviceType(): Flow<String?> =
+                kotlinx.coroutines.flow.flowOf(deviceInfoProvider.getDeviceInfo().deviceType)
+        }
 
     @Provides
     fun provideAboutScreenInteractor(
