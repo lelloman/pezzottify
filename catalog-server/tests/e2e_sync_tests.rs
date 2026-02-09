@@ -5,7 +5,6 @@
 mod common;
 
 use common::{TestClient, TestServer, TEST_USER, TRACK_1_ID};
-use pezzottify_catalog_server::user::{UserEventStore, UserStore};
 use reqwest::StatusCode;
 use serde_json::json;
 
