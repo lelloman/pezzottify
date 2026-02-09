@@ -26,7 +26,6 @@ class MainScreenViewModel @Inject constructor(
         viewModelScope.launch {
             interactor.getPlaybackState()
                 .collect { playbackState ->
-                    logger.debug("Collecting new playback state $playbackState")
                     val newBottomPlayerState = when (playbackState) {
                         is Interactor.PlaybackState.Idle, null -> MainScreenState.BottomPlayer()
                         is Interactor.PlaybackState.Loading -> {
