@@ -28,6 +28,25 @@ authStore.initialize();
 
 app.mount("#app");
 
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", async () => {
+    try {
+      await navigator.serviceWorker.register("/sw.js");
+      console.log("[SW] Registered");
+      if (!navigator.serviceWorker.controller) {
+        const reloadKey = "sw_controller_reloaded";
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          if (sessionStorage.getItem(reloadKey)) return;
+          sessionStorage.setItem(reloadKey, "1");
+          window.location.reload();
+        });
+      }
+    } catch (error) {
+      console.warn("[SW] Registration failed:", error);
+    }
+  });
+}
+
 remoteStore.setBlockHttpCache(window.config.blockHttpCache);
 
 watch(

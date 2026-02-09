@@ -67,6 +67,25 @@ function scheduleRefreshForUser(user) {
   }, refreshInMs);
 }
 
+function notifyServiceWorker(idToken) {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
+    return;
+  }
+
+  const send = (worker) => {
+    if (!worker) return;
+    worker.postMessage({ type: "SET_AUTH_TOKEN", token: idToken || null });
+  };
+
+  if (navigator.serviceWorker.controller) {
+    send(navigator.serviceWorker.controller);
+  } else {
+    navigator.serviceWorker.ready
+      .then((registration) => send(registration.active))
+      .catch(() => {});
+  }
+}
+
 /**
  * Get or create the UserManager instance.
  */
@@ -226,6 +245,7 @@ export async function handleCallback() {
     if (user?.id_token) {
       setSessionCookie(user.id_token);
     }
+    notifyServiceWorker(user?.id_token || null);
     scheduleRefreshForUser(user);
     return user;
   } catch (error) {
@@ -243,12 +263,13 @@ export async function getUser() {
   const manager = getUserManager();
   const user = await manager.getUser();
   // Ensure cookie is set if we have a valid user (for WebSocket)
-  if (user?.id_token && !user.expired) {
-    setSessionCookie(user.id_token);
-    scheduleRefreshForUser(user);
+    if (user?.id_token && !user.expired) {
+      setSessionCookie(user.id_token);
+      notifyServiceWorker(user.id_token);
+      scheduleRefreshForUser(user);
+    }
+    return user;
   }
-  return user;
-}
 
 /**
  * Get the current ID token, refreshing if expired.
@@ -388,6 +409,7 @@ async function performRefresh() {
     if (newUser?.id_token) {
       setSessionCookie(newUser.id_token);
     }
+    notifyServiceWorker(newUser?.id_token || null);
     scheduleRefreshForUser(newUser);
     return newUser;
   } catch (error) {
@@ -478,6 +500,7 @@ export async function logout(redirectToProvider = false) {
 
   // Clear the session cookie
   clearSessionCookie();
+  notifyServiceWorker(null);
   clearRefreshTimeout();
 
   // Clear rate limit and debounce state so user can log in immediately
@@ -502,6 +525,7 @@ export async function clearStorage() {
   // Reset state
   rateLimitedUntil = 0;
   lastRefreshTime = 0;
+  notifyServiceWorker(null);
   clearRefreshTimeout();
 }
 
