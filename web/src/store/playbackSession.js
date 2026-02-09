@@ -107,6 +107,11 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
   function broadcastState() {
     if (!_playbackStore?.currentTrackId || _playbackStore?.mode === "remote")
       return;
+    console.debug("[PlaybackSession] broadcastState", {
+      trackId: _playbackStore.currentTrackId,
+      isPlaying: _playbackStore.isPlaying,
+      queueVersion: queueVersion.value,
+    });
     const state = _playbackStore.snapshotState(queueVersion.value);
     ws.send("playback.state", state);
   }
@@ -116,6 +121,11 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
       return;
     queueVersion.value++;
     const queue = _playbackStore.snapshotQueue();
+    console.debug("[PlaybackSession] broadcastQueue", {
+      queueSize: queue.length,
+      queueVersion: queueVersion.value,
+      trackId: _playbackStore.currentTrackId,
+    });
     ws.send("playback.queue_update", {
       queue,
       queue_version: queueVersion.value,
@@ -183,6 +193,11 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
   function handleWelcome(payload) {
     myDeviceId.value = payload.device_id;
     devices.value = payload.devices || [];
+    console.info("[PlaybackSession] welcome", {
+      myDeviceId: myDeviceId.value,
+      devices: devices.value.length,
+      activeDevices: payload.session?.active_devices?.length || 0,
+    });
 
     const states = {};
     for (const d of payload.session?.active_devices || []) {
@@ -218,6 +233,14 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
   function handleDeviceState(payload) {
     if (payload.device_id === myDeviceId.value) return;
 
+    console.debug("[PlaybackSession] device_state", {
+      deviceId: payload.device_id,
+      isPlaying: payload.state?.is_playing,
+      trackId: payload.state?.current_track?.id,
+      queuePosition: payload.state?.queue_position,
+      queueVersion: payload.state?.queue_version,
+      timestamp: payload.state?.timestamp,
+    });
     const existing = otherDeviceStates.value[payload.device_id] || {};
     otherDeviceStates.value = {
       ...otherDeviceStates.value,
@@ -232,6 +255,11 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
   function handleDeviceQueue(payload) {
     if (payload.device_id === myDeviceId.value) return;
 
+    console.debug("[PlaybackSession] device_queue", {
+      deviceId: payload.device_id,
+      queueSize: payload.queue?.length || 0,
+      queueVersion: payload.queue_version,
+    });
     const existing = otherDeviceStates.value[payload.device_id] || {};
     otherDeviceStates.value = {
       ...otherDeviceStates.value,
@@ -256,6 +284,11 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
       return;
     }
 
+    console.debug("[PlaybackSession] queue_sync", {
+      deviceId: targetDeviceId,
+      queueSize: payload.queue?.length || 0,
+      queueVersion: payload.queue_version,
+    });
     const existing = otherDeviceStates.value[targetDeviceId] || {};
     otherDeviceStates.value = {
       ...otherDeviceStates.value,
@@ -271,6 +304,7 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
     if (!_playbackStore) return;
 
     const { command, payload: cmdPayload } = payload;
+    console.info("[PlaybackSession] command", { command, payload: cmdPayload });
     switch (command) {
       case "play":
         _playbackStore.play();
