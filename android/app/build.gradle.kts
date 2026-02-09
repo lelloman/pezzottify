@@ -64,6 +64,22 @@ android {
         manifestPlaceholders["appAuthRedirectScheme"] = "com.lelloman.pezzottify.android"
     }
 
+    flavorDimensions += "formFactor"
+    productFlavors {
+        create("phone") {
+            dimension = "formFactor"
+            buildConfigField("boolean", "IS_TV", "false")
+            buildConfigField("String", "DEVICE_TYPE", "\"android\"")
+        }
+        create("tv") {
+            dimension = "formFactor"
+            applicationIdSuffix = ".tv"
+            versionNameSuffix = "-tv"
+            buildConfigField("boolean", "IS_TV", "true")
+            buildConfigField("String", "DEVICE_TYPE", "\"android_tv\"")
+        }
+    }
+
     signingConfigs {
         getByName("debug") {
             // Uses default debug keystore

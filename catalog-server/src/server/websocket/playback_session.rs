@@ -14,9 +14,9 @@ use tracing::{debug, info, warn};
 use super::connection::ConnectionManager;
 use super::messages::{msg_types, ServerMessage};
 use super::playback_messages::*;
-use crate::user::UserManager;
 use crate::user::device::{DeviceShareMode, DeviceSharePolicy};
 use crate::user::permissions::UserRole;
+use crate::user::UserManager;
 
 /// Maximum queue size to prevent memory exhaustion.
 const MAX_QUEUE_SIZE: usize = 500;
@@ -107,7 +107,10 @@ impl From<PlaybackError> for PlaybackErrorPayload {
 
 impl PlaybackSessionManager {
     /// Create a new playback session manager.
-    pub fn new(connection_manager: Arc<ConnectionManager>, user_manager: Arc<Mutex<UserManager>>) -> Self {
+    pub fn new(
+        connection_manager: Arc<ConnectionManager>,
+        user_manager: Arc<Mutex<UserManager>>,
+    ) -> Self {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             devices: RwLock::new(HashMap::new()),
@@ -176,7 +179,11 @@ impl PlaybackSessionManager {
         }
     }
 
-    async fn get_allowed_external_users(&self, owner_user_id: usize, device_id: usize) -> Vec<usize> {
+    async fn get_allowed_external_users(
+        &self,
+        owner_user_id: usize,
+        device_id: usize,
+    ) -> Vec<usize> {
         let connected_users = self.connection_manager.get_connected_user_ids().await;
         connected_users
             .into_iter()
@@ -231,7 +238,9 @@ impl PlaybackSessionManager {
             .send_to_other_devices(owner_user_id, exclude_device_id, owner_msg)
             .await;
 
-        let external_users = self.get_allowed_external_users(owner_user_id, device_id).await;
+        let external_users = self
+            .get_allowed_external_users(owner_user_id, device_id)
+            .await;
         for user_id in external_users {
             let devices = self.build_device_list(user_id).await;
             let msg = ServerMessage::new(
@@ -340,8 +349,7 @@ impl PlaybackSessionManager {
         let connected_devices = self.build_device_list(user_id).await;
 
         // Broadcast device list changed to other devices
-        self
-            .broadcast_device_list_change(user_id, device_id, "connected", device_id)
+        self.broadcast_device_list_change(user_id, device_id, "connected", device_id)
             .await;
 
         info!(
@@ -358,25 +366,47 @@ impl PlaybackSessionManager {
 
     /// Build the list of connected devices for a user.
     async fn build_device_list(&self, user_id: usize) -> Vec<ConnectedDevice> {
-        let device_ids = self.connection_manager.get_all_connected_devices().await;
+        let own_device_ids = self.connection_manager.get_connected_devices(user_id).await;
+        let all_device_ids = self.connection_manager.get_all_connected_devices().await;
         let devices = self.devices.read().await;
         let sessions = self.sessions.read().await;
 
-        debug!(
-            "[playback] build_device_list: user={} connection_manager_devices={:?}",
-            user_id, device_ids
+        info!(
+            "[playback] build_device_list: user={} own_devices={:?} all_devices={:?} devices_map_len={}",
+            user_id,
+            own_device_ids,
+            all_device_ids,
+            devices.len()
         );
+
+        let mut device_ids: Vec<(usize, usize)> =
+            own_device_ids.into_iter().map(|id| (user_id, id)).collect();
+
+        for (owner_user_id, id) in all_device_ids {
+            if owner_user_id == user_id {
+                continue;
+            }
+            if !self.is_user_allowed_for_device(owner_user_id, id, user_id) {
+                continue;
+            }
+            device_ids.push((owner_user_id, id));
+        }
 
         device_ids
             .into_iter()
             .filter_map(|(owner_user_id, id)| {
-                if owner_user_id != user_id
-                    && !self.is_user_allowed_for_device(owner_user_id, id, user_id)
-                {
-                    return None;
-                }
+                let meta = devices.get(&(owner_user_id, id));
+                let meta = if let Some(meta) = meta {
+                    Some((
+                        meta.name.clone(),
+                        meta.device_type,
+                        meta.connected_at,
+                    ))
+                } else {
+                    None
+                };
 
-                devices.get(&(owner_user_id, id)).map(|meta| {
+                meta.map(|(name, device_type, connected_at)| {
                     let is_playing = sessions
                         .get(&owner_user_id)
                         .map(|s| s.device_states.contains_key(&id))
@@ -386,10 +416,10 @@ impl PlaybackSessionManager {
                         .unwrap_or_else(|| "Unknown".to_string());
                     ConnectedDevice {
                         id,
-                        name: meta.name.clone(),
-                        device_type: meta.device_type,
+                        name,
+                        device_type,
                         is_playing,
-                        connected_at: meta.connected_at,
+                        connected_at,
                         owner_user_id,
                         owner_handle,
                         is_shared: owner_user_id != user_id,
@@ -451,15 +481,32 @@ impl PlaybackSessionManager {
             .await
             .unwrap_or_else(|| "Unknown".to_string());
 
-        let mut sessions = self.sessions.write().await;
-        let session = sessions.entry(user_id).or_default();
+        let state_stopped = state.current_track.is_none() && !state.is_playing;
+        let mut was_new = false;
+        {
+            let mut sessions = self.sessions.write().await;
+            let session = sessions.entry(user_id).or_default();
+
+            if state_stopped {
+                session.device_states.remove(&device_id);
+            } else {
+                was_new = !session.device_states.contains_key(&device_id);
+                let entry = session
+                    .device_states
+                    .entry(device_id)
+                    .or_insert_with(|| DevicePlaybackState {
+                        state: state.clone(),
+                        queue: Vec::new(),
+                        queue_version: 0,
+                        last_update: Instant::now(),
+                    });
+                entry.state = state.clone();
+                entry.last_update = Instant::now();
+            }
+        }
 
         // If the state has no current track and is not playing, the device is stopping
-        if state.current_track.is_none() && !state.is_playing {
-            // Remove device state
-            session.device_states.remove(&device_id);
-
-            // Relay stopped to other devices
+        if state_stopped {
             let stopped_msg = ServerMessage::new(
                 msg_types::PLAYBACK_DEVICE_STOPPED,
                 DeviceStoppedPayload {
@@ -467,31 +514,12 @@ impl PlaybackSessionManager {
                     reason: "stopped".to_string(),
                 },
             );
-            self
-                .broadcast_to_authorized_users(user_id, device_id, device_id, stopped_msg)
+            self.broadcast_to_authorized_users(user_id, device_id, device_id, stopped_msg)
                 .await;
-
-            // Update device list
-            self
-                .broadcast_device_list_change(user_id, device_id, "stopped_playing", device_id)
+            self.broadcast_device_list_change(user_id, device_id, "stopped_playing", device_id)
                 .await;
-
             return Ok(());
         }
-
-        // Update or create device state
-        let was_new = !session.device_states.contains_key(&device_id);
-        let entry = session
-            .device_states
-            .entry(device_id)
-            .or_insert_with(|| DevicePlaybackState {
-                state: state.clone(),
-                queue: Vec::new(),
-                queue_version: 0,
-                last_update: Instant::now(),
-            });
-        entry.state = state.clone();
-        entry.last_update = Instant::now();
 
         // Relay state to other devices
         let relay_msg = ServerMessage::new(
@@ -502,14 +530,12 @@ impl PlaybackSessionManager {
                 state,
             },
         );
-        self
-            .broadcast_to_authorized_users(user_id, device_id, device_id, relay_msg)
+        self.broadcast_to_authorized_users(user_id, device_id, device_id, relay_msg)
             .await;
 
         // If this is the first state from this device, broadcast device list changed
         if was_new {
-            self
-                .broadcast_device_list_change(user_id, device_id, "started_playing", device_id)
+            self.broadcast_device_list_change(user_id, device_id, "started_playing", device_id)
                 .await;
         }
 
@@ -528,33 +554,35 @@ impl PlaybackSessionManager {
             return Err(PlaybackError::QueueLimitExceeded);
         }
 
-        let mut sessions = self.sessions.write().await;
-        let session = sessions.entry(user_id).or_default();
+        {
+            let mut sessions = self.sessions.write().await;
+            let session = sessions.entry(user_id).or_default();
 
-        // Update or create device state with queue
-        let entry = session
-            .device_states
-            .entry(device_id)
-            .or_insert_with(|| DevicePlaybackState {
-                state: PlaybackState {
-                    current_track: None,
-                    queue_position: 0,
-                    queue_version,
-                    position: 0.0,
-                    is_playing: false,
-                    volume: 1.0,
-                    muted: false,
-                    shuffle: false,
-                    repeat: RepeatMode::Off,
-                    timestamp: 0,
-                },
-                queue: Vec::new(),
-                queue_version: 0,
-                last_update: Instant::now(),
-            });
-        entry.queue = queue.clone();
-        entry.queue_version = queue_version;
-        entry.last_update = Instant::now();
+            // Update or create device state with queue
+            let entry = session
+                .device_states
+                .entry(device_id)
+                .or_insert_with(|| DevicePlaybackState {
+                    state: PlaybackState {
+                        current_track: None,
+                        queue_position: 0,
+                        queue_version,
+                        position: 0.0,
+                        is_playing: false,
+                        volume: 1.0,
+                        muted: false,
+                        shuffle: false,
+                        repeat: RepeatMode::Off,
+                        timestamp: 0,
+                    },
+                    queue: Vec::new(),
+                    queue_version: 0,
+                    last_update: Instant::now(),
+                });
+            entry.queue = queue.clone();
+            entry.queue_version = queue_version;
+            entry.last_update = Instant::now();
+        }
 
         // Relay to other devices
         let relay_msg = ServerMessage::new(
@@ -565,8 +593,7 @@ impl PlaybackSessionManager {
                 queue_version,
             },
         );
-        self
-            .broadcast_to_authorized_users(user_id, device_id, device_id, relay_msg)
+        self.broadcast_to_authorized_users(user_id, device_id, device_id, relay_msg)
             .await;
 
         Ok(())
@@ -625,8 +652,6 @@ impl PlaybackSessionManager {
         device_id: usize,
         target_device_id: Option<usize>,
     ) -> Result<QueueSyncPayload, PlaybackError> {
-        let sessions = self.sessions.read().await;
-
         let (owner_user_id, target_id) = if let Some(target_id) = target_device_id {
             let owner_user_id = self
                 .get_device_owner_id(target_id)
@@ -642,6 +667,8 @@ impl PlaybackSessionManager {
         {
             return Err(PlaybackError::Forbidden);
         }
+
+        let sessions = self.sessions.read().await;
 
         // Try to find the requested device's queue if specified
         if let Some(session) = sessions.get(&owner_user_id) {
@@ -694,11 +721,13 @@ impl PlaybackSessionManager {
         }
 
         // Remove device's playback state
-        let mut sessions = self.sessions.write().await;
-        let had_state = if let Some(session) = sessions.get_mut(&user_id) {
-            session.device_states.remove(&device_id).is_some()
-        } else {
-            false
+        let had_state = {
+            let mut sessions = self.sessions.write().await;
+            if let Some(session) = sessions.get_mut(&user_id) {
+                session.device_states.remove(&device_id).is_some()
+            } else {
+                false
+            }
         };
 
         // Broadcast device_stopped if the device had active state
@@ -710,14 +739,12 @@ impl PlaybackSessionManager {
                     reason: "disconnected".to_string(),
                 },
             );
-            self
-                .broadcast_to_authorized_users(user_id, device_id, device_id, stopped_msg)
+            self.broadcast_to_authorized_users(user_id, device_id, device_id, stopped_msg)
                 .await;
         }
 
         // Broadcast device list changed
-        self
-            .broadcast_device_list_change(user_id, device_id, "disconnected", device_id)
+        self.broadcast_device_list_change(user_id, device_id, "disconnected", device_id)
             .await;
 
         info!(
@@ -728,34 +755,39 @@ impl PlaybackSessionManager {
 
     /// Check for stale device states and remove them.
     pub async fn check_stale_devices(&self) {
-        let mut sessions = self.sessions.write().await;
+        let mut stale_events: Vec<(usize, usize)> = Vec::new();
+        {
+            let mut sessions = self.sessions.write().await;
 
-        for (user_id, session) in sessions.iter_mut() {
-            let stale_ids: Vec<usize> = session
-                .device_states
-                .iter()
-                .filter(|(_, ds)| ds.last_update.elapsed() >= STALE_DEVICE_TIMEOUT)
-                .map(|(id, _)| *id)
-                .collect();
+            for (user_id, session) in sessions.iter_mut() {
+                let stale_ids: Vec<usize> = session
+                    .device_states
+                    .iter()
+                    .filter(|(_, ds)| ds.last_update.elapsed() >= STALE_DEVICE_TIMEOUT)
+                    .map(|(id, _)| *id)
+                    .collect();
 
-            for device_id in stale_ids {
-                info!(
-                    "[playback] stale device timeout: user={} device={}",
-                    user_id, device_id
-                );
-                session.device_states.remove(&device_id);
-
-                let stopped_msg = ServerMessage::new(
-                    msg_types::PLAYBACK_DEVICE_STOPPED,
-                    DeviceStoppedPayload {
-                        device_id,
-                        reason: "stale".to_string(),
-                    },
-                );
-                self
-                    .broadcast_to_authorized_users(*user_id, device_id, device_id, stopped_msg)
-                    .await;
+                for device_id in stale_ids {
+                    info!(
+                        "[playback] stale device timeout: user={} device={}",
+                        user_id, device_id
+                    );
+                    session.device_states.remove(&device_id);
+                    stale_events.push((*user_id, device_id));
+                }
             }
+        }
+
+        for (user_id, device_id) in stale_events {
+            let stopped_msg = ServerMessage::new(
+                msg_types::PLAYBACK_DEVICE_STOPPED,
+                DeviceStoppedPayload {
+                    device_id,
+                    reason: "stale".to_string(),
+                },
+            );
+            self.broadcast_to_authorized_users(user_id, device_id, device_id, stopped_msg)
+                .await;
         }
     }
 
@@ -788,11 +820,7 @@ impl PlaybackSessionManager {
                                 .unwrap_or_else(|| "Unknown".to_string()),
                             device_type: meta.map(|m| m.device_type),
                             is_playing: ds.state.is_playing,
-                            track_title: ds
-                                .state
-                                .current_track
-                                .as_ref()
-                                .map(|t| t.title.clone()),
+                            track_title: ds.state.current_track.as_ref().map(|t| t.title.clone()),
                             artist_name: ds
                                 .state
                                 .current_track
@@ -852,18 +880,13 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let store = SqliteUserStore::new(temp_dir.path().join("user.db")).unwrap();
         let user_store: Arc<dyn crate::user::FullUserStore> = Arc::new(store);
-        let catalog_store: Arc<dyn crate::catalog_store::CatalogStore> =
-            Arc::new(NullCatalogStore);
-        let user_manager = Arc::new(Mutex::new(UserManager::new(
-            catalog_store,
-            user_store,
-        )));
+        let catalog_store: Arc<dyn crate::catalog_store::CatalogStore> = Arc::new(NullCatalogStore);
+        let user_manager = Arc::new(Mutex::new(UserManager::new(catalog_store, user_store)));
         let session_manager = PlaybackSessionManager::new(conn_manager.clone(), user_manager);
         (conn_manager, session_manager)
     }
 
-    async fn setup_with_user_manager(
-    ) -> (
+    async fn setup_with_user_manager() -> (
         Arc<ConnectionManager>,
         PlaybackSessionManager,
         Arc<Mutex<UserManager>>,
@@ -872,13 +895,10 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let store = SqliteUserStore::new(temp_dir.path().join("user.db")).unwrap();
         let user_store: Arc<dyn crate::user::FullUserStore> = Arc::new(store);
-        let catalog_store: Arc<dyn crate::catalog_store::CatalogStore> =
-            Arc::new(NullCatalogStore);
-        let user_manager = Arc::new(Mutex::new(UserManager::new(
-            catalog_store,
-            user_store,
-        )));
-        let session_manager = PlaybackSessionManager::new(conn_manager.clone(), user_manager.clone());
+        let catalog_store: Arc<dyn crate::catalog_store::CatalogStore> = Arc::new(NullCatalogStore);
+        let user_manager = Arc::new(Mutex::new(UserManager::new(catalog_store, user_store)));
+        let session_manager =
+            PlaybackSessionManager::new(conn_manager.clone(), user_manager.clone());
         (conn_manager, session_manager, user_manager)
     }
 
@@ -937,8 +957,7 @@ mod tests {
             .set_device_share_policy(device_id, &DeviceSharePolicy::allow_everyone())
             .unwrap();
 
-        assert!(manager
-            .is_user_allowed_for_device(owner_id, device_id, other_id));
+        assert!(manager.is_user_allowed_for_device(owner_id, device_id, other_id));
     }
 
     #[tokio::test]
@@ -970,10 +989,8 @@ mod tests {
             .set_device_share_policy(device_id, &DeviceSharePolicy::deny_everyone())
             .unwrap();
 
-        assert!(!manager
-            .is_user_allowed_for_device(owner_id, device_id, other_id));
-        assert!(manager
-            .is_user_allowed_for_device(owner_id, device_id, owner_id));
+        assert!(!manager.is_user_allowed_for_device(owner_id, device_id, other_id));
+        assert!(manager.is_user_allowed_for_device(owner_id, device_id, owner_id));
     }
 
     #[tokio::test]
@@ -1012,8 +1029,7 @@ mod tests {
             .set_device_share_policy(device_id, &policy)
             .unwrap();
 
-        assert!(!manager
-            .is_user_allowed_for_device(owner_id, device_id, other_id));
+        assert!(!manager.is_user_allowed_for_device(owner_id, device_id, other_id));
     }
 
     #[tokio::test]
@@ -1057,8 +1073,7 @@ mod tests {
             .set_device_share_policy(device_id, &policy)
             .unwrap();
 
-        assert!(manager
-            .is_user_allowed_for_device(owner_id, device_id, other_id));
+        assert!(manager.is_user_allowed_for_device(owner_id, device_id, other_id));
     }
 
     fn make_stopped_state() -> PlaybackState {
@@ -1106,7 +1121,12 @@ mod tests {
         let session = sessions.get(&1).unwrap();
         assert!(session.device_states.contains_key(&100));
         assert_eq!(
-            session.device_states[&100].state.current_track.as_ref().unwrap().title,
+            session.device_states[&100]
+                .state
+                .current_track
+                .as_ref()
+                .unwrap()
+                .title,
             "Test Song"
         );
     }
@@ -1136,11 +1156,21 @@ mod tests {
         let session = sessions.get(&1).unwrap();
         assert_eq!(session.device_states.len(), 2);
         assert_eq!(
-            session.device_states[&100].state.current_track.as_ref().unwrap().title,
+            session.device_states[&100]
+                .state
+                .current_track
+                .as_ref()
+                .unwrap()
+                .title,
             "Song A"
         );
         assert_eq!(
-            session.device_states[&200].state.current_track.as_ref().unwrap().title,
+            session.device_states[&200]
+                .state
+                .current_track
+                .as_ref()
+                .unwrap()
+                .title,
             "Song B"
         );
         assert!(session.device_states[&100].state.is_playing);
@@ -1170,7 +1200,12 @@ mod tests {
         assert_eq!(welcome.session.active_devices[0].device_id, 100);
         assert_eq!(welcome.session.active_devices[0].device_name, "Chrome");
         assert_eq!(
-            welcome.session.active_devices[0].state.current_track.as_ref().unwrap().title,
+            welcome.session.active_devices[0]
+                .state
+                .current_track
+                .as_ref()
+                .unwrap()
+                .title,
             "Active Song"
         );
     }
@@ -1278,8 +1313,7 @@ mod tests {
         // Verify target device received the command
         let msg = rx_target.recv().await.unwrap();
         assert_eq!(msg.msg_type, "playback.command");
-        let payload: PlaybackCommandPayload =
-            serde_json::from_value(msg.payload).unwrap();
+        let payload: PlaybackCommandPayload = serde_json::from_value(msg.payload).unwrap();
         assert_eq!(payload.command, "play");
         assert!(payload.target_device_id.is_none());
     }
@@ -1324,8 +1358,7 @@ mod tests {
         assert!(result.is_ok());
 
         let msg = rx_target.recv().await.unwrap();
-        let payload: PlaybackCommandPayload =
-            serde_json::from_value(msg.payload).unwrap();
+        let payload: PlaybackCommandPayload = serde_json::from_value(msg.payload).unwrap();
         assert_eq!(payload.command, "seek");
         assert_eq!(payload.payload["position"], 45.5);
     }

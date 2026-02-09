@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.device
 import android.content.Context
 import android.os.Build
 import android.provider.Settings
+import com.lelloman.pezzottify.android.BuildConfig
 import com.lelloman.pezzottify.android.domain.device.DeviceInfoProvider
 import com.lelloman.pezzottify.android.domain.remoteapi.DeviceInfo
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -26,7 +27,7 @@ class AndroidDeviceInfoProvider @Inject constructor(
 
     override fun getDeviceInfo(): DeviceInfo = DeviceInfo(
         deviceUuid = deviceUuid,
-        deviceType = "android",
+        deviceType = BuildConfig.DEVICE_TYPE,
         deviceName = "${Build.MANUFACTURER} ${Build.MODEL}",
         osInfo = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
     )

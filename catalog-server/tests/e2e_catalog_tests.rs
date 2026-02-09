@@ -220,7 +220,7 @@ async fn test_get_image_returns_image_data() {
 
     // Verify we got image bytes
     let bytes = response.bytes().await.unwrap();
-    assert!(bytes.len() > 0);
+    assert!(!bytes.is_empty());
 }
 
 #[tokio::test]

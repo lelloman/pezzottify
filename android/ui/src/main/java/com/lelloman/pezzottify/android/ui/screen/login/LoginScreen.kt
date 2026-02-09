@@ -77,6 +77,8 @@ internal fun LoginScreenInternal(
     events: Flow<LoginScreenEvents>,
     actions: LoginScreenActions,
     navController: NavController,
+    enableOidc: Boolean = true,
+    onNavigateToMain: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
 
@@ -99,12 +101,18 @@ internal fun LoginScreenInternal(
                         notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                     }
                 }
-                LoginScreenEvents.NavigateToMain -> navController.fromLoginToMain()
+                LoginScreenEvents.NavigateToMain -> {
+                    onNavigateToMain?.invoke() ?: navController.fromLoginToMain()
+                }
                 is LoginScreenEvents.LaunchOidcIntent -> {
-                    oidcLauncher.launch(it.intent)
+                    if (enableOidc) {
+                        oidcLauncher.launch(it.intent)
+                    }
                 }
                 is LoginScreenEvents.OidcError -> {
-                    Toast.makeText(context, it.message, Toast.LENGTH_LONG).show()
+                    if (enableOidc) {
+                        Toast.makeText(context, it.message, Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         }
@@ -199,26 +207,28 @@ internal fun LoginScreenInternal(
                 }
             }
 
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 16.dp),
-                color = MaterialTheme.colorScheme.outlineVariant,
-            )
-
-            OutlinedButton(
-                onClick = {
-                    if (!state.isLoading) {
-                        actions.clickOnOidcLogin()
-                    }
-                },
-                enabled = !state.isLoading,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Lock,
-                    contentDescription = null,
+            if (enableOidc) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 16.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant,
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(stringResource(R.string.login_with_sso))
+
+                OutlinedButton(
+                    onClick = {
+                        if (!state.isLoading) {
+                            actions.clickOnOidcLogin()
+                        }
+                    },
+                    enabled = !state.isLoading,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = null,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stringResource(R.string.login_with_sso))
+                }
             }
         }
     }

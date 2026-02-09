@@ -86,7 +86,7 @@ async fn test_websocket_sync_broadcast_on_like() {
         .login_with_device(TEST_USER, TEST_PASS, "device-1-uuid")
         .await;
     assert_eq!(response1.status(), StatusCode::CREATED);
-    let token1 = extract_session_token(response1).await;
+    let _token1 = extract_session_token(response1).await;
 
     let client2 = TestClient::new(server.base_url.clone());
     let response2 = client2
@@ -144,7 +144,7 @@ async fn test_websocket_sync_broadcast_on_unlike() {
         .login_with_device(TEST_USER, TEST_PASS, "device-3-uuid")
         .await;
     assert_eq!(response1.status(), StatusCode::CREATED);
-    let token1 = extract_session_token(response1).await;
+    let _token1 = extract_session_token(response1).await;
 
     let client2 = TestClient::new(server.base_url.clone());
     let response2 = client2
@@ -196,7 +196,7 @@ async fn test_websocket_sync_broadcast_on_playlist_create() {
         .login_with_device(TEST_USER, TEST_PASS, "device-5-uuid")
         .await;
     assert_eq!(response1.status(), StatusCode::CREATED);
-    let token1 = extract_session_token(response1).await;
+    let _token1 = extract_session_token(response1).await;
 
     let client2 = TestClient::new(server.base_url.clone());
     let response2 = client2

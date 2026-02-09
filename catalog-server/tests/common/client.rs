@@ -18,6 +18,7 @@ pub struct TestClient {
     pub base_url: String,
 }
 
+#[allow(dead_code)]
 impl TestClient {
     /// Creates a new unauthenticated client
     ///
@@ -468,6 +469,7 @@ impl TestClient {
     }
 
     /// POST /v1/user/listening with full payload
+    #[allow(clippy::too_many_arguments)]
     pub async fn post_listening_event_full(
         &self,
         track_id: &str,

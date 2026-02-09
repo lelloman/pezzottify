@@ -62,6 +62,8 @@ pub struct QueueItem {
 pub enum DeviceType {
     Web,
     Android,
+    #[serde(rename = "android_tv")]
+    AndroidTv,
     Ios,
 }
 

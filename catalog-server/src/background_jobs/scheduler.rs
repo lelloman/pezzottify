@@ -367,16 +367,21 @@ impl JobScheduler {
             .insert(job_id.to_string(), cancel_token.clone());
 
         // Create job context with the specific cancellation token
-        let ctx = match (&self.job_context.search_vault, &self.job_context.sync_notifier) {
-            (Some(search_vault), Some(sync_notifier)) => JobContext::with_search_vault_and_sync_notifier(
-                cancel_token,
-                Arc::clone(&self.job_context.catalog_store),
-                Arc::clone(&self.job_context.user_store),
-                Arc::clone(&self.job_context.server_store),
-                Arc::clone(&self.job_context.user_manager),
-                Arc::clone(search_vault),
-                Arc::clone(sync_notifier),
-            ),
+        let ctx = match (
+            &self.job_context.search_vault,
+            &self.job_context.sync_notifier,
+        ) {
+            (Some(search_vault), Some(sync_notifier)) => {
+                JobContext::with_search_vault_and_sync_notifier(
+                    cancel_token,
+                    Arc::clone(&self.job_context.catalog_store),
+                    Arc::clone(&self.job_context.user_store),
+                    Arc::clone(&self.job_context.server_store),
+                    Arc::clone(&self.job_context.user_manager),
+                    Arc::clone(search_vault),
+                    Arc::clone(sync_notifier),
+                )
+            }
             (Some(search_vault), None) => JobContext::with_search_vault(
                 cancel_token,
                 Arc::clone(&self.job_context.catalog_store),

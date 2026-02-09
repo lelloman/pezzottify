@@ -196,10 +196,10 @@ mod tests {
         assert_eq!(WRITE_PER_MINUTE, 60);
 
         // Verify ordering makes sense (global should be highest)
-        assert!(GLOBAL_PER_MINUTE > CONTENT_READ_PER_MINUTE);
-        assert!(CONTENT_READ_PER_MINUTE > SEARCH_PER_MINUTE);
-        assert!(STREAM_PER_MINUTE > SEARCH_PER_MINUTE);
-        assert!(SEARCH_PER_MINUTE > WRITE_PER_MINUTE);
+        const { assert!(GLOBAL_PER_MINUTE > CONTENT_READ_PER_MINUTE) };
+        const { assert!(CONTENT_READ_PER_MINUTE > SEARCH_PER_MINUTE) };
+        const { assert!(STREAM_PER_MINUTE > SEARCH_PER_MINUTE) };
+        const { assert!(SEARCH_PER_MINUTE > WRITE_PER_MINUTE) };
     }
 
     #[test]
@@ -213,8 +213,8 @@ mod tests {
         assert_eq!(WRITE_PER_HOUR, 5000);
 
         // Verify ordering
-        assert!(CONTENT_READ_PER_HOUR > GLOBAL_PER_HOUR);
-        assert!(GLOBAL_PER_HOUR > SEARCH_PER_HOUR);
+        const { assert!(CONTENT_READ_PER_HOUR > GLOBAL_PER_HOUR) };
+        const { assert!(GLOBAL_PER_HOUR > SEARCH_PER_HOUR) };
     }
 
     #[test]

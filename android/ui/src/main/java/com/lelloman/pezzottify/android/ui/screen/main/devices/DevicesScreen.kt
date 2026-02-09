@@ -10,17 +10,22 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Laptop
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -28,6 +33,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -64,6 +70,7 @@ fun DevicesScreen(
     val viewModel = hiltViewModel<DevicesScreenViewModel>()
     val state by viewModel.state.collectAsState()
     val sharePolicy by viewModel.sharePolicy.collectAsState()
+    var showPolicyEditor by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -85,18 +92,6 @@ fun DevicesScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item { Spacer(modifier = Modifier.height(4.dp)) }
-            item {
-                SharePolicyCard(
-                    state = sharePolicy,
-                    onModeChange = viewModel::updatePolicyMode,
-                    onAllowUsersChange = viewModel::updateAllowUsers,
-                    onDenyUsersChange = viewModel::updateDenyUsers,
-                    onAllowAdminChange = viewModel::updateAllowAdmin,
-                    onAllowRegularChange = viewModel::updateAllowRegular,
-                    onSave = viewModel::saveSharePolicy,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
             if (state.devices.isEmpty()) {
                 item {
                     Column(
@@ -141,6 +136,52 @@ fun DevicesScreen(
                     )
                 }
             }
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    ListItem(
+                        headlineContent = { Text("Device Sharing (This Device)") },
+                        supportingContent = {
+                            if (sharePolicy.isSaving) {
+                                Text("Saving…")
+                            } else {
+                                Text(if (showPolicyEditor) "Tap to collapse" else "Tap to configure")
+                            }
+                        },
+                        trailingContent = {
+                            Icon(
+                                imageVector = if (showPolicyEditor) {
+                                    Icons.Filled.ExpandLess
+                                } else {
+                                    Icons.Filled.ExpandMore
+                                },
+                                contentDescription = null,
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surface)
+                            .clickable { showPolicyEditor = !showPolicyEditor }
+                            .padding(horizontal = 4.dp),
+                    )
+
+                    if (showPolicyEditor) {
+                        SharePolicyCard(
+                            state = sharePolicy,
+                            onModeChange = viewModel::updatePolicyMode,
+                            onAllowUsersChange = viewModel::updateAllowUsers,
+                            onDenyUsersChange = viewModel::updateDenyUsers,
+                            onAllowAdminChange = viewModel::updateAllowAdmin,
+                            onAllowRegularChange = viewModel::updateAllowRegular,
+                            onSave = viewModel::saveSharePolicy,
+                        )
+                    }
+                }
+            }
             item { Spacer(modifier = Modifier.height(4.dp)) }
         }
     }
@@ -158,17 +199,13 @@ private fun SharePolicyCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        shape = RoundedCornerShape(12.dp),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                text = "Device Sharing (This Device)",
-                style = MaterialTheme.typography.titleMedium,
-            )
             if (state.isLoading) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
@@ -279,10 +316,10 @@ private fun DeviceCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    imageVector = if (device.deviceType == "web") {
-                        Icons.Filled.Laptop
-                    } else {
-                        Icons.Filled.Smartphone
+                    imageVector = when (device.deviceType) {
+                        "web" -> Icons.Filled.Laptop
+                        "android_tv" -> Icons.Filled.Tv
+                        else -> Icons.Filled.Smartphone
                     },
                     contentDescription = null,
                     tint = if (device.isThisDevice) {
@@ -305,6 +342,43 @@ private fun DeviceCard(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
+                }
+            }
+            val typeLabel = deviceTypeLabel(device.deviceType)
+            if (typeLabel != null) {
+                Text(
+                    text = typeLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
+
+            // Remote mode connect/disconnect should be available even when target is idle.
+            if (!device.isThisDevice) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    if (isControlling) {
+                        OutlinedButton(
+                            onClick = onDisconnectDevice,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error,
+                            ),
+                        ) {
+                            Text("Disconnect")
+                        }
+                    } else {
+                        Button(
+                            onClick = onControlDevice,
+                        ) {
+                            Text("Control this device")
+                        }
+                    }
                 }
             }
 
@@ -335,31 +409,6 @@ private fun DeviceCard(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                        }
-                    }
-                }
-
-                // Remote mode buttons
-                if (!device.isThisDevice) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                    ) {
-                        if (isControlling) {
-                            OutlinedButton(
-                                onClick = onDisconnectDevice,
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.error,
-                                ),
-                            ) {
-                                Text("Disconnect")
-                            }
-                        } else {
-                            Button(
-                                onClick = onControlDevice,
-                            ) {
-                                Text("Control this device")
-                            }
                         }
                     }
                 }
@@ -479,6 +528,13 @@ private fun DeviceCard(
             }
         }
     }
+}
+
+private fun deviceTypeLabel(deviceType: String): String? = when (deviceType) {
+    "web" -> "Web"
+    "android_tv" -> "TV"
+    "android" -> "Phone"
+    else -> null
 }
 
 private fun formatSeconds(totalSeconds: Int): String {

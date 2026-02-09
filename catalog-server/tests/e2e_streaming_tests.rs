@@ -31,7 +31,7 @@ async fn test_stream_track_returns_audio_data() {
 
     // Verify we got audio bytes
     let bytes = response.bytes().await.unwrap();
-    assert!(bytes.len() > 0);
+    assert!(!bytes.is_empty());
     assert!(
         bytes.len() <= TEST_AUDIO_SIZE_BYTES + 1000,
         "Expected ~{} bytes, got {}",
@@ -76,8 +76,8 @@ async fn test_stream_multiple_tracks() {
     let bytes2 = response.bytes().await.unwrap();
 
     // Both should return data
-    assert!(bytes1.len() > 0);
-    assert!(bytes2.len() > 0);
+    assert!(!bytes1.is_empty());
+    assert!(!bytes2.is_empty());
 }
 
 // =============================================================================
@@ -126,7 +126,10 @@ async fn test_stream_track_with_open_ended_range() {
 
     let bytes = response.bytes().await.unwrap();
     // Should get file size minus 100 bytes
-    assert!(bytes.len() > 0, "Expected some bytes for open-ended range");
+    assert!(
+        !bytes.is_empty(),
+        "Expected some bytes for open-ended range"
+    );
 }
 
 #[tokio::test]
@@ -145,7 +148,7 @@ async fn test_stream_track_with_suffix_range() {
     );
 
     let bytes = response.bytes().await.unwrap();
-    assert!(bytes.len() > 0);
+    assert!(!bytes.is_empty());
     assert!(bytes.len() <= 500);
 }
 
@@ -158,7 +161,7 @@ async fn test_stream_track_full_then_partial() {
     let response = client.stream_track(TRACK_1_ID).await;
     assert_eq!(response.status(), StatusCode::OK);
     let full_bytes = response.bytes().await.unwrap();
-    let file_size = full_bytes.len();
+    let _file_size = full_bytes.len();
 
     // Then get just first 100 bytes with range request
     let response = client
