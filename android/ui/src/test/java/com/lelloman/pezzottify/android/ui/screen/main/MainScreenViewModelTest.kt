@@ -307,5 +307,7 @@ class MainScreenViewModelTest {
         }
 
         override fun getRemoteDeviceName(): Flow<String?> = flowOf(null)
+
+        override fun getHasOtherDeviceConnected(): Flow<Boolean> = flowOf(false)
     }
 }
