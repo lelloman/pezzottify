@@ -1471,6 +1471,11 @@ class InteractorsModule {
                 }
 
             override fun exitRemoteMode() {
+                val currentRemote =
+                    playbackModeManager.mode.value as? com.lelloman.pezzottify.android.domain.player.PlaybackMode.Remote
+                if (currentRemote != null) {
+                    playbackSessionHandler.sendCommand("pause", emptyMap(), currentRemote.deviceId)
+                }
                 playbackModeManager.exitRemoteMode()
             }
         }
@@ -2070,11 +2075,24 @@ class InteractorsModule {
         }
 
         override fun enterRemoteMode(deviceId: Int, deviceName: String) {
+            if (playbackSessionHandler.myDeviceId.value == deviceId) {
+                return
+            }
+            val currentRemote =
+                playbackModeManager.mode.value as? com.lelloman.pezzottify.android.domain.player.PlaybackMode.Remote
+            if (currentRemote != null && currentRemote.deviceId != deviceId) {
+                playbackSessionHandler.sendCommand("pause", emptyMap(), currentRemote.deviceId)
+            }
             playbackModeManager.enterRemoteMode(deviceId, deviceName)
             playbackSessionHandler.requestQueue(deviceId)
         }
 
         override fun exitRemoteMode() {
+            val currentRemote =
+                playbackModeManager.mode.value as? com.lelloman.pezzottify.android.domain.player.PlaybackMode.Remote
+            if (currentRemote != null) {
+                playbackSessionHandler.sendCommand("pause", emptyMap(), currentRemote.deviceId)
+            }
             playbackModeManager.exitRemoteMode()
         }
 
