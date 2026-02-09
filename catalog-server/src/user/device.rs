@@ -2,6 +2,8 @@ use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 
+use super::permissions::UserRole;
+
 // Validation constants
 pub const DEVICE_UUID_MIN_LEN: usize = 8;
 pub const DEVICE_UUID_MAX_LEN: usize = 64;
@@ -48,6 +50,66 @@ pub struct Device {
     pub os_info: Option<String>,
     pub first_seen: SystemTime,
     pub last_seen: SystemTime,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DeviceShareMode {
+    AllowEveryone,
+    DenyEveryone,
+    Custom,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DeviceSharePolicy {
+    pub mode: DeviceShareMode,
+    #[serde(default)]
+    pub allow_users: Vec<usize>,
+    #[serde(default)]
+    pub allow_roles: Vec<UserRole>,
+    #[serde(default)]
+    pub deny_users: Vec<usize>,
+}
+
+impl Default for DeviceSharePolicy {
+    fn default() -> Self {
+        Self::deny_everyone()
+    }
+}
+
+impl DeviceSharePolicy {
+    pub fn allow_everyone() -> Self {
+        Self {
+            mode: DeviceShareMode::AllowEveryone,
+            allow_users: Vec::new(),
+            allow_roles: Vec::new(),
+            deny_users: Vec::new(),
+        }
+    }
+
+    pub fn deny_everyone() -> Self {
+        Self {
+            mode: DeviceShareMode::DenyEveryone,
+            allow_users: Vec::new(),
+            allow_roles: Vec::new(),
+            deny_users: Vec::new(),
+        }
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        match self.mode {
+            DeviceShareMode::AllowEveryone | DeviceShareMode::DenyEveryone => {
+                if !self.allow_users.is_empty()
+                    || !self.allow_roles.is_empty()
+                    || !self.deny_users.is_empty()
+                {
+                    bail!("everyone mode cannot include allow/deny rules");
+                }
+            }
+            DeviceShareMode::Custom => {}
+        }
+        Ok(())
+    }
 }
 
 /// Input for registering/updating a device
@@ -255,5 +317,35 @@ mod tests {
         let reg = result.unwrap();
         assert!(reg.device_name.is_none());
         assert!(reg.os_info.is_none());
+    }
+
+    #[test]
+    fn device_share_policy_validate_rejects_rules_with_everyone_modes() {
+        let policy = DeviceSharePolicy {
+            mode: DeviceShareMode::AllowEveryone,
+            allow_users: vec![1],
+            allow_roles: vec![UserRole::Admin],
+            deny_users: vec![],
+        };
+        assert!(policy.validate().is_err());
+
+        let policy = DeviceSharePolicy {
+            mode: DeviceShareMode::DenyEveryone,
+            allow_users: vec![],
+            allow_roles: vec![],
+            deny_users: vec![2],
+        };
+        assert!(policy.validate().is_err());
+    }
+
+    #[test]
+    fn device_share_policy_validate_allows_custom_rules() {
+        let policy = DeviceSharePolicy {
+            mode: DeviceShareMode::Custom,
+            allow_users: vec![1],
+            allow_roles: vec![UserRole::Admin],
+            deny_users: vec![2],
+        };
+        assert!(policy.validate().is_ok());
     }
 }

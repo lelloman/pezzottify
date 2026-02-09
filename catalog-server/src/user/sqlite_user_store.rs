@@ -6,7 +6,8 @@ use crate::sqlite_persistence::{
     Column, ForeignKey, ForeignKeyOnChange, SqlType, Table, VersionedSchema, BASE_DB_VERSION,
     DEFAULT_TIMESTAMP,
 };
-use crate::user::device::{Device, DeviceRegistration, DeviceType};
+use crate::user::device::{Device, DeviceRegistration, DeviceShareMode, DeviceSharePolicy, DeviceType};
+use crate::user::permissions::UserRole;
 use crate::user::user_models::{
     BandwidthSummary, BandwidthUsage, CategoryBandwidth, DailyListeningStats, ListeningEvent,
     ListeningSummary, TrackListeningStats, TrackPlayCount, UserListeningHistoryEntry,
@@ -540,6 +541,67 @@ const DEVICE_TABLE_V_8: Table = Table {
     ],
 };
 
+/// V 13
+/// Device share policy table
+const DEVICE_SHARE_POLICY_TABLE_V_13: Table = Table {
+    name: "device_share_policy",
+    columns: &[
+        sqlite_column!(
+            "device_id",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "device",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        sqlite_column!("mode", &SqlType::Text, non_null = true),
+        sqlite_column!(
+            "updated_at",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+    ],
+    unique_constraints: &[&["device_id"]],
+    indices: &[("idx_device_share_policy_device", "device_id")],
+};
+
+/// V 13
+/// Device share rules table
+const DEVICE_SHARE_RULE_TABLE_V_13: Table = Table {
+    name: "device_share_rule",
+    columns: &[
+        sqlite_column!(
+            "device_id",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "device",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        sqlite_column!("rule_type", &SqlType::Text, non_null = true),
+        sqlite_column!("subject_type", &SqlType::Text, non_null = true),
+        sqlite_column!("subject_value", &SqlType::Text, non_null = true),
+        sqlite_column!(
+            "created_at",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+    ],
+    unique_constraints: &[&[
+        "device_id",
+        "rule_type",
+        "subject_type",
+        "subject_value",
+    ]],
+    indices: &[("idx_device_share_rule_device", "device_id")],
+};
+
 /// V 9
 /// User events table - append-only log for multi-device sync
 const USER_EVENTS_TABLE_V_9: Table = Table {
@@ -939,6 +1001,33 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_user_oidc_subject ON user(oidc_subject)",
                 [],
             )?;
+            Ok(())
+        }),
+    },
+    // V13: Add device share policy tables
+    VersionedSchema {
+        version: 13,
+        tables: &[
+            USER_TABLE_V_12,
+            LIKED_CONTENT_TABLE_V_2,
+            AUTH_TOKEN_TABLE_V_8,
+            USER_PASSWORD_CREDENTIALS_V_0,
+            USER_PLAYLIST_TABLE_V_3,
+            USER_PLAYLIST_TRACKS_TABLE_V_3,
+            USER_ROLE_TABLE_V_4,
+            USER_EXTRA_PERMISSION_TABLE_V_4,
+            BANDWIDTH_USAGE_TABLE_V_5,
+            LISTENING_EVENTS_TABLE_V_6,
+            USER_SETTINGS_TABLE_V_7,
+            DEVICE_TABLE_V_8,
+            USER_EVENTS_TABLE_V_9,
+            USER_NOTIFICATIONS_TABLE_V_11,
+            DEVICE_SHARE_POLICY_TABLE_V_13,
+            DEVICE_SHARE_RULE_TABLE_V_13,
+        ],
+        migration: Some(|conn: &Connection| {
+            DEVICE_SHARE_POLICY_TABLE_V_13.create(conn)?;
+            DEVICE_SHARE_RULE_TABLE_V_13.create(conn)?;
             Ok(())
         }),
     },
@@ -3025,6 +3114,136 @@ impl user_store::DeviceStore for SqliteUserStore {
         record_db_query("enforce_user_device_limit", start.elapsed());
         Ok(deleted)
     }
+
+    fn get_device_share_policy(&self, device_id: usize) -> Result<DeviceSharePolicy> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+
+        let policy_row: Option<(String,)> = conn
+            .query_row(
+                "SELECT mode FROM device_share_policy WHERE device_id = ?1",
+                params![device_id],
+                |row| Ok((row.get(0)?,)),
+            )
+            .optional()?;
+
+        let mode = match policy_row.map(|(m,)| m) {
+            Some(m) => match m.as_str() {
+                "allow_everyone" => DeviceShareMode::AllowEveryone,
+                "deny_everyone" => DeviceShareMode::DenyEveryone,
+                "custom" => DeviceShareMode::Custom,
+                _ => DeviceShareMode::DenyEveryone,
+            },
+            None => {
+                record_db_query("get_device_share_policy", start.elapsed());
+                return Ok(DeviceSharePolicy::default());
+            }
+        };
+
+        let mut allow_users = Vec::new();
+        let mut allow_roles = Vec::new();
+        let mut deny_users = Vec::new();
+
+        let mut stmt = conn.prepare(
+            "SELECT rule_type, subject_type, subject_value
+             FROM device_share_rule WHERE device_id = ?1",
+        )?;
+        let rows = stmt.query_map(params![device_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+
+        for row in rows {
+            let (rule_type, subject_type, subject_value) = row?;
+            match (rule_type.as_str(), subject_type.as_str()) {
+                ("allow", "user_id") => {
+                    if let Ok(id) = subject_value.parse::<usize>() {
+                        allow_users.push(id);
+                    }
+                }
+                ("allow", "role") => {
+                    if let Some(role) = UserRole::from_str(&subject_value) {
+                        allow_roles.push(role);
+                    }
+                }
+                ("deny", "user_id") => {
+                    if let Ok(id) = subject_value.parse::<usize>() {
+                        deny_users.push(id);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        record_db_query("get_device_share_policy", start.elapsed());
+        Ok(DeviceSharePolicy {
+            mode,
+            allow_users,
+            allow_roles,
+            deny_users,
+        })
+    }
+
+    fn set_device_share_policy(&self, device_id: usize, policy: &DeviceSharePolicy) -> Result<()> {
+        policy.validate()?;
+
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let mode_str = match policy.mode {
+            DeviceShareMode::AllowEveryone => "allow_everyone",
+            DeviceShareMode::DenyEveryone => "deny_everyone",
+            DeviceShareMode::Custom => "custom",
+        };
+
+        conn.execute(
+            "INSERT INTO device_share_policy (device_id, mode, updated_at)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(device_id) DO UPDATE SET
+                mode = ?2,
+                updated_at = ?3",
+            params![device_id, mode_str, now],
+        )?;
+
+        conn.execute(
+            "DELETE FROM device_share_rule WHERE device_id = ?1",
+            params![device_id],
+        )?;
+
+        if policy.mode == DeviceShareMode::Custom {
+            for user_id in &policy.allow_users {
+                conn.execute(
+                    "INSERT OR IGNORE INTO device_share_rule (device_id, rule_type, subject_type, subject_value, created_at)
+                     VALUES (?1, 'allow', 'user_id', ?2, ?3)",
+                    params![device_id, user_id.to_string(), now],
+                )?;
+            }
+            for role in &policy.allow_roles {
+                conn.execute(
+                    "INSERT OR IGNORE INTO device_share_rule (device_id, rule_type, subject_type, subject_value, created_at)
+                     VALUES (?1, 'allow', 'role', ?2, ?3)",
+                    params![device_id, role.as_str().to_lowercase(), now],
+                )?;
+            }
+            for user_id in &policy.deny_users {
+                conn.execute(
+                    "INSERT OR IGNORE INTO device_share_rule (device_id, rule_type, subject_type, subject_value, created_at)
+                     VALUES (?1, 'deny', 'user_id', ?2, ?3)",
+                    params![device_id, user_id.to_string(), now],
+                )?;
+            }
+        }
+
+        record_db_query("set_device_share_policy", start.elapsed());
+        Ok(())
+    }
 }
 
 impl user_store::UserEventStore for SqliteUserStore {
@@ -3387,16 +3606,16 @@ mod tests {
             assert_eq!(db_version, BASE_DB_VERSION as i64 + 3);
         }
 
-        // Now open with SqliteUserStore, which should trigger migration to latest (V11)
+        // Now open with SqliteUserStore, which should trigger migration to latest
         let store = SqliteUserStore::new(&temp_file_path).unwrap();
 
-        // Verify we're now at the latest version (V11)
+        // Verify we're now at the latest version
         {
             let conn = store.conn.lock().unwrap();
             let db_version: i64 = conn
                 .query_row("PRAGMA user_version;", [], |row| row.get(0))
                 .unwrap();
-            assert_eq!(db_version, BASE_DB_VERSION as i64 + 12);
+            assert_eq!(db_version, BASE_DB_VERSION as i64 + 13);
 
             // Verify new tables exist
             let user_role_table_exists: i64 = conn
@@ -3538,13 +3757,13 @@ mod tests {
         // Now open with SqliteUserStore, which should trigger migration to latest
         let store = SqliteUserStore::new(&temp_file_path).unwrap();
 
-        // Verify we're now at the latest version (V11)
+        // Verify we're now at the latest version
         {
             let conn = store.conn.lock().unwrap();
             let db_version: i64 = conn
                 .query_row("PRAGMA user_version;", [], |row| row.get(0))
                 .unwrap();
-            assert_eq!(db_version, BASE_DB_VERSION as i64 + 12);
+            assert_eq!(db_version, BASE_DB_VERSION as i64 + 13);
 
             // Verify device table exists
             let device_table_exists: i64 = conn

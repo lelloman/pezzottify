@@ -165,6 +165,18 @@ impl ConnectionManager {
             .unwrap_or_default()
     }
 
+    /// Get list of all connected devices with their user IDs.
+    pub async fn get_all_connected_devices(&self) -> Vec<(usize, usize)> {
+        let conns = self.connections.read().await;
+        let mut devices = Vec::new();
+        for (user_id, user_conns) in conns.iter() {
+            for device_id in user_conns.keys() {
+                devices.push((*user_id, *device_id));
+            }
+        }
+        devices
+    }
+
     /// Check if a specific device is connected.
     pub async fn is_device_connected(&self, user_id: usize, device_id: usize) -> bool {
         let conns = self.connections.read().await;

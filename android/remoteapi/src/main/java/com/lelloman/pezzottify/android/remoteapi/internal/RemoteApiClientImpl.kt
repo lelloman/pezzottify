@@ -11,6 +11,8 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.BatchItemResult
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.DevicesResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.DeviceSharePolicy
 import com.lelloman.pezzottify.android.domain.remoteapi.response.FullSkeletonResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.GenreResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.GenreTracksResponse
@@ -49,6 +51,7 @@ import com.lelloman.pezzottify.android.remoteapi.internal.requests.SearchRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.SubmitBugReportRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdatePlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdateUserSettingsRequest
+import com.lelloman.pezzottify.android.domain.remoteapi.request.DeviceSharePolicyRequest
 import com.lelloman.pezzottify.android.logger.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -434,6 +437,26 @@ internal class RemoteApiClientImpl(
                 )
                 .returnFromRetrofitResponse()
         }
+
+    override suspend fun getDevices(): RemoteApiResponse<DevicesResponse> =
+        catchingNetworkError {
+            getRetrofit()
+                .getDevices(authToken = authToken)
+                .returnFromRetrofitResponse()
+        }
+
+    override suspend fun updateDeviceSharePolicy(
+        deviceId: Int,
+        policy: DeviceSharePolicyRequest
+    ): RemoteApiResponse<DeviceSharePolicy> = catchingNetworkError {
+        getRetrofit()
+            .updateDeviceSharePolicy(
+                authToken = authToken,
+                deviceId = deviceId,
+                request = policy
+            )
+            .returnFromRetrofitResponse()
+    }
 
     // Download manager endpoints
 

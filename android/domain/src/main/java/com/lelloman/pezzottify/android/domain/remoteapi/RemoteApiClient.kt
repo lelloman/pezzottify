@@ -166,6 +166,19 @@ interface RemoteApiClient {
      */
     suspend fun updateUserSettings(settings: List<UserSetting>): RemoteApiResponse<Unit>
 
+    /**
+     * Get devices registered for the current user.
+     */
+    suspend fun getDevices(): RemoteApiResponse<com.lelloman.pezzottify.android.domain.remoteapi.response.DevicesResponse>
+
+    /**
+     * Update share policy for a device.
+     */
+    suspend fun updateDeviceSharePolicy(
+        deviceId: Int,
+        policy: com.lelloman.pezzottify.android.domain.remoteapi.request.DeviceSharePolicyRequest
+    ): RemoteApiResponse<com.lelloman.pezzottify.android.domain.remoteapi.response.DeviceSharePolicy>
+
     // Download manager endpoints
 
     /**

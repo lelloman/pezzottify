@@ -30,8 +30,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -60,6 +63,7 @@ fun DevicesScreen(
 ) {
     val viewModel = hiltViewModel<DevicesScreenViewModel>()
     val state by viewModel.state.collectAsState()
+    val sharePolicy by viewModel.sharePolicy.collectAsState()
 
     Scaffold(
         topBar = {
@@ -97,6 +101,18 @@ fun DevicesScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 item { Spacer(modifier = Modifier.height(4.dp)) }
+                item {
+                    SharePolicyCard(
+                        state = sharePolicy,
+                        onModeChange = viewModel::updatePolicyMode,
+                        onAllowUsersChange = viewModel::updateAllowUsers,
+                        onDenyUsersChange = viewModel::updateDenyUsers,
+                        onAllowAdminChange = viewModel::updateAllowAdmin,
+                        onAllowRegularChange = viewModel::updateAllowRegular,
+                        onSave = viewModel::saveSharePolicy,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
                 items(state.devices, key = { it.id }) { device ->
                     val isControlling = state.remoteControlDeviceId == device.id
                     DeviceCard(
@@ -124,6 +140,101 @@ fun DevicesScreen(
                     )
                 }
                 item { Spacer(modifier = Modifier.height(4.dp)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SharePolicyCard(
+    state: DeviceSharePolicyUiState,
+    onModeChange: (String) -> Unit,
+    onAllowUsersChange: (String) -> Unit,
+    onDenyUsersChange: (String) -> Unit,
+    onAllowAdminChange: (Boolean) -> Unit,
+    onAllowRegularChange: (Boolean) -> Unit,
+    onSave: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = "Device Sharing (This Device)",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            if (state.isLoading) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+            if (state.error != null) {
+                Text(
+                    text = state.error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(
+                    selected = state.mode == "deny_everyone",
+                    onClick = { onModeChange("deny_everyone") },
+                )
+                Text("Deny everyone")
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(
+                    selected = state.mode == "allow_everyone",
+                    onClick = { onModeChange("allow_everyone") },
+                )
+                Text("Allow everyone")
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(
+                    selected = state.mode == "custom",
+                    onClick = { onModeChange("custom") },
+                )
+                Text("Custom")
+            }
+
+            if (state.mode == "custom") {
+                OutlinedTextField(
+                    value = state.allowUsers,
+                    onValueChange = onAllowUsersChange,
+                    label = { Text("Allow users (IDs)") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = state.denyUsers,
+                    onValueChange = onDenyUsersChange,
+                    label = { Text("Deny users (IDs)") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = state.allowAdmin,
+                        onCheckedChange = onAllowAdminChange,
+                    )
+                    Text("Allow Admin")
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Checkbox(
+                        checked = state.allowRegular,
+                        onCheckedChange = onAllowRegularChange,
+                    )
+                    Text("Allow Regular")
+                }
+            }
+
+            Button(
+                onClick = onSave,
+                enabled = !state.isSaving,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                modifier = Modifier.align(Alignment.End),
+            ) {
+                Text(if (state.isSaving) "Saving…" else "Save Policy")
             }
         }
     }

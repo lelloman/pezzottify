@@ -2,7 +2,7 @@ use crate::catalog_store::CatalogStore;
 
 use super::{
     auth::PezzottifyHasher,
-    device::{Device, DeviceRegistration},
+    device::{Device, DeviceRegistration, DeviceSharePolicy},
     permissions::{Permission, PermissionGrant, UserRole},
     settings::UserSetting,
     user_models::{
@@ -482,6 +482,18 @@ impl UserManager {
     pub fn enforce_user_device_limit(&self, user_id: usize, max_devices: usize) -> Result<usize> {
         self.user_store
             .enforce_user_device_limit(user_id, max_devices)
+    }
+
+    pub fn get_device_share_policy(&self, device_id: usize) -> Result<DeviceSharePolicy> {
+        self.user_store.get_device_share_policy(device_id)
+    }
+
+    pub fn set_device_share_policy(
+        &self,
+        device_id: usize,
+        policy: &DeviceSharePolicy,
+    ) -> Result<()> {
+        self.user_store.set_device_share_policy(device_id, policy)
     }
 
     // Bandwidth tracking methods

@@ -5,7 +5,7 @@
 //! updates to other devices of the same user.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use tokio::sync::RwLock;
@@ -14,6 +14,9 @@ use tracing::{debug, info, warn};
 use super::connection::ConnectionManager;
 use super::messages::{msg_types, ServerMessage};
 use super::playback_messages::*;
+use crate::user::UserManager;
+use crate::user::device::{DeviceShareMode, DeviceSharePolicy};
+use crate::user::permissions::UserRole;
 
 /// Maximum queue size to prevent memory exhaustion.
 const MAX_QUEUE_SIZE: usize = 500;
@@ -28,6 +31,7 @@ pub struct PlaybackSessionManager {
     /// Device metadata indexed by (user_id, device_id).
     devices: RwLock<HashMap<(usize, usize), DeviceMetadata>>,
     connection_manager: Arc<ConnectionManager>,
+    user_manager: Arc<Mutex<UserManager>>,
 }
 
 /// Metadata about a connected device.
@@ -62,6 +66,8 @@ pub enum PlaybackError {
     InvalidMessage(String),
     /// Command execution failed.
     CommandFailed(String),
+    /// Forbidden action.
+    Forbidden,
     /// Device not found.
     DeviceNotFound,
 }
@@ -74,6 +80,7 @@ impl std::fmt::Display for PlaybackError {
             }
             PlaybackError::InvalidMessage(msg) => write!(f, "Invalid message: {}", msg),
             PlaybackError::CommandFailed(msg) => write!(f, "Command failed: {}", msg),
+            PlaybackError::Forbidden => write!(f, "Forbidden"),
             PlaybackError::DeviceNotFound => write!(f, "Device not found"),
         }
     }
@@ -87,6 +94,7 @@ impl From<PlaybackError> for PlaybackErrorPayload {
             PlaybackError::QueueLimitExceeded => "queue_limit_exceeded",
             PlaybackError::InvalidMessage(_) => "invalid_message",
             PlaybackError::CommandFailed(_) => "command_failed",
+            PlaybackError::Forbidden => "forbidden",
             PlaybackError::DeviceNotFound => "device_not_found",
         };
         PlaybackErrorPayload {
@@ -99,11 +107,193 @@ impl From<PlaybackError> for PlaybackErrorPayload {
 
 impl PlaybackSessionManager {
     /// Create a new playback session manager.
-    pub fn new(connection_manager: Arc<ConnectionManager>) -> Self {
+    pub fn new(connection_manager: Arc<ConnectionManager>, user_manager: Arc<Mutex<UserManager>>) -> Self {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             devices: RwLock::new(HashMap::new()),
             connection_manager,
+            user_manager,
+        }
+    }
+
+    fn get_owner_handle(&self, user_id: usize) -> Option<String> {
+        let manager = self.user_manager.lock().unwrap();
+        manager.get_user_handle(user_id).ok().flatten()
+    }
+
+    async fn get_device_owner_id(&self, device_id: usize) -> Option<usize> {
+        {
+            let manager = self.user_manager.lock().unwrap();
+            if let Ok(Some(device)) = manager.get_device(device_id) {
+                if let Some(user_id) = device.user_id {
+                    return Some(user_id);
+                }
+            }
+        }
+        let devices = self.devices.read().await;
+        devices
+            .keys()
+            .find(|(_, did)| *did == device_id)
+            .map(|(uid, _)| *uid)
+    }
+
+    fn get_device_share_policy(&self, device_id: usize) -> DeviceSharePolicy {
+        let manager = self.user_manager.lock().unwrap();
+        manager
+            .get_device_share_policy(device_id)
+            .unwrap_or_default()
+    }
+
+    fn get_user_roles(&self, user_id: usize) -> Vec<UserRole> {
+        let manager = self.user_manager.lock().unwrap();
+        manager.get_user_roles(user_id).unwrap_or_default()
+    }
+
+    fn is_user_allowed_for_device(
+        &self,
+        owner_user_id: usize,
+        device_id: usize,
+        user_id: usize,
+    ) -> bool {
+        if owner_user_id == user_id {
+            return true;
+        }
+
+        let policy = self.get_device_share_policy(device_id);
+        match policy.mode {
+            DeviceShareMode::AllowEveryone => true,
+            DeviceShareMode::DenyEveryone => false,
+            DeviceShareMode::Custom => {
+                if policy.deny_users.contains(&user_id) {
+                    return false;
+                }
+                if policy.allow_users.contains(&user_id) {
+                    return true;
+                }
+                let roles = self.get_user_roles(user_id);
+                roles.iter().any(|role| policy.allow_roles.contains(role))
+            }
+        }
+    }
+
+    async fn get_allowed_external_users(&self, owner_user_id: usize, device_id: usize) -> Vec<usize> {
+        let connected_users = self.connection_manager.get_connected_user_ids().await;
+        connected_users
+            .into_iter()
+            .filter(|uid| *uid != owner_user_id)
+            .filter(|uid| self.is_user_allowed_for_device(owner_user_id, device_id, *uid))
+            .collect()
+    }
+
+    async fn broadcast_to_authorized_users(
+        &self,
+        owner_user_id: usize,
+        device_id: usize,
+        exclude_device_id: usize,
+        message: ServerMessage,
+    ) {
+        let _ = self
+            .connection_manager
+            .send_to_other_devices(owner_user_id, exclude_device_id, message.clone())
+            .await;
+
+        let external_users = self
+            .get_allowed_external_users(owner_user_id, device_id)
+            .await;
+        for user_id in external_users {
+            let _ = self
+                .connection_manager
+                .broadcast_to_user(user_id, message.clone())
+                .await;
+        }
+    }
+
+    async fn broadcast_device_list_change(
+        &self,
+        owner_user_id: usize,
+        device_id: usize,
+        change_type: &str,
+        exclude_device_id: usize,
+    ) {
+        let owner_devices = self.build_device_list(owner_user_id).await;
+        let owner_msg = ServerMessage::new(
+            msg_types::PLAYBACK_DEVICE_LIST_CHANGED,
+            DeviceListChangedPayload {
+                devices: owner_devices,
+                change: DeviceChange {
+                    change_type: change_type.to_string(),
+                    device_id,
+                },
+            },
+        );
+        let _ = self
+            .connection_manager
+            .send_to_other_devices(owner_user_id, exclude_device_id, owner_msg)
+            .await;
+
+        let external_users = self.get_allowed_external_users(owner_user_id, device_id).await;
+        for user_id in external_users {
+            let devices = self.build_device_list(user_id).await;
+            let msg = ServerMessage::new(
+                msg_types::PLAYBACK_DEVICE_LIST_CHANGED,
+                DeviceListChangedPayload {
+                    devices,
+                    change: DeviceChange {
+                        change_type: change_type.to_string(),
+                        device_id,
+                    },
+                },
+            );
+            let _ = self
+                .connection_manager
+                .broadcast_to_user(user_id, msg)
+                .await;
+        }
+    }
+
+    pub async fn broadcast_device_list_refresh(&self, device_id: usize) {
+        let owner_user_id = match self.get_device_owner_id(device_id).await {
+            Some(id) => id,
+            None => return,
+        };
+
+        // Always notify the owner
+        let owner_devices = self.build_device_list(owner_user_id).await;
+        let owner_msg = ServerMessage::new(
+            msg_types::PLAYBACK_DEVICE_LIST_CHANGED,
+            DeviceListChangedPayload {
+                devices: owner_devices,
+                change: DeviceChange {
+                    change_type: "policy_changed".to_string(),
+                    device_id,
+                },
+            },
+        );
+        let _ = self
+            .connection_manager
+            .broadcast_to_user(owner_user_id, owner_msg)
+            .await;
+
+        // Notify only users who currently have visibility to this device
+        let visible_users = self
+            .get_allowed_external_users(owner_user_id, device_id)
+            .await;
+        for user_id in visible_users {
+            let devices = self.build_device_list(user_id).await;
+            let msg = ServerMessage::new(
+                msg_types::PLAYBACK_DEVICE_LIST_CHANGED,
+                DeviceListChangedPayload {
+                    devices,
+                    change: DeviceChange {
+                        change_type: "policy_changed".to_string(),
+                        device_id,
+                    },
+                },
+            );
+            let _ = self
+                .connection_manager
+                .broadcast_to_user(user_id, msg)
+                .await;
         }
     }
 
@@ -138,34 +328,7 @@ impl PlaybackSessionManager {
             );
         }
 
-        // Get or create session
-        let sessions = self.sessions.read().await;
-        let session = sessions.get(&user_id);
-
-        // Build active devices list for session info
-        let devices_guard = self.devices.read().await;
-        let active_devices: Vec<DevicePlaybackInfo> = session
-            .map(|s| {
-                s.device_states
-                    .iter()
-                    .map(|(did, ds)| {
-                        let name = devices_guard
-                            .get(&(user_id, *did))
-                            .map(|m| m.name.clone())
-                            .unwrap_or_else(|| "Unknown".to_string());
-                        DevicePlaybackInfo {
-                            device_id: *did,
-                            device_name: name,
-                            state: ds.state.clone(),
-                            queue: ds.queue.clone(),
-                            queue_version: ds.queue_version,
-                        }
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        drop(devices_guard);
-
+        let active_devices = self.build_active_devices_for_user(user_id).await;
         let session_info = SessionInfo { active_devices };
 
         info!(
@@ -174,24 +337,11 @@ impl PlaybackSessionManager {
         );
 
         // Get list of connected devices
-        let connected_devices = self.build_device_list(user_id, session).await;
-
-        drop(sessions);
+        let connected_devices = self.build_device_list(user_id).await;
 
         // Broadcast device list changed to other devices
-        let change_msg = ServerMessage::new(
-            msg_types::PLAYBACK_DEVICE_LIST_CHANGED,
-            DeviceListChangedPayload {
-                devices: connected_devices.clone(),
-                change: DeviceChange {
-                    change_type: "connected".to_string(),
-                    device_id,
-                },
-            },
-        );
-        let _ = self
-            .connection_manager
-            .send_to_other_devices(user_id, device_id, change_msg)
+        self
+            .broadcast_device_list_change(user_id, device_id, "connected", device_id)
             .await;
 
         info!(
@@ -207,13 +357,10 @@ impl PlaybackSessionManager {
     }
 
     /// Build the list of connected devices for a user.
-    async fn build_device_list(
-        &self,
-        user_id: usize,
-        session: Option<&UserPlaybackSession>,
-    ) -> Vec<ConnectedDevice> {
-        let device_ids = self.connection_manager.get_connected_devices(user_id).await;
+    async fn build_device_list(&self, user_id: usize) -> Vec<ConnectedDevice> {
+        let device_ids = self.connection_manager.get_all_connected_devices().await;
         let devices = self.devices.read().await;
+        let sessions = self.sessions.read().await;
 
         debug!(
             "[playback] build_device_list: user={} connection_manager_devices={:?}",
@@ -222,18 +369,64 @@ impl PlaybackSessionManager {
 
         device_ids
             .into_iter()
-            .filter_map(|id| {
-                devices.get(&(user_id, id)).map(|meta| ConnectedDevice {
-                    id,
-                    name: meta.name.clone(),
-                    device_type: meta.device_type,
-                    is_playing: session
+            .filter_map(|(owner_user_id, id)| {
+                if owner_user_id != user_id
+                    && !self.is_user_allowed_for_device(owner_user_id, id, user_id)
+                {
+                    return None;
+                }
+
+                devices.get(&(owner_user_id, id)).map(|meta| {
+                    let is_playing = sessions
+                        .get(&owner_user_id)
                         .map(|s| s.device_states.contains_key(&id))
-                        .unwrap_or(false),
-                    connected_at: meta.connected_at,
+                        .unwrap_or(false);
+                    let owner_handle = self
+                        .get_owner_handle(owner_user_id)
+                        .unwrap_or_else(|| "Unknown".to_string());
+                    ConnectedDevice {
+                        id,
+                        name: meta.name.clone(),
+                        device_type: meta.device_type,
+                        is_playing,
+                        connected_at: meta.connected_at,
+                        owner_user_id,
+                        owner_handle,
+                        is_shared: owner_user_id != user_id,
+                    }
                 })
             })
             .collect()
+    }
+
+    async fn build_active_devices_for_user(&self, user_id: usize) -> Vec<DevicePlaybackInfo> {
+        let sessions = self.sessions.read().await;
+        let devices_guard = self.devices.read().await;
+        let mut active_devices = Vec::new();
+
+        for (owner_user_id, session) in sessions.iter() {
+            for (device_id, ds) in session.device_states.iter() {
+                if *owner_user_id != user_id
+                    && !self.is_user_allowed_for_device(*owner_user_id, *device_id, user_id)
+                {
+                    continue;
+                }
+
+                let name = devices_guard
+                    .get(&(*owner_user_id, *device_id))
+                    .map(|m| m.name.clone())
+                    .unwrap_or_else(|| "Unknown".to_string());
+                active_devices.push(DevicePlaybackInfo {
+                    device_id: *device_id,
+                    device_name: name,
+                    state: ds.state.clone(),
+                    queue: ds.queue.clone(),
+                    queue_version: ds.queue_version,
+                });
+            }
+        }
+
+        active_devices
     }
 
     /// Handle state broadcast from any device.
@@ -274,26 +467,13 @@ impl PlaybackSessionManager {
                     reason: "stopped".to_string(),
                 },
             );
-            let _ = self
-                .connection_manager
-                .send_to_other_devices(user_id, device_id, stopped_msg)
+            self
+                .broadcast_to_authorized_users(user_id, device_id, device_id, stopped_msg)
                 .await;
 
             // Update device list
-            let connected_devices = self.build_device_list(user_id, Some(session)).await;
-            let change_msg = ServerMessage::new(
-                msg_types::PLAYBACK_DEVICE_LIST_CHANGED,
-                DeviceListChangedPayload {
-                    devices: connected_devices,
-                    change: DeviceChange {
-                        change_type: "stopped_playing".to_string(),
-                        device_id,
-                    },
-                },
-            );
-            let _ = self
-                .connection_manager
-                .send_to_other_devices(user_id, device_id, change_msg)
+            self
+                .broadcast_device_list_change(user_id, device_id, "stopped_playing", device_id)
                 .await;
 
             return Ok(());
@@ -322,27 +502,14 @@ impl PlaybackSessionManager {
                 state,
             },
         );
-        let _ = self
-            .connection_manager
-            .send_to_other_devices(user_id, device_id, relay_msg)
+        self
+            .broadcast_to_authorized_users(user_id, device_id, device_id, relay_msg)
             .await;
 
         // If this is the first state from this device, broadcast device list changed
         if was_new {
-            let connected_devices = self.build_device_list(user_id, Some(session)).await;
-            let change_msg = ServerMessage::new(
-                msg_types::PLAYBACK_DEVICE_LIST_CHANGED,
-                DeviceListChangedPayload {
-                    devices: connected_devices,
-                    change: DeviceChange {
-                        change_type: "started_playing".to_string(),
-                        device_id,
-                    },
-                },
-            );
-            let _ = self
-                .connection_manager
-                .send_to_other_devices(user_id, device_id, change_msg)
+            self
+                .broadcast_device_list_change(user_id, device_id, "started_playing", device_id)
                 .await;
         }
 
@@ -398,9 +565,8 @@ impl PlaybackSessionManager {
                 queue_version,
             },
         );
-        let _ = self
-            .connection_manager
-            .send_to_other_devices(user_id, device_id, relay_msg)
+        self
+            .broadcast_to_authorized_users(user_id, device_id, device_id, relay_msg)
             .await;
 
         Ok(())
@@ -424,6 +590,17 @@ impl PlaybackSessionManager {
             user_id, from_device_id, target_device_id, command
         );
 
+        let owner_user_id = self
+            .get_device_owner_id(target_device_id)
+            .await
+            .ok_or(PlaybackError::DeviceNotFound)?;
+
+        if owner_user_id != user_id
+            && !self.is_user_allowed_for_device(owner_user_id, target_device_id, user_id)
+        {
+            return Err(PlaybackError::Forbidden);
+        }
+
         // Build the forwarded command message (without target_device_id)
         let forwarded = ServerMessage::new(
             msg_types::PLAYBACK_COMMAND,
@@ -436,7 +613,7 @@ impl PlaybackSessionManager {
 
         // Send to target device - returns NotConnected if not found
         self.connection_manager
-            .send_to_device(user_id, target_device_id, forwarded)
+            .send_to_device(owner_user_id, target_device_id, forwarded)
             .await
             .map_err(|_| PlaybackError::DeviceNotFound)
     }
@@ -450,34 +627,49 @@ impl PlaybackSessionManager {
     ) -> Result<QueueSyncPayload, PlaybackError> {
         let sessions = self.sessions.read().await;
 
+        let (owner_user_id, target_id) = if let Some(target_id) = target_device_id {
+            let owner_user_id = self
+                .get_device_owner_id(target_id)
+                .await
+                .ok_or(PlaybackError::DeviceNotFound)?;
+            (owner_user_id, target_id)
+        } else {
+            (user_id, device_id)
+        };
+
+        if owner_user_id != user_id
+            && !self.is_user_allowed_for_device(owner_user_id, target_id, user_id)
+        {
+            return Err(PlaybackError::Forbidden);
+        }
+
         // Try to find the requested device's queue if specified
-        if let Some(session) = sessions.get(&user_id) {
-            if let Some(target_id) = target_device_id {
-                if let Some(ds) = session.device_states.get(&target_id) {
+        if let Some(session) = sessions.get(&owner_user_id) {
+            if let Some(ds) = session.device_states.get(&target_id) {
+                return Ok(QueueSyncPayload {
+                    device_id: target_id,
+                    queue: ds.queue.clone(),
+                    queue_version: ds.queue_version,
+                });
+            }
+
+            if target_device_id.is_none() {
+                // Prefer the requesting device's own queue, otherwise pick any
+                if let Some(ds) = session.device_states.get(&device_id) {
                     return Ok(QueueSyncPayload {
-                        device_id: target_id,
+                        device_id,
                         queue: ds.queue.clone(),
                         queue_version: ds.queue_version,
                     });
                 }
-                return Err(PlaybackError::DeviceNotFound);
-            }
-
-            // Prefer the requesting device's own queue, otherwise pick any
-            if let Some(ds) = session.device_states.get(&device_id) {
-                return Ok(QueueSyncPayload {
-                    device_id,
-                    queue: ds.queue.clone(),
-                    queue_version: ds.queue_version,
-                });
-            }
-            // Return first available device's queue
-            if let Some((found_id, ds)) = session.device_states.iter().next() {
-                return Ok(QueueSyncPayload {
-                    device_id: *found_id,
-                    queue: ds.queue.clone(),
-                    queue_version: ds.queue_version,
-                });
+                // Return first available device's queue
+                if let Some((found_id, ds)) = session.device_states.iter().next() {
+                    return Ok(QueueSyncPayload {
+                        device_id: *found_id,
+                        queue: ds.queue.clone(),
+                        queue_version: ds.queue_version,
+                    });
+                }
             }
         }
 
@@ -509,8 +701,6 @@ impl PlaybackSessionManager {
             false
         };
 
-        let session = sessions.get(&user_id);
-
         // Broadcast device_stopped if the device had active state
         if had_state {
             let stopped_msg = ServerMessage::new(
@@ -520,27 +710,14 @@ impl PlaybackSessionManager {
                     reason: "disconnected".to_string(),
                 },
             );
-            let _ = self
-                .connection_manager
-                .broadcast_to_user(user_id, stopped_msg)
+            self
+                .broadcast_to_authorized_users(user_id, device_id, device_id, stopped_msg)
                 .await;
         }
 
         // Broadcast device list changed
-        let connected_devices = self.build_device_list(user_id, session).await;
-        let change_msg = ServerMessage::new(
-            msg_types::PLAYBACK_DEVICE_LIST_CHANGED,
-            DeviceListChangedPayload {
-                devices: connected_devices,
-                change: DeviceChange {
-                    change_type: "disconnected".to_string(),
-                    device_id,
-                },
-            },
-        );
-        let _ = self
-            .connection_manager
-            .broadcast_to_user(user_id, change_msg)
+        self
+            .broadcast_device_list_change(user_id, device_id, "disconnected", device_id)
             .await;
 
         info!(
@@ -575,9 +752,8 @@ impl PlaybackSessionManager {
                         reason: "stale".to_string(),
                     },
                 );
-                let _ = self
-                    .connection_manager
-                    .broadcast_to_user(*user_id, stopped_msg)
+                self
+                    .broadcast_to_authorized_users(*user_id, device_id, device_id, stopped_msg)
                     .await;
             }
         }
@@ -665,12 +841,45 @@ pub struct DeviceSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::catalog_store::NullCatalogStore;
+    use crate::user::SqliteUserStore;
+    use std::sync::{Arc, Mutex};
+    use tempfile::tempdir;
     use tokio::sync::mpsc;
 
     async fn setup() -> (Arc<ConnectionManager>, PlaybackSessionManager) {
         let conn_manager = Arc::new(ConnectionManager::new());
-        let session_manager = PlaybackSessionManager::new(conn_manager.clone());
+        let temp_dir = tempdir().unwrap();
+        let store = SqliteUserStore::new(temp_dir.path().join("user.db")).unwrap();
+        let user_store: Arc<dyn crate::user::FullUserStore> = Arc::new(store);
+        let catalog_store: Arc<dyn crate::catalog_store::CatalogStore> =
+            Arc::new(NullCatalogStore);
+        let user_manager = Arc::new(Mutex::new(UserManager::new(
+            catalog_store,
+            user_store,
+        )));
+        let session_manager = PlaybackSessionManager::new(conn_manager.clone(), user_manager);
         (conn_manager, session_manager)
+    }
+
+    async fn setup_with_user_manager(
+    ) -> (
+        Arc<ConnectionManager>,
+        PlaybackSessionManager,
+        Arc<Mutex<UserManager>>,
+    ) {
+        let conn_manager = Arc::new(ConnectionManager::new());
+        let temp_dir = tempdir().unwrap();
+        let store = SqliteUserStore::new(temp_dir.path().join("user.db")).unwrap();
+        let user_store: Arc<dyn crate::user::FullUserStore> = Arc::new(store);
+        let catalog_store: Arc<dyn crate::catalog_store::CatalogStore> =
+            Arc::new(NullCatalogStore);
+        let user_manager = Arc::new(Mutex::new(UserManager::new(
+            catalog_store,
+            user_store,
+        )));
+        let session_manager = PlaybackSessionManager::new(conn_manager.clone(), user_manager.clone());
+        (conn_manager, session_manager, user_manager)
     }
 
     fn make_state(track_title: &str, is_playing: bool) -> PlaybackState {
@@ -697,6 +906,159 @@ mod tests {
             repeat: RepeatMode::Off,
             timestamp: 1000,
         }
+    }
+
+    #[tokio::test]
+    async fn policy_allow_everyone_allows_any_user() {
+        let (_conn, manager, user_manager) = setup_with_user_manager().await;
+
+        let owner_id = user_manager.lock().unwrap().add_user("owner").unwrap();
+        let other_id = user_manager.lock().unwrap().add_user("other").unwrap();
+
+        let device_id = user_manager
+            .lock()
+            .unwrap()
+            .register_or_update_device(&crate::user::device::DeviceRegistration {
+                device_uuid: "device-uuid-allow-all".to_string(),
+                device_type: crate::user::device::DeviceType::Web,
+                device_name: Some("Owner Device".to_string()),
+                os_info: None,
+            })
+            .unwrap();
+        user_manager
+            .lock()
+            .unwrap()
+            .associate_device_with_user(device_id, owner_id)
+            .unwrap();
+
+        user_manager
+            .lock()
+            .unwrap()
+            .set_device_share_policy(device_id, &DeviceSharePolicy::allow_everyone())
+            .unwrap();
+
+        assert!(manager
+            .is_user_allowed_for_device(owner_id, device_id, other_id));
+    }
+
+    #[tokio::test]
+    async fn policy_deny_everyone_denies_non_owner() {
+        let (_conn, manager, user_manager) = setup_with_user_manager().await;
+
+        let owner_id = user_manager.lock().unwrap().add_user("owner").unwrap();
+        let other_id = user_manager.lock().unwrap().add_user("other").unwrap();
+
+        let device_id = user_manager
+            .lock()
+            .unwrap()
+            .register_or_update_device(&crate::user::device::DeviceRegistration {
+                device_uuid: "device-uuid-deny-all".to_string(),
+                device_type: crate::user::device::DeviceType::Web,
+                device_name: Some("Owner Device".to_string()),
+                os_info: None,
+            })
+            .unwrap();
+        user_manager
+            .lock()
+            .unwrap()
+            .associate_device_with_user(device_id, owner_id)
+            .unwrap();
+
+        user_manager
+            .lock()
+            .unwrap()
+            .set_device_share_policy(device_id, &DeviceSharePolicy::deny_everyone())
+            .unwrap();
+
+        assert!(!manager
+            .is_user_allowed_for_device(owner_id, device_id, other_id));
+        assert!(manager
+            .is_user_allowed_for_device(owner_id, device_id, owner_id));
+    }
+
+    #[tokio::test]
+    async fn policy_disallow_overrides_allow_user() {
+        let (_conn, manager, user_manager) = setup_with_user_manager().await;
+
+        let owner_id = user_manager.lock().unwrap().add_user("owner").unwrap();
+        let other_id = user_manager.lock().unwrap().add_user("other").unwrap();
+
+        let device_id = user_manager
+            .lock()
+            .unwrap()
+            .register_or_update_device(&crate::user::device::DeviceRegistration {
+                device_uuid: "device-uuid-disallow".to_string(),
+                device_type: crate::user::device::DeviceType::Web,
+                device_name: Some("Owner Device".to_string()),
+                os_info: None,
+            })
+            .unwrap();
+        user_manager
+            .lock()
+            .unwrap()
+            .associate_device_with_user(device_id, owner_id)
+            .unwrap();
+
+        let policy = DeviceSharePolicy {
+            mode: DeviceShareMode::Custom,
+            allow_users: vec![other_id],
+            allow_roles: vec![],
+            deny_users: vec![other_id],
+        };
+
+        user_manager
+            .lock()
+            .unwrap()
+            .set_device_share_policy(device_id, &policy)
+            .unwrap();
+
+        assert!(!manager
+            .is_user_allowed_for_device(owner_id, device_id, other_id));
+    }
+
+    #[tokio::test]
+    async fn policy_allows_by_role_when_not_denied() {
+        let (_conn, manager, user_manager) = setup_with_user_manager().await;
+
+        let owner_id = user_manager.lock().unwrap().add_user("owner").unwrap();
+        let other_id = user_manager.lock().unwrap().add_user("other").unwrap();
+        user_manager
+            .lock()
+            .unwrap()
+            .add_user_role(other_id, UserRole::Admin)
+            .unwrap();
+
+        let device_id = user_manager
+            .lock()
+            .unwrap()
+            .register_or_update_device(&crate::user::device::DeviceRegistration {
+                device_uuid: "device-uuid-role".to_string(),
+                device_type: crate::user::device::DeviceType::Web,
+                device_name: Some("Owner Device".to_string()),
+                os_info: None,
+            })
+            .unwrap();
+        user_manager
+            .lock()
+            .unwrap()
+            .associate_device_with_user(device_id, owner_id)
+            .unwrap();
+
+        let policy = DeviceSharePolicy {
+            mode: DeviceShareMode::Custom,
+            allow_users: vec![],
+            allow_roles: vec![UserRole::Admin],
+            deny_users: vec![],
+        };
+
+        user_manager
+            .lock()
+            .unwrap()
+            .set_device_share_policy(device_id, &policy)
+            .unwrap();
+
+        assert!(manager
+            .is_user_allowed_for_device(owner_id, device_id, other_id));
     }
 
     fn make_stopped_state() -> PlaybackState {

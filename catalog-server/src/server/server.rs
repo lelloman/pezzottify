@@ -19,8 +19,13 @@ use crate::catalog_store::{CatalogStore, DiscographySort};
 use crate::{
     server::stream_track::stream_track,
     user::{
-        device::DeviceRegistration, settings::UserSetting, sync_events::UserEvent,
-        user_models::LikedContentType, FullUserStore, Permission,
+        device::{DeviceRegistration, DeviceShareMode, DeviceSharePolicy},
+        settings::UserSetting,
+        sync_events::UserEvent,
+        user_models::LikedContentType,
+        FullUserStore,
+        Permission,
+        UserRole,
     },
 };
 use axum_extra::extract::cookie::{Cookie, SameSite};
@@ -2644,6 +2649,170 @@ async fn update_user_settings(
     StatusCode::OK.into_response()
 }
 
+// Device sharing endpoints
+
+#[derive(Deserialize)]
+struct DeviceSharePolicyRequest {
+    mode: String,
+    #[serde(default)]
+    allow_users: Vec<usize>,
+    #[serde(default)]
+    allow_roles: Vec<String>,
+    #[serde(default)]
+    deny_users: Vec<usize>,
+}
+
+#[derive(Serialize)]
+struct DeviceSharePolicyResponse {
+    mode: String,
+    allow_users: Vec<usize>,
+    allow_roles: Vec<String>,
+    deny_users: Vec<usize>,
+}
+
+#[derive(Serialize)]
+struct DeviceInfoResponse {
+    id: usize,
+    device_uuid: String,
+    device_type: String,
+    device_name: Option<String>,
+    os_info: Option<String>,
+    first_seen: u64,
+    last_seen: u64,
+    share_policy: DeviceSharePolicyResponse,
+}
+
+#[derive(Serialize)]
+struct DevicesResponse {
+    devices: Vec<DeviceInfoResponse>,
+}
+
+fn policy_mode_to_str(mode: DeviceShareMode) -> &'static str {
+    match mode {
+        DeviceShareMode::AllowEveryone => "allow_everyone",
+        DeviceShareMode::DenyEveryone => "deny_everyone",
+        DeviceShareMode::Custom => "custom",
+    }
+}
+
+fn policy_to_response(policy: DeviceSharePolicy) -> DeviceSharePolicyResponse {
+    DeviceSharePolicyResponse {
+        mode: policy_mode_to_str(policy.mode).to_string(),
+        allow_users: policy.allow_users,
+        allow_roles: policy
+            .allow_roles
+            .into_iter()
+            .map(|r| r.as_str().to_lowercase())
+            .collect(),
+        deny_users: policy.deny_users,
+    }
+}
+
+async fn get_user_devices(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+) -> Response {
+    let devices = match user_manager.lock().unwrap().get_user_devices(session.user_id) {
+        Ok(devices) => devices,
+        Err(err) => {
+            error!("Error getting user devices: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let mut result = Vec::new();
+    for device in devices {
+        let policy = user_manager
+            .lock()
+            .unwrap()
+            .get_device_share_policy(device.id)
+            .unwrap_or_default();
+        result.push(DeviceInfoResponse {
+            id: device.id,
+            device_uuid: device.device_uuid,
+            device_type: device.device_type.as_str().to_string(),
+            device_name: device.device_name,
+            os_info: device.os_info,
+            first_seen: device
+                .first_seen
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            last_seen: device
+                .last_seen
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            share_policy: policy_to_response(policy),
+        });
+    }
+
+    Json(DevicesResponse { devices: result }).into_response()
+}
+
+async fn put_device_share_policy(
+    session: Session,
+    State(user_manager): State<GuardedUserManager>,
+    State(playback_session_manager): State<GuardedPlaybackSessionManager>,
+    Path(device_id): Path<usize>,
+    Json(body): Json<DeviceSharePolicyRequest>,
+) -> Response {
+    let device = match user_manager.lock().unwrap().get_device(device_id) {
+        Ok(Some(device)) => device,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            error!("Error getting device: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    if device.user_id != Some(session.user_id) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    let mode = match body.mode.as_str() {
+        "allow_everyone" => DeviceShareMode::AllowEveryone,
+        "deny_everyone" => DeviceShareMode::DenyEveryone,
+        "custom" => DeviceShareMode::Custom,
+        _ => return (StatusCode::BAD_REQUEST, "Invalid mode").into_response(),
+    };
+
+    let mut allow_roles = Vec::new();
+    for role in body.allow_roles {
+        let parsed = match UserRole::from_str(&role) {
+            Some(r) => r,
+            None => return (StatusCode::BAD_REQUEST, "Invalid role").into_response(),
+        };
+        allow_roles.push(parsed);
+    }
+
+    let policy = DeviceSharePolicy {
+        mode,
+        allow_users: body.allow_users,
+        allow_roles,
+        deny_users: body.deny_users,
+    };
+
+    if let Err(err) = policy.validate() {
+        return (StatusCode::BAD_REQUEST, err.to_string()).into_response();
+    }
+
+    if let Err(err) = user_manager
+        .lock()
+        .unwrap()
+        .set_device_share_policy(device_id, &policy)
+    {
+        error!("Error setting device share policy: {}", err);
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    playback_session_manager
+        .broadcast_device_list_refresh(device_id)
+        .await;
+
+    Json(policy_to_response(policy)).into_response()
+}
+
 async fn login(
     State(config): State<ServerConfig>,
     State(user_manager): State<GuardedUserManager>,
@@ -4360,6 +4529,7 @@ impl ServerState {
         // Create playback session manager for multi-device sync
         let playback_session_manager = Arc::new(super::websocket::PlaybackSessionManager::new(
             ws_connection_manager.clone(),
+            user_manager.clone(),
         ));
 
         // Create auth state store for OIDC flow (always created, even if OIDC is disabled)
@@ -4770,6 +4940,27 @@ pub async fn make_app(
         ))
         .with_state(state.clone());
 
+    // Device share policy routes (requires AccessCatalog permission)
+    let device_read_routes: Router = Router::new()
+        .route("/devices", get(get_user_devices))
+        .layer(GovernorLayer::new(user_content_read_rate_limit.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_access_catalog,
+        ))
+        .with_state(state.clone());
+
+    let device_write_routes: Router = Router::new()
+        .route("/devices/{device_id}/share_policy", put(put_device_share_policy))
+        .layer(GovernorLayer::new(write_rate_limit.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_access_catalog,
+        ))
+        .with_state(state.clone());
+
+    let device_routes = device_read_routes.merge(device_write_routes);
+
     // Notifications routes (requires AccessCatalog permission)
     let notifications_routes: Router = Router::new()
         .route("/notifications/{id}/read", post(mark_notification_read))
@@ -4796,6 +4987,7 @@ pub async fn make_app(
         .merge(playlist_routes)
         .merge(listening_stats_routes)
         .merge(settings_routes)
+        .merge(device_routes)
         .merge(notifications_routes)
         .merge(bug_report_routes);
 
@@ -5843,6 +6035,19 @@ mod tests {
         }
         fn enforce_user_device_limit(&self, _user_id: usize, _max_devices: usize) -> Result<usize> {
             Ok(0)
+        }
+        fn get_device_share_policy(
+            &self,
+            _device_id: usize,
+        ) -> Result<crate::user::device::DeviceSharePolicy> {
+            Ok(crate::user::device::DeviceSharePolicy::default())
+        }
+        fn set_device_share_policy(
+            &self,
+            _device_id: usize,
+            _policy: &crate::user::device::DeviceSharePolicy,
+        ) -> Result<()> {
+            Ok(())
         }
     }
 

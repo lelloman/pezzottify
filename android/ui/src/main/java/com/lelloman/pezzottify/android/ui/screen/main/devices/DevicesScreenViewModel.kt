@@ -32,6 +32,17 @@ data class DevicesScreenState(
     val remoteControlDeviceId: Int? = null,
 )
 
+data class DeviceSharePolicyUiState(
+    val mode: String = "deny_everyone",
+    val allowUsers: String = "",
+    val denyUsers: String = "",
+    val allowAdmin: Boolean = false,
+    val allowRegular: Boolean = false,
+    val isLoading: Boolean = false,
+    val isSaving: Boolean = false,
+    val error: String? = null,
+)
+
 @HiltViewModel
 class DevicesScreenViewModel @Inject constructor(
     private val interactor: Interactor,
@@ -40,8 +51,12 @@ class DevicesScreenViewModel @Inject constructor(
     private val mutableState = MutableStateFlow(DevicesScreenState())
     val state: StateFlow<DevicesScreenState> = mutableState.asStateFlow()
 
+    private val mutableSharePolicy = MutableStateFlow(DeviceSharePolicyUiState())
+    val sharePolicy: StateFlow<DeviceSharePolicyUiState> = mutableSharePolicy.asStateFlow()
+
     private var lastBaseState = DevicesScreenState()
     private var interpolationJob: Job? = null
+    private var lastPolicyDeviceId: Int? = null
 
     init {
         viewModelScope.launch {
@@ -49,6 +64,11 @@ class DevicesScreenViewModel @Inject constructor(
                 lastBaseState = newState
                 mutableState.value = interpolatePositions(newState)
                 ensureInterpolation(newState)
+                val deviceId = newState.thisDeviceId
+                if (deviceId != null && deviceId != lastPolicyDeviceId) {
+                    lastPolicyDeviceId = deviceId
+                    loadSharePolicy(deviceId)
+                }
             }
         }
         viewModelScope.launch {
@@ -105,12 +125,77 @@ class DevicesScreenViewModel @Inject constructor(
         interactor.exitRemoteMode()
     }
 
+    fun updatePolicyMode(mode: String) {
+        mutableSharePolicy.value = mutableSharePolicy.value.copy(mode = mode, error = null)
+    }
+
+    fun updateAllowUsers(text: String) {
+        mutableSharePolicy.value = mutableSharePolicy.value.copy(allowUsers = text, error = null)
+    }
+
+    fun updateDenyUsers(text: String) {
+        mutableSharePolicy.value = mutableSharePolicy.value.copy(denyUsers = text, error = null)
+    }
+
+    fun updateAllowAdmin(enabled: Boolean) {
+        mutableSharePolicy.value = mutableSharePolicy.value.copy(allowAdmin = enabled, error = null)
+    }
+
+    fun updateAllowRegular(enabled: Boolean) {
+        mutableSharePolicy.value = mutableSharePolicy.value.copy(allowRegular = enabled, error = null)
+    }
+
+    fun saveSharePolicy() {
+        val deviceId = lastPolicyDeviceId ?: return
+        viewModelScope.launch {
+            val current = mutableSharePolicy.value
+            mutableSharePolicy.value = current.copy(isSaving = true, error = null)
+            val response = interactor.updateDeviceSharePolicy(deviceId, current)
+            mutableSharePolicy.value = when (response) {
+                is DeviceSharePolicyResult.Success -> mapPolicyToUi(response.policy).copy(isSaving = false)
+                is DeviceSharePolicyResult.Error -> current.copy(isSaving = false, error = response.message)
+            }
+        }
+    }
+
+    private fun loadSharePolicy(deviceId: Int) {
+        viewModelScope.launch {
+            mutableSharePolicy.value = mutableSharePolicy.value.copy(isLoading = true, error = null)
+            val response = interactor.fetchDeviceSharePolicy(deviceId)
+            mutableSharePolicy.value = when (response) {
+                is DeviceSharePolicyResult.Success -> mapPolicyToUi(response.policy).copy(isLoading = false)
+                is DeviceSharePolicyResult.Error -> DeviceSharePolicyUiState(isLoading = false, error = response.message)
+            }
+        }
+    }
+
+    private fun mapPolicyToUi(policy: com.lelloman.pezzottify.android.domain.remoteapi.response.DeviceSharePolicy): DeviceSharePolicyUiState {
+        val roles = policy.allowRoles.toSet()
+        return DeviceSharePolicyUiState(
+            mode = policy.mode,
+            allowUsers = policy.allowUsers.joinToString(", "),
+            denyUsers = policy.denyUsers.joinToString(", "),
+            allowAdmin = roles.contains("admin"),
+            allowRegular = roles.contains("regular"),
+        )
+    }
+
     interface Interactor {
         fun observeDevicesScreenState(): Flow<DevicesScreenState>
         fun observeRemoteControlDeviceId(): Flow<Int?>
         fun sendCommand(command: String, payload: Map<String, Any?>, targetDeviceId: Int)
         fun enterRemoteMode(deviceId: Int, deviceName: String)
         fun exitRemoteMode()
+        suspend fun fetchDeviceSharePolicy(deviceId: Int): DeviceSharePolicyResult
+        suspend fun updateDeviceSharePolicy(
+            deviceId: Int,
+            state: DeviceSharePolicyUiState
+        ): DeviceSharePolicyResult
+    }
+
+    sealed interface DeviceSharePolicyResult {
+        data class Success(val policy: com.lelloman.pezzottify.android.domain.remoteapi.response.DeviceSharePolicy) : DeviceSharePolicyResult
+        data class Error(val message: String) : DeviceSharePolicyResult
     }
 
     companion object {
