@@ -191,9 +191,9 @@ class QueueScreenViewModelTest {
         createViewModel()
         advanceUntilIdle()
 
-        viewModel.removeTrack("track-1")
+        viewModel.removeTrack(1)
 
-        assertThat(fakeInteractor.lastRemovedTrackId).isEqualTo("track-1")
+        assertThat(fakeInteractor.lastRemovedIndex).isEqualTo(1)
     }
 
     @Test
@@ -235,13 +235,15 @@ class QueueScreenViewModelTest {
 
     private class FakeInteractor : QueueScreenViewModel.Interactor {
         val queueStateFlow = MutableStateFlow<QueueScreenViewModel.Interactor.QueueState?>(null)
+        val isRemoteFlow = MutableStateFlow(false)
 
         var lastPlayedIndex: Int? = null
         var lastMoveFrom: Int? = null
         var lastMoveTo: Int? = null
-        var lastRemovedTrackId: String? = null
+        var lastRemovedIndex: Int? = null
 
         override fun getQueueState(): Flow<QueueScreenViewModel.Interactor.QueueState?> = queueStateFlow
+        override fun getIsRemote(): Flow<Boolean> = isRemoteFlow
 
         override fun playTrackAtIndex(index: Int) {
             lastPlayedIndex = index
@@ -252,8 +254,8 @@ class QueueScreenViewModelTest {
             lastMoveTo = toIndex
         }
 
-        override fun removeTrack(trackId: String) {
-            lastRemovedTrackId = trackId
+        override fun removeTrack(index: Int) {
+            lastRemovedIndex = index
         }
 
         override fun playTrackDirectly(trackId: String) {

@@ -333,17 +333,34 @@ async fn handle_playback_message(
         }
 
         msg_types::PLAYBACK_REQUEST_QUEUE => {
-            match manager.handle_request_queue(user_id, device_id).await {
-                Ok(sync) => {
-                    let _ = state
-                        .connection_manager
-                        .send_to_device(
-                            user_id,
-                            device_id,
-                            ServerMessage::new(msg_types::PLAYBACK_QUEUE_SYNC, sync),
-                        )
-                        .await;
-                    Ok(())
+            let payload = if payload.is_null() {
+                Ok(RequestQueuePayload {
+                    target_device_id: None,
+                })
+            } else {
+                serde_json::from_value::<RequestQueuePayload>(payload).map_err(|e| {
+                    PlaybackError::InvalidMessage(format!("Invalid request_queue payload: {}", e))
+                })
+            };
+            match payload {
+                Ok(payload) => {
+                    match manager
+                        .handle_request_queue(user_id, device_id, payload.target_device_id)
+                        .await
+                    {
+                        Ok(sync) => {
+                            let _ = state
+                                .connection_manager
+                                .send_to_device(
+                                    user_id,
+                                    device_id,
+                                    ServerMessage::new(msg_types::PLAYBACK_QUEUE_SYNC, sync),
+                                )
+                                .await;
+                            Ok(())
+                        }
+                        Err(e) => Err(e),
+                    }
                 }
                 Err(e) => Err(e),
             }

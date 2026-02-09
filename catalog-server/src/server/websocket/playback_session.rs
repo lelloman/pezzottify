@@ -446,21 +446,35 @@ impl PlaybackSessionManager {
         &self,
         user_id: usize,
         device_id: usize,
+        target_device_id: Option<usize>,
     ) -> Result<QueueSyncPayload, PlaybackError> {
         let sessions = self.sessions.read().await;
 
-        // Try to find any device's queue to return
+        // Try to find the requested device's queue if specified
         if let Some(session) = sessions.get(&user_id) {
+            if let Some(target_id) = target_device_id {
+                if let Some(ds) = session.device_states.get(&target_id) {
+                    return Ok(QueueSyncPayload {
+                        device_id: target_id,
+                        queue: ds.queue.clone(),
+                        queue_version: ds.queue_version,
+                    });
+                }
+                return Err(PlaybackError::DeviceNotFound);
+            }
+
             // Prefer the requesting device's own queue, otherwise pick any
             if let Some(ds) = session.device_states.get(&device_id) {
                 return Ok(QueueSyncPayload {
+                    device_id,
                     queue: ds.queue.clone(),
                     queue_version: ds.queue_version,
                 });
             }
             // Return first available device's queue
-            if let Some(ds) = session.device_states.values().next() {
+            if let Some((found_id, ds)) = session.device_states.iter().next() {
                 return Ok(QueueSyncPayload {
+                    device_id: *found_id,
                     queue: ds.queue.clone(),
                     queue_version: ds.queue_version,
                 });
@@ -468,6 +482,7 @@ impl PlaybackSessionManager {
         }
 
         Ok(QueueSyncPayload {
+            device_id,
             queue: Vec::new(),
             queue_version: 0,
         })

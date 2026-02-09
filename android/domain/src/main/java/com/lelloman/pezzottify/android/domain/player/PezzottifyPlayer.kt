@@ -20,6 +20,7 @@ interface PezzottifyPlayer : ControlsAndStatePlayer, AppInitializer{
     fun goToNextPlaylist()
     fun moveTrack(fromIndex: Int, toIndex: Int)
     fun addTracksToPlaylist(tracksIds: List<String>)
+    fun removeTrackAtIndex(index: Int)
     fun removeTrackFromPlaylist(trackId: String)
 
     /**
@@ -37,4 +38,3 @@ interface PezzottifyPlayer : ControlsAndStatePlayer, AppInitializer{
     suspend fun tryRestoreState(): Boolean
 
 }
-
