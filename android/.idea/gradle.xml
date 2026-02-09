@@ -19,6 +19,7 @@
             <option value="$PROJECT_DIR$/remoteapi" />
             <option value="$PROJECT_DIR$/simple-ai-assistant" />
             <option value="$PROJECT_DIR$/simple-ai-provider-ollama" />
+            <option value="$PROJECT_DIR$/simple-ai-provider-simpleai" />
             <option value="$PROJECT_DIR$/ui" />
           </set>
         </option>
