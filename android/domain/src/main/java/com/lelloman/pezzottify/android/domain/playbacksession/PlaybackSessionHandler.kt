@@ -99,7 +99,11 @@ class PlaybackSessionHandler internal constructor(
         scope.launch {
             webSocketManager.connectionState.collect { state ->
                 when (state) {
-                    is ConnectionState.Connected -> sendHello()
+                    is ConnectionState.Connected -> {
+                        // Fallback self identity even if playback.welcome is delayed/missed.
+                        _myDeviceId.value = state.deviceId
+                        sendHello()
+                    }
                     is ConnectionState.Disconnected,
                     is ConnectionState.Error -> {
                         stopBroadcasting()

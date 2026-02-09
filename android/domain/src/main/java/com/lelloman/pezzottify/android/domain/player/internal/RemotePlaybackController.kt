@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -100,17 +101,23 @@ class RemotePlaybackController internal constructor(
         logger.info("Starting remote tracking for device $deviceId")
 
         stateCollectionJob = scope.launch {
-            playbackSessionHandler.otherDeviceStates
-                .map { it[deviceId] }
-                .collect { remoteState ->
-                    if (remoteState != null) {
-                        updateFromRemoteState(remoteState)
-                    } else {
-                        // Remote device disconnected or stopped
-                        logger.info("Remote device $deviceId state became null, exiting remote mode")
+            combine(
+                playbackSessionHandler.otherDeviceStates,
+                playbackSessionHandler.connectedDevices,
+            ) { states, devices ->
+                val remoteState = states[deviceId]
+                val isStillConnected = devices.any { it.id == deviceId }
+                remoteState to isStillConnected
+            }.collect { (remoteState, isStillConnected) ->
+                when {
+                    remoteState != null -> updateFromRemoteState(remoteState)
+                    isStillConnected -> clearRemotePlaybackState()
+                    else -> {
+                        logger.info("Remote device $deviceId disconnected, exiting remote mode")
                         playbackModeManager.exitRemoteMode()
                     }
                 }
+            }
         }
 
         // Start progress interpolation
@@ -128,6 +135,16 @@ class RemotePlaybackController internal constructor(
         interpolationJob?.cancel()
         interpolationJob = null
         _isActive.value = false
+        _isPlaying.value = false
+        _currentTrackIndex.value = null
+        _currentTrackPercent.value = null
+        _currentTrackProgressSec.value = null
+        _currentTrackDurationSeconds.value = null
+        _playerError.value = null
+    }
+
+    private fun clearRemotePlaybackState() {
+        lastRemoteState = null
         _isPlaying.value = false
         _currentTrackIndex.value = null
         _currentTrackPercent.value = null
