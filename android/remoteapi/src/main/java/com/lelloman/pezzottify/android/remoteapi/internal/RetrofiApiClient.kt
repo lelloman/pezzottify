@@ -15,6 +15,9 @@ import com.lelloman.pezzottify.android.remoteapi.internal.requests.SearchRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.SubmitBugReportRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdatePlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdateUserSettingsRequest
+import com.lelloman.pezzottify.android.domain.remoteapi.request.DeviceSharePolicyRequest
+import com.lelloman.pezzottify.android.domain.remoteapi.response.DevicesResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.DeviceSharePolicy
 import com.lelloman.pezzottify.android.domain.remoteapi.SubmitBugReportResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
@@ -189,6 +192,18 @@ internal interface RetrofitApiClient {
         @Header("Authorization") authToken: String,
         @Body request: UpdateUserSettingsRequest,
     ): Response<Unit>
+
+    @GET("/v1/user/devices")
+    suspend fun getDevices(
+        @Header("Authorization") authToken: String,
+    ): Response<DevicesResponse>
+
+    @PUT("/v1/user/devices/{deviceId}/share_policy")
+    suspend fun updateDeviceSharePolicy(
+        @Header("Authorization") authToken: String,
+        @Path("deviceId") deviceId: Int,
+        @Body request: DeviceSharePolicyRequest,
+    ): Response<DeviceSharePolicy>
 
     @POST("/v1/user/notifications/{notificationId}/read")
     suspend fun markNotificationRead(

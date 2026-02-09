@@ -64,7 +64,8 @@ const REGULAR_PERMISSIONS: &[Permission] = &[
     Permission::ReportBug,
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum UserRole {
     Admin,
     Regular,

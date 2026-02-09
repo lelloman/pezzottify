@@ -1,5 +1,5 @@
 use super::auth::{AuthToken, AuthTokenValue, UserAuthCredentials};
-use super::device::{Device, DeviceRegistration};
+use super::device::{Device, DeviceRegistration, DeviceSharePolicy};
 use super::permissions::{Permission, PermissionGrant, UserRole};
 use super::settings::UserSetting;
 use super::user_models::{
@@ -332,6 +332,12 @@ pub trait DeviceStore: Send + Sync {
     /// Called after associating a device with a user during login.
     /// Returns the number of devices deleted.
     fn enforce_user_device_limit(&self, user_id: usize, max_devices: usize) -> Result<usize>;
+
+    /// Get the share policy for a device (defaults to deny everyone if missing).
+    fn get_device_share_policy(&self, device_id: usize) -> Result<DeviceSharePolicy>;
+
+    /// Set the share policy for a device.
+    fn set_device_share_policy(&self, device_id: usize, policy: &DeviceSharePolicy) -> Result<()>;
 }
 
 use super::sync_events::{StoredEvent, UserEvent};

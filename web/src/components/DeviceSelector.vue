@@ -61,6 +61,9 @@
             <span v-if="device.is_playing" class="deviceBadge playing"
               >Playing</span
             >
+            <span v-if="device.is_shared" class="deviceBadge shared">
+              Shared by {{ device.owner_handle || "Unknown" }}
+            </span>
           </div>
         </div>
       </div>
@@ -202,6 +205,10 @@ onBeforeUnmount(() => {
 
 .deviceBadge.playing {
   color: var(--spotify-green);
+}
+
+.deviceBadge.shared {
+  color: var(--text-subdued);
 }
 
 </style>

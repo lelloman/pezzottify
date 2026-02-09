@@ -73,6 +73,9 @@ pub struct ConnectedDevice {
     pub device_type: DeviceType,
     pub is_playing: bool,
     pub connected_at: u64,
+    pub owner_user_id: usize,
+    pub owner_handle: String,
+    pub is_shared: bool,
 }
 
 // ============================================================================
@@ -277,6 +280,9 @@ mod tests {
                 device_type: DeviceType::Web,
                 is_playing: false,
                 connected_at: 1234567890,
+                owner_user_id: 1,
+                owner_handle: "owner".to_string(),
+                is_shared: false,
             }],
         };
 

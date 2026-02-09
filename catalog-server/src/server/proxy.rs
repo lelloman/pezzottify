@@ -1004,6 +1004,19 @@ mod tests {
         ) -> anyhow::Result<usize> {
             Ok(0)
         }
+        fn get_device_share_policy(
+            &self,
+            _device_id: usize,
+        ) -> anyhow::Result<crate::user::device::DeviceSharePolicy> {
+            Ok(crate::user::device::DeviceSharePolicy::default())
+        }
+        fn set_device_share_policy(
+            &self,
+            _device_id: usize,
+            _policy: &crate::user::device::DeviceSharePolicy,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
     }
 
     impl crate::user::UserEventStore for TestUserStore {
@@ -1731,6 +1744,19 @@ mod tests {
             _max_devices: usize,
         ) -> anyhow::Result<usize> {
             Ok(0)
+        }
+        fn get_device_share_policy(
+            &self,
+            _device_id: usize,
+        ) -> anyhow::Result<crate::user::device::DeviceSharePolicy> {
+            Ok(crate::user::device::DeviceSharePolicy::default())
+        }
+        fn set_device_share_policy(
+            &self,
+            _device_id: usize,
+            _policy: &crate::user::device::DeviceSharePolicy,
+        ) -> anyhow::Result<()> {
+            Ok(())
         }
     }
 

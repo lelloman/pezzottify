@@ -1,14 +1,83 @@
 <template>
   <div class="devicesPage">
-    <h1 class="pageTitle">Your Devices</h1>
+    <h1 class="pageTitle">Devices</h1>
+
+    <div v-if="policyLoaded || policyError" class="sharePolicyCard">
+      <div class="sharePolicyHeader">
+        <span class="sectionTitle">Device Sharing (This Device)</span>
+        <span v-if="policySaving" class="policyStatus">Saving…</span>
+        <span v-if="policyError" class="policyError">{{ policyError }}</span>
+      </div>
+      <div class="policyModeRow">
+        <label class="policyOption">
+          <input
+            type="radio"
+            value="deny_everyone"
+            v-model="policyState.mode"
+          />
+          <span>Deny everyone</span>
+        </label>
+        <label class="policyOption">
+          <input
+            type="radio"
+            value="allow_everyone"
+            v-model="policyState.mode"
+          />
+          <span>Allow everyone</span>
+        </label>
+        <label class="policyOption">
+          <input type="radio" value="custom" v-model="policyState.mode" />
+          <span>Custom</span>
+        </label>
+      </div>
+
+      <div v-if="policyState.mode === 'custom'" class="policyRules">
+        <div class="policyField">
+          <label>Allow users (IDs, comma separated)</label>
+          <input
+            v-model="policyState.allowUsers"
+            type="text"
+            placeholder="e.g. 12, 34"
+          />
+        </div>
+        <div class="policyField">
+          <label>Deny users (IDs, comma separated)</label>
+          <input
+            v-model="policyState.denyUsers"
+            type="text"
+            placeholder="e.g. 56"
+          />
+        </div>
+        <div class="policyField">
+          <label>Allow roles</label>
+          <div class="policyRoleRow">
+            <label class="policyOption">
+              <input type="checkbox" v-model="policyState.allowRoles.admin" />
+              <span>Admin</span>
+            </label>
+            <label class="policyOption">
+              <input type="checkbox" v-model="policyState.allowRoles.regular" />
+              <span>Regular</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="policyActions">
+        <button class="primaryBtn" @click="savePolicy" :disabled="policySaving">
+          Save Policy
+        </button>
+      </div>
+    </div>
 
     <div v-if="allDevices.length === 0" class="emptyState">
       No devices connected.
     </div>
 
-    <div class="deviceCards">
+    <div v-if="myDevices.length > 0" class="sectionHeader">Your Devices</div>
+    <div v-if="myDevices.length > 0" class="deviceCards">
       <div
-        v-for="device in allDevices"
+        v-for="device in myDevices"
         :key="device.id"
         class="deviceCard"
         :class="{ thisDevice: device.isThisDevice }"
@@ -42,6 +111,9 @@
           <span v-if="device.isThisDevice" class="thisDeviceBadge"
             >this device</span
           >
+          <span v-if="device.is_shared" class="sharedBadge">
+            shared by {{ device.owner_handle || "unknown" }}
+          </span>
         </div>
 
         <!-- This device: show local playback state -->
@@ -134,11 +206,109 @@
         </template>
       </div>
     </div>
+
+    <div v-if="sharedDevices.length > 0" class="sectionHeader">
+      Shared Devices
+    </div>
+    <div v-if="sharedDevices.length > 0" class="deviceCards">
+      <div v-for="device in sharedDevices" :key="device.id" class="deviceCard">
+        <div class="deviceHeader">
+          <svg
+            v-if="device.device_type === 'web'"
+            class="deviceTypeIcon"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            width="18"
+            height="18"
+          >
+            <path
+              d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12z"
+            />
+          </svg>
+          <svg
+            v-else
+            class="deviceTypeIcon"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            width="18"
+            height="18"
+          >
+            <path
+              d="M16 1H8C6.34 1 5 2.34 5 4v16c0 1.66 1.34 3 3 3h8c1.66 0 3-1.34 3-3V4c0-1.66-1.34-3-3-3zm-2 20h-4v-1h4v1zm3.25-3H6.75V4h10.5v14z"
+            />
+          </svg>
+          <span class="deviceName">{{ device.name }}</span>
+          <span v-if="device.is_shared" class="sharedBadge">
+            shared by {{ device.owner_handle || "unknown" }}
+          </span>
+        </div>
+
+        <div v-if="device.state?.current_track" class="playbackInfo">
+          <MultiSourceImage
+            :urls="remoteImageUrls(device.state.current_track)"
+            :lazy="false"
+            alt="Album art"
+            class="albumArt"
+          />
+          <div class="trackDetails">
+            <span class="trackTitle">{{
+              device.state.current_track.title
+            }}</span>
+            <span class="trackArtist">{{
+              device.state.current_track.artist_name
+            }}</span>
+          </div>
+        </div>
+        <div v-if="device.state?.current_track" class="controlsRow">
+          <div
+            class="controlBtn scaleClickFeedback"
+            @click="sendCmd('prev', device.id)"
+            title="Previous"
+          >
+            <SkipPrevious />
+          </div>
+          <div
+            class="controlBtn playPauseBtn scaleClickFeedback"
+            @click="
+              sendCmd(device.state.is_playing ? 'pause' : 'play', device.id)
+            "
+            :title="device.state.is_playing ? 'Pause' : 'Play'"
+          >
+            <PauseIcon v-if="device.state.is_playing" />
+            <PlayIcon v-else />
+          </div>
+          <div
+            class="controlBtn scaleClickFeedback"
+            @click="sendCmd('next', device.id)"
+            title="Next"
+          >
+            <SkipNext />
+          </div>
+        </div>
+        <div v-if="device.state?.current_track" class="progressRow">
+          <ProgressBar
+            class="deviceProgressBar"
+            :progress="interpolatedRemoteProgress(device.id, device.state)"
+            @update:progress="
+              (p) => onRemoteSeek(p, device.id, device.state)
+            "
+          />
+          <span class="progressTime"
+            >{{ formatSec(interpolatedRemotePositionSec(device.id, device.state)) }} /
+            {{ formatMs(device.state.current_track.duration) }}</span
+          >
+        </div>
+        <div v-if="!device.state?.current_track" class="notPlaying">
+          Not playing
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onUnmounted } from "vue";
+import { computed, ref, onMounted, onUnmounted, watch } from "vue";
+import axios from "axios";
 import { usePlaybackSessionStore } from "@/store/playbackSession";
 import { usePlaybackStore } from "@/store/playback";
 import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
@@ -171,6 +341,92 @@ function remoteImageUrls(currentTrack) {
   return remoteImageUrlCache[id];
 }
 
+const policyState = ref({
+  mode: "deny_everyone",
+  allowUsers: "",
+  denyUsers: "",
+  allowRoles: {
+    admin: false,
+    regular: false,
+  },
+});
+const policyLoaded = ref(false);
+const policySaving = ref(false);
+const policyError = ref("");
+
+function normalizeIdList(input) {
+  return input
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map((s) => Number(s))
+    .filter((n) => Number.isFinite(n) && n > 0);
+}
+
+function applyPolicyResponse(policy) {
+  policyState.value.mode = policy.mode || "deny_everyone";
+  policyState.value.allowUsers = (policy.allow_users || []).join(", ");
+  policyState.value.denyUsers = (policy.deny_users || []).join(", ");
+  const roles = new Set(policy.allow_roles || []);
+  policyState.value.allowRoles.admin = roles.has("admin");
+  policyState.value.allowRoles.regular = roles.has("regular");
+}
+
+async function loadPolicy() {
+  if (!sessionStore.myDeviceId) return;
+  policyError.value = "";
+  try {
+    const res = await axios.get("/v1/user/devices");
+    const devices = res.data?.devices || [];
+    const me = devices.find((d) => d.id === sessionStore.myDeviceId);
+    if (me?.share_policy) {
+      applyPolicyResponse(me.share_policy);
+      policyLoaded.value = true;
+    } else {
+      policyLoaded.value = false;
+    }
+  } catch (err) {
+    console.error("[Devices] Failed to load share policy", err);
+    policyError.value = "Failed to load policy";
+  }
+}
+
+async function savePolicy() {
+  if (!sessionStore.myDeviceId) return;
+  policySaving.value = true;
+  policyError.value = "";
+  try {
+    const body = {
+      mode: policyState.value.mode,
+      allow_users:
+        policyState.value.mode === "custom"
+          ? normalizeIdList(policyState.value.allowUsers)
+          : [],
+      deny_users:
+        policyState.value.mode === "custom"
+          ? normalizeIdList(policyState.value.denyUsers)
+          : [],
+      allow_roles:
+        policyState.value.mode === "custom"
+          ? [
+              ...(policyState.value.allowRoles.admin ? ["admin"] : []),
+              ...(policyState.value.allowRoles.regular ? ["regular"] : []),
+            ]
+          : [],
+    };
+    const res = await axios.put(
+      `/v1/user/devices/${sessionStore.myDeviceId}/share_policy`,
+      body,
+    );
+    applyPolicyResponse(res.data || body);
+  } catch (err) {
+    console.error("[Devices] Failed to save share policy", err);
+    policyError.value = "Failed to save policy";
+  } finally {
+    policySaving.value = false;
+  }
+}
+
 // ========================================
 // Progress interpolation for remote devices
 // ========================================
@@ -191,6 +447,16 @@ onUnmounted(() => {
     interpolationTimer = null;
   }
 });
+
+watch(
+  () => sessionStore.myDeviceId,
+  (deviceId) => {
+    if (deviceId) {
+      loadPolicy();
+    }
+  },
+  { immediate: true },
+);
 
 /**
  * Compute the interpolated position in seconds for a remote device.
@@ -263,6 +529,11 @@ const allDevices = computed(() => {
     state: otherStates[d.id]?.state || null,
   }));
 });
+
+const myDevices = computed(() => allDevices.value.filter((d) => !d.is_shared));
+const sharedDevices = computed(() =>
+  allDevices.value.filter((d) => d.is_shared),
+);
 </script>
 
 <style scoped>
@@ -281,6 +552,107 @@ const allDevices = computed(() => {
 .emptyState {
   color: var(--text-subdued);
   font-size: var(--text-base);
+}
+
+.sectionHeader {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-subdued);
+  margin-bottom: var(--spacing-2);
+}
+
+.sharePolicyCard {
+  background-color: var(--bg-elevated-base);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-4);
+  margin-bottom: var(--spacing-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+
+.sharePolicyHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+}
+
+.sectionTitle {
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  color: var(--text-base);
+}
+
+.policyStatus {
+  font-size: var(--text-xs);
+  color: var(--text-subdued);
+}
+
+.policyError {
+  font-size: var(--text-xs);
+  color: #dc2626;
+}
+
+.policyModeRow {
+  display: flex;
+  gap: var(--spacing-3);
+  flex-wrap: wrap;
+}
+
+.policyOption {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  font-size: var(--text-sm);
+  color: var(--text-base);
+}
+
+.policyRules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+
+.policyField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  font-size: var(--text-sm);
+  color: var(--text-subdued);
+}
+
+.policyField input {
+  background: var(--bg-base);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-2);
+  color: var(--text-base);
+}
+
+.policyRoleRow {
+  display: flex;
+  gap: var(--spacing-3);
+}
+
+.policyActions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.primaryBtn {
+  background-color: var(--spotify-green);
+  color: var(--bg-base);
+  border: none;
+  border-radius: var(--radius-full);
+  padding: var(--spacing-2) var(--spacing-4);
+  cursor: pointer;
+  font-weight: var(--font-semibold);
+}
+
+.primaryBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .deviceCards {
@@ -329,6 +701,14 @@ const allDevices = computed(() => {
   font-size: var(--text-xs);
   color: var(--spotify-green);
   background-color: rgba(30, 215, 96, 0.1);
+  padding: 2px var(--spacing-2);
+  border-radius: var(--radius-full);
+}
+
+.sharedBadge {
+  font-size: var(--text-xs);
+  color: var(--text-subdued);
+  background-color: var(--bg-elevated-highlight);
   padding: 2px var(--spacing-2);
   border-radius: var(--radius-full);
 }
