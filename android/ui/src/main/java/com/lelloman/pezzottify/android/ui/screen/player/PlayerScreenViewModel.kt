@@ -33,6 +33,12 @@ class PlayerScreenViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            interactor.getHasOtherDeviceConnected().collect { hasOtherDeviceConnected ->
+                mutableState.value = mutableState.value.copy(hasOtherDeviceConnected = hasOtherDeviceConnected)
+            }
+        }
+
+        viewModelScope.launch {
             interactor.getPlaybackState().collect { playbackState ->
                 val currentState = mutableState.value
                 mutableState.value = when (playbackState) {
@@ -109,6 +115,7 @@ class PlayerScreenViewModel @Inject constructor(
     interface Interactor {
         fun getPlaybackState(): Flow<PlaybackState?>
         fun getRemoteDeviceName(): Flow<String?>
+        fun getHasOtherDeviceConnected(): Flow<Boolean>
         fun togglePlayPause()
         fun skipToNext()
         fun skipToPrevious()

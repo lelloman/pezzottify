@@ -54,6 +54,7 @@
 
     <!-- CONNECTION STATUS -->
     <string name="back_online">Di nuovo online</string>
+    <string name="another_device_connected">Un altro dispositivo connesso</string>
     <string name="offline">Offline</string>
     <string name="connecting">Connessione in corso</string>
     <!-- CONNECTION STATUS -->

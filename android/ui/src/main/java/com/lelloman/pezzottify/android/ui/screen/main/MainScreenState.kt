@@ -6,6 +6,7 @@ data class MainScreenState(
     val bottomPlayer: BottomPlayer = BottomPlayer(),
     val notificationUnreadCount: Int = 0,
     val remoteDeviceName: String? = null,
+    val hasOtherDeviceConnected: Boolean = false,
 ) {
 
     data class BottomPlayer(

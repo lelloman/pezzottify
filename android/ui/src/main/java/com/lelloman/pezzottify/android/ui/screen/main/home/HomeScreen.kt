@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Laptop
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import com.lelloman.pezzottify.android.ui.component.NotificationBadgedBox
@@ -51,6 +52,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.ui.R
+import com.lelloman.pezzottify.android.ui.Screen
 import com.lelloman.pezzottify.android.ui.component.BackOnlineBanner
 import com.lelloman.pezzottify.android.ui.component.NullablePezzottifyImage
 import com.lelloman.pezzottify.android.ui.component.OfflineIndicator
@@ -74,6 +76,7 @@ fun HomeScreen(
     navController: NavController,
     onOpenProfileDrawer: () -> Unit = {},
     notificationUnreadCount: Int = 0,
+    hasOtherDeviceConnected: Boolean = false,
 ) {
     val viewModel = hiltViewModel<HomeScreenViewModel>()
     HomeScreenContent(
@@ -83,6 +86,7 @@ fun HomeScreen(
         state = viewModel.state.collectAsStateWithLifecycle().value,
         onOpenProfileDrawer = onOpenProfileDrawer,
         notificationUnreadCount = notificationUnreadCount,
+        hasOtherDeviceConnected = hasOtherDeviceConnected,
     )
 }
 
@@ -95,6 +99,7 @@ private fun HomeScreenContent(
     state: HomeScreenState,
     onOpenProfileDrawer: () -> Unit,
     notificationUnreadCount: Int,
+    hasOtherDeviceConnected: Boolean,
 ) {
     val coroutineScope = rememberCoroutineScope()
 
@@ -142,6 +147,15 @@ private fun HomeScreenContent(
                             .align(alignment = androidx.compose.ui.Alignment.CenterVertically),
                         size = 20.dp
                     )
+                    if (hasOtherDeviceConnected) {
+                        IconButton(onClick = { navController.navigate(Screen.Main.Devices) }) {
+                            Icon(
+                                imageVector = Icons.Filled.Laptop,
+                                contentDescription = stringResource(R.string.devices),
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
                     // Settings icon
                     IconButton(onClick = {
                         coroutineScope.launch { actions.clickOnSettings() }

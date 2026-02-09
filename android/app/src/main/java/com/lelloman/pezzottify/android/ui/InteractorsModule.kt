@@ -1103,6 +1103,7 @@ class InteractorsModule {
         notificationRepository: NotificationRepository,
         playbackMetadataProvider: com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider,
         playbackModeManager: com.lelloman.pezzottify.android.domain.player.PlaybackModeManager,
+        playbackSessionHandler: PlaybackSessionHandler,
     ): MainScreenViewModel.Interactor =
         object : MainScreenViewModel.Interactor {
 
@@ -1114,6 +1115,18 @@ class InteractorsModule {
             override fun getRemoteDeviceName(): Flow<String?> =
                 playbackModeManager.mode.map { mode ->
                     (mode as? com.lelloman.pezzottify.android.domain.player.PlaybackMode.Remote)?.deviceName
+                }
+
+            override fun getHasOtherDeviceConnected(): Flow<Boolean> =
+                combine(
+                    playbackSessionHandler.connectedDevices,
+                    playbackSessionHandler.myDeviceId,
+                ) { devices, myDeviceId ->
+                    if (myDeviceId != null) {
+                        devices.any { it.id != myDeviceId }
+                    } else {
+                        devices.size > 1
+                    }
                 }
 
             override fun getPlaybackState(): Flow<MainScreenViewModel.Interactor.PlaybackState?> =
@@ -1245,6 +1258,7 @@ class InteractorsModule {
         player: PezzottifyPlayer,
         playbackMetadataProvider: com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider,
         playbackModeManager: com.lelloman.pezzottify.android.domain.player.PlaybackModeManager,
+        playbackSessionHandler: PlaybackSessionHandler,
     ): PlayerScreenViewModel.Interactor =
         object : PlayerScreenViewModel.Interactor {
             override fun getPlaybackState(): Flow<PlayerScreenViewModel.Interactor.PlaybackState?> =
@@ -1393,6 +1407,18 @@ class InteractorsModule {
             override fun getRemoteDeviceName(): Flow<String?> =
                 playbackModeManager.mode.map { mode ->
                     (mode as? com.lelloman.pezzottify.android.domain.player.PlaybackMode.Remote)?.deviceName
+                }
+
+            override fun getHasOtherDeviceConnected(): Flow<Boolean> =
+                combine(
+                    playbackSessionHandler.connectedDevices,
+                    playbackSessionHandler.myDeviceId,
+                ) { devices, myDeviceId ->
+                    if (myDeviceId != null) {
+                        devices.any { it.id != myDeviceId }
+                    } else {
+                        devices.size > 1
+                    }
                 }
 
             override fun exitRemoteMode() {
