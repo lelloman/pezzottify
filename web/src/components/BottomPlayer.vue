@@ -1,18 +1,4 @@
 <template>
-  <div
-    v-if="showRemoteBanner"
-    class="remoteBanner"
-  >
-    <span class="remoteBannerText">
-      {{ remoteBannerText }}
-    </span>
-    <button
-      class="remoteBannerDismiss"
-      @click="dismissBanner"
-    >
-      Dismiss
-    </button>
-  </div>
   <footer v-if="hasPlayback" class="footerPlayer">
     <div class="trackInfoRow">
       <MultiSourceImage
@@ -103,7 +89,6 @@ import LoadClickableArtistsNames from "@/components/common/LoadClickableArtistsN
 import { useRouter } from "vue-router";
 import TrackName from "./common/TrackName.vue";
 import { useStaticsStore } from "@/store/statics";
-import { usePlaybackSessionStore } from "@/store/playbackSession";
 import DeviceSelector from "./DeviceSelector.vue";
 
 const ControlIconButton = {
@@ -130,40 +115,10 @@ const ControlIconButton = {
 const router = useRouter();
 const playback = usePlaybackStore();
 const staticsStore = useStaticsStore();
-const sessionStore = usePlaybackSessionStore();
-
 // Track whether there's any playback to display
 const hasPlayback = computed(() => {
   return playback.currentTrackId;
 });
-
-// Remote mode banner state
-const bannerDismissed = ref(false);
-
-const showRemoteBanner = computed(() => {
-  return !bannerDismissed.value && sessionStore.anyOtherDevicePlaying;
-});
-
-const remoteBannerText = computed(() => {
-  const names = sessionStore.otherPlayingDeviceNames;
-  if (names.length === 0) return "Music playing on another device";
-  if (names.length === 1) return `${names[0]} is playing`;
-  return `${names.join(", ")} are playing`;
-});
-
-function dismissBanner() {
-  bannerDismissed.value = true;
-}
-
-// Reset banner dismissal when other devices change
-watch(
-  () => sessionStore.anyOtherDevicePlaying,
-  (playing) => {
-    if (playing) {
-      bannerDismissed.value = false;
-    }
-  },
-);
 
 // Progress dragging state
 const draggingTrackPercent = ref(null);
@@ -359,57 +314,6 @@ watch(
 
 <style scoped>
 @import "@/assets/icons.css";
-
-/* ============================================
-   Remote Banner
-   ============================================ */
-
-.remoteBanner {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-3);
-  padding: var(--spacing-1) var(--spacing-4);
-  background-color: var(--spotify-green);
-  color: var(--bg-base);
-  font-size: var(--text-sm);
-}
-
-.remoteBannerText {
-  font-weight: var(--font-medium);
-}
-
-.remoteBannerAction {
-  padding: 2px var(--spacing-3);
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  background-color: var(--bg-base);
-  color: var(--spotify-green);
-  border: none;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: opacity var(--transition-fast);
-}
-
-.remoteBannerAction:hover {
-  opacity: 0.9;
-}
-
-.remoteBannerDismiss {
-  padding: 2px var(--spacing-2);
-  font-size: var(--text-xs);
-  background: transparent;
-  color: var(--bg-base);
-  border: 1px solid var(--bg-base);
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  opacity: 0.7;
-  transition: opacity var(--transition-fast);
-}
-
-.remoteBannerDismiss:hover {
-  opacity: 1;
-}
 
 /* ============================================
    Footer Player - Desktop Layout
