@@ -291,6 +291,17 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  // Notification operations
+  const markNotificationRead = async (notificationId) => {
+    try {
+      await axios.post(`/v1/user/notifications/${notificationId}/read`);
+      return true;
+    } catch (error) {
+      console.error("Failed to mark notification as read:", error);
+      return false;
+    }
+  };
+
   // Sync API operations
   const fetchSyncState = async () => {
     try {
@@ -1139,6 +1150,8 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchGenreTracks,
     fetchGenreRadio,
     recordImpression,
+    // Notifications
+    markNotificationRead,
     // Sync API
     fetchSyncState,
     fetchSyncEvents,

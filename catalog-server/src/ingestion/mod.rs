@@ -24,8 +24,8 @@ pub use fingerprint::{
     FingerprintMatchResult, ScoredCandidate,
 };
 pub use manager::{
-    AlbumCandidateInfo, DownloadManagerTrait, IngestionError, IngestionManager,
-    IngestionManagerConfig, QueueItemInfo, UploadResult,
+    AlbumCandidateInfo, CompletedRequestInfo, DownloadManagerTrait, IngestionError,
+    IngestionManager, IngestionManagerConfig, QueueItemInfo, UploadResult,
 };
 pub use models::{
     AlbumMetadataSummary, ConversionReason, IngestionContextType, IngestionFile, IngestionJob,

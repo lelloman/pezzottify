@@ -105,6 +105,14 @@ export const useSyncStore = defineStore("sync", () => {
         userStore.applyPermissionsReset(payload.permissions);
         break;
 
+      case "notification_created":
+        userStore.applyNotificationCreated(payload.notification);
+        break;
+
+      case "notification_read":
+        userStore.applyNotificationRead(payload.notification_id, payload.read_at);
+        break;
+
       case "catalog_invalidation": {
         // Invalidate cached content when catalog changes
         const contentType = payload.content_type; // "album", "artist", "track"
@@ -173,6 +181,7 @@ export const useSyncStore = defineStore("sync", () => {
       userStore.setPlaylists(playlists);
 
       userStore.setPermissions(state.permissions || []);
+      userStore.setNotifications(state.notifications || []);
 
       // Update cursor
       saveCursor(state.seq);

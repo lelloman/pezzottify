@@ -40,6 +40,17 @@ pub struct QueueItemInfo {
     pub content_name: Option<String>,
     /// Artist name
     pub artist_name: Option<String>,
+    /// User who requested this download
+    pub requested_by_user_id: Option<String>,
+}
+
+/// Info about a completed download request (returned by auto-complete).
+#[derive(Debug, Clone)]
+pub struct CompletedRequestInfo {
+    /// Queue item ID
+    pub id: String,
+    /// User who requested this download
+    pub requested_by_user_id: Option<String>,
 }
 
 /// Trait for DownloadManager operations needed by IngestionManager.
@@ -63,13 +74,13 @@ pub trait DownloadManagerTrait: Send + Sync {
     fn mark_request_failed(&self, item_id: &str, error_message: &str) -> Result<()>;
 
     /// Complete all pending download requests for an album.
-    /// Returns the IDs of completed requests.
+    /// Returns info about completed requests (including requesting user IDs).
     fn complete_requests_for_album(
         &self,
         album_id: &str,
         bytes_downloaded: u64,
         duration_ms: i64,
-    ) -> Result<Vec<String>>;
+    ) -> Result<Vec<CompletedRequestInfo>>;
 }
 
 /// Errors that can occur during ingestion.
@@ -201,6 +212,7 @@ pub struct IngestionManager {
     config: IngestionManagerConfig,
     download_manager: Option<Arc<dyn DownloadManagerTrait>>,
     notifier: Option<Arc<super::notifier::IngestionNotifier>>,
+    notification_service: Option<Arc<crate::notifications::NotificationService>>,
 }
 
 impl IngestionManager {
@@ -222,6 +234,7 @@ impl IngestionManager {
             config,
             download_manager,
             notifier: None,
+            notification_service: None,
         }
     }
 
@@ -231,10 +244,87 @@ impl IngestionManager {
         self
     }
 
+    /// Set the notification service for download completion notifications.
+    pub fn with_notification_service(
+        mut self,
+        service: Arc<crate::notifications::NotificationService>,
+    ) -> Self {
+        self.notification_service = Some(service);
+        self
+    }
+
     /// Initialize the manager (creates temp directory, etc.).
     pub async fn init(&self) -> Result<()> {
         self.file_handler.init().await?;
         Ok(())
+    }
+
+    /// Send a download-completed notification to a user.
+    /// All errors are logged as warnings, never propagated.
+    async fn send_download_notification(
+        &self,
+        user_id_str: &str,
+        request_id: &str,
+        album_id: &str,
+        album_name: &str,
+        artist_name: &str,
+    ) {
+        let notification_service = match &self.notification_service {
+            Some(svc) => svc,
+            None => return,
+        };
+
+        let user_id = match user_id_str.parse::<usize>() {
+            Ok(id) => id,
+            Err(_) => {
+                warn!(
+                    "Cannot send download notification: failed to parse user_id '{}'",
+                    user_id_str
+                );
+                return;
+            }
+        };
+
+        let image_id = match self.catalog.get_album_image_url(album_id) {
+            Ok(Some(_)) => Some(album_id.to_string()),
+            Ok(None) => None,
+            Err(e) => {
+                warn!("Failed to get album image for notification: {}", e);
+                None
+            }
+        };
+
+        let data = crate::notifications::DownloadCompletedData {
+            album_id: album_id.to_string(),
+            album_name: album_name.to_string(),
+            artist_name: artist_name.to_string(),
+            image_id,
+            request_id: request_id.to_string(),
+        };
+
+        let data_json = match serde_json::to_value(&data) {
+            Ok(v) => v,
+            Err(e) => {
+                warn!("Failed to serialize notification data: {}", e);
+                return;
+            }
+        };
+
+        if let Err(e) = notification_service
+            .create_notification(
+                user_id,
+                crate::notifications::NotificationType::DownloadCompleted,
+                format!("{} is ready", album_name),
+                Some(format!("by {}", artist_name)),
+                data_json,
+            )
+            .await
+        {
+            warn!(
+                "Failed to create download notification for user {}: {}",
+                user_id, e
+            );
+        }
     }
 
     /// Mark a job as failed, clean up temp files, and notify.
@@ -2541,10 +2631,18 @@ impl IngestionManager {
         self.store.update_job(&job)?;
 
         // If this job is associated with a download request, mark it as completed
+        let mut primary_requester_user_id: Option<String> = None;
+        let mut primary_requester_request_id: Option<String> = None;
         if let (Some(IngestionContextType::DownloadRequest), Some(context_id)) =
             (job.context_type, &job.context_id)
         {
             if let Some(download_manager) = &self.download_manager {
+                // Capture the requesting user before marking completed
+                if let Ok(Some(queue_item)) = download_manager.get_queue_item(context_id) {
+                    primary_requester_user_id = queue_item.requested_by_user_id.clone();
+                    primary_requester_request_id = Some(queue_item.id.clone());
+                }
+
                 let duration_ms = job.started_at.map_or(0, |started| {
                     job.completed_at
                         .unwrap_or(chrono::Utc::now().timestamp_millis())
@@ -2570,6 +2668,7 @@ impl IngestionManager {
         }
 
         // Auto-complete any other pending download requests for the same album
+        let mut auto_completed_requests: Vec<CompletedRequestInfo> = Vec::new();
         if let Some(album_id) = &job.matched_album_id {
             if let Some(download_manager) = &self.download_manager {
                 let duration_ms = job.started_at.map_or(0, |started| {
@@ -2583,13 +2682,14 @@ impl IngestionManager {
                     job.total_size_bytes as u64,
                     duration_ms,
                 ) {
-                    Ok(completed_ids) if !completed_ids.is_empty() => {
+                    Ok(completed) if !completed.is_empty() => {
                         info!(
                             "Auto-completed {} additional download request(s) for album {}: {:?}",
-                            completed_ids.len(),
+                            completed.len(),
                             album_id,
-                            completed_ids
+                            completed
                         );
+                        auto_completed_requests = completed;
                     }
                     Ok(_) => {} // No additional requests to complete
                     Err(e) => {
@@ -2606,15 +2706,16 @@ impl IngestionManager {
         let _ = self.file_handler.cleanup_job(job_id).await;
 
         // Notify completion
+        let album_name = job
+            .detected_album
+            .clone()
+            .unwrap_or_else(|| "Unknown Album".to_string());
+        let artist_name = job
+            .detected_artist
+            .clone()
+            .unwrap_or_else(|| "Unknown Artist".to_string());
+
         if let Some(notifier) = &self.notifier {
-            let album_name = job
-                .detected_album
-                .clone()
-                .unwrap_or_else(|| "Unknown Album".to_string());
-            let artist_name = job
-                .detected_artist
-                .clone()
-                .unwrap_or_else(|| "Unknown Artist".to_string());
             notifier
                 .notify_completed(&job, converted as u32, &album_name, &artist_name)
                 .await;
@@ -2629,6 +2730,33 @@ impl IngestionManager {
                         "ingestion",
                     )
                     .await;
+            }
+        }
+
+        // Send download-completed notifications to requesting users
+        if let Some(album_id) = &job.matched_album_id {
+            // Notify the primary requester
+            if let (Some(user_id), Some(request_id)) =
+                (&primary_requester_user_id, &primary_requester_request_id)
+            {
+                self.send_download_notification(
+                    user_id, request_id, album_id, &album_name, &artist_name,
+                )
+                .await;
+            }
+
+            // Notify auto-completed requesters
+            for completed in &auto_completed_requests {
+                if let Some(user_id) = &completed.requested_by_user_id {
+                    self.send_download_notification(
+                        user_id,
+                        &completed.id,
+                        album_id,
+                        &album_name,
+                        &artist_name,
+                    )
+                    .await;
+                }
             }
         }
 

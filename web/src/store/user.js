@@ -18,6 +18,7 @@ export const useUserStore = defineStore("user", () => {
   const playlistRefs = {};
   const settings = ref({});
   const permissions = ref([]);
+  const notifications = ref([]);
 
   // Pending settings that failed to sync - key -> { value, retryCount }
   const pendingSettings = ref({});
@@ -425,6 +426,20 @@ export const useUserStore = defineStore("user", () => {
     permissions.value = newPermissions;
   };
 
+  const applyNotificationCreated = (notification) => {
+    // Deduplicate by id, prepend new notification
+    notifications.value = [
+      notification,
+      ...notifications.value.filter((n) => n.id !== notification.id),
+    ];
+  };
+
+  const applyNotificationRead = (notificationId, readAt) => {
+    notifications.value = notifications.value.map((n) =>
+      n.id === notificationId ? { ...n, read_at: readAt } : n,
+    );
+  };
+
   // =====================================================
   // Permission Check Helpers
   // =====================================================
@@ -448,6 +463,9 @@ export const useUserStore = defineStore("user", () => {
   );
   const canRequestContent = computed(() =>
     permissions.value.includes("RequestContent"),
+  );
+  const unreadNotificationCount = computed(
+    () => notifications.value.filter((n) => !n.read_at).length,
   );
 
   // =====================================================
@@ -486,6 +504,10 @@ export const useUserStore = defineStore("user", () => {
     permissions.value = newPermissions;
   };
 
+  const setNotifications = (notifs) => {
+    notifications.value = notifs;
+  };
+
   // Reset all state (for logout)
   const reset = () => {
     likedAlbumIds.value = null;
@@ -495,6 +517,7 @@ export const useUserStore = defineStore("user", () => {
     settings.value = {};
     pendingSettings.value = {};
     permissions.value = [];
+    notifications.value = [];
     isInitialized.value = false;
     isInitializing.value = false;
     // Clear playlist refs
@@ -509,6 +532,7 @@ export const useUserStore = defineStore("user", () => {
     playlistsData,
     settings,
     permissions,
+    notifications,
     isInitialized,
     isInitializing,
 
@@ -541,6 +565,8 @@ export const useUserStore = defineStore("user", () => {
     applyPermissionGranted,
     applyPermissionRevoked,
     applyPermissionsReset,
+    applyNotificationCreated,
+    applyNotificationRead,
 
     // Full sync setter methods
     setLikedAlbums,
@@ -549,6 +575,7 @@ export const useUserStore = defineStore("user", () => {
     setAllSettings,
     setPlaylists,
     setPermissions,
+    setNotifications,
 
     // Lifecycle
     reset,
@@ -560,5 +587,6 @@ export const useUserStore = defineStore("user", () => {
     canViewAnalytics,
     canServerAdmin,
     canRequestContent,
+    unreadNotificationCount,
   };
 });
