@@ -447,7 +447,7 @@
     <!-- MY REQUESTS SCREEN -->
 
     <!-- DEVICES SCREEN -->
-    <string name="device_sharing_this_device">Condivisione dispositivo (Questo dispositivo)</string>
+    <string name="device_sharing">Condivisione dispositivo</string>
     <string name="saving">Salvataggio…</string>
     <string name="deny_everyone">Nega a tutti</string>
     <string name="allow_everyone">Consenti a tutti</string>
