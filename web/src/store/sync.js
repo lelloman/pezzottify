@@ -105,7 +105,7 @@ export const useSyncStore = defineStore("sync", () => {
         userStore.applyPermissionsReset(payload.permissions);
         break;
 
-      case "catalog_invalidation":
+      case "catalog_invalidation": {
         // Invalidate cached content when catalog changes
         const contentType = payload.content_type; // "album", "artist", "track"
         const contentId = payload.content_id;
@@ -115,6 +115,7 @@ export const useSyncStore = defineStore("sync", () => {
           staticsStore.invalidateItem(itemType, contentId);
         }
         break;
+      }
 
       default:
         console.warn("Unknown sync event type:", type);
