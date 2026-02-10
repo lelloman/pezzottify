@@ -479,6 +479,14 @@ impl UserManager {
         self.user_store.prune_orphaned_devices(inactive_for_days)
     }
 
+    pub fn prune_inactive_devices(&self, inactive_for_days: u32) -> Result<usize> {
+        self.user_store.prune_inactive_devices(inactive_for_days)
+    }
+
+    pub fn touch_device(&self, device_id: usize) -> Result<()> {
+        self.user_store.touch_device(device_id)
+    }
+
     pub fn enforce_user_device_limit(&self, user_id: usize, max_devices: usize) -> Result<usize> {
         self.user_store
             .enforce_user_device_limit(user_id, max_devices)

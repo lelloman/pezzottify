@@ -997,6 +997,9 @@ mod tests {
         fn prune_orphaned_devices(&self, _inactive_for_days: u32) -> anyhow::Result<usize> {
             Ok(0)
         }
+        fn prune_inactive_devices(&self, _inactive_for_days: u32) -> anyhow::Result<usize> {
+            Ok(0)
+        }
         fn enforce_user_device_limit(
             &self,
             _user_id: usize,
@@ -1736,6 +1739,9 @@ mod tests {
             Ok(())
         }
         fn prune_orphaned_devices(&self, _inactive_for_days: u32) -> anyhow::Result<usize> {
+            Ok(0)
+        }
+        fn prune_inactive_devices(&self, _inactive_for_days: u32) -> anyhow::Result<usize> {
             Ok(0)
         }
         fn enforce_user_device_limit(

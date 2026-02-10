@@ -2,9 +2,10 @@ mod file_config;
 
 pub use file_config::{
     AgentConfig, AgentLlmConfig, AuditLogCleanupJobConfig, BackgroundJobsConfig,
-    CatalogStoreConfig, DownloadManagerConfig, FileConfig, IngestionCleanupJobConfig,
-    IngestionConfig, IntervalJobConfig, OidcConfig, PopularContentJobConfig, RelatedArtistsConfig,
-    SearchConfig, StreamingSearchConfig as StreamingSearchFileConfig,
+    CatalogStoreConfig, DevicePruningJobConfig, DownloadManagerConfig, FileConfig,
+    IngestionCleanupJobConfig, IngestionConfig, IntervalJobConfig, OidcConfig,
+    PopularContentJobConfig, RelatedArtistsConfig, SearchConfig,
+    StreamingSearchConfig as StreamingSearchFileConfig,
 };
 
 use crate::server::RequestsLoggingLevel;
@@ -246,11 +247,20 @@ impl AppConfig {
             }
         });
 
+        // Device pruning job settings
+        let dp_file = bg_jobs_file.device_pruning.unwrap_or_default();
+        let dp_defaults = DevicePruningJobSettings::default();
+        let device_pruning = DevicePruningJobSettings {
+            interval_hours: dp_file.interval_hours.unwrap_or(dp_defaults.interval_hours),
+            retention_days: dp_file.retention_days.unwrap_or(dp_defaults.retention_days),
+        };
+
         let background_jobs = BackgroundJobsSettings {
             popular_content,
             whatsnew_batch,
             ingestion_cleanup,
             audit_log_cleanup,
+            device_pruning,
         };
 
         // Catalog store settings from file config
@@ -467,6 +477,7 @@ pub struct BackgroundJobsSettings {
     pub whatsnew_batch: IntervalJobSettings,
     pub ingestion_cleanup: Option<IngestionCleanupJobSettings>,
     pub audit_log_cleanup: Option<AuditLogCleanupJobSettings>,
+    pub device_pruning: DevicePruningJobSettings,
 }
 
 /// Settings for popular content job
@@ -529,6 +540,22 @@ pub struct AuditLogCleanupJobSettings {
 }
 
 impl Default for AuditLogCleanupJobSettings {
+    fn default() -> Self {
+        Self {
+            interval_hours: 24,
+            retention_days: 90,
+        }
+    }
+}
+
+/// Settings for device pruning job
+#[derive(Debug, Clone)]
+pub struct DevicePruningJobSettings {
+    pub interval_hours: u64,
+    pub retention_days: u64,
+}
+
+impl Default for DevicePruningJobSettings {
     fn default() -> Self {
         Self {
             interval_hours: 24,

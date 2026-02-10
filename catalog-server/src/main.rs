@@ -9,7 +9,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 
 // Import modules from the library crate
 use pezzottify_catalog_server::background_jobs::jobs::{
-    IngestionCleanupJob, PopularContentJob, RelatedArtistsEnrichmentJob, WhatsNewBatchJob,
+    DevicePruningJob, IngestionCleanupJob, PopularContentJob, RelatedArtistsEnrichmentJob,
+    WhatsNewBatchJob,
 };
 use pezzottify_catalog_server::background_jobs::{
     create_scheduler, GuardedSearchVault, JobContext,
@@ -262,6 +263,11 @@ async fn main() -> Result<()> {
     scheduler
         .register_job(Arc::new(WhatsNewBatchJob::from_settings(
             &app_config.background_jobs.whatsnew_batch,
+        )))
+        .await;
+    scheduler
+        .register_job(Arc::new(DevicePruningJob::from_settings(
+            &app_config.background_jobs.device_pruning,
         )))
         .await;
 
