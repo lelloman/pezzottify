@@ -478,6 +478,9 @@
     <string name="websocket_status">WebSocket: %1$s</string>
     <string name="signed_in_as">Accesso effettuato come %1$s</string>
     <string name="device_info">%1$s (%2$s)</string>
+    <string name="tv_settings_device">Dispositivo</string>
+    <string name="tv_settings_connection">Connessione</string>
+    <string name="tv_settings_app_info">App</string>
     <!-- TV SCREENS -->
 
     <!-- WHATS NEW SCREEN -->

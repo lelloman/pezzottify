@@ -1,0 +1,14 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "--html=/test-results/report.html --self-contained-html"
+markers = [
+    "web: web-only tests (default)",
+    "android: requires Android emulator",
+    "cross: web + Android together",
+    "sync: multi-device sync tests",
+    "auth: authentication tests",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]

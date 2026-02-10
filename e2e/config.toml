@@ -1,0 +1,16 @@
+db_dir = "/data/db"
+media_path = "/data/media"
+port = 3001
+metrics_port = 9091
+logging_level = "path"
+content_cache_age_sec = 60
+frontend_dir_path = "/app/web"
+event_retention_days = 30
+
+[oidc]
+provider_url = "http://mock-oidc:8080"
+client_id = "pezzottify-e2e"
+client_secret = "e2e-secret"
+redirect_uri = "http://catalog-server:3001/v1/auth/callback"
+scopes = ["openid", "profile", "email"]
+disable_password_auth = false

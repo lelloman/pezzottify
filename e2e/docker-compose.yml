@@ -1,0 +1,96 @@
+services:
+  catalog-server-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.seed
+    volumes:
+      - catalog-data:/data
+      - ./seed:/seed:ro
+    entrypoint: ["/bin/bash", "/seed/seed_entrypoint.sh"]
+    environment:
+      - DB_DIR=/data/db
+      - MEDIA_DIR=/data/media
+    networks:
+      - e2e-net
+
+  mock-oidc:
+    build: ./mock-oidc
+    environment:
+      - MOCK_OIDC_ISSUER=http://mock-oidc:8080
+      - MOCK_OIDC_USERS=testuser:testpass123,admin:adminpass123
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/.well-known/openid-configuration')"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+    networks:
+      - e2e-net
+
+  catalog-server:
+    image: pezzottify-e2e-catalog-server:latest
+    build:
+      context: ..
+      dockerfile: catalog-server/Dockerfile
+      args:
+        VITE_OIDC_AUTHORITY: http://mock-oidc:8080
+        VITE_OIDC_CLIENT_ID: pezzottify-e2e
+    volumes:
+      - catalog-data:/data
+      - ./config.toml:/app/config.toml:ro
+    command:
+      - catalog-server
+      - --config
+      - /app/config.toml
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/3001"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    depends_on:
+      catalog-server-init:
+        condition: service_completed_successfully
+      mock-oidc:
+        condition: service_healthy
+    networks:
+      - e2e-net
+
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test-runner
+    volumes:
+      - .:/e2e:ro
+      - test-results:/test-results
+    working_dir: /e2e
+    environment:
+      - CATALOG_SERVER_URL=http://catalog-server:3001
+      - OIDC_URL=http://mock-oidc:8080
+      - ANDROID_HOSTS=
+    depends_on:
+      catalog-server:
+        condition: service_healthy
+    networks:
+      - e2e-net
+
+  android-emulator-1:
+    image: budtmo/docker-android:emulator_14.0
+    privileged: true
+    environment:
+      - EMULATOR_DEVICE=pixel_6
+      - WEB_VNC=true
+    ports:
+      - "6080:6080"
+    devices:
+      - /dev/kvm
+    networks:
+      - e2e-net
+    profiles:
+      - android
+
+volumes:
+  catalog-data:
+  test-results:
+
+networks:
+  e2e-net:
+    driver: bridge

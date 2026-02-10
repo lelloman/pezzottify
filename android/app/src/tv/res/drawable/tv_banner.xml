@@ -1,6 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <solid android:color="#0E0F12" />
-    <corners android:radius="12dp" />
-</shape>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="0"
+                android:endColor="#11181A"
+                android:startColor="#09110D" />
+        </shape>
+    </item>
+
+    <item android:gravity="center_vertical|start">
+        <inset
+            android:drawable="@drawable/ic_launcher_foreground"
+            android:insetLeft="28dp"
+            android:insetTop="34dp"
+            android:insetBottom="34dp"
+            android:insetRight="236dp" />
+    </item>
+
+    <item android:gravity="center_vertical|end">
+        <shape android:shape="rectangle">
+            <size
+                android:width="8dp"
+                android:height="124dp" />
+            <corners android:radius="4dp" />
+            <solid android:color="#1DB954" />
+        </shape>
+    </item>
+</layer-list>
