@@ -132,16 +132,7 @@ export const useStaticsStore = defineStore("statics", () => {
     return true;
   };
 
-  const triggerStaticItemFetch = (itemType, itemId) => {
-    const storedItem = loadFetchItemFromStorage(itemType, itemId);
-    if (storedItem && isValidCachedItem(itemType, storedItem)) {
-      statics[itemType][itemId].ref.item = storedItem;
-      return;
-    }
-    // If cached item is invalid, remove it
-    if (storedItem) {
-      localStorage.removeItem(getStoredItemKey(itemType, itemId));
-    }
+  const updateItemFromRemote = (itemType, itemId) => {
     fetchItemFromRemote(itemType, itemId)
       .then((fetchedItem) => {
         localStorage.setItem(
@@ -151,9 +142,26 @@ export const useStaticsStore = defineStore("statics", () => {
         statics[itemType][itemId].ref.item = fetchedItem;
       })
       .catch((e) => {
-        console.log("triggerStaticsItemFetch error:", e);
-        statics[itemType][itemId].ref.error = "Failed to fetch item";
+        console.log("updateItemFromRemote error:", e);
+        if (!statics[itemType][itemId].ref.item) {
+          statics[itemType][itemId].ref.error = "Failed to fetch item";
+        }
       });
+  };
+
+  const triggerStaticItemFetch = (itemType, itemId) => {
+    const storedItem = loadFetchItemFromStorage(itemType, itemId);
+    if (storedItem && isValidCachedItem(itemType, storedItem)) {
+      // Serve cached data immediately, then refresh in the background
+      statics[itemType][itemId].ref.item = storedItem;
+      updateItemFromRemote(itemType, itemId);
+      return;
+    }
+    // If cached item is invalid, remove it
+    if (storedItem) {
+      localStorage.removeItem(getStoredItemKey(itemType, itemId));
+    }
+    updateItemFromRemote(itemType, itemId);
   };
 
   const getItem = (type, id) => {
