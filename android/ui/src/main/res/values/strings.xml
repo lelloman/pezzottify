@@ -471,6 +471,7 @@
     <!-- DEVICES SCREEN -->
 
     <!-- TV SCREENS -->
+    <string name="tv_app_name">Pezzottify TV</string>
     <string name="sign_in">Sign in</string>
     <string name="invalid_url_message">Invalid URL</string>
     <string name="waiting_for_playback">Waiting for playback…</string>

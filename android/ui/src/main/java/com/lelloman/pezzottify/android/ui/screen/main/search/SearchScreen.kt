@@ -723,7 +723,7 @@ private fun ErrorSearchResult() {
             .padding(8.dp)
             .height(PezzottifyImageShape.SmallSquare.size)
     ) {
-        Text("Error")
+        Text(stringResource(R.string.error))
     }
 }
 
