@@ -447,7 +447,7 @@
     <!-- MY REQUESTS SCREEN -->
 
     <!-- DEVICES SCREEN -->
-    <string name="device_sharing_this_device">Device Sharing (This Device)</string>
+    <string name="device_sharing">Device Sharing</string>
     <string name="saving">Saving…</string>
     <string name="deny_everyone">Deny everyone</string>
     <string name="allow_everyone">Allow everyone</string>

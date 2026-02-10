@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -17,6 +18,8 @@ data class DeviceUiState(
     val name: String,
     val deviceType: String,
     val isThisDevice: Boolean,
+    val isOwnDevice: Boolean = false,
+    val isOnline: Boolean = true,
     val trackTitle: String?,
     val artistName: String?,
     val albumImageUrl: String?,
@@ -50,6 +53,13 @@ data class DeviceSharePolicyUi(
     val allowRoles: List<String>,
 )
 
+data class RegisteredDeviceInfo(
+    val id: Int,
+    val name: String,
+    val deviceType: String,
+    val sharePolicy: DeviceSharePolicyUi,
+)
+
 @HiltViewModel
 class DevicesScreenViewModel @Inject constructor(
     private val interactor: Interactor,
@@ -58,28 +68,32 @@ class DevicesScreenViewModel @Inject constructor(
     private val mutableState = MutableStateFlow(DevicesScreenState())
     val state: StateFlow<DevicesScreenState> = mutableState.asStateFlow()
 
-    private val mutableSharePolicy = MutableStateFlow(DeviceSharePolicyUiState())
-    val sharePolicy: StateFlow<DeviceSharePolicyUiState> = mutableSharePolicy.asStateFlow()
+    private val mutableSharePolicies = MutableStateFlow<Map<Int, DeviceSharePolicyUiState>>(emptyMap())
+    val sharePolicies: StateFlow<Map<Int, DeviceSharePolicyUiState>> = mutableSharePolicies.asStateFlow()
+
+    private val ownRegisteredDevices = MutableStateFlow<List<RegisteredDeviceInfo>>(emptyList())
 
     private var lastBaseState = DevicesScreenState()
     private var interpolationJob: Job? = null
-    private var lastPolicyDeviceId: Int? = null
-    private var attemptedPolicyResolve = false
 
     init {
         viewModelScope.launch {
-            interactor.observeDevicesScreenState().collect { newState ->
+            val registered = interactor.fetchOwnRegisteredDevices()
+            ownRegisteredDevices.value = registered
+            mutableSharePolicies.value = registered.associate { device ->
+                device.id to mapPolicyToUi(device.sharePolicy)
+            }
+        }
+        viewModelScope.launch {
+            combine(
+                interactor.observeDevicesScreenState(),
+                ownRegisteredDevices,
+            ) { wsState, registered ->
+                mergeDevices(wsState, registered)
+            }.collect { newState ->
                 lastBaseState = newState
                 mutableState.value = interpolatePositions(newState)
                 ensureInterpolation(newState)
-                val deviceId = newState.thisDeviceId
-                if (deviceId != null && deviceId != lastPolicyDeviceId) {
-                    lastPolicyDeviceId = deviceId
-                    loadSharePolicy(deviceId)
-                } else if (deviceId == null && !attemptedPolicyResolve) {
-                    attemptedPolicyResolve = true
-                    resolveAndLoadPolicy()
-                }
             }
         }
         viewModelScope.launch {
@@ -87,6 +101,44 @@ class DevicesScreenViewModel @Inject constructor(
                 mutableState.value = mutableState.value.copy(remoteControlDeviceId = deviceId)
             }
         }
+    }
+
+    private fun mergeDevices(
+        wsState: DevicesScreenState,
+        registered: List<RegisteredDeviceInfo>,
+    ): DevicesScreenState {
+        val registeredIds = registered.map { it.id }.toSet()
+        val wsDeviceIds = wsState.devices.map { it.id }.toSet()
+
+        val taggedWsDevices = wsState.devices.map { device ->
+            device.copy(
+                isOwnDevice = device.isThisDevice || device.id in registeredIds,
+                isOnline = true,
+            )
+        }
+
+        val offlineDevices = registered
+            .filter { it.id !in wsDeviceIds }
+            .map { device ->
+                DeviceUiState(
+                    id = device.id,
+                    name = device.name,
+                    deviceType = device.deviceType,
+                    isThisDevice = false,
+                    isOwnDevice = true,
+                    isOnline = false,
+                    trackTitle = null,
+                    artistName = null,
+                    albumImageUrl = null,
+                    isPlaying = false,
+                    positionSec = 0.0,
+                    durationMs = 0L,
+                )
+            }
+
+        return wsState.copy(
+            devices = taggedWsDevices + offlineDevices,
+        )
     }
 
     private fun ensureInterpolation(state: DevicesScreenState) {
@@ -136,72 +188,43 @@ class DevicesScreenViewModel @Inject constructor(
         interactor.exitRemoteMode()
     }
 
-    fun updatePolicyMode(mode: String) {
-        mutableSharePolicy.value = mutableSharePolicy.value.copy(mode = mode, error = null)
+    fun updatePolicyMode(deviceId: Int, mode: String) {
+        updatePolicyField(deviceId) { it.copy(mode = mode, error = null) }
     }
 
-    fun updateAllowUsers(text: String) {
-        mutableSharePolicy.value = mutableSharePolicy.value.copy(allowUsers = text, error = null)
+    fun updateAllowUsers(deviceId: Int, text: String) {
+        updatePolicyField(deviceId) { it.copy(allowUsers = text, error = null) }
     }
 
-    fun updateDenyUsers(text: String) {
-        mutableSharePolicy.value = mutableSharePolicy.value.copy(denyUsers = text, error = null)
+    fun updateDenyUsers(deviceId: Int, text: String) {
+        updatePolicyField(deviceId) { it.copy(denyUsers = text, error = null) }
     }
 
-    fun updateAllowAdmin(enabled: Boolean) {
-        mutableSharePolicy.value = mutableSharePolicy.value.copy(allowAdmin = enabled, error = null)
+    fun updateAllowAdmin(deviceId: Int, enabled: Boolean) {
+        updatePolicyField(deviceId) { it.copy(allowAdmin = enabled, error = null) }
     }
 
-    fun updateAllowRegular(enabled: Boolean) {
-        mutableSharePolicy.value = mutableSharePolicy.value.copy(allowRegular = enabled, error = null)
+    fun updateAllowRegular(deviceId: Int, enabled: Boolean) {
+        updatePolicyField(deviceId) { it.copy(allowRegular = enabled, error = null) }
     }
 
-    fun saveSharePolicy() {
-        val current = mutableSharePolicy.value
+    fun saveSharePolicy(deviceId: Int) {
+        val current = mutableSharePolicies.value[deviceId] ?: return
         viewModelScope.launch {
-            val deviceId = lastPolicyDeviceId ?: run {
-                val resolved = interactor.resolveLocalDeviceId()
-                if (resolved != null) {
-                    lastPolicyDeviceId = resolved
-                    resolved
-                } else {
-                    mutableSharePolicy.value = current.copy(isSaving = false, error = "Unable to identify this device")
-                    return@launch
+            updatePolicyField(deviceId) { it.copy(isSaving = true, error = null) }
+            val response = interactor.updateDeviceSharePolicy(deviceId, current)
+            updatePolicyField(deviceId) { state ->
+                when (response) {
+                    is DeviceSharePolicyResult.Success -> mapPolicyToUi(response.policy).copy(isSaving = false)
+                    is DeviceSharePolicyResult.Error -> state.copy(isSaving = false, error = response.message)
                 }
             }
-            mutableSharePolicy.value = current.copy(isSaving = true, error = null)
-            val response = interactor.updateDeviceSharePolicy(deviceId, current)
-            mutableSharePolicy.value = when (response) {
-                is DeviceSharePolicyResult.Success -> mapPolicyToUi(response.policy).copy(isSaving = false)
-                is DeviceSharePolicyResult.Error -> current.copy(isSaving = false, error = response.message)
-            }
         }
     }
 
-    private fun resolveAndLoadPolicy() {
-        viewModelScope.launch {
-            val resolved = interactor.resolveLocalDeviceId()
-            if (resolved != null) {
-                lastPolicyDeviceId = resolved
-                loadSharePolicy(resolved)
-            } else {
-                mutableSharePolicy.value = DeviceSharePolicyUiState(
-                    isLoading = false,
-                    error = "Unable to identify this device"
-                )
-            }
-        }
-    }
-
-    private fun loadSharePolicy(deviceId: Int) {
-        viewModelScope.launch {
-            mutableSharePolicy.value = mutableSharePolicy.value.copy(isLoading = true, error = null)
-            val response = interactor.fetchDeviceSharePolicy(deviceId)
-            mutableSharePolicy.value = when (response) {
-                is DeviceSharePolicyResult.Success -> mapPolicyToUi(response.policy).copy(isLoading = false)
-                is DeviceSharePolicyResult.Error -> DeviceSharePolicyUiState(isLoading = false, error = response.message)
-            }
-        }
+    private fun updatePolicyField(deviceId: Int, transform: (DeviceSharePolicyUiState) -> DeviceSharePolicyUiState) {
+        val current = mutableSharePolicies.value[deviceId] ?: DeviceSharePolicyUiState()
+        mutableSharePolicies.value = mutableSharePolicies.value + (deviceId to transform(current))
     }
 
     private fun mapPolicyToUi(policy: DeviceSharePolicyUi): DeviceSharePolicyUiState {
@@ -221,8 +244,7 @@ class DevicesScreenViewModel @Inject constructor(
         fun sendCommand(command: String, payload: Map<String, Any?>, targetDeviceId: Int)
         fun enterRemoteMode(deviceId: Int, deviceName: String)
         fun exitRemoteMode()
-        suspend fun fetchDeviceSharePolicy(deviceId: Int): DeviceSharePolicyResult
-        suspend fun resolveLocalDeviceId(): Int?
+        suspend fun fetchOwnRegisteredDevices(): List<RegisteredDeviceInfo>
         suspend fun updateDeviceSharePolicy(
             deviceId: Int,
             state: DeviceSharePolicyUiState
