@@ -16,6 +16,7 @@ import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.ui.SessionExpiredViewModel
 import com.lelloman.pezzottify.android.ui.screen.tv.TvLoginScreen
 import com.lelloman.pezzottify.android.ui.screen.tv.TvNowPlayingScreen
+import com.lelloman.pezzottify.android.ui.screen.tv.TvSettingsScreen
 import com.lelloman.pezzottify.android.ui.screen.tv.TvSplashScreen
 import com.lelloman.pezzottify.android.ui.theme.AppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette
@@ -56,7 +57,12 @@ fun TvAppUi(
                     TvLoginScreen(navController)
                 }
                 composable<TvScreen.NowPlaying> {
-                    TvNowPlayingScreen()
+                    TvNowPlayingScreen(
+                        onOpenSettings = { navController.fromTvNowPlayingToSettings() },
+                    )
+                }
+                composable<TvScreen.Settings> {
+                    TvSettingsScreen(navController)
                 }
             }
         }

@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.login
 
 import android.Manifest
+import android.content.res.Configuration
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -42,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -62,12 +64,16 @@ import kotlinx.coroutines.launch
 @Composable
 fun LoginScreen(navController: NavController) {
     val viewModel = hiltViewModel<LoginViewModel>()
+    val configuration = LocalConfiguration.current
+    val isTvDevice =
+        (configuration.uiMode and Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_TELEVISION
 
     LoginScreenInternal(
         state = viewModel.state.collectAsState().value,
         actions = viewModel,
         events = viewModel.events,
         navController = navController,
+        enableOidc = !isTvDevice,
     )
 }
 

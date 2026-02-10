@@ -22,6 +22,14 @@ fun NavController.fromTvNowPlayingToLogin() = navigate(TvScreen.Login) {
     popUpTo(TvScreen.NowPlaying, inclusive())
 }
 
+fun NavController.fromTvNowPlayingToSettings() = navigate(TvScreen.Settings)
+
+fun NavController.fromTvSettingsToNowPlaying() = popBackStack()
+
+fun NavController.fromTvSettingsToLogin() = navigate(TvScreen.Login) {
+    popUpTo(TvScreen.NowPlaying, inclusive())
+}
+
 sealed interface TvScreen {
 
     @Serializable
@@ -32,4 +40,7 @@ sealed interface TvScreen {
 
     @Serializable
     data object NowPlaying : TvScreen
+
+    @Serializable
+    data object Settings : TvScreen
 }

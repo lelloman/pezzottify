@@ -80,6 +80,7 @@ import com.lelloman.pezzottify.android.ui.screen.main.home.PopularAlbumState
 import com.lelloman.pezzottify.android.ui.screen.main.home.PopularArtistState
 import com.lelloman.pezzottify.android.ui.screen.main.home.PopularContentState
 import com.lelloman.pezzottify.android.ui.screen.tv.TvNowPlayingStatusViewModel
+import com.lelloman.pezzottify.android.ui.screen.tv.TvSettingsViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.home.ViewedContentType
 import com.lelloman.pezzottify.android.ui.screen.main.library.LibraryScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.library.UiUserPlaylist
@@ -282,6 +283,60 @@ class InteractorsModule {
 
             override fun deviceType(): Flow<String?> =
                 kotlinx.coroutines.flow.flowOf(deviceInfoProvider.getDeviceInfo().deviceType)
+        }
+
+    @Provides
+    fun provideTvSettingsInteractor(
+        performLogout: PerformLogout,
+        authStore: AuthStore,
+        configStore: ConfigStore,
+        buildInfo: BuildInfo,
+        webSocketManager: WebSocketManager,
+        deviceInfoProvider: DeviceInfoProvider,
+    ): TvSettingsViewModel.Interactor =
+        object : TvSettingsViewModel.Interactor {
+            override suspend fun logout() {
+                performLogout()
+            }
+
+            override fun userHandle(): Flow<String?> =
+                authStore.getAuthState().map { state ->
+                    when (state) {
+                        is AuthState.LoggedIn -> state.userHandle
+                        else -> authStore.getLastUsedHandle()
+                    }
+                }
+
+            override fun deviceName(): Flow<String?> =
+                kotlinx.coroutines.flow.flowOf(deviceInfoProvider.getDeviceInfo().deviceName)
+
+            override fun deviceType(): Flow<String?> =
+                kotlinx.coroutines.flow.flowOf(deviceInfoProvider.getDeviceInfo().deviceType)
+
+            override fun connectionStatus(): Flow<String> =
+                webSocketManager.connectionState.map { state ->
+                    when (state) {
+                        is com.lelloman.pezzottify.android.domain.websocket.ConnectionState.Connected -> "Connected"
+                        is com.lelloman.pezzottify.android.domain.websocket.ConnectionState.Connecting -> "Connecting"
+                        is com.lelloman.pezzottify.android.domain.websocket.ConnectionState.Error ->
+                            "Error: ${state.message}"
+                        com.lelloman.pezzottify.android.domain.websocket.ConnectionState.Disconnected -> "Disconnected"
+                    }
+                }
+
+            override fun serverUrl(): String = configStore.baseUrl.value
+
+            override fun serverVersion(): Flow<String> =
+                webSocketManager.connectionState.map { state ->
+                    when (state) {
+                        is DomainConnectionState.Connected -> state.serverVersion
+                        else -> "disconnected"
+                    }
+                }
+
+            override fun versionName(): String = buildInfo.versionName
+
+            override fun gitCommit(): String = buildInfo.gitCommit
         }
 
     @Provides
