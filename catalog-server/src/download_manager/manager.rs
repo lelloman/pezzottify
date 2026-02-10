@@ -12,7 +12,7 @@ use tracing::{info, warn};
 
 use crate::catalog_store::{CatalogStore, TrackAvailability};
 use crate::config::DownloadManagerSettings;
-use crate::ingestion::{DownloadManagerTrait, QueueItemInfo};
+use crate::ingestion::{CompletedRequestInfo, DownloadManagerTrait, QueueItemInfo};
 use crate::search::SearchVault;
 
 use super::audit_logger::AuditLogger;
@@ -29,6 +29,7 @@ impl DownloadManagerTrait for DownloadManager {
             content_id: i.content_id,
             content_name: i.content_name,
             artist_name: i.artist_name,
+            requested_by_user_id: i.requested_by_user_id,
         }))
     }
 
@@ -112,29 +113,34 @@ impl DownloadManagerTrait for DownloadManager {
         album_id: &str,
         bytes_downloaded: u64,
         duration_ms: i64,
-    ) -> Result<Vec<String>> {
+    ) -> Result<Vec<CompletedRequestInfo>> {
         let pending_requests = self
             .queue_store
             .find_pending_by_content(DownloadContentType::Album, album_id)?;
 
-        let mut completed_ids = Vec::new();
+        let mut completed = Vec::new();
 
         for item in pending_requests {
-            if let Err(e) = self.mark_request_completed(&item.id, bytes_downloaded, duration_ms) {
+            let user_id = item.requested_by_user_id.clone();
+            let item_id = item.id.clone();
+            if let Err(e) = self.mark_request_completed(&item_id, bytes_downloaded, duration_ms) {
                 warn!(
                     "Failed to auto-complete download request {} for album {}: {}",
-                    item.id, album_id, e
+                    item_id, album_id, e
                 );
             } else {
                 info!(
                     "Auto-completed download request {} for album {} (ingestion fulfilled)",
-                    item.id, album_id
+                    item_id, album_id
                 );
-                completed_ids.push(item.id);
+                completed.push(CompletedRequestInfo {
+                    id: item_id,
+                    requested_by_user_id: user_id,
+                });
             }
         }
 
-        Ok(completed_ids)
+        Ok(completed)
     }
 }
 

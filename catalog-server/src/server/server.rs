@@ -4661,6 +4661,23 @@ pub async fn make_app(
                     });
                 }
 
+                // Wire up sync notifier for WebSocket download status updates
+                {
+                    let sync_notifier = Arc::new(
+                        crate::download_manager::DownloadSyncNotifier::new(
+                            user_store.clone(),
+                            state.ws_connection_manager.clone(),
+                            state.server_store.clone(),
+                        ),
+                    );
+                    let manager_for_notifier = manager.clone();
+                    tokio::spawn(async move {
+                        manager_for_notifier
+                            .set_sync_notifier(sync_notifier)
+                            .await;
+                    });
+                }
+
                 state.download_manager = Some(manager);
                 info!("Download manager initialized successfully");
             }
@@ -4709,6 +4726,14 @@ pub async fn make_app(
                         .with_server_store(state.server_store.clone()),
                 );
 
+                // Create notification service for download completion notifications
+                let notification_service = Arc::new(
+                    crate::notifications::NotificationService::new(
+                        user_store.clone(),
+                        state.ws_connection_manager.clone(),
+                    ),
+                );
+
                 let ingestion_manager = Arc::new(
                     crate::ingestion::IngestionManager::new(
                         Arc::new(store),
@@ -4717,7 +4742,8 @@ pub async fn make_app(
                         ingestion_config,
                         manager_traits,
                     )
-                    .with_notifier(notifier),
+                    .with_notifier(notifier)
+                    .with_notification_service(notification_service),
                 );
 
                 // Initialize the manager (creates temp directory)
