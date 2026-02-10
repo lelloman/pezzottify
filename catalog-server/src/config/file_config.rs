@@ -60,6 +60,7 @@ pub struct BackgroundJobsConfig {
     pub whatsnew_batch: Option<IntervalJobConfig>,
     pub ingestion_cleanup: Option<IngestionCleanupJobConfig>,
     pub audit_log_cleanup: Option<AuditLogCleanupJobConfig>,
+    pub device_pruning: Option<DevicePruningJobConfig>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]
@@ -89,6 +90,13 @@ pub struct IngestionCleanupJobConfig {
 #[derive(Debug, Deserialize, Default, Clone)]
 #[serde(default)]
 pub struct AuditLogCleanupJobConfig {
+    pub interval_hours: Option<u64>,
+    pub retention_days: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct DevicePruningJobConfig {
     pub interval_hours: Option<u64>,
     pub retention_days: Option<u64>,
 }

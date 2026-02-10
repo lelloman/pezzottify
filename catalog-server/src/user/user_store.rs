@@ -328,6 +328,10 @@ pub trait DeviceStore: Send + Sync {
     /// Returns the number of devices deleted.
     fn prune_orphaned_devices(&self, inactive_for_days: u32) -> Result<usize>;
 
+    /// Prune all inactive devices (regardless of user_id) that haven't been seen for the specified days.
+    /// Returns the number of devices deleted.
+    fn prune_inactive_devices(&self, inactive_for_days: u32) -> Result<usize>;
+
     /// Enforce per-user device limit by pruning oldest devices (by last_seen).
     /// Called after associating a device with a user during login.
     /// Returns the number of devices deleted.

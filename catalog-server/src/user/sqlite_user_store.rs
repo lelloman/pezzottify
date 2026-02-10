@@ -3081,6 +3081,23 @@ impl user_store::DeviceStore for SqliteUserStore {
         Ok(deleted)
     }
 
+    fn prune_inactive_devices(&self, inactive_for_days: u32) -> Result<usize> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+        let cutoff = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64
+            - (inactive_for_days as i64 * 24 * 60 * 60);
+
+        let deleted = conn.execute(
+            "DELETE FROM device WHERE last_seen < ?1",
+            params![cutoff],
+        )?;
+        record_db_query("prune_inactive_devices", start.elapsed());
+        Ok(deleted)
+    }
+
     fn enforce_user_device_limit(&self, user_id: usize, max_devices: usize) -> Result<usize> {
         let start = Instant::now();
         let conn = self.conn.lock().unwrap();

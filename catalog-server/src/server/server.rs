@@ -55,7 +55,7 @@ use axum::extract::Request;
 use axum::middleware::Next;
 use tower_governor::governor::GovernorConfigBuilder;
 
-const MAX_DEVICES_PER_USER: usize = 50;
+const MAX_DEVICES_PER_USER: usize = 6;
 
 #[derive(Serialize)]
 struct ServerStats {
@@ -6062,6 +6062,9 @@ mod tests {
             Ok(())
         }
         fn prune_orphaned_devices(&self, _inactive_for_days: u32) -> Result<usize> {
+            Ok(0)
+        }
+        fn prune_inactive_devices(&self, _inactive_for_days: u32) -> Result<usize> {
             Ok(0)
         }
         fn enforce_user_device_limit(&self, _user_id: usize, _max_devices: usize) -> Result<usize> {

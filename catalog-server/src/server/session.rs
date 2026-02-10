@@ -9,6 +9,7 @@ use axum::{
     response::IntoResponse,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar};
+use std::time::{Duration, SystemTime};
 use tracing::{debug, warn};
 
 #[derive(Debug, Clone)]
@@ -146,6 +147,11 @@ async fn try_oidc_session(token: &str, ctx: &ServerState) -> Option<Session> {
         // First try to find existing device by UUID
         match user_manager.get_device_by_uuid(device_uuid) {
             Ok(Some(device)) => {
+                // Throttled touch: only update last_seen if >1 hour stale
+                let one_hour_ago = SystemTime::now() - Duration::from_secs(3600);
+                if device.last_seen < one_hour_ago {
+                    let _ = user_manager.touch_device(device.id);
+                }
                 debug!(
                     "Found existing device for OIDC session: device_id={}, uuid={}",
                     device.id, device_uuid
@@ -259,6 +265,11 @@ async fn try_legacy_session(token: &str, ctx: &ServerState) -> Option<Session> {
     let (device_id, device_type) = if let Some(device_id) = auth_token.device_id {
         match user_manager.get_device(device_id) {
             Ok(Some(device)) => {
+                // Throttled touch: only update last_seen if >1 hour stale
+                let one_hour_ago = SystemTime::now() - Duration::from_secs(3600);
+                if device.last_seen < one_hour_ago {
+                    let _ = user_manager.touch_device(device.id);
+                }
                 debug!(
                     "Found device for session: device_id={}, type={:?}",
                     device_id, device.device_type
