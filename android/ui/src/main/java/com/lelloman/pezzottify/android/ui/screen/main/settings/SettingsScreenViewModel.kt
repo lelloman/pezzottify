@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui.screen.main.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lelloman.pezzottify.android.domain.settings.BackgroundSyncInterval
 import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.model.StorageInfo
 import com.lelloman.pezzottify.android.ui.theme.AppFontFamily
@@ -39,6 +40,7 @@ class SettingsScreenViewModel @Inject constructor(
                 isCacheEnabled = interactor.isCacheEnabled(),
                 storageInfo = interactor.getStorageInfo(),
                 notifyWhatsNewEnabled = interactor.isNotifyWhatsNewEnabled(),
+                backgroundSyncInterval = interactor.getBackgroundSyncInterval(),
                 smartSearchEnabled = interactor.isSmartSearchEnabled(),
                 excludeUnavailableEnabled = interactor.isExcludeUnavailableEnabled(),
                 isFileLoggingEnabled = interactor.isFileLoggingEnabled(),
@@ -77,6 +79,11 @@ class SettingsScreenViewModel @Inject constructor(
             launch {
                 interactor.observeNotifyWhatsNewEnabled().collect { enabled ->
                     mutableState.update { it.copy(notifyWhatsNewEnabled = enabled) }
+                }
+            }
+            launch {
+                interactor.observeBackgroundSyncInterval().collect { interval ->
+                    mutableState.update { it.copy(backgroundSyncInterval = interval) }
                 }
             }
             launch {
@@ -151,6 +158,10 @@ class SettingsScreenViewModel @Inject constructor(
         viewModelScope.launch {
             interactor.setNotifyWhatsNewEnabled(enabled)
         }
+    }
+
+    override fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) {
+        interactor.setBackgroundSyncInterval(interval)
     }
 
     override fun setSmartSearchEnabled(enabled: Boolean) {
@@ -262,6 +273,7 @@ class SettingsScreenViewModel @Inject constructor(
         fun isCacheEnabled(): Boolean
         fun getStorageInfo(): StorageInfo?
         fun isNotifyWhatsNewEnabled(): Boolean
+        fun getBackgroundSyncInterval(): BackgroundSyncInterval
         fun isSmartSearchEnabled(): Boolean
         fun isExcludeUnavailableEnabled(): Boolean
         fun observeThemeMode(): kotlinx.coroutines.flow.Flow<ThemeMode>
@@ -270,6 +282,7 @@ class SettingsScreenViewModel @Inject constructor(
         fun observeCacheEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeStorageInfo(): kotlinx.coroutines.flow.Flow<StorageInfo>
         fun observeNotifyWhatsNewEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
+        fun observeBackgroundSyncInterval(): kotlinx.coroutines.flow.Flow<BackgroundSyncInterval>
         fun observeSmartSearchEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeExcludeUnavailableEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeFileLoggingEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
@@ -278,6 +291,7 @@ class SettingsScreenViewModel @Inject constructor(
         suspend fun setFontFamily(fontFamily: AppFontFamily)
         suspend fun setCacheEnabled(enabled: Boolean)
         suspend fun setNotifyWhatsNewEnabled(enabled: Boolean)
+        fun setBackgroundSyncInterval(interval: BackgroundSyncInterval)
         fun setSmartSearchEnabled(enabled: Boolean)
         fun setExcludeUnavailableEnabled(enabled: Boolean)
         suspend fun setFileLoggingEnabled(enabled: Boolean)

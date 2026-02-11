@@ -22,6 +22,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ResolvedSearchResult
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchSection
+import com.lelloman.pezzottify.android.domain.settings.BackgroundSyncInterval
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateNotifyWhatsNewSetting
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
@@ -440,6 +441,8 @@ class InteractorsModule {
         override fun isNotifyWhatsNewEnabled(): Boolean =
             userSettingsStore.isNotifyWhatsNewEnabled.value
 
+        override fun getBackgroundSyncInterval() = userSettingsStore.backgroundSyncInterval.value
+
         override fun isSmartSearchEnabled(): Boolean = userSettingsStore.isSmartSearchEnabled.value
 
         override fun isExcludeUnavailableEnabled(): Boolean =
@@ -447,6 +450,8 @@ class InteractorsModule {
 
         override fun observeNotifyWhatsNewEnabled(): Flow<Boolean> =
             userSettingsStore.isNotifyWhatsNewEnabled
+
+        override fun observeBackgroundSyncInterval() = userSettingsStore.backgroundSyncInterval
 
         override fun observeSmartSearchEnabled(): Flow<Boolean> =
             userSettingsStore.isSmartSearchEnabled
@@ -456,6 +461,10 @@ class InteractorsModule {
 
         override suspend fun setNotifyWhatsNewEnabled(enabled: Boolean) {
             updateNotifyWhatsNewSetting(enabled)
+        }
+
+        override fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) {
+            userSettingsStore.setBackgroundSyncInterval(interval)
         }
 
         override fun setSmartSearchEnabled(enabled: Boolean) {

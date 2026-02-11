@@ -172,6 +172,9 @@ dependencies {
     implementation(libs.hilt.navigation.compose)
     kapt(libs.hilt.compiler)
 
+    implementation(libs.androidx.work.runtime)
+    implementation(libs.androidx.hilt.work)
+
     implementation(libs.coil)
     implementation(libs.coil.network)
     implementation(platform(libs.okhttp.bom))

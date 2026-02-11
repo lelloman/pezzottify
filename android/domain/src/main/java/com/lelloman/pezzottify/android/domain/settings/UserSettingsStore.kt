@@ -20,6 +20,12 @@ interface UserSettingsStore {
     val isNotifyWhatsNewEnabled: StateFlow<Boolean>
 
     /**
+     * How often to run background sync when the app is not running.
+     * This is a local-only setting.
+     */
+    val backgroundSyncInterval: StateFlow<BackgroundSyncInterval>
+
+    /**
      * Whether to use smart (streaming) search instead of classic flat search.
      * This is a local-only setting.
      */
@@ -37,6 +43,7 @@ interface UserSettingsStore {
     suspend fun setInMemoryCacheEnabled(enabled: Boolean)
     suspend fun setFileLoggingEnabled(enabled: Boolean)
     suspend fun setNotifyWhatsNewEnabled(enabled: Boolean)
+    fun setBackgroundSyncInterval(interval: BackgroundSyncInterval)
     fun setSmartSearchEnabled(enabled: Boolean)
     fun setExcludeUnavailableEnabled(enabled: Boolean)
 
@@ -97,5 +104,21 @@ enum class AppFontFamily {
 
     companion object {
         val Default = SansSerif
+    }
+}
+
+enum class BackgroundSyncInterval(val minutes: Long) {
+    Minutes15(15),
+    Minutes30(30),
+    Hours1(60),
+    Hours2(120),
+    Hours4(240),
+    Hours6(360),
+    Hours12(720),
+    Hours24(1440),
+    Disabled(-1);
+
+    companion object {
+        val Default = Hours12
     }
 }

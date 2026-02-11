@@ -1,19 +1,29 @@
 package com.lelloman.pezzottify.android
 
 import android.app.Application
+import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.Configuration
 import com.lelloman.pezzottify.android.domain.usecase.InitializeApp
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
 @HiltAndroidApp
-class PezzottifyApplication : Application() {
+class PezzottifyApplication : Application(), Configuration.Provider {
 
     @Inject
     lateinit var initializeApp: InitializeApp
 
     @Inject
     lateinit var loggerFactory: LoggerFactory
+
+    @Inject
+    lateinit var workerFactory: HiltWorkerFactory
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setWorkerFactory(workerFactory)
+            .build()
 
     override fun onCreate() {
         super.onCreate()
