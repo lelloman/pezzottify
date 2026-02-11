@@ -2705,15 +2705,45 @@ impl IngestionManager {
         // Cleanup temp files
         let _ = self.file_handler.cleanup_job(job_id).await;
 
-        // Notify completion
-        let album_name = job
-            .detected_album
-            .clone()
-            .unwrap_or_else(|| "Unknown Album".to_string());
-        let artist_name = job
-            .detected_artist
-            .clone()
-            .unwrap_or_else(|| "Unknown Artist".to_string());
+        // Notify completion — look up names from catalog for accuracy,
+        // falling back to detected metadata or "Unknown" defaults.
+        let (album_name, artist_name) = match &job.matched_album_id {
+            Some(album_id) => {
+                let album_name = self
+                    .catalog
+                    .get_album_json(album_id)
+                    .ok()
+                    .flatten()
+                    .and_then(|v| v.get("name")?.as_str().map(String::from))
+                    .or_else(|| job.detected_album.clone())
+                    .unwrap_or_else(|| "Unknown Album".to_string());
+
+                let artist_name = self
+                    .catalog
+                    .get_album_artist_ids(album_id)
+                    .ok()
+                    .and_then(|ids| ids.into_iter().next())
+                    .and_then(|aid| {
+                        self.catalog
+                            .get_artist_json(&aid)
+                            .ok()
+                            .flatten()
+                            .and_then(|v| v.get("name")?.as_str().map(String::from))
+                    })
+                    .or_else(|| job.detected_artist.clone())
+                    .unwrap_or_else(|| "Unknown Artist".to_string());
+
+                (album_name, artist_name)
+            }
+            None => (
+                job.detected_album
+                    .clone()
+                    .unwrap_or_else(|| "Unknown Album".to_string()),
+                job.detected_artist
+                    .clone()
+                    .unwrap_or_else(|| "Unknown Artist".to_string()),
+            ),
+        };
 
         if let Some(notifier) = &self.notifier {
             notifier

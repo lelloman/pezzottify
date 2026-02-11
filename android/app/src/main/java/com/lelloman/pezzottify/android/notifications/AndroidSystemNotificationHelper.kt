@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.lelloman.pezzottify.android.MainActivity
 import com.lelloman.pezzottify.android.R
+import com.lelloman.pezzottify.android.domain.notifications.DownloadCompletedData
 import com.lelloman.pezzottify.android.domain.notifications.SystemNotificationHelper
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -185,6 +186,59 @@ class AndroidSystemNotificationHelper @Inject constructor(
         notificationManager.notify(albumId.hashCode(), notification)
     }
 
+    @Suppress("NotificationPermission") // Permission is checked manually before notify()
+    override fun showDownloadsCompletedNotification(downloads: List<DownloadCompletedData>) {
+        if (downloads.isEmpty()) return
+
+        // Single download — delegate to the existing single-album notification
+        if (downloads.size == 1) {
+            val d = downloads.first()
+            showDownloadCompletedNotification(d.albumId, d.albumName, d.artistName)
+            return
+        }
+
+        // Multiple downloads — show one grouped notification
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            DOWNLOADS_BATCH_NOTIFICATION_ID,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val title = context.getString(R.string.notification_downloads_completed_title)
+        val summary = context.resources.getQuantityString(
+            R.plurals.notification_downloads_completed_body, downloads.size, downloads.size
+        )
+        val details = downloads.joinToString("\n") { "${it.albumName} — ${it.artistName}" }
+
+        val notification = NotificationCompat.Builder(context, DOWNLOADS_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(summary)
+            .setStyle(NotificationCompat.BigTextStyle().bigText("$summary\n$details"))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+
+        // Check notification permission on Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
+        }
+
+        notificationManager.notify(DOWNLOADS_BATCH_NOTIFICATION_ID, notification)
+    }
+
     companion object {
         const val WHATSNEW_CHANNEL_ID = "whatsnew"
         const val DOWNLOADS_CHANNEL_ID = "downloads"
@@ -192,5 +246,6 @@ class AndroidSystemNotificationHelper @Inject constructor(
         const val EXTRA_ALBUM_ID = "album_id"
         const val DESTINATION_WHATSNEW = "whatsnew"
         const val DESTINATION_ALBUM = "album"
+        private const val DOWNLOADS_BATCH_NOTIFICATION_ID = 0x50455A5A // "PEZZ"
     }
 }

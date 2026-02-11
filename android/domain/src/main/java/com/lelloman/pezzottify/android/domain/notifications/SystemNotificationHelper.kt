@@ -37,4 +37,12 @@ interface SystemNotificationHelper {
         albumName: String,
         artistName: String,
     )
+
+    /**
+     * Show a single grouped notification for multiple completed downloads.
+     * If the list has one item, behaves the same as [showDownloadCompletedNotification].
+     *
+     * @param downloads The list of completed downloads to summarize
+     */
+    fun showDownloadsCompletedNotification(downloads: List<DownloadCompletedData>)
 }

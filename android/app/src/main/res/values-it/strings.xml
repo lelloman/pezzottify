@@ -14,6 +14,11 @@
     <!-- Download completed notification content -->
     <string name="notification_download_completed_title">Download completato</string>
     <string name="notification_download_completed_body">%1$s di %2$s è ora disponibile</string>
+    <string name="notification_downloads_completed_title">Download completati</string>
+    <plurals name="notification_downloads_completed_body">
+        <item quantity="one">Abbiamo scaricato %d album per te</item>
+        <item quantity="other">Abbiamo scaricato %d album per te</item>
+    </plurals>
 
     <plurals name="notification_albums_added">
         <item quantity="one">%d album</item>
