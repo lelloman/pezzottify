@@ -2770,7 +2770,11 @@ impl IngestionManager {
                 (&primary_requester_user_id, &primary_requester_request_id)
             {
                 self.send_download_notification(
-                    user_id, request_id, album_id, &album_name, &artist_name,
+                    user_id,
+                    request_id,
+                    album_id,
+                    &album_name,
+                    &artist_name,
                 )
                 .await;
             }
