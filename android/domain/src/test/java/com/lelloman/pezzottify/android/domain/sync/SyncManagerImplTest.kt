@@ -2,8 +2,11 @@ package com.lelloman.pezzottify.android.domain.sync
 
 import com.google.common.truth.Truth.assertThat
 import com.lelloman.pezzottify.android.domain.download.DownloadStatusRepository
+import com.lelloman.pezzottify.android.domain.notifications.DownloadCompletedData
 import com.lelloman.pezzottify.android.domain.notifications.NotificationRepository
+import com.lelloman.pezzottify.android.domain.notifications.NotificationType
 import com.lelloman.pezzottify.android.domain.notifications.SystemNotificationHelper
+import io.mockk.verify
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.LikesState
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
@@ -625,6 +628,78 @@ class SyncManagerImplTest {
 
     // endregion
 
+    // region showSystemNotificationsForUnread
+
+    @Test
+    fun `showSystemNotificationsForUnread shows grouped notification for unread recent downloads`() {
+        val data = DownloadCompletedData(
+            albumId = "album-1",
+            albumName = "Test Album",
+            artistName = "Test Artist",
+            imageId = null,
+            requestId = "req-1",
+        )
+        val notification = createDownloadNotification("notif-1", data)
+
+        syncManager.showSystemNotificationsForUnread(listOf(notification))
+
+        val slot = slot<List<DownloadCompletedData>>()
+        verify { systemNotificationHelper.showDownloadsCompletedNotification(capture(slot)) }
+        assertThat(slot.captured).hasSize(1)
+        assertThat(slot.captured[0].albumId).isEqualTo("album-1")
+        assertThat(slot.captured[0].albumName).isEqualTo("Test Album")
+    }
+
+    @Test
+    fun `showSystemNotificationsForUnread groups multiple downloads into one call`() {
+        val data1 = DownloadCompletedData(
+            albumId = "album-1", albumName = "Album A", artistName = "Artist A",
+            imageId = null, requestId = "req-1",
+        )
+        val data2 = DownloadCompletedData(
+            albumId = "album-2", albumName = "Album B", artistName = "Artist B",
+            imageId = null, requestId = "req-2",
+        )
+
+        syncManager.showSystemNotificationsForUnread(listOf(
+            createDownloadNotification("notif-1", data1),
+            createDownloadNotification("notif-2", data2),
+        ))
+
+        val slot = slot<List<DownloadCompletedData>>()
+        verify { systemNotificationHelper.showDownloadsCompletedNotification(capture(slot)) }
+        assertThat(slot.captured).hasSize(2)
+    }
+
+    @Test
+    fun `showSystemNotificationsForUnread skips read notifications`() {
+        val data = DownloadCompletedData(
+            albumId = "album-1", albumName = "Test Album", artistName = "Test Artist",
+            imageId = null, requestId = "req-1",
+        )
+        val notification = createDownloadNotification("notif-1", data, readAt = System.currentTimeMillis())
+
+        syncManager.showSystemNotificationsForUnread(listOf(notification))
+
+        verify(exactly = 0) { systemNotificationHelper.showDownloadsCompletedNotification(any()) }
+    }
+
+    @Test
+    fun `showSystemNotificationsForUnread skips old notifications`() {
+        val data = DownloadCompletedData(
+            albumId = "album-1", albumName = "Test Album", artistName = "Test Artist",
+            imageId = null, requestId = "req-1",
+        )
+        val twoDaysAgo = System.currentTimeMillis() - 2 * 24 * 60 * 60 * 1000L
+        val notification = createDownloadNotification("notif-1", data, createdAt = twoDaysAgo)
+
+        syncManager.showSystemNotificationsForUnread(listOf(notification))
+
+        verify(exactly = 0) { systemNotificationHelper.showDownloadsCompletedNotification(any()) }
+    }
+
+    // endregion
+
     // region helper functions
 
     private fun createSyncStateResponse(
@@ -634,6 +709,7 @@ class SyncManagerImplTest {
         likesTracks: List<String> = emptyList(),
         settings: List<UserSetting> = emptyList(),
         playlists: List<PlaylistState> = emptyList(),
+        notifications: List<com.lelloman.pezzottify.android.domain.notifications.Notification> = emptyList(),
     ): SyncStateResponse {
         return SyncStateResponse(
             seq = seq,
@@ -645,6 +721,7 @@ class SyncManagerImplTest {
             settings = settings,
             playlists = playlists,
             permissions = emptyList(),
+            notifications = notifications,
         )
     }
 
@@ -743,6 +820,25 @@ class SyncManagerImplTest {
                 setting = setting,
             ),
             serverTimestamp = serverTimestamp,
+        )
+    }
+
+    private fun createDownloadNotification(
+        id: String,
+        data: DownloadCompletedData,
+        readAt: Long? = null,
+        createdAt: Long = System.currentTimeMillis(),
+    ): com.lelloman.pezzottify.android.domain.notifications.Notification {
+        return com.lelloman.pezzottify.android.domain.notifications.Notification(
+            id = id,
+            notificationType = NotificationType.DownloadCompleted,
+            title = "${data.albumName} is ready",
+            body = "by ${data.artistName}",
+            data = kotlinx.serialization.json.Json.encodeToJsonElement(
+                DownloadCompletedData.serializer(), data
+            ),
+            readAt = readAt,
+            createdAt = createdAt,
         )
     }
 

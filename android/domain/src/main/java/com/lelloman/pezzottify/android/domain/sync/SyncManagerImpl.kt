@@ -130,6 +130,9 @@ class SyncManagerImpl internal constructor(
                 notificationRepository.setNotifications(syncState.notifications)
                 logger.debug("Applied ${syncState.notifications.size} notifications")
 
+                // Show system notifications for unread download completions
+                showSystemNotificationsForUnread(syncState.notifications)
+
                 // Save cursor and clear needsFullSync flag
                 syncStateStore.saveCursor(syncState.seq)
                 syncStateStore.setNeedsFullSync(false)
@@ -407,6 +410,40 @@ class SyncManagerImpl internal constructor(
         }
     }
 
+    /**
+     * Show a single grouped system notification for unread download completions received
+     * during full sync. During full sync, notifications are loaded into the in-app list but
+     * system notifications are not shown (unlike catch-up/WebSocket paths which go through
+     * applyStoredEvent). Only includes notifications created within the last 24 hours to
+     * avoid surfacing stale notifications after app reinstall or data clear.
+     */
+    internal fun showSystemNotificationsForUnread(notifications: List<com.lelloman.pezzottify.android.domain.notifications.Notification>) {
+        val cutoffMs = System.currentTimeMillis() - NOTIFICATION_RECENCY_WINDOW_MS
+        val downloads = mutableListOf<DownloadCompletedData>()
+
+        for (notification in notifications) {
+            if (notification.readAt != null) continue
+            if (notification.notificationType != NotificationType.DownloadCompleted) continue
+            if (notification.createdAt < cutoffMs) continue
+
+            try {
+                downloads.add(
+                    kotlinx.serialization.json.Json.decodeFromJsonElement(
+                        DownloadCompletedData.serializer(),
+                        notification.data
+                    )
+                )
+            } catch (e: Exception) {
+                logger.error("Failed to parse download completed notification data during full sync", e)
+            }
+        }
+
+        if (downloads.isNotEmpty()) {
+            systemNotificationHelper.showDownloadsCompletedNotification(downloads)
+            logger.debug("Showed grouped system notification for ${downloads.size} unread download(s)")
+        }
+    }
+
     private suspend fun applyLikesState(contentIds: List<String>, type: LikedContent.ContentType) {
         val now = System.currentTimeMillis()
         val items = contentIds.map { contentId ->
@@ -538,5 +575,6 @@ class SyncManagerImpl internal constructor(
         private val MIN_RETRY_DELAY = 5.seconds
         private val MAX_RETRY_DELAY = 5.minutes
         private const val BACKOFF_MULTIPLIER = 2.0
+        private const val NOTIFICATION_RECENCY_WINDOW_MS = 24 * 60 * 60 * 1000L // 24 hours
     }
 }
