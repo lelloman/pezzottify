@@ -32,6 +32,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -51,6 +52,7 @@ fun NotificationListScreen(
     onNavigateToAlbum: (String) -> Unit,
 ) {
     val viewModel = hiltViewModel<NotificationListScreenViewModel>()
+    LaunchedEffect(Unit) { viewModel.markAllAsRead() }
     NotificationListScreenContent(
         state = viewModel.state.collectAsState().value,
         onNotificationClick = { notification ->
