@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.settings.logviewer
 
 import androidx.compose.foundation.horizontalScroll
+import com.lelloman.pezzottify.android.ui.screen.main.MainScreenScaffold
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -146,7 +147,7 @@ private fun LogViewerScreenInternal(
         }
     }
 
-    Scaffold(
+    MainScreenScaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.logs_title)) },

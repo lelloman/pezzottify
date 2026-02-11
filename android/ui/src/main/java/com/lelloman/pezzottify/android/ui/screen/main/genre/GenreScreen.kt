@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.genre
 
 import androidx.compose.foundation.layout.Arrangement
+import com.lelloman.pezzottify.android.ui.screen.main.MainScreenScaffold
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -78,7 +79,7 @@ private fun GenreScreenContent(
     state: GenreScreenState,
     actions: GenreScreenActions,
 ) {
-    Scaffold(
+    MainScreenScaffold(
         topBar = {
             TopAppBar(
                 title = {
@@ -98,7 +99,6 @@ private fun GenreScreenContent(
                 }
             )
         },
-        contentWindowInsets = WindowInsets(0.dp)
     ) { paddingValues ->
         Box(
             modifier = Modifier

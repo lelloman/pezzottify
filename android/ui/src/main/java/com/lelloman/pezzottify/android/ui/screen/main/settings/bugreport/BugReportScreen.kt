@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.settings.bugreport
 
 import androidx.compose.foundation.layout.Column
+import com.lelloman.pezzottify.android.ui.screen.main.MainScreenScaffold
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -58,7 +59,7 @@ private fun BugReportScreenInternal(
 ) {
     val currentState by state.collectAsState()
 
-    Scaffold(
+    MainScreenScaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.report_bug)) },

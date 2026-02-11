@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.content.userplaylist
 
 import androidx.compose.animation.core.LinearEasing
+import com.lelloman.pezzottify.android.ui.screen.main.MainScreenScaffold
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -115,9 +116,8 @@ private fun UserPlaylistScreenContent(
         }
     }
 
-    Scaffold(
+    MainScreenScaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        contentWindowInsets = WindowInsets(0.dp)
     ) { contentPadding ->
         Box(
             modifier = Modifier
