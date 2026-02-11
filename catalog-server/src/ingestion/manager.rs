@@ -2633,14 +2633,18 @@ impl IngestionManager {
         // If this job is associated with a download request, mark it as completed
         let mut primary_requester_user_id: Option<String> = None;
         let mut primary_requester_request_id: Option<String> = None;
+        let mut download_request_album_name: Option<String> = None;
+        let mut download_request_artist_name: Option<String> = None;
         if let (Some(IngestionContextType::DownloadRequest), Some(context_id)) =
             (job.context_type, &job.context_id)
         {
             if let Some(download_manager) = &self.download_manager {
-                // Capture the requesting user before marking completed
+                // Capture the requesting user and names before marking completed
                 if let Ok(Some(queue_item)) = download_manager.get_queue_item(context_id) {
                     primary_requester_user_id = queue_item.requested_by_user_id.clone();
                     primary_requester_request_id = Some(queue_item.id.clone());
+                    download_request_album_name = queue_item.content_name.clone();
+                    download_request_artist_name = queue_item.artist_name.clone();
                 }
 
                 let duration_ms = job.started_at.map_or(0, |started| {
@@ -2715,6 +2719,7 @@ impl IngestionManager {
                     .ok()
                     .flatten()
                     .and_then(|v| v.get("name")?.as_str().map(String::from))
+                    .or_else(|| download_request_album_name.clone())
                     .or_else(|| job.detected_album.clone())
                     .unwrap_or_else(|| "Unknown Album".to_string());
 
@@ -2730,17 +2735,20 @@ impl IngestionManager {
                             .flatten()
                             .and_then(|v| v.get("name")?.as_str().map(String::from))
                     })
+                    .or_else(|| download_request_artist_name.clone())
                     .or_else(|| job.detected_artist.clone())
                     .unwrap_or_else(|| "Unknown Artist".to_string());
 
                 (album_name, artist_name)
             }
             None => (
-                job.detected_album
+                download_request_album_name
                     .clone()
+                    .or_else(|| job.detected_album.clone())
                     .unwrap_or_else(|| "Unknown Album".to_string()),
-                job.detected_artist
+                download_request_artist_name
                     .clone()
+                    .or_else(|| job.detected_artist.clone())
                     .unwrap_or_else(|| "Unknown Artist".to_string()),
             ),
         };

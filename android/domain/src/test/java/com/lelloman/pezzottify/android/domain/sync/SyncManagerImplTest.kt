@@ -30,6 +30,7 @@ import io.mockk.slot
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
@@ -700,6 +701,64 @@ class SyncManagerImplTest {
 
     // endregion
 
+    // region download notification debouncing
+
+    @Test
+    fun `catchUp debounces download notifications into grouped call`() = runTest(testDispatcher) {
+        every { syncStateStore.getCurrentCursor() } returns 5L
+
+        val data1 = DownloadCompletedData(
+            albumId = "album-1", albumName = "Album A", artistName = "Artist A",
+            imageId = null, requestId = "req-1",
+        )
+        val data2 = DownloadCompletedData(
+            albumId = "album-2", albumName = "Album B", artistName = "Artist B",
+            imageId = null, requestId = "req-2",
+        )
+
+        val events = listOf(
+            createNotificationCreatedEvent(seq = 6L, data = data1),
+            createNotificationCreatedEvent(seq = 7L, data = data2),
+        )
+        coEvery { remoteApiClient.getSyncEvents(5L) } returns RemoteApiResponse.Success(
+            SyncEventsResponse(events = events, currentSeq = 7L)
+        )
+
+        syncManager.catchUp()
+
+        // Before debounce fires, no notification shown
+        verify(exactly = 0) { systemNotificationHelper.showDownloadsCompletedNotification(any()) }
+
+        // Advance past the debounce window
+        testScope.advanceTimeBy(3000)
+
+        val slot = slot<List<DownloadCompletedData>>()
+        verify { systemNotificationHelper.showDownloadsCompletedNotification(capture(slot)) }
+        assertThat(slot.captured).hasSize(2)
+        assertThat(slot.captured[0].albumId).isEqualTo("album-1")
+        assertThat(slot.captured[1].albumId).isEqualTo("album-2")
+    }
+
+    @Test
+    fun `handleSyncMessage shows single download notification via grouped method`() = runTest(testDispatcher) {
+        every { syncStateStore.getCurrentCursor() } returns 5L
+
+        val data = DownloadCompletedData(
+            albumId = "album-1", albumName = "Test Album", artistName = "Test Artist",
+            imageId = null, requestId = "req-1",
+        )
+        val event = createNotificationCreatedEvent(seq = 6L, data = data)
+
+        syncManager.handleSyncMessage(event)
+        testScope.advanceTimeBy(3000)
+
+        val slot = slot<List<DownloadCompletedData>>()
+        verify { systemNotificationHelper.showDownloadsCompletedNotification(capture(slot)) }
+        assertThat(slot.captured).hasSize(1)
+    }
+
+    // endregion
+
     // region helper functions
 
     private fun createSyncStateResponse(
@@ -818,6 +877,22 @@ class SyncManagerImplTest {
             type = "setting_changed",
             payload = SyncEventPayload(
                 setting = setting,
+            ),
+            serverTimestamp = serverTimestamp,
+        )
+    }
+
+    private fun createNotificationCreatedEvent(
+        seq: Long,
+        data: DownloadCompletedData,
+        serverTimestamp: Long = System.currentTimeMillis(),
+    ): StoredEvent {
+        val notification = createDownloadNotification("notif-$seq", data)
+        return StoredEvent(
+            seq = seq,
+            type = "notification_created",
+            payload = SyncEventPayload(
+                notification = notification,
             ),
             serverTimestamp = serverTimestamp,
         )
