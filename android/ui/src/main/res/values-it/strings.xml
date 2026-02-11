@@ -213,6 +213,20 @@
     <string name="notify_whatsnew_description">Ricevi notifiche quando viene aggiunta nuova musica al catalogo</string>
     <!-- NOTIFY WHAT'S NEW SECTION -->
 
+    <!-- BACKGROUND SYNC SECTION -->
+    <string name="background_sync_section">Sincronizzazione in background</string>
+    <string name="background_sync_description">Sincronizza i dati periodicamente quando l\'app non è in esecuzione</string>
+    <string name="sync_interval_15min">15 minuti</string>
+    <string name="sync_interval_30min">30 minuti</string>
+    <string name="sync_interval_1h">1 ora</string>
+    <string name="sync_interval_2h">2 ore</string>
+    <string name="sync_interval_4h">4 ore</string>
+    <string name="sync_interval_6h">6 ore</string>
+    <string name="sync_interval_12h">12 ore</string>
+    <string name="sync_interval_24h">24 ore</string>
+    <string name="sync_interval_disabled">Disabilitato</string>
+    <!-- BACKGROUND SYNC SECTION -->
+
     <!-- SMART SEARCH SECTION -->
     <string name="search_section">Ricerca</string>
     <string name="smart_search">Ricerca intelligente</string>

@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.settings
 
 import androidx.annotation.StringRes
+import com.lelloman.pezzottify.android.domain.settings.BackgroundSyncInterval
 import com.lelloman.pezzottify.android.ui.model.StorageInfo
 import com.lelloman.pezzottify.android.ui.theme.AppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette
@@ -13,6 +14,7 @@ data class SettingsScreenState(
     val isCacheEnabled: Boolean = true,
     val storageInfo: StorageInfo? = null,
     val notifyWhatsNewEnabled: Boolean = false,
+    val backgroundSyncInterval: BackgroundSyncInterval = BackgroundSyncInterval.Default,
     val smartSearchEnabled: Boolean = true,
     val excludeUnavailableEnabled: Boolean = true,
     val isFileLoggingEnabled: Boolean = false,

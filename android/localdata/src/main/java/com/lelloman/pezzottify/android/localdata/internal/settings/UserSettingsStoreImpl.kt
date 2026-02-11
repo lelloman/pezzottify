@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.localdata.internal.settings
 
 import android.content.Context
 import com.lelloman.pezzottify.android.domain.settings.AppFontFamily
+import com.lelloman.pezzottify.android.domain.settings.BackgroundSyncInterval
 import com.lelloman.pezzottify.android.domain.settings.ColorPalette
 import com.lelloman.pezzottify.android.domain.settings.SyncedUserSetting
 import com.lelloman.pezzottify.android.domain.settings.ThemeMode
@@ -80,6 +81,13 @@ internal class UserSettingsStoreImpl(
         MutableStateFlow(enabled)
     }
     override val isNotifyWhatsNewEnabled: StateFlow<Boolean> = mutableNotifyWhatsNewEnabled.asStateFlow()
+
+    private val mutableBackgroundSyncInterval by lazy {
+        val storedValue = prefs.getString(KEY_BACKGROUND_SYNC_INTERVAL, null)
+        val interval = storedValue?.let { parseBackgroundSyncInterval(it) } ?: BackgroundSyncInterval.Default
+        MutableStateFlow(interval)
+    }
+    override val backgroundSyncInterval: StateFlow<BackgroundSyncInterval> = mutableBackgroundSyncInterval.asStateFlow()
 
     private val mutableSmartSearchEnabled by lazy {
         // Default to true (smart search enabled by default)
@@ -161,6 +169,11 @@ internal class UserSettingsStoreImpl(
             updatedSettings.remove(KEY_SETTING_NOTIFY_WHATSNEW)
             mutableSyncedSettings.value = updatedSettings
         }
+    }
+
+    override fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) {
+        mutableBackgroundSyncInterval.value = interval
+        prefs.edit().putString(KEY_BACKGROUND_SYNC_INTERVAL, interval.name).apply()
     }
 
     override fun setSmartSearchEnabled(enabled: Boolean) {
@@ -261,6 +274,12 @@ internal class UserSettingsStoreImpl(
         null
     }
 
+    private fun parseBackgroundSyncInterval(value: String): BackgroundSyncInterval? = try {
+        BackgroundSyncInterval.valueOf(value)
+    } catch (e: IllegalArgumentException) {
+        null
+    }
+
     private fun parseSyncStatus(value: String): SyncStatus? = try {
         SyncStatus.valueOf(value)
     } catch (e: IllegalArgumentException) {
@@ -285,6 +304,8 @@ internal class UserSettingsStoreImpl(
         const val KEY_SETTING_NOTIFY_WHATSNEW = "notify_whatsnew"
         // Legacy value for migration - AmoledBlack was removed and converted to Amoled theme mode
         const val LEGACY_AMOLED_BLACK_PALETTE = "AmoledBlack"
+        // Background sync interval (local only)
+        const val KEY_BACKGROUND_SYNC_INTERVAL = "BackgroundSyncInterval"
         // Smart search setting (local only)
         const val KEY_SMART_SEARCH_ENABLED = "SmartSearchEnabled"
         const val DEFAULT_SMART_SEARCH_ENABLED = true

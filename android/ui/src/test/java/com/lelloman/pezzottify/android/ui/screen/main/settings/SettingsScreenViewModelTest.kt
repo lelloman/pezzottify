@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui.screen.main.settings
 
 import android.content.Intent
 import com.google.common.truth.Truth.assertThat
+import com.lelloman.pezzottify.android.domain.settings.BackgroundSyncInterval
 import com.lelloman.pezzottify.android.ui.R
 import com.lelloman.pezzottify.android.ui.model.StorageInfo
 import com.lelloman.pezzottify.android.ui.model.StoragePressureLevel
@@ -323,6 +324,7 @@ class SettingsScreenViewModelTest {
         override fun getLogFilesSize(): String = _logFilesSize
         override fun getBaseUrl(): String = _baseUrl
         override fun isNotifyWhatsNewEnabled(): Boolean = false
+        override fun getBackgroundSyncInterval() = BackgroundSyncInterval.Default
         override fun isSmartSearchEnabled(): Boolean = false
         override fun isExcludeUnavailableEnabled(): Boolean = true
 
@@ -333,6 +335,7 @@ class SettingsScreenViewModelTest {
         override fun observeStorageInfo(): Flow<StorageInfo> = storageInfoFlow
         override fun observeFileLoggingEnabled(): Flow<Boolean> = fileLoggingEnabledFlow
         override fun observeNotifyWhatsNewEnabled(): Flow<Boolean> = MutableStateFlow(false)
+        override fun observeBackgroundSyncInterval() = MutableStateFlow(BackgroundSyncInterval.Default)
         override fun observeSmartSearchEnabled(): Flow<Boolean> = MutableStateFlow(false)
         override fun observeExcludeUnavailableEnabled(): Flow<Boolean> = MutableStateFlow(true)
 
@@ -353,6 +356,10 @@ class SettingsScreenViewModelTest {
         }
 
         override suspend fun setNotifyWhatsNewEnabled(enabled: Boolean) {
+            // no-op for tests
+        }
+
+        override fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) {
             // no-op for tests
         }
 

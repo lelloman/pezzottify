@@ -57,6 +57,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.coil)
     implementation(libs.coil.network)
+    implementation(project(":domain"))
     implementation(project(":logger"))
     implementation(project(":simple-ai-assistant"))
 

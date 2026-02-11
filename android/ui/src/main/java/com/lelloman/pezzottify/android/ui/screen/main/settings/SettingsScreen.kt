@@ -33,6 +33,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.lelloman.pezzottify.android.domain.settings.BackgroundSyncInterval
 import com.lelloman.pezzottify.android.ui.R
 import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.ui.model.StorageInfo
@@ -158,6 +159,14 @@ private fun SettingsScreenInternal(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
+            // Background Sync Section
+            BackgroundSyncSection(
+                selectedInterval = currentState.backgroundSyncInterval,
+                onIntervalChanged = actions::setBackgroundSyncInterval,
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+
             // Search Section
             SmartSearchSection(
                 isEnabled = currentState.smartSearchEnabled,
@@ -249,6 +258,7 @@ private fun SettingsScreenPreview() {
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
                 override fun setCacheEnabled(enabled: Boolean) {}
                 override fun setNotifyWhatsNewEnabled(enabled: Boolean) {}
+                override fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) {}
                 override fun setSmartSearchEnabled(enabled: Boolean) {}
                 override fun setExcludeUnavailableEnabled(enabled: Boolean) {}
                 override fun setFileLoggingEnabled(enabled: Boolean) {}
@@ -286,6 +296,7 @@ private fun SettingsScreenPreviewDark() {
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
                 override fun setCacheEnabled(enabled: Boolean) {}
                 override fun setNotifyWhatsNewEnabled(enabled: Boolean) {}
+                override fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) {}
                 override fun setSmartSearchEnabled(enabled: Boolean) {}
                 override fun setExcludeUnavailableEnabled(enabled: Boolean) {}
                 override fun setFileLoggingEnabled(enabled: Boolean) {}
