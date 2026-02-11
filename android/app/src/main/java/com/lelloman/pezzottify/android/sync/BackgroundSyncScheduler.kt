@@ -37,8 +37,6 @@ class BackgroundSyncScheduler @Inject constructor(
     private val logger: Logger by loggerFactory
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    // Lazy to avoid circular dependency: WorkManager.getInstance() calls
-    // Configuration.Provider before Hilt finishes injecting workerFactory.
     private val workManager by lazy { WorkManager.getInstance(context) }
 
     override fun initialize() {
