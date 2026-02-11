@@ -19,6 +19,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -46,7 +49,9 @@ class BackgroundSyncScheduler @Inject constructor(
             ) { authState, interval ->
                 authState to interval
             }.collect { (authState, interval) ->
-                if (authState is AuthState.LoggedIn && interval != BackgroundSyncInterval.Disabled) {
+                val isLoggedIn = authState is AuthState.LoggedIn
+                logger.info("Background sync state changed: loggedIn=$isLoggedIn, interval=$interval")
+                if (isLoggedIn && interval != BackgroundSyncInterval.Disabled) {
                     scheduleSync(interval)
                 } else {
                     cancelSync()
@@ -56,7 +61,11 @@ class BackgroundSyncScheduler @Inject constructor(
     }
 
     private fun scheduleSync(interval: BackgroundSyncInterval) {
-        logger.info("Scheduling background sync every ${interval.minutes} minutes")
+        val nextRunTime = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(interval.minutes)
+        val nextRunFormatted = dateFormat.format(Date(nextRunTime))
+        logger.info(
+            "Scheduling background sync: interval=${interval.minutes}min, next expected run ~$nextRunFormatted"
+        )
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
@@ -69,7 +78,7 @@ class BackgroundSyncScheduler @Inject constructor(
 
         workManager.enqueueUniquePeriodicWork(
             WORK_NAME,
-            ExistingPeriodicWorkPolicy.UPDATE,
+            ExistingPeriodicWorkPolicy.REPLACE,
             workRequest,
         )
     }
@@ -81,5 +90,6 @@ class BackgroundSyncScheduler @Inject constructor(
 
     companion object {
         private const val WORK_NAME = "background_sync"
+        private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
     }
 }
