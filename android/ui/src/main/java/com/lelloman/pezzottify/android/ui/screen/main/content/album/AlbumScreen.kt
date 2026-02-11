@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.content.album
 
 import androidx.compose.animation.core.LinearEasing
+import com.lelloman.pezzottify.android.ui.screen.main.MainScreenScaffold
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -140,14 +141,13 @@ private fun AlbumScreenContent(
         }
     }
 
-    Scaffold(
+    MainScreenScaffold(
         snackbarHost = {
             SnackbarHost(
                 hostState = snackbarHostState,
                 modifier = Modifier.padding(WindowInsets.statusBars.asPaddingValues())
             )
         },
-        contentWindowInsets = WindowInsets(0.dp)
     ) { contentPadding ->
         Box(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
             when {

@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.whatsnew
 
 import androidx.compose.animation.AnimatedVisibility
+import com.lelloman.pezzottify.android.ui.screen.main.MainScreenScaffold
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -87,7 +89,7 @@ private fun WhatsNewScreenContent(
     state: WhatsNewScreenState,
     actions: WhatsNewScreenActions,
 ) {
-    Scaffold(
+    MainScreenScaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.whats_new_header)) },

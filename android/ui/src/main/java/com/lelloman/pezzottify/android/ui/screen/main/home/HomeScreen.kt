@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.home
 
 import androidx.compose.foundation.background
+import com.lelloman.pezzottify.android.ui.screen.main.MainScreenScaffold
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -122,7 +123,7 @@ private fun HomeScreenContent(
         }
     }
 
-    Scaffold(
+    MainScreenScaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
             TopAppBar(

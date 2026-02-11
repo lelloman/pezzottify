@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.profile.stylesettings
 
 import androidx.compose.foundation.background
+import com.lelloman.pezzottify.android.ui.screen.main.MainScreenScaffold
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -74,7 +75,7 @@ private fun StyleSettingsScreenInternal(
 ) {
     val currentState by state.collectAsState()
 
-    Scaffold(
+    MainScreenScaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.appearance)) },

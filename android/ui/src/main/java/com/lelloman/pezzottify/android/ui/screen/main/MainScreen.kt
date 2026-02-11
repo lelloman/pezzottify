@@ -133,7 +133,6 @@ private val overlayRoutes = setOf(
     Screen.Main.Player::class.qualifiedName,
     Screen.Main.Queue::class.qualifiedName,
     Screen.Main.FullScreenImage::class.qualifiedName,
-    Screen.Main.Home.LogViewer::class.qualifiedName,
 )
 
 @Composable
@@ -142,7 +141,7 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
-    // Hide bottom bars for overlay screens (Player, Queue, FullScreenImage)
+    // Hide bottom bars for immersive screens (Player, Queue, FullScreenImage)
     val isOverlayScreen = overlayRoutes.any { currentRoute?.startsWith(it ?: "") == true }
 
     // Drawer state for profile drawer

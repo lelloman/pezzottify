@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.notifications
 
 import androidx.compose.foundation.background
+import com.lelloman.pezzottify.android.ui.screen.main.MainScreenScaffold
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -69,7 +70,7 @@ private fun NotificationListScreenContent(
     onMarkAllAsReadClick: () -> Unit,
     onBackClick: () -> Unit,
 ) {
-    Scaffold(
+    MainScreenScaffold(
         topBar = {
             TopAppBar(
                 modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),

@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.listeninghistory
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import com.lelloman.pezzottify.android.ui.screen.main.MainScreenScaffold
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -62,7 +63,7 @@ fun ListeningHistoryScreen(
 ) {
     val state by viewModel.state.collectAsState()
 
-    Scaffold(
+    MainScreenScaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.listening_history_title)) },
@@ -78,7 +79,6 @@ fun ListeningHistoryScreen(
                 }
             )
         },
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { paddingValues ->
         PullToRefreshBox(
             isRefreshing = state.isLoading && state.events.isEmpty(),

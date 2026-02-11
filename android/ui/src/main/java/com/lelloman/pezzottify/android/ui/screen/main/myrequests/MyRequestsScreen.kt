@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.myrequests
 
 import androidx.compose.foundation.clickable
+import com.lelloman.pezzottify.android.ui.screen.main.MainScreenScaffold
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -89,7 +90,7 @@ fun MyRequestsScreen(
         }
     }
 
-    Scaffold(
+    MainScreenScaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.my_requests_title)) },
@@ -105,7 +106,6 @@ fun MyRequestsScreen(
                 }
             )
         },
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { paddingValues ->
         PullToRefreshBox(
             isRefreshing = state.isLoading,

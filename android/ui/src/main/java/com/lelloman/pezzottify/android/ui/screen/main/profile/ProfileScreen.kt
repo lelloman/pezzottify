@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.profile
 
 import androidx.compose.foundation.layout.Arrangement
+import com.lelloman.pezzottify.android.ui.screen.main.MainScreenScaffold
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -117,7 +118,7 @@ private fun ProfileScreenInternal(
         )
     }
 
-    Scaffold(
+    MainScreenScaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.profile_title)) },
@@ -131,7 +132,6 @@ private fun ProfileScreenInternal(
                 }
             )
         },
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { innerPadding ->
         Column(
             modifier = Modifier

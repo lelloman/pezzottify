@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.genre
 
 import androidx.compose.foundation.clickable
+import com.lelloman.pezzottify.android.ui.screen.main.MainScreenScaffold
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -76,7 +77,7 @@ private fun GenreListScreenContent(
     state: GenreListScreenState,
     actions: GenreListScreenActions,
 ) {
-    Scaffold(
+    MainScreenScaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.genres_header)) },
@@ -90,7 +91,6 @@ private fun GenreListScreenContent(
                 }
             )
         },
-        contentWindowInsets = WindowInsets(0.dp)
     ) { paddingValues ->
         Column(
             modifier = Modifier

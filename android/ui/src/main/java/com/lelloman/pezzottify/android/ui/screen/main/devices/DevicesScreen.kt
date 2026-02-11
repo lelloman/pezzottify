@@ -1,9 +1,11 @@
 package com.lelloman.pezzottify.android.ui.screen.main.devices
 
 import androidx.compose.foundation.layout.Arrangement
+import com.lelloman.pezzottify.android.ui.screen.main.MainScreenScaffold
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -75,7 +77,7 @@ fun DevicesScreen(
     val state by viewModel.state.collectAsState()
     val sharePolicies by viewModel.sharePolicies.collectAsState()
 
-    Scaffold(
+    MainScreenScaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.devices)) },
