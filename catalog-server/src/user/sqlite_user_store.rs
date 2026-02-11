@@ -3090,10 +3090,7 @@ impl user_store::DeviceStore for SqliteUserStore {
             .as_secs() as i64
             - (inactive_for_days as i64 * 24 * 60 * 60);
 
-        let deleted = conn.execute(
-            "DELETE FROM device WHERE last_seen < ?1",
-            params![cutoff],
-        )?;
+        let deleted = conn.execute("DELETE FROM device WHERE last_seen < ?1", params![cutoff])?;
         record_db_query("prune_inactive_devices", start.elapsed());
         Ok(deleted)
     }
