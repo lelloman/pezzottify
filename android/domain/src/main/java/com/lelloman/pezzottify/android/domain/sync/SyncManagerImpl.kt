@@ -85,6 +85,10 @@ class SyncManagerImpl internal constructor(
     private var retryJob: Job? = null
     private var currentRetryDelay: Duration = minRetryDelay
 
+    // Debounce download completion notifications so multiple arrivals get grouped
+    private val pendingDownloadNotifications = mutableListOf<DownloadCompletedData>()
+    private var downloadNotificationFlushJob: Job? = null
+
     override suspend fun initialize(): Boolean = withContext(dispatcher) {
         logger.info("initialize()")
 
@@ -238,6 +242,8 @@ class SyncManagerImpl internal constructor(
     override suspend fun cleanup() = withContext(dispatcher) {
         logger.info("cleanup()")
         cancelRetry()
+        downloadNotificationFlushJob?.cancel()
+        synchronized(pendingDownloadNotifications) { pendingDownloadNotifications.clear() }
         syncStateStore.clearCursor()
         downloadStatusRepository.clear()
         notificationRepository.clear()
@@ -366,19 +372,14 @@ class SyncManagerImpl internal constructor(
 
             is SyncEvent.NotificationCreated -> {
                 notificationRepository.onNotificationCreated(event.notification)
-                // Show system notification for download completed
+                // Queue system notification for download completed (debounced to group multiple)
                 if (event.notification.notificationType == NotificationType.DownloadCompleted) {
                     try {
                         val data = kotlinx.serialization.json.Json.decodeFromJsonElement(
                             DownloadCompletedData.serializer(),
                             event.notification.data
                         )
-                        systemNotificationHelper.showDownloadCompletedNotification(
-                            albumId = data.albumId,
-                            albumName = data.albumName,
-                            artistName = data.artistName,
-                        )
-                        logger.debug("Showed download completed notification: ${data.albumId} ${data.albumName}")
+                        scheduleDownloadNotification(data)
                     } catch (e: Exception) {
                         logger.error("Failed to parse download completed notification data", e)
                     }
@@ -407,6 +408,29 @@ class SyncManagerImpl internal constructor(
                     logger.debug("Skipped WhatsNew notification (user opted out): ${event.batchId}")
                 }
             }
+        }
+    }
+
+    private fun scheduleDownloadNotification(data: DownloadCompletedData) {
+        synchronized(pendingDownloadNotifications) {
+            pendingDownloadNotifications.add(data)
+        }
+        downloadNotificationFlushJob?.cancel()
+        downloadNotificationFlushJob = scope.launch {
+            delay(DOWNLOAD_NOTIFICATION_DEBOUNCE_MS)
+            flushDownloadNotifications()
+        }
+    }
+
+    private fun flushDownloadNotifications() {
+        val downloads: List<DownloadCompletedData>
+        synchronized(pendingDownloadNotifications) {
+            downloads = pendingDownloadNotifications.toList()
+            pendingDownloadNotifications.clear()
+        }
+        if (downloads.isNotEmpty()) {
+            systemNotificationHelper.showDownloadsCompletedNotification(downloads)
+            logger.debug("Showed grouped download notification for ${downloads.size} album(s)")
         }
     }
 
@@ -576,5 +600,6 @@ class SyncManagerImpl internal constructor(
         private val MAX_RETRY_DELAY = 5.minutes
         private const val BACKOFF_MULTIPLIER = 2.0
         private const val NOTIFICATION_RECENCY_WINDOW_MS = 24 * 60 * 60 * 1000L // 24 hours
+        private const val DOWNLOAD_NOTIFICATION_DEBOUNCE_MS = 2000L // 2 seconds
     }
 }
