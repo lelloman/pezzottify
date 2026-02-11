@@ -1,7 +1,6 @@
 package com.lelloman.pezzottify.android.sync
 
 import android.content.Context
-import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.lelloman.pezzottify.android.domain.auth.AuthState
@@ -10,20 +9,33 @@ import com.lelloman.pezzottify.android.domain.catalogsync.CatalogSyncManager
 import com.lelloman.pezzottify.android.domain.sync.SyncManager
 import com.lelloman.pezzottify.android.logger.Logger
 import com.lelloman.pezzottify.android.logger.LoggerFactory
-import dagger.assisted.Assisted
-import dagger.assisted.AssistedInject
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 
-@HiltWorker
-class BackgroundSyncWorker @AssistedInject constructor(
-    @Assisted appContext: Context,
-    @Assisted workerParams: WorkerParameters,
-    private val authStore: AuthStore,
-    private val syncManager: SyncManager,
-    private val catalogSyncManager: CatalogSyncManager,
-    loggerFactory: LoggerFactory,
+class BackgroundSyncWorker(
+    appContext: Context,
+    workerParams: WorkerParameters,
 ) : CoroutineWorker(appContext, workerParams) {
 
-    private val logger: Logger by loggerFactory
+    @EntryPoint
+    @InstallIn(SingletonComponent::class)
+    interface BackgroundSyncWorkerEntryPoint {
+        fun authStore(): AuthStore
+        fun syncManager(): SyncManager
+        fun catalogSyncManager(): CatalogSyncManager
+        fun loggerFactory(): LoggerFactory
+    }
+
+    private val entryPoint = EntryPointAccessors.fromApplication(
+        appContext,
+        BackgroundSyncWorkerEntryPoint::class.java,
+    )
+    private val authStore: AuthStore = entryPoint.authStore()
+    private val syncManager: SyncManager = entryPoint.syncManager()
+    private val catalogSyncManager: CatalogSyncManager = entryPoint.catalogSyncManager()
+    private val logger: Logger by entryPoint.loggerFactory()
 
     override suspend fun doWork(): Result {
         val authState = authStore.getAuthState().value
