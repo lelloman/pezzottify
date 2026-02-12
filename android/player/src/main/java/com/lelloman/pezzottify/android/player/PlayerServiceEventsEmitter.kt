@@ -1,17 +1,22 @@
 package com.lelloman.pezzottify.android.player
 
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
+import javax.inject.Inject
+import javax.inject.Singleton
 
-internal class PlayerServiceEventsEmitter {
+@Singleton
+internal class PlayerServiceEventsEmitter @Inject constructor(
+    private val applicationScope: CoroutineScope,
+) {
 
     private val mutableEvents = MutableSharedFlow<Event>()
     val events = mutableEvents.asSharedFlow()
 
     fun shutdown() {
-        GlobalScope.launch {
+        applicationScope.launch {
             mutableEvents.emit(Event.Shutdown)
         }
     }

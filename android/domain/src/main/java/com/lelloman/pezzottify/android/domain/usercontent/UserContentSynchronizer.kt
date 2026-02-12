@@ -7,7 +7,6 @@ import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -15,7 +14,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 @Singleton
-class UserContentSynchronizer internal constructor(
+class UserContentSynchronizer @Inject constructor(
     private val userContentStore: UserContentStore,
     private val remoteApiClient: RemoteApiClient,
     loggerFactory: LoggerFactory,
@@ -28,19 +27,6 @@ class UserContentSynchronizer internal constructor(
     minSleepDuration = MIN_SLEEP_DURATION,
     maxSleepDuration = MAX_SLEEP_DURATION,
 ) {
-
-    @Inject
-    constructor(
-        userContentStore: UserContentStore,
-        remoteApiClient: RemoteApiClient,
-        loggerFactory: LoggerFactory,
-    ) : this(
-        userContentStore,
-        remoteApiClient,
-        loggerFactory,
-        Dispatchers.IO,
-        GlobalScope
-    )
 
     override suspend fun getItemsToProcess(): List<LikedContent> {
         return userContentStore.getPendingSyncItems().first()

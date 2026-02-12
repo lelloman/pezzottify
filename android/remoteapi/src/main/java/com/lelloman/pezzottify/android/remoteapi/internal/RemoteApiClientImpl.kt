@@ -55,7 +55,6 @@ import com.lelloman.pezzottify.android.domain.remoteapi.request.DeviceSharePolic
 import com.lelloman.pezzottify.android.logger.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.filterNotNull
@@ -85,7 +84,7 @@ internal class RemoteApiClientImpl(
     private val hostUrlProvider: RemoteApiClient.HostUrlProvider,
     private val okHttpClientFactory: OkHttpClientFactory,
     private val credentialsProvider: RemoteApiCredentialsProvider,
-    coroutineScope: CoroutineScope = GlobalScope,
+    coroutineScope: CoroutineScope,
     private val interceptors: List<Interceptor> = emptyList(),
     private val logger: Logger? = null,
 ) : RemoteApiClient {
