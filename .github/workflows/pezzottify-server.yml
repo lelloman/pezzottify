@@ -1,10 +1,10 @@
-name: Catalog Server CI
+name: Pezzottify Server CI
 
 on:
   pull_request:
     paths:
-      - 'catalog-server/**'
-      - '.github/workflows/catalog-server.yml'
+      - 'pezzottify-server/**'
+      - '.github/workflows/pezzottify-server.yml'
 
 env:
   CARGO_TERM_COLOR: always
@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: catalog-server
+        working-directory: pezzottify-server
 
     steps:
       - uses: actions/checkout@v4
@@ -31,8 +31,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            catalog-server/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('catalog-server/Cargo.lock') }}
+            pezzottify-server/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('pezzottify-server/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
 

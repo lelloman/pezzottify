@@ -199,7 +199,7 @@ The app implements a robust offline-first synchronization system:
 
 **Integration tests** are located in `remoteapi/src/integrationTest/` and test the remote API client against a real backend server. The `run-integration-tests.sh` script:
 - Creates a test catalog with sample data (artist, album, track, image)
-- Builds and runs a catalog-server Docker container
+- Builds and runs a pezzottify-server Docker container
 - Creates a test database with authentication credentials
 - Runs the integration test suite
 - Cleans up all resources automatically
@@ -219,7 +219,7 @@ adb shell am start -n com.lelloman.pezzottify.android/.MainActivity
 
 ## Backend
 
-The Android app requires the Pezzottify catalog server to be running. See the main project README for instructions on setting up the backend server.
+The Android app requires the Pezzottify server to be running. See the main project README for instructions on setting up the backend server.
 
 Default server URL can be configured in the app's settings or debug interface.
 

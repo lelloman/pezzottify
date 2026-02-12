@@ -58,19 +58,19 @@ cleanup() {
 # Set up cleanup trap
 trap cleanup EXIT
 
-echo "=== Building catalog-server image (needed by seed container) ==="
-docker compose build catalog-server
+echo "=== Building pezzottify-server image (needed by seed container) ==="
+docker compose build pezzottify-server
 
 echo "=== Building and starting services ==="
 docker compose $PROFILE_ARGS up --build -d
 
-echo "=== Waiting for catalog-server to be healthy ==="
+echo "=== Waiting for pezzottify-server to be healthy ==="
 timeout=120
 elapsed=0
-while ! docker compose ps catalog-server --format '{{.Health}}' 2>/dev/null | grep -q "healthy"; do
+while ! docker compose ps pezzottify-server --format '{{.Health}}' 2>/dev/null | grep -q "healthy"; do
     if [ $elapsed -ge $timeout ]; then
-        echo "ERROR: catalog-server did not become healthy within ${timeout}s"
-        docker compose logs catalog-server
+        echo "ERROR: pezzottify-server did not become healthy within ${timeout}s"
+        docker compose logs pezzottify-server
         exit 1
     fi
     sleep 2
@@ -78,7 +78,7 @@ while ! docker compose ps catalog-server --format '{{.Health}}' 2>/dev/null | gr
     echo "  waiting... (${elapsed}s)"
 done
 
-echo "=== catalog-server is healthy ==="
+echo "=== pezzottify-server is healthy ==="
 
 echo "=== Running tests ==="
 # Default to all tests if no pytest args provided

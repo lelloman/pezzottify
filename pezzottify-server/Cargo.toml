@@ -1,8 +1,8 @@
 [package]
-name = "pezzottify-catalog-server"
+name = "pezzottify-server"
 version = "0.5.0"
 edition = "2021"
-default-run = "catalog-server"
+default-run = "pezzottify-server"
 
 [features]
 default = []
@@ -73,7 +73,7 @@ tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
 http = "1.0"
 
 [[bin]]
-name = "catalog-server"
+name = "pezzottify-server"
 path = "src/main.rs"
 
 [[bin]]

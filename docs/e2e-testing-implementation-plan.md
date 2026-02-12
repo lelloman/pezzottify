@@ -2,14 +2,14 @@
 
 ## Executive Summary
 
-Implement a Docker Compose-based E2E testing environment with a Python test runner (pytest) that coordinates across catalog-server, LelloAuth (OIDC provider), multiple web clients (via Playwright), and multiple Android emulators (via docker-android).
+Implement a Docker Compose-based E2E testing environment with a Python test runner (pytest) that coordinates across pezzottify-server, LelloAuth (OIDC provider), multiple web clients (via Playwright), and multiple Android emulators (via docker-android).
 
 **Key decisions:**
 - Docker Compose owns all service lifecycle
 - Python pytest is the test runner (no custom orchestration layer)
 - Pure pytest fixtures for dependency injection (no base class abstractions)
 - LelloAuth container for real OIDC authentication
-- Catalog-server serves the web frontend via `--frontend-dir-path` (same as production)
+- Pezzottify-server serves the web frontend via `--frontend-dir-path` (same as production)
 - Test catalog created via server's own schema management (not raw SQL)
 - Local-only (requires KVM for Android emulators)
 - Configurable N Android emulators and M web clients via Compose profiles/scale
@@ -22,7 +22,7 @@ Implement a Docker Compose-based E2E testing environment with a Python test runn
 pezzottify/
 ├── e2e-tests/
 │   ├── docker/
-│   │   ├── Dockerfile.catalog-server   # Catalog server + web frontend build
+│   │   ├── Dockerfile.pezzottify-server   # Catalog server + web frontend build
 │   │   ├── Dockerfile.test-runner      # Python test runner with Playwright
 │   │   └── docker-compose.yml          # Full E2E stack
 │   ├── tests/
@@ -73,10 +73,10 @@ services:
       retries: 15
 
   # Catalog Server - built with web frontend, configured for OIDC
-  catalog-server:
+  pezzottify-server:
     build:
       context: ../..
-      dockerfile: catalog-server/Dockerfile
+      dockerfile: pezzottify-server/Dockerfile
       args:
         VITE_OIDC_AUTHORITY: http://lelloauth:8080
         VITE_OIDC_CLIENT_ID: pezzottify-e2e
@@ -107,12 +107,12 @@ services:
     networks:
       - e2e-net
     depends_on:
-      catalog-server:
+      pezzottify-server:
         condition: service_healthy
     volumes:
       - test-results:/test-results
     environment:
-      - CATALOG_SERVER_URL=http://catalog-server:3001
+      - CATALOG_SERVER_URL=http://pezzottify-server:3001
       - LELLOAUTH_URL=http://lelloauth:8080
       - ANDROID_EMULATOR_HOSTS=android-emulator-1:5555,android-emulator-2:5555
       - PYTHONUNBUFFERED=1
@@ -177,12 +177,12 @@ Both web and Android clients authenticate via OIDC against the LelloAuth contain
 
 **Setup flow:**
 1. LelloAuth starts with a pre-configured client (`pezzottify-e2e`) and test users
-2. Catalog-server config points OIDC at `http://lelloauth:8080`
+2. Pezzottify-server config points OIDC at `http://lelloauth:8080`
 3. Web frontend is built with `VITE_OIDC_AUTHORITY=http://lelloauth:8080`
 4. Test users are created in LelloAuth (via its admin API or seed config)
-5. Catalog-server users are created via `cli-auth` in `setup-test-data.sh`
+5. Pezzottify-server users are created via `cli-auth` in `setup-test-data.sh`
 
-**Note:** The catalog-server supports password auth alongside OIDC (unless `disable_password_auth` is set). API-level test helpers can use password auth for convenience, while UI-level tests exercise the full OIDC flow.
+**Note:** The pezzottify-server supports password auth alongside OIDC (unless `disable_password_auth` is set). API-level test helpers can use password auth for convenience, while UI-level tests exercise the full OIDC flow.
 
 ---
 
@@ -190,12 +190,12 @@ Both web and Android clients authenticate via OIDC against the LelloAuth contain
 
 Test catalog and users are created using the server's own tooling, not raw SQL:
 
-1. **`setup-test-data.sh`** runs after catalog-server is healthy:
+1. **`setup-test-data.sh`** runs after pezzottify-server is healthy:
    - Uses `cli-auth` to create test users with known credentials
    - Uses the admin API (`/v1/admin/*`) to create test catalog entries (artists, albums, tracks)
    - Copies minimal test media files (embedded MP3/JPEG, same pattern as `run-integration-tests.sh`)
 
-2. **Constants** reuse IDs from `catalog-server/tests/common/constants.rs` where possible
+2. **Constants** reuse IDs from `pezzottify-server/tests/common/constants.rs` where possible
 
 This ensures test data stays valid across schema migrations.
 
@@ -323,7 +323,7 @@ async def wait_for_boot(self, timeout=120):
 
 ### Phase 1: Infrastructure
 1. Create directory structure
-2. Write `docker-compose.yml` with catalog-server + LelloAuth + test-runner
+2. Write `docker-compose.yml` with pezzottify-server + LelloAuth + test-runner
 3. Write `Dockerfile.test-runner` (Python + Playwright + ADB tools)
 4. Write `setup-test-data.sh` (create users and catalog via `cli-auth` + admin API)
 5. Write `conftest.py` skeleton with `config` and `catalog_api` fixtures
@@ -371,7 +371,7 @@ rich>=13.6.0
 - LelloAuth image (from external registry)
 - `budtmo/docker-android:emulator-33` — Android emulators
 - `python:3.11-slim` — Test runner base
-- Catalog-server built from existing `catalog-server/Dockerfile` (includes web frontend)
+- Pezzottify-server built from existing `pezzottify-server/Dockerfile` (includes web frontend)
 
 ---
 
@@ -396,8 +396,8 @@ cd "$E2E_DIR/docker"
 # Build and start services
 docker compose $PROFILE_ARGS up --build -d
 
-# Wait for catalog-server, then seed test data
-docker compose exec catalog-server /app/setup-test-data.sh
+# Wait for pezzottify-server, then seed test data
+docker compose exec pezzottify-server /app/setup-test-data.sh
 
 # Run tests
 docker compose $PROFILE_ARGS run --rm test-runner
@@ -423,7 +423,7 @@ INCLUDE_ANDROID=true ./e2e-tests/scripts/run-e2e.sh
 ## Notes
 
 - **Network:** All services share `e2e-net` bridge network, inter-service communication uses container names as hostnames
-- **OIDC redirect URIs:** LelloAuth must be configured with `http://catalog-server:3001/auth/callback` as an allowed redirect URI
+- **OIDC redirect URIs:** LelloAuth must be configured with `http://pezzottify-server:3001/auth/callback` as an allowed redirect URI
 - **Android emulator resources:** Each emulator needs ~2GB RAM and 2 CPU cores; requires KVM on the host
 - **No Docker-in-Docker:** Compose owns all container lifecycle; the test runner is a pure pytest process with no Docker SDK dependency
 - **Test data:** Created via server tooling (`cli-auth`, admin API), not raw SQL — survives schema migrations

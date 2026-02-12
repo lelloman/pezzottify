@@ -243,7 +243,7 @@ Note: Spotify popularity should exist for all imported items, so the "No Spotify
 
 ## Files to Modify
 
-### catalog-server
+### pezzottify-server
 
 1. **`src/search/fts5_levenshtein_search.rs`**
    - Add `item_impressions` table creation in `create_tables()`

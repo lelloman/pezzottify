@@ -41,7 +41,7 @@ class TestPlaylistWeb:
     async def test_playlist_visible_in_ui(self, web, config):
         from helpers.api_client import CatalogApiClient
 
-        api = CatalogApiClient(config.catalog_server_url)
+        api = CatalogApiClient(config.server_url)
         playlist_id = None
         try:
             await api.login(TEST_USER, TEST_PASS, device_uuid="playlist-test")

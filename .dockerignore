@@ -1,5 +1,5 @@
 # Rust build artifacts (can be 10+ GB)
-catalog-server/target/
+pezzottify-server/target/
 
 # Node modules (rebuilt in container)
 web/node_modules/

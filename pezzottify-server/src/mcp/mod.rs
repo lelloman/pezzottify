@@ -2,7 +2,7 @@
 //!
 //! Provides an MCP interface for LLM-based administration, debugging,
 //! and catalog management. Exposes tools and resources that LLM clients
-//! can use to interact with the catalog server.
+//! can use to interact with the server.
 //!
 //! ## Architecture
 //!

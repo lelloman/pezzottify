@@ -765,10 +765,10 @@ data class SimilarItem(
 >
 > Options:
 > - A) External service (Python with librosa, ML models, etc.)
-> - B) Built into catalog-server (Rust libraries)
+> - B) Built into pezzottify-server (Rust libraries)
 > - C) Separate microservice
 >
-> Current proposal: A) External service, catalog-server just stores/indexes
+> Current proposal: A) External service, pezzottify-server just stores/indexes
 
 > **Q5: How to handle missing fingerprints?**
 >

@@ -1,4 +1,4 @@
-//! Pezzottify Catalog Server Library
+//! Pezzottify Server Library
 //!
 //! This library exposes the internal modules for testing and potential reuse.
 

@@ -1,13 +1,13 @@
 """Creates a seeded catalog.db for E2E tests.
 
-Schema matches catalog-server/src/catalog_store/schema.rs at version 4.
-Data mirrors catalog-server/tests/common/fixtures.rs.
+Schema matches pezzottify-server/src/catalog_store/schema.rs at version 4.
+Data mirrors pezzottify-server/tests/common/fixtures.rs.
 """
 
 import sqlite3
 import sys
 
-# Constants matching catalog-server/tests/common/constants.rs
+# Constants matching pezzottify-server/tests/common/constants.rs
 ARTIST_1_ID = "test_artist_001"
 ARTIST_2_ID = "test_artist_002"
 ALBUM_1_ID = "test_album_001"

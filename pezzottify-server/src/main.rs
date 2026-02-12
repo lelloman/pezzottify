@@ -9,20 +9,20 @@ use tracing::{error, info, level_filters::LevelFilter};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 // Import modules from the library crate
-use pezzottify_catalog_server::background_jobs::jobs::{
+use pezzottify_server::background_jobs::jobs::{
     CatalogAvailabilityStatsJob, DevicePruningJob, IngestionCleanupJob, PopularContentJob,
     RelatedArtistsEnrichmentJob, WhatsNewBatchJob,
 };
-use pezzottify_catalog_server::background_jobs::{
+use pezzottify_server::background_jobs::{
     create_scheduler, GuardedSearchVault, JobContext,
 };
-use pezzottify_catalog_server::catalog_store::{CatalogStore, SqliteCatalogStore};
-use pezzottify_catalog_server::config;
-use pezzottify_catalog_server::ingestion::{IngestionStore, SqliteIngestionStore};
-use pezzottify_catalog_server::search::{Fts5LevenshteinSearchVault, NoopSearchVault};
-use pezzottify_catalog_server::server::{metrics, run_server, RequestsLoggingLevel};
-use pezzottify_catalog_server::server_store::{self, ServerStore, SqliteServerStore};
-use pezzottify_catalog_server::user::{self, SqliteUserStore, UserManager};
+use pezzottify_server::catalog_store::{CatalogStore, SqliteCatalogStore};
+use pezzottify_server::config;
+use pezzottify_server::ingestion::{IngestionStore, SqliteIngestionStore};
+use pezzottify_server::search::{Fts5LevenshteinSearchVault, NoopSearchVault};
+use pezzottify_server::server::{metrics, run_server, RequestsLoggingLevel};
+use pezzottify_server::server_store::{self, ServerStore, SqliteServerStore};
+use pezzottify_server::user::{self, SqliteUserStore, UserManager};
 
 fn parse_path(s: &str) -> Result<PathBuf, String> {
     let path_buf = PathBuf::from(s);
@@ -207,7 +207,7 @@ async fn main() -> Result<()> {
 
     // Create search vault early so it can be shared with job scheduler
     // Use lazy initialization for fast startup, then build index in background
-    let search_vault: Box<dyn pezzottify_catalog_server::search::SearchVault> =
+    let search_vault: Box<dyn pezzottify_server::search::SearchVault> =
         match app_config.search.engine.as_str() {
             "noop" => {
                 info!("Search disabled (noop engine)");

@@ -1,4 +1,4 @@
-FROM pezzottify-e2e-catalog-server:latest AS cli-source
+FROM pezzottify-e2e-pezzottify-server:latest AS cli-source
 
 FROM python:3.12-slim
 
@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy cli-auth binary from catalog-server image
+# Copy cli-auth binary from pezzottify-server image
 COPY --from=cli-source /usr/local/bin/cli-auth /usr/local/bin/cli-auth
 
 WORKDIR /seed

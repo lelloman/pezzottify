@@ -43,7 +43,7 @@ cd android
 ./run-integration-tests.sh         # Run integration tests (requires Docker)
 ```
 
-**Integration tests** are located in `remoteapi/src/integrationTest/` and test the remote API client against a real catalog-server instance. The `run-integration-tests.sh` script handles all setup (Docker container, test database, sample catalog) and cleanup automatically. Integration tests are kept separate from unit tests to maintain fast test execution with `./gradlew test`.
+**Integration tests** are located in `remoteapi/src/integrationTest/` and test the remote API client against a real pezzottify-server instance. The `run-integration-tests.sh` script handles all setup (Docker container, test database, sample catalog) and cleanup automatically. Integration tests are kept separate from unit tests to maintain fast test execution with `./gradlew test`.
 
 ### Running
 
@@ -444,9 +444,9 @@ fun MyScreen(viewModel: MyViewModel = hiltViewModel()) {
 
 ## Backend Connection
 
-The app requires the Pezzottify catalog server to be running:
+The app requires the Pezzottify server to be running:
 
-1. Start backend server (see main repository CLAUDE.md or catalog-server README)
+1. Start backend server (see main repository CLAUDE.md or pezzottify-server README)
 2. Default server URL: `http://10.0.2.2:3001` (Android emulator localhost)
 3. Configure server URL in app:
    - Via debug interface (debug builds only)
@@ -606,7 +606,7 @@ fun testScreen() {
 - Main repository CLAUDE.md (root level) for overall project guidance
 - README.md in this directory for project overview
 - TODO.md in root directory for known issues and future work
-- Catalog server documentation in `catalog-server/README.md`
+- Catalog server documentation in `pezzottify-server/README.md`
 
 ## Questions or Issues
 

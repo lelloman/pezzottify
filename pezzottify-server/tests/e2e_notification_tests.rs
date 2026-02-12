@@ -8,7 +8,7 @@
 mod common;
 
 use common::{TestClient, TestServer};
-use pezzottify_catalog_server::notifications::NotificationType;
+use pezzottify_server::notifications::NotificationType;
 use reqwest::StatusCode;
 
 #[tokio::test]
@@ -176,7 +176,7 @@ async fn test_notification_created_event_in_sync_events() {
     let initial_seq = state["seq"].as_i64().unwrap();
 
     // Create a notification and log the event
-    use pezzottify_catalog_server::user::sync_events::UserEvent;
+    use pezzottify_server::user::sync_events::UserEvent;
 
     let notification = server
         .user_store

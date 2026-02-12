@@ -2,7 +2,7 @@
 """
 Mock downloader service for integration tests.
 
-This provides a minimal implementation of the downloader API that the catalog-server
+This provides a minimal implementation of the downloader API that the pezzottify-server
 expects when the download manager feature is enabled.
 
 Endpoints:

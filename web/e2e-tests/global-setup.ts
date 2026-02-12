@@ -10,20 +10,20 @@ const WEB_URL = process.env.E2E_WEB_URL || 'http://localhost:5199';
 async function globalSetup() {
   console.log('Checking test environment...');
 
-  // Check if the catalog-server is running
+  // Check if the pezzottify-server is running
   try {
     const healthResponse = await fetch(`${SERVER_URL}/v1/health`);
     if (!healthResponse.ok) {
       throw new Error(`Server health check failed: ${healthResponse.status}`);
     }
-    console.log(`  Catalog server: OK (${SERVER_URL})`);
+    console.log(`  Pezzottify server: OK (${SERVER_URL})`);
   } catch (error) {
-    console.error(`\n  ERROR: Catalog server not running at ${SERVER_URL}`);
+    console.error(`\n  ERROR: Pezzottify server not running at ${SERVER_URL}`);
     console.error('  Please start the server with test fixtures before running E2E tests.');
     console.error('\n  Example:');
-    console.error('    cd catalog-server');
+    console.error('    cd pezzottify-server');
     console.error('    cargo run --features fast -- test.db user.db --media-path=../test-media --port=3099\n');
-    throw new Error('Catalog server not available');
+    throw new Error('Pezzottify server not available');
   }
 
   // Check if the web server is running
