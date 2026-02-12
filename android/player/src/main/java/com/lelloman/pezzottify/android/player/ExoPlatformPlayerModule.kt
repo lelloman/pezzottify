@@ -10,6 +10,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineScope
 import javax.inject.Singleton
 
 @InstallIn(SingletonComponent::class)
@@ -19,7 +20,8 @@ internal class ExoPlatformPlayerModule {
 
     @Provides
     @Singleton
-    fun providePlayerServiceEventsEmitter() = PlayerServiceEventsEmitter()
+    fun providePlayerServiceEventsEmitter(applicationScope: CoroutineScope) =
+        PlayerServiceEventsEmitter(applicationScope)
 
     @Provides
     @Singleton
@@ -27,5 +29,6 @@ internal class ExoPlatformPlayerModule {
         @ApplicationContext context: Context,
         playerServiceEventsEmitter: PlayerServiceEventsEmitter,
         loggerFactory: LoggerFactory,
-    ): PlatformPlayer = ExoPlatformPlayer(context, playerServiceEventsEmitter, loggerFactory)
+        applicationScope: CoroutineScope,
+    ): PlatformPlayer = ExoPlatformPlayer(context, playerServiceEventsEmitter, loggerFactory, applicationScope)
 }

@@ -13,9 +13,7 @@ import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
 import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylistStore
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,7 +25,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration.Companion.seconds
 
-@OptIn(DelicateCoroutinesApi::class)
 class PlayerImpl(
     private val staticsProvider: StaticsProvider,
     loggerFactory: LoggerFactory,
@@ -35,7 +32,7 @@ class PlayerImpl(
     private val configStore: ConfigStore,
     private val userPlaylistStore: UserPlaylistStore,
     private val playbackStateStore: PlaybackStateStore,
-    private val coroutineScope: CoroutineScope = GlobalScope,
+    private val coroutineScope: CoroutineScope,
 ) : PezzottifyPlayer, ControlsAndStatePlayer by platformPlayer {
 
     private val logger by loggerFactory

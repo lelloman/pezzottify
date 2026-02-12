@@ -68,6 +68,7 @@ class RemoteApiModule {
         sessionExpiredHandler: SessionExpiredHandler,
         tokenRefresher: TokenRefresher,
         loggerFactory: LoggerFactory,
+        applicationScope: CoroutineScope,
     ): RemoteApiClient {
         val httpLogger = loggerFactory.getLogger("HTTP")
         val sessionLogger = loggerFactory.getLogger("SessionExpired")
@@ -88,6 +89,7 @@ class RemoteApiModule {
                 HttpLoggingInterceptor(httpLogger),
             ),
             logger = apiLogger,
+            coroutineScope = applicationScope,
         )
     }
 }

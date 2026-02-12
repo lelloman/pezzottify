@@ -18,14 +18,13 @@ import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 @Singleton
-internal class StaticsSynchronizer(
+internal class StaticsSynchronizer @Inject constructor(
     private val fetchStateStore: StaticItemFetchStateStore,
     private val remoteApiClient: RemoteApiClient,
     private val staticsStore: StaticsStore,
@@ -41,25 +40,6 @@ internal class StaticsSynchronizer(
     minSleepDuration = MIN_SLEEP_DURATION,
     maxSleepDuration = MAX_SLEEP_DURATION,
 ) {
-
-    @Inject
-    constructor(
-        fetchStateStore: StaticItemFetchStateStore,
-        remoteApiClient: RemoteApiClient,
-        staticsStore: StaticsStore,
-        skeletonStore: SkeletonStore,
-        timeProvider: TimeProvider,
-        loggerFactory: LoggerFactory,
-    ) : this(
-        fetchStateStore,
-        remoteApiClient,
-        staticsStore,
-        skeletonStore,
-        timeProvider,
-        loggerFactory,
-        Dispatchers.IO,
-        GlobalScope
-    )
 
     override suspend fun onBeforeMainLoop() {
         fetchStateStore.resetLoadingStates()

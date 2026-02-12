@@ -17,9 +17,7 @@ import com.lelloman.pezzottify.android.domain.player.PlatformPlayer
 import com.lelloman.pezzottify.android.domain.player.RepeatMode
 import com.lelloman.pezzottify.android.domain.player.VolumeState
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -31,13 +29,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-@OptIn(DelicateCoroutinesApi::class)
 @UnstableApi
 internal class ExoPlatformPlayer(
     private val context: Context,
     playerServiceEventsEmitter: PlayerServiceEventsEmitter,
     loggerFactory: LoggerFactory,
-    private val coroutineScope: CoroutineScope = GlobalScope,
+    private val coroutineScope: CoroutineScope,
 ) : PlatformPlayer {
 
     private val logger: Logger by loggerFactory

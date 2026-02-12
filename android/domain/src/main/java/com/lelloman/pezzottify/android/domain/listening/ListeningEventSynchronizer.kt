@@ -9,7 +9,6 @@ import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -25,7 +24,7 @@ import kotlin.time.Duration.Companion.seconds
  * - Session ID deduplication handles retries
  */
 @Singleton
-class ListeningEventSynchronizer internal constructor(
+class ListeningEventSynchronizer @Inject constructor(
     private val listeningEventStore: ListeningEventStore,
     private val remoteApiClient: RemoteApiClient,
     private val timeProvider: TimeProvider,
@@ -39,21 +38,6 @@ class ListeningEventSynchronizer internal constructor(
     minSleepDuration = MIN_SLEEP_DURATION,
     maxSleepDuration = MAX_SLEEP_DURATION,
 ) {
-
-    @Inject
-    constructor(
-        listeningEventStore: ListeningEventStore,
-        remoteApiClient: RemoteApiClient,
-        timeProvider: TimeProvider,
-        loggerFactory: LoggerFactory,
-    ) : this(
-        listeningEventStore,
-        remoteApiClient,
-        timeProvider,
-        loggerFactory,
-        Dispatchers.IO,
-        GlobalScope,
-    )
 
     override suspend fun getItemsToProcess(): List<ListeningEvent> =
         listeningEventStore.getPendingSyncEvents()

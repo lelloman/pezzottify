@@ -8,7 +8,6 @@ import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -24,7 +23,7 @@ import kotlin.time.Duration.Companion.seconds
  * pending and are retried with exponential backoff.
  */
 @Singleton
-class UserSettingsSynchronizer internal constructor(
+class UserSettingsSynchronizer @Inject constructor(
     private val userSettingsStore: UserSettingsStore,
     private val remoteApiClient: RemoteApiClient,
     loggerFactory: LoggerFactory,
@@ -37,19 +36,6 @@ class UserSettingsSynchronizer internal constructor(
     minSleepDuration = MIN_SLEEP_DURATION,
     maxSleepDuration = MAX_SLEEP_DURATION,
 ) {
-
-    @Inject
-    constructor(
-        userSettingsStore: UserSettingsStore,
-        remoteApiClient: RemoteApiClient,
-        loggerFactory: LoggerFactory,
-    ) : this(
-        userSettingsStore,
-        remoteApiClient,
-        loggerFactory,
-        Dispatchers.IO,
-        GlobalScope
-    )
 
     override suspend fun getItemsToProcess(): List<SyncedUserSetting> {
         return userSettingsStore.getPendingSyncSettings().first()

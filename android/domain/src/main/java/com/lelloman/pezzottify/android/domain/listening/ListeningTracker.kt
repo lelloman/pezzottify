@@ -7,8 +7,6 @@ import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext
 import com.lelloman.pezzottify.android.domain.usercontent.SyncStatus
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
@@ -25,9 +23,8 @@ import javax.inject.Singleton
  * - Periodic save: Every 10 seconds, update DB record with current progress
  * - End: When track changes, playback stops, or after 5 minutes of inactivity
  */
-@OptIn(DelicateCoroutinesApi::class)
 @Singleton
-class ListeningTracker internal constructor(
+class ListeningTracker @Inject constructor(
     private val player: PezzottifyPlayer,
     private val listeningEventStore: ListeningEventStore,
     private val listeningEventSynchronizer: ListeningEventSynchronizer,
@@ -35,22 +32,6 @@ class ListeningTracker internal constructor(
     private val scope: CoroutineScope,
     loggerFactory: LoggerFactory,
 ) : AppInitializer {
-
-    @Inject
-    constructor(
-        player: PezzottifyPlayer,
-        listeningEventStore: ListeningEventStore,
-        listeningEventSynchronizer: ListeningEventSynchronizer,
-        timeProvider: TimeProvider,
-        loggerFactory: LoggerFactory,
-    ) : this(
-        player,
-        listeningEventStore,
-        listeningEventSynchronizer,
-        timeProvider,
-        GlobalScope,
-        loggerFactory,
-    )
 
     private val logger = loggerFactory.getLogger(ListeningTracker::class)
     private var currentSession: ActiveSession? = null

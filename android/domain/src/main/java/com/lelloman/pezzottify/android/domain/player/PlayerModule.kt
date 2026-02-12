@@ -15,6 +15,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineScope
 import javax.inject.Singleton
 
 @InstallIn(SingletonComponent::class)
@@ -30,6 +31,7 @@ class PlayerModule {
         configStore: ConfigStore,
         userPlaylistStore: UserPlaylistStore,
         playbackStateStore: PlaybackStateStore,
+        applicationScope: CoroutineScope,
     ): PlayerImpl = PlayerImpl(
         staticsProvider = staticsProvider,
         loggerFactory = loggerFactory,
@@ -37,6 +39,7 @@ class PlayerModule {
         configStore = configStore,
         userPlaylistStore = userPlaylistStore,
         playbackStateStore = playbackStateStore,
+        coroutineScope = applicationScope,
     )
 
     @Provides
