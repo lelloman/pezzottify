@@ -112,6 +112,29 @@ pub trait CatalogStore: Send + Sync {
     /// Get the number of tracks in the catalog.
     fn get_tracks_count(&self) -> usize;
 
+    /// Reconcile availability with filesystem truth and return aggregate stats.
+    ///
+    /// Implementations should:
+    /// - verify track availability from audio file presence
+    /// - recompute album availability from tracks
+    /// - recompute artist availability from credited available tracks
+    fn refresh_availability_and_stats(&self) -> Result<super::AvailabilityRefreshResult> {
+        Err(anyhow::anyhow!(
+            "refresh_availability_and_stats not supported by this catalog store"
+        ))
+    }
+
+    /// Cancellable variant of availability refresh.
+    ///
+    /// Implementations should periodically check `is_cancelled` during long loops
+    /// and abort early when it returns true.
+    fn refresh_availability_and_stats_with_cancel(
+        &self,
+        _is_cancelled: &(dyn Fn() -> bool + Send + Sync),
+    ) -> Result<super::AvailabilityRefreshResult> {
+        self.refresh_availability_and_stats()
+    }
+
     // =========================================================================
     // Search Support
     // =========================================================================

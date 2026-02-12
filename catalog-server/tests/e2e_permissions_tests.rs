@@ -23,6 +23,15 @@ async fn test_unauthenticated_cannot_access_catalog() {
 }
 
 #[tokio::test]
+async fn test_unauthenticated_cannot_access_catalog_stats() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::new(server.base_url.clone());
+
+    let response = client.get_catalog_stats().await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
 async fn test_unauthenticated_cannot_stream() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -73,6 +82,19 @@ async fn test_regular_user_can_access_catalog() {
 
     let response = client.get_artist(ARTIST_1_ID).await;
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_regular_user_can_access_catalog_stats() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    let response = client.get_catalog_stats().await;
+    assert!(
+        response.status() == StatusCode::OK || response.status() == StatusCode::SERVICE_UNAVAILABLE,
+        "Expected OK or SERVICE_UNAVAILABLE, got {}",
+        response.status()
+    );
 }
 
 #[tokio::test]

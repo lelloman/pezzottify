@@ -1,4 +1,5 @@
 use anyhow::Result;
+use chrono::{Duration as ChronoDuration, Utc};
 use clap::Parser;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -9,8 +10,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 
 // Import modules from the library crate
 use pezzottify_catalog_server::background_jobs::jobs::{
-    DevicePruningJob, IngestionCleanupJob, PopularContentJob, RelatedArtistsEnrichmentJob,
-    WhatsNewBatchJob,
+    CatalogAvailabilityStatsJob, DevicePruningJob, IngestionCleanupJob, PopularContentJob,
+    RelatedArtistsEnrichmentJob, WhatsNewBatchJob,
 };
 use pezzottify_catalog_server::background_jobs::{
     create_scheduler, GuardedSearchVault, JobContext,
@@ -20,7 +21,7 @@ use pezzottify_catalog_server::config;
 use pezzottify_catalog_server::ingestion::{IngestionStore, SqliteIngestionStore};
 use pezzottify_catalog_server::search::{Fts5LevenshteinSearchVault, NoopSearchVault};
 use pezzottify_catalog_server::server::{metrics, run_server, RequestsLoggingLevel};
-use pezzottify_catalog_server::server_store::{self, SqliteServerStore};
+use pezzottify_catalog_server::server_store::{self, ServerStore, SqliteServerStore};
 use pezzottify_catalog_server::user::{self, SqliteUserStore, UserManager};
 
 fn parse_path(s: &str) -> Result<PathBuf, String> {
@@ -261,6 +262,11 @@ async fn main() -> Result<()> {
         )))
         .await;
     scheduler
+        .register_job(Arc::new(CatalogAvailabilityStatsJob::from_settings(
+            &app_config.background_jobs.catalog_availability_stats,
+        )))
+        .await;
+    scheduler
         .register_job(Arc::new(WhatsNewBatchJob::from_settings(
             &app_config.background_jobs.whatsnew_batch,
         )))
@@ -310,6 +316,26 @@ async fn main() -> Result<()> {
                 error!("Failed to create related artists enrichment job: {}", e);
             }
         }
+    }
+
+    // Delay the first catalog availability stats run after each startup.
+    // This avoids expensive filesystem scans during initial server warm-up.
+    let first_stats_run_at = Utc::now()
+        + ChronoDuration::minutes(
+            app_config
+                .background_jobs
+                .catalog_availability_stats
+                .startup_delay_minutes as i64,
+        );
+    if let Err(e) = server_store.update_schedule_state(&server_store::JobScheduleState {
+        job_id: "catalog_availability_stats".to_string(),
+        next_run_at: first_stats_run_at,
+        last_run_at: None,
+    }) {
+        error!(
+            "Failed to set initial schedule for catalog availability stats job: {}",
+            e
+        );
     }
 
     info!(

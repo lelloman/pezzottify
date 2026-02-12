@@ -2,9 +2,9 @@ mod file_config;
 
 pub use file_config::{
     AgentConfig, AgentLlmConfig, AuditLogCleanupJobConfig, BackgroundJobsConfig,
-    CatalogStoreConfig, DevicePruningJobConfig, DownloadManagerConfig, FileConfig,
-    IngestionCleanupJobConfig, IngestionConfig, IntervalJobConfig, OidcConfig,
-    PopularContentJobConfig, RelatedArtistsConfig, SearchConfig,
+    CatalogAvailabilityStatsJobConfig, CatalogStoreConfig, DevicePruningJobConfig,
+    DownloadManagerConfig, FileConfig, IngestionCleanupJobConfig, IngestionConfig,
+    IntervalJobConfig, OidcConfig, PopularContentJobConfig, RelatedArtistsConfig, SearchConfig,
     StreamingSearchConfig as StreamingSearchFileConfig,
 };
 
@@ -217,6 +217,18 @@ impl AppConfig {
                 .unwrap_or(bg_jobs_defaults.popular_content.impression_retention_days),
         };
 
+        let cas_file = bg_jobs_file.catalog_availability_stats.unwrap_or_default();
+        let catalog_availability_stats = CatalogAvailabilityStatsJobSettings {
+            interval_hours: cas_file
+                .interval_hours
+                .unwrap_or(bg_jobs_defaults.catalog_availability_stats.interval_hours),
+            startup_delay_minutes: cas_file.startup_delay_minutes.unwrap_or(
+                bg_jobs_defaults
+                    .catalog_availability_stats
+                    .startup_delay_minutes,
+            ),
+        };
+
         // What's new batch job settings
         let wn_file = bg_jobs_file.whatsnew_batch.unwrap_or_default();
         let whatsnew_batch = IntervalJobSettings {
@@ -257,6 +269,7 @@ impl AppConfig {
 
         let background_jobs = BackgroundJobsSettings {
             popular_content,
+            catalog_availability_stats,
             whatsnew_batch,
             ingestion_cleanup,
             audit_log_cleanup,
@@ -474,6 +487,7 @@ impl Default for DownloadManagerSettings {
 #[derive(Debug, Clone, Default)]
 pub struct BackgroundJobsSettings {
     pub popular_content: PopularContentJobSettings,
+    pub catalog_availability_stats: CatalogAvailabilityStatsJobSettings,
     pub whatsnew_batch: IntervalJobSettings,
     pub ingestion_cleanup: Option<IngestionCleanupJobSettings>,
     pub audit_log_cleanup: Option<AuditLogCleanupJobSettings>,
@@ -500,6 +514,22 @@ impl Default for PopularContentJobSettings {
             lookback_days: 30,
             impression_lookback_days: 365,
             impression_retention_days: 365,
+        }
+    }
+}
+
+/// Settings for catalog availability stats job
+#[derive(Debug, Clone)]
+pub struct CatalogAvailabilityStatsJobSettings {
+    pub interval_hours: u64,
+    pub startup_delay_minutes: u64,
+}
+
+impl Default for CatalogAvailabilityStatsJobSettings {
+    fn default() -> Self {
+        Self {
+            interval_hours: 6,
+            startup_delay_minutes: 60,
         }
     }
 }

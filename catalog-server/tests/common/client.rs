@@ -221,6 +221,15 @@ impl TestClient {
             .expect("Get image request failed")
     }
 
+    /// GET /v1/content/catalog/stats - Catalog availability stats snapshot
+    pub async fn get_catalog_stats(&self) -> Response {
+        self.client
+            .get(format!("{}/v1/content/catalog/stats", self.base_url))
+            .send()
+            .await
+            .expect("Get catalog stats request failed")
+    }
+
     // ========================================================================
     // Streaming Endpoints
     // ========================================================================
