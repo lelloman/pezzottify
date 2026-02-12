@@ -13,9 +13,7 @@ use pezzottify_server::background_jobs::jobs::{
     CatalogAvailabilityStatsJob, DevicePruningJob, IngestionCleanupJob, PopularContentJob,
     RelatedArtistsEnrichmentJob, WhatsNewBatchJob,
 };
-use pezzottify_server::background_jobs::{
-    create_scheduler, GuardedSearchVault, JobContext,
-};
+use pezzottify_server::background_jobs::{create_scheduler, GuardedSearchVault, JobContext};
 use pezzottify_server::catalog_store::{CatalogStore, SqliteCatalogStore};
 use pezzottify_server::config;
 use pezzottify_server::ingestion::{IngestionStore, SqliteIngestionStore};
