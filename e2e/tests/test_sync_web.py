@@ -29,7 +29,7 @@ class TestFreshLoginFullSync:
     async def test_liked_content_visible_after_login(self, web, config):
         """After liking content via API, a fresh login shows it."""
         # Like a track via a separate API session
-        api = CatalogApiClient(config.catalog_server_url)
+        api = CatalogApiClient(config.server_url)
         try:
             await api.login(TEST_USER, TEST_PASS, device_uuid="sync-setup-1")
             await api.like_content("track", TRACK_1_ID)
@@ -54,7 +54,7 @@ class TestFreshLoginFullSync:
 
     async def test_playlists_visible_after_login(self, web, config):
         """After creating a playlist via API, a fresh login shows it."""
-        api = CatalogApiClient(config.catalog_server_url)
+        api = CatalogApiClient(config.server_url)
         playlist_id = None
         try:
             await api.login(TEST_USER, TEST_PASS, device_uuid="sync-setup-2")
@@ -84,7 +84,7 @@ class TestPageRefreshCatchUp:
         await web.page.wait_for_timeout(2000)
 
         # Make changes via API (simulating another device)
-        api = CatalogApiClient(config.catalog_server_url)
+        api = CatalogApiClient(config.server_url)
         try:
             await api.login(TEST_USER, TEST_PASS, device_uuid="background-device")
             await api.like_content("track", TRACK_2_ID)
@@ -118,7 +118,7 @@ class TestTwoTabsRealtimeSync:
         await client2.page.wait_for_timeout(2000)
 
         # Like content via API (third "device")
-        api = CatalogApiClient(config.catalog_server_url)
+        api = CatalogApiClient(config.server_url)
         try:
             await api.login(TEST_USER, TEST_PASS, device_uuid="api-device")
             await api.like_content("track", TRACK_3_ID)
@@ -148,7 +148,7 @@ class TestOfflineReconnect:
         await web.context.set_offline(True)
 
         # Make changes via API while browser is offline
-        api = CatalogApiClient(config.catalog_server_url)
+        api = CatalogApiClient(config.server_url)
         try:
             await api.login(TEST_USER, TEST_PASS, device_uuid="offline-device")
             await api.like_content("track", TRACK_4_ID)

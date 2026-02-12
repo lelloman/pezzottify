@@ -1,6 +1,6 @@
 """Shared constants for E2E tests.
 
-Values match catalog-server/tests/common/constants.rs
+Values match pezzottify-server/tests/common/constants.rs
 and seed/seed_catalog.py.
 """
 

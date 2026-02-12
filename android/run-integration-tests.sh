@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # Script to run integration tests for the Android remoteapi module
-# This script sets up a test catalog-server instance with Docker and runs integration tests
+# This script sets up a test pezzottify-server instance with Docker and runs integration tests
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-CATALOG_SERVER_DIR="$PROJECT_ROOT/catalog-server"
+PEZZOTTIFY_SERVER_DIR="$PROJECT_ROOT/pezzottify-server"
 
 # Test data directories - use timestamp to avoid Docker caching issues
 TEST_DATA_DIR="$HOME/.pezzottify-integration-test-$(date +%s)"
@@ -17,7 +17,7 @@ TEST_CATALOG_DB="$TEST_DB_DIR/catalog.db"
 TEST_USER_DB="$TEST_DB_DIR/user.db"
 
 # Docker configuration
-DOCKER_IMAGE="pezzottify-catalog-server"
+DOCKER_IMAGE="pezzottify-server"
 CONTAINER_NAME="pezzottify-integration-test"
 
 # Mock downloader configuration
@@ -54,7 +54,7 @@ sqlite3 "$TEST_CATALOG_DB" << 'EOSQL'
 -- Enable foreign keys
 PRAGMA foreign_keys = ON;
 
--- Create schema (matching catalog-server schema v0)
+-- Create schema (matching pezzottify-server schema v0)
 -- Uses rowid-based schema with Spotify-style IDs
 
 CREATE TABLE artists (
@@ -197,11 +197,11 @@ echo "✅ Catalog database created with test data"
 echo "🐳 Building Docker image..."
 cd "$PROJECT_ROOT"
 
-# Get the latest commit hash of catalog-server
-LATEST_COMMIT=$(git log -1 --format=%H -- catalog-server/)
+# Get the latest commit hash of pezzottify-server
+LATEST_COMMIT=$(git log -1 --format=%H -- pezzottify-server/)
 
 # Check if image exists and has the correct commit label
-EXISTING_COMMIT=$(docker image inspect "$DOCKER_IMAGE" --format '{{index .Config.Labels "catalog-server.commit"}}' 2>/dev/null || echo "")
+EXISTING_COMMIT=$(docker image inspect "$DOCKER_IMAGE" --format '{{index .Config.Labels "pezzottify-server.commit"}}' 2>/dev/null || echo "")
 
 if [ "$EXISTING_COMMIT" = "$LATEST_COMMIT" ]; then
     echo "Docker image $DOCKER_IMAGE is up to date (commit: ${LATEST_COMMIT:0:8})"
@@ -214,12 +214,12 @@ else
     else
         echo "Building $DOCKER_IMAGE..."
     fi
-    docker build -t "$DOCKER_IMAGE" --label "catalog-server.commit=$LATEST_COMMIT" -f catalog-server/Dockerfile .
+    docker build -t "$DOCKER_IMAGE" --label "pezzottify-server.commit=$LATEST_COMMIT" -f pezzottify-server/Dockerfile .
 fi
 
 # Create test user database
 echo "💾 Creating test user database..."
-cd "$CATALOG_SERVER_DIR"
+cd "$PEZZOTTIFY_SERVER_DIR"
 cargo build --release --bin cli-auth 2>&1 | grep -E "(Compiling|Finished|error)" || true
 
 # Use cli-auth to create the test user with both Admin and Regular roles
@@ -259,9 +259,9 @@ if ! curl -s -f "http://localhost:$MOCK_DOWNLOADER_PORT/health" &> /dev/null; th
 fi
 echo "✅ Mock downloader is ready!"
 
-# Start catalog-server container with downloader URL
+# Start pezzottify-server container with downloader URL
 # The container runs on the host network to access the mock downloader
-echo "🚀 Starting catalog-server container..."
+echo "🚀 Starting pezzottify-server container..."
 docker run -d \
     --name "$CONTAINER_NAME" \
     --network host \
@@ -269,7 +269,7 @@ docker run -d \
     -v "$TEST_MEDIA_DIR:/data/media" \
     -e RUST_LOG=info \
     "$DOCKER_IMAGE" \
-    catalog-server \
+    pezzottify-server \
     --db-dir /data/db \
     --media-path /data/media \
     --port 3002 \
@@ -278,7 +278,7 @@ docker run -d \
     --downloader-url "http://localhost:$MOCK_DOWNLOADER_PORT"
 
 # Wait for server to be ready
-echo "⏳ Waiting for catalog-server to be ready..."
+echo "⏳ Waiting for pezzottify-server to be ready..."
 for i in {1..30}; do
     if curl -s -f http://localhost:3002/ &> /dev/null; then
         echo "✅ Server is ready!"

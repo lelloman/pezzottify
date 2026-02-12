@@ -11,6 +11,6 @@ event_retention_days = 30
 provider_url = "http://mock-oidc:8080"
 client_id = "pezzottify-e2e"
 client_secret = "e2e-secret"
-redirect_uri = "http://catalog-server:3001/v1/auth/callback"
+redirect_uri = "http://pezzottify-server:3001/v1/auth/callback"
 scopes = ["openid", "profile", "email"]
 disable_password_auth = false

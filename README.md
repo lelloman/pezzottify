@@ -6,7 +6,7 @@ A self-hosted music streaming platform with a Rust backend, Vue 3 web frontend, 
 
 | Component          | Description        | Tech Stack              |
 | ------------------ | ------------------ | ----------------------- |
-| **catalog-server** | Backend API server | Rust, Axum, SQLite      |
+| **pezzottify-server** | Backend API server | Rust, Axum, SQLite      |
 | **web**            | Web frontend       | Vue 3, Vite, Pinia      |
 | **android**        | Mobile app         | Kotlin, Jetpack Compose |
 
@@ -28,7 +28,7 @@ cd pezzottify
 mkdir -p dev-data
 
 # Create config from example
-cp catalog-server/config.example.toml catalog-server/config.toml
+cp pezzottify-server/config.example.toml pezzottify-server/config.toml
 # Edit config.toml as needed
 
 # Build and start
@@ -43,7 +43,7 @@ The server will be available at http://localhost:3001
 
 See component-specific READMEs:
 
-- [catalog-server/README.md](catalog-server/README.md) - Backend server
+- [pezzottify-server/README.md](pezzottify-server/README.md) - Backend server
 - [web/README.md](web/README.md) - Web frontend
 - [android/README.md](android/README.md) - Android app
 
@@ -59,7 +59,7 @@ See component-specific READMEs:
                  │ HTTP/WebSocket
                  ▼
         ┌────────────────┐
-        │ Catalog Server │
+        │   Pezzottify   │
         │     (Rust)     │
         └───────┬────────┘
                 │
@@ -250,7 +250,7 @@ The server exposes a REST API over HTTP with WebSocket support for real-time syn
 - **Rate limiting**: Per-endpoint limits to prevent abuse
 - **HTTP caching**: Configurable cache headers for static content
 
-For detailed endpoint documentation, see [catalog-server/README.md](catalog-server/README.md#api-endpoints).
+For detailed endpoint documentation, see [pezzottify-server/README.md](pezzottify-server/README.md#api-endpoints).
 
 ## Monitoring
 
@@ -268,7 +268,7 @@ For the full monitoring stack (Prometheus, Grafana, Alertmanager), see the [home
 
 ```
 pezzottify/
-├── catalog-server/     # Rust backend
+├── pezzottify-server/  # Rust backend
 ├── web/                # Vue 3 frontend
 ├── android/            # Kotlin/Android app
 └── docker-compose.yml  # Development docker-compose

@@ -5,19 +5,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 Pezzottify is a music streaming platform with three main components:
-- **catalog-server**: Rust backend server that manages music catalog, authentication, and streaming
+- **pezzottify-server**: Rust backend server that manages music catalog, authentication, and streaming
 - **web**: Vue 3 frontend web application
 - **android**: Kotlin/Android mobile application
 
 ## Development Commands
 
-### Catalog Server (Rust)
+### Pezzottify Server (Rust)
 
-The catalog server uses a SQLite database for catalog metadata and a media directory for audio files and images.
+The pezzottify server uses a SQLite database for catalog metadata and a media directory for audio files and images.
 
 **Running the server:**
 ```bash
-cd catalog-server
+cd pezzottify-server
 # Using config file (recommended):
 cargo run -- --config ./config.toml
 
@@ -50,13 +50,13 @@ cargo run -- --db-dir ../../pezzottify-catalog --media-path=../../pezzottify-cat
 
 **Running tests:**
 ```bash
-cd catalog-server
+cd pezzottify-server
 cargo test
 ```
 
 **Running specific test:**
 ```bash
-cd catalog-server
+cd pezzottify-server
 cargo test <test_name>
 ```
 
@@ -65,8 +65,8 @@ cargo test <test_name>
 
 **Docker build:**
 ```bash
-./build-docker.sh catalog-server        # Build and start with correct version info
-./build-docker.sh -d catalog-server     # Detached mode
+./build-docker.sh pezzottify-server        # Build and start with correct version info
+./build-docker.sh -d pezzottify-server     # Detached mode
 ```
 
 The wrapper script detects git hash and dirty state on the host and passes them to Docker. This is necessary because Docker builds don't have access to the full git repo.
@@ -97,13 +97,13 @@ The Android project uses a multi-module Gradle setup with modules: `app`, `ui`, 
 
 **Integration tests:**
 - Located in `remoteapi/src/integrationTest/`
-- Require Docker to run (spins up test catalog-server instance)
+- Require Docker to run (spins up test pezzottify-server instance)
 - Run via `./run-integration-tests.sh` script
 - Not included in `./gradlew test` to keep unit tests fast
 
 ## Architecture
 
-### Catalog Server Architecture
+### Pezzottify Server Architecture
 
 **Core modules:**
 - `catalog_store/`: SQLite-backed catalog management
@@ -292,7 +292,7 @@ Multi-module Gradle project with clean architecture layers:
 
 ## Important Implementation Notes
 
-### Catalog Server
+### Pezzottify Server
 
 **User permissions system:**
 - Permissions are checked via middleware functions in server.rs
@@ -341,7 +341,7 @@ Multi-module Gradle project with clean architecture layers:
 
 See TODO.md for comprehensive list. Key items:
 
-**catalog-server:**
+**pezzottify-server:**
 - Display image references in artist/album/track models
 
 **web:**

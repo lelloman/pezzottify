@@ -363,7 +363,7 @@ impl<'a> StreamingSearchPipeline<'a> {
 mod tests {
     use super::*;
 
-    // Note: Integration tests are in catalog-server/tests/e2e_search_tests.rs
+    // Note: Integration tests are in pezzottify-server/tests/e2e_search_tests.rs
     // These are basic unit tests for the pipeline structure.
 
     #[test]

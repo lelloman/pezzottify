@@ -4,7 +4,7 @@ import { defineConfig, devices } from '@playwright/test';
  * Playwright configuration for E2E sync tests.
  *
  * Before running tests, you need to:
- * 1. Start the catalog-server on port 3099 (or set E2E_SERVER_URL)
+ * 1. Start the pezzottify-server on port 3099 (or set E2E_SERVER_URL)
  * 2. Start the web dev server on port 5199 (or set E2E_WEB_URL)
  *
  * The servers should have a test user:

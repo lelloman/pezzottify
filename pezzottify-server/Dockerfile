@@ -31,10 +31,10 @@ ARG COMMIT_COUNT=0
 
 WORKDIR /app
 
-COPY catalog-server/ catalog-server/
+COPY pezzottify-server/ pezzottify-server/
 COPY VERSION VERSION
 
-WORKDIR /app/catalog-server
+WORKDIR /app/pezzottify-server
 
 # Build with version info from build args
 RUN GIT_HASH="$GIT_HASH" GIT_DIRTY="$GIT_DIRTY" COMMIT_COUNT="$COMMIT_COUNT" cargo build --release
@@ -54,8 +54,8 @@ RUN apt-get update && apt-get install -y libsqlite3-dev ffmpeg ca-certificates &
 WORKDIR /app
 
 # Copy the binaries from the builder stage
-COPY --from=rust-builder /app/catalog-server/target/release/cli-auth /usr/local/bin/cli-auth
-COPY --from=rust-builder /app/catalog-server/target/release/catalog-server /usr/local/bin/catalog-server
+COPY --from=rust-builder /app/pezzottify-server/target/release/cli-auth /usr/local/bin/cli-auth
+COPY --from=rust-builder /app/pezzottify-server/target/release/pezzottify-server /usr/local/bin/pezzottify-server
 
 # Copy the web frontend from the web builder stage
 COPY --from=web-builder /web/dist /app/web
@@ -71,11 +71,11 @@ EXPOSE 9091
 # Args: --db-dir <path> [--media-path <path>] [options]
 # Optional: --downloader-url <URL> --downloader-timeout-sec <SECONDS>
 #   Enables on-demand content fetching from an external downloader service
-CMD ["catalog-server", "--db-dir", "/data/db", "--media-path", "/data/media", "--content-cache-age-sec=60", "--logging-level", "path", "--frontend-dir-path", "/app/web"]
+CMD ["pezzottify-server", "--db-dir", "/data/db", "--media-path", "/data/media", "--content-cache-age-sec=60", "--logging-level", "path", "--frontend-dir-path", "/app/web"]
 
-# NOTE: Build context must be the repository root (not catalog-server/)
+# NOTE: Build context must be the repository root (not pezzottify-server/)
 # Build with (from repo root):
-#   ./build-docker.sh catalog-server
+#   ./build-docker.sh pezzottify-server
 # Or manually:
 #   GIT_HASH=$(git rev-parse --short HEAD) GIT_DIRTY=$(git status --porcelain | grep -q . && echo 1 || echo 0) \
-#   docker compose up --build catalog-server
+#   docker compose up --build pezzottify-server

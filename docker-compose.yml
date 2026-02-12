@@ -1,10 +1,10 @@
 # Development docker-compose
 
 services:
-  catalog-server:
+  pezzottify-server:
     build:
       context: .
-      dockerfile: catalog-server/Dockerfile
+      dockerfile: pezzottify-server/Dockerfile
       args:
         GIT_HASH: ${GIT_HASH:-unknown}
         GIT_DIRTY: ${GIT_DIRTY:-0}
@@ -14,7 +14,7 @@ services:
     volumes:
       - ./dev-data:/data/db
       - ./dev-data:/data/media
-      - ./catalog-server/config.toml:/etc/pezzottify/config.toml:ro
+      - ./pezzottify-server/config.toml:/etc/pezzottify/config.toml:ro
     environment:
       - LOG_LEVEL=debug
-    command: ["catalog-server", "--config", "/etc/pezzottify/config.toml"]
+    command: ["pezzottify-server", "--config", "/etc/pezzottify/config.toml"]

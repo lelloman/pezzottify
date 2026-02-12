@@ -7,9 +7,9 @@ use std::{path::PathBuf, sync::Arc};
 mod cli_style;
 
 // Import from the library crate
-use pezzottify_catalog_server::catalog_store::NullCatalogStore;
-use pezzottify_catalog_server::config;
-use pezzottify_catalog_server::user::{SqliteUserStore, UserManager};
+use pezzottify_server::catalog_store::NullCatalogStore;
+use pezzottify_server::config;
+use pezzottify_server::user::{SqliteUserStore, UserManager};
 
 use cli_style::{
     box_chars, colors, get_prompt, get_styles, print_command_echo, print_empty_list, print_error,
@@ -482,7 +482,7 @@ fn execute_command(
                     }
                 },
                 InnerCommand::ListRoles => {
-                    use pezzottify_catalog_server::user::UserRole;
+                    use pezzottify_server::user::UserRole;
 
                     print_section_header("Available Roles");
                     println!();
@@ -508,8 +508,8 @@ fn execute_command(
                     print_section_footer();
                 }
                 InnerCommand::AddRole { user_handle, role } => {
-                    use pezzottify_catalog_server::user::sync_events::UserEvent;
-                    use pezzottify_catalog_server::user::UserRole;
+                    use pezzottify_server::user::sync_events::UserEvent;
+                    use pezzottify_server::user::UserRole;
                     let role_enum = match UserRole::from_str(&role) {
                         Some(r) => r,
                         None => {
@@ -555,8 +555,8 @@ fn execute_command(
                     ));
                 }
                 InnerCommand::RemoveRole { user_handle, role } => {
-                    use pezzottify_catalog_server::user::sync_events::UserEvent;
-                    use pezzottify_catalog_server::user::UserRole;
+                    use pezzottify_server::user::sync_events::UserEvent;
+                    use pezzottify_server::user::UserRole;
                     let role_enum = match UserRole::from_str(&role) {
                         Some(r) => r,
                         None => {

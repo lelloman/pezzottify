@@ -1,5 +1,5 @@
 services:
-  catalog-server-init:
+  pezzottify-server-init:
     build:
       context: .
       dockerfile: Dockerfile.seed
@@ -26,11 +26,11 @@ services:
     networks:
       - e2e-net
 
-  catalog-server:
-    image: pezzottify-e2e-catalog-server:latest
+  pezzottify-server:
+    image: pezzottify-e2e-server:latest
     build:
       context: ..
-      dockerfile: catalog-server/Dockerfile
+      dockerfile: pezzottify-server/Dockerfile
       args:
         VITE_OIDC_AUTHORITY: http://mock-oidc:8080
         VITE_OIDC_CLIENT_ID: pezzottify-e2e
@@ -38,7 +38,7 @@ services:
       - catalog-data:/data
       - ./config.toml:/app/config.toml:ro
     command:
-      - catalog-server
+      - pezzottify-server
       - --config
       - /app/config.toml
     healthcheck:
@@ -47,7 +47,7 @@ services:
       timeout: 5s
       retries: 30
     depends_on:
-      catalog-server-init:
+      pezzottify-server-init:
         condition: service_completed_successfully
       mock-oidc:
         condition: service_healthy
@@ -63,11 +63,11 @@ services:
       - test-results:/test-results
     working_dir: /e2e
     environment:
-      - CATALOG_SERVER_URL=http://catalog-server:3001
+      - PEZZOTTIFY_SERVER_URL=http://pezzottify-server:3001
       - OIDC_URL=http://mock-oidc:8080
       - ANDROID_HOSTS=
     depends_on:
-      catalog-server:
+      pezzottify-server:
         condition: service_healthy
     networks:
       - e2e-net

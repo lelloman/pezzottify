@@ -107,7 +107,7 @@ async def clean_user_state(config: E2EConfig):
 
     from helpers.api_client import CatalogApiClient
 
-    cleanup_api = CatalogApiClient(config.catalog_server_url)
+    cleanup_api = CatalogApiClient(config.server_url)
     try:
         await cleanup_api.login(
             config.test_user, config.test_pass, device_uuid="cleanup-fixture"

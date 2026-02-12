@@ -15,7 +15,7 @@ def config() -> E2EConfig:
 async def admin_api(config: E2EConfig):
     from helpers.api_client import CatalogApiClient
 
-    client = CatalogApiClient(config.catalog_server_url)
+    client = CatalogApiClient(config.server_url)
     await client.login(config.admin_user, config.admin_pass)
     yield client
     await client.close()
@@ -25,7 +25,7 @@ async def admin_api(config: E2EConfig):
 async def user_api(config: E2EConfig):
     from helpers.api_client import CatalogApiClient
 
-    client = CatalogApiClient(config.catalog_server_url)
+    client = CatalogApiClient(config.server_url)
     await client.login(config.test_user, config.test_pass)
     yield client
     await client.close()

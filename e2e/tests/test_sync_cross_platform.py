@@ -22,7 +22,7 @@ class TestCrossPlatformSync:
         await android.login_password(TEST_USER, TEST_PASS)
 
         # Like via API (simulates web action)
-        api = CatalogApiClient(config.catalog_server_url)
+        api = CatalogApiClient(config.server_url)
         try:
             await api.login(TEST_USER, TEST_PASS, device_uuid="cross-platform-web")
             await api.like_content("track", TRACK_1_ID)
@@ -38,8 +38,8 @@ class TestCrossPlatformSync:
 
     async def test_api_sync_state_consistency(self, config):
         """Multiple API clients for the same user see consistent sync state."""
-        api1 = CatalogApiClient(config.catalog_server_url)
-        api2 = CatalogApiClient(config.catalog_server_url)
+        api1 = CatalogApiClient(config.server_url)
+        api2 = CatalogApiClient(config.server_url)
         try:
             await api1.login(TEST_USER, TEST_PASS, device_uuid="sync-api-1")
             await api2.login(TEST_USER, TEST_PASS, device_uuid="sync-api-2")

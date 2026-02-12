@@ -1,6 +1,6 @@
 # End-to-End HTTP Tests
 
-This directory contains end-to-end integration tests for the catalog-server. These tests spawn a real HTTP server, make actual HTTP requests, and verify the complete request/response cycle.
+This directory contains end-to-end integration tests for the pezzottify-server. These tests spawn a real HTTP server, make actual HTTP requests, and verify the complete request/response cycle.
 
 ## Overview
 
@@ -332,8 +332,8 @@ pub const ARTIST_3_ID: &str = "artist-3";
 ### Port Already in Use
 
 Tests use random ports (bind to `0.0.0.0:0`), so this shouldn't happen. If it does:
-- Check for orphaned test processes: `ps aux | grep catalog-server`
-- Kill them: `pkill -f catalog-server`
+- Check for orphaned test processes: `ps aux | grep pezzottify-server`
+- Kill them: `pkill -f pezzottify-server`
 
 ### Tests Fail After Server Changes
 
@@ -346,7 +346,7 @@ Tests use random ports (bind to `0.0.0.0:0`), so this shouldn't happen. If it do
 
 Regenerate fixtures:
 ```bash
-cd catalog-server/tests/fixtures
+cd pezzottify-server/tests/fixtures
 
 # Generate test audio (requires ffmpeg)
 ffmpeg -f lavfi -i anullsrc=r=44100:cl=stereo -t 2 -q:a 9 \

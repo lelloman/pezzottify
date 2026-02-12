@@ -1,4 +1,4 @@
-# Pezzottify Catalog Server
+# Pezzottify Server
 
 A high-performance Rust backend server for the Pezzottify music streaming platform. Handles music catalog management, user authentication, audio streaming, and search functionality.
 
@@ -27,7 +27,7 @@ A high-performance Rust backend server for the Pezzottify music streaming platfo
 
 ## Overview
 
-The catalog server is the backend component of Pezzottify that provides:
+The pezzottify server is the backend component of Pezzottify that provides:
 
 - **Music Catalog Management**: SQLite-backed catalog with CRUD operations
 - **Audio Streaming**: HTTP range request support for efficient audio playback
@@ -114,7 +114,7 @@ The catalog server is the backend component of Pezzottify that provides:
 
    ```bash
    git clone https://github.com/lelloman/pezzottify
-   cd pezzottify/catalog-server
+   cd pezzottify/pezzottify-server
    ```
 
 2. Build the project:
@@ -164,14 +164,14 @@ cargo build --features slowdown
 
 ## Docker Build
 
-The Docker image includes both the catalog server and web frontend. A wrapper script handles git version detection since Docker builds don't have access to the full git repository.
+The Docker image includes both the pezzottify server and web frontend. A wrapper script handles git version detection since Docker builds don't have access to the full git repository.
 
 ### Using the Build Script (Recommended)
 
 ```bash
 # From repository root
-./build-docker.sh catalog-server        # Build and start
-./build-docker.sh -d catalog-server     # Detached mode
+./build-docker.sh pezzottify-server        # Build and start
+./build-docker.sh -d pezzottify-server     # Detached mode
 ```
 
 The script:
@@ -188,7 +188,7 @@ If you need to build manually:
 ```bash
 GIT_HASH=$(git rev-parse --short HEAD) \
 GIT_DIRTY=$(git status --porcelain | grep -q . && echo 1 || echo 0) \
-docker-compose up --build catalog-server
+docker-compose up --build pezzottify-server
 ```
 
 ### Version in Docker Image
@@ -861,7 +861,7 @@ sqlite3 /path/to/user.db
 ### Project Structure
 
 ```
-catalog-server/
+pezzottify-server/
 ├── src/
 │   ├── main.rs              # Main server entry point
 │   ├── cli_auth.rs          # CLI auth tool entry point
@@ -926,7 +926,7 @@ catalog-server/
 
 ## Monitoring & Alerting
 
-The catalog server includes a full monitoring stack with Prometheus metrics, Grafana dashboards, and Alertmanager for notifications.
+The pezzottify server includes a full monitoring stack with Prometheus metrics, Grafana dashboards, and Alertmanager for notifications.
 
 ### Quick Start (Fresh Clone)
 
@@ -959,7 +959,7 @@ The catalog server includes a full monitoring stack with Prometheus metrics, Gra
 
 This starts:
 
-- **catalog-server** on port 3001
+- **pezzottify-server** on port 3001
 - **Prometheus** on port 9090
 - **Grafana** on port 3000
 - **Alertmanager** on port 9093
@@ -1020,7 +1020,7 @@ Example payload:
   "alerts": [
     {
       "labels": { "alertname": "ServiceDown", "severity": "critical" },
-      "annotations": { "summary": "Catalog server is down" },
+      "annotations": { "summary": "Pezzottify server is down" },
       "startsAt": "2024-01-15T10:00:00Z"
     }
   ]
@@ -1068,7 +1068,7 @@ The following alerts are configured in `monitoring/alerts.yml`:
 
 **Critical:**
 
-- `ServiceDown` - Catalog server unreachable
+- `ServiceDown` - Pezzottify server unreachable
 - `LoginBruteForceAttempt` - Possible brute force attack on login
 - `HighErrorRate` - High HTTP 5xx error rate
 - `DatabaseErrors` - Database connection failures
@@ -1084,11 +1084,11 @@ The following alerts are configured in `monitoring/alerts.yml`:
 ### Running Individual Services
 
 ```bash
-# Build and start only the catalog server (no monitoring)
-./build-docker.sh -d catalog-server
+# Build and start only the pezzottify server (no monitoring)
+./build-docker.sh -d pezzottify-server
 
 # Build server and start with monitoring (no alerting)
-./build-docker.sh -d catalog-server && docker-compose up -d prometheus grafana
+./build-docker.sh -d pezzottify-server && docker-compose up -d prometheus grafana
 
 # Build and start the full stack including alerts
 ./build-docker.sh -d
@@ -1141,8 +1141,8 @@ curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=$
 **Trigger a real alert (ServiceDown):**
 
 ```bash
-# Stop the catalog server to trigger the ServiceDown alert
-docker-compose stop catalog-server
+# Stop the pezzottify server to trigger the ServiceDown alert
+docker-compose stop pezzottify-server
 
 # Wait ~1 minute for the alert to fire (has a 1-minute threshold)
 # You should receive a Telegram notification
@@ -1151,7 +1151,7 @@ docker-compose stop catalog-server
 open http://localhost:9090/alerts
 
 # Restart the server (you'll get a "resolved" notification)
-docker-compose start catalog-server
+docker-compose start pezzottify-server
 ```
 
 **Send a test alert directly to Alertmanager:**
@@ -1174,7 +1174,7 @@ curl -X POST http://localhost:9093/api/v2/alerts \
 
 **Verify alert routing:**
 
-- Prometheus targets: http://localhost:9090/targets (should show catalog-server as UP)
+- Prometheus targets: http://localhost:9090/targets (should show pezzottify-server as UP)
 - Active alerts: http://localhost:9090/alerts
 - Alertmanager status: http://localhost:9093/#/alerts
 

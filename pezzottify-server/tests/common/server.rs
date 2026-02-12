@@ -5,12 +5,12 @@
 
 use super::constants::*;
 use super::fixtures::{create_test_catalog, create_test_db_with_users};
-use pezzottify_catalog_server::catalog_store::{CatalogStore, SqliteCatalogStore};
-use pezzottify_catalog_server::search::{HashedItemType, SearchResult, SearchVault};
-use pezzottify_catalog_server::server::state::GuardedSearchVault;
-use pezzottify_catalog_server::server::{server::make_app, RequestsLoggingLevel, ServerConfig};
-use pezzottify_catalog_server::server_store::{ServerStore, SqliteServerStore};
-use pezzottify_catalog_server::user::{FullUserStore, SqliteUserStore, UserManager};
+use pezzottify_server::catalog_store::{CatalogStore, SqliteCatalogStore};
+use pezzottify_server::search::{HashedItemType, SearchResult, SearchVault};
+use pezzottify_server::server::state::GuardedSearchVault;
+use pezzottify_server::server::{server::make_app, RequestsLoggingLevel, ServerConfig};
+use pezzottify_server::server_store::{ServerStore, SqliteServerStore};
+use pezzottify_server::user::{FullUserStore, SqliteUserStore, UserManager};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -38,7 +38,7 @@ impl SearchVault for MockSearchVault {
 
     fn upsert_items(
         &self,
-        _items: &[pezzottify_catalog_server::search::SearchIndexItem],
+        _items: &[pezzottify_server::search::SearchIndexItem],
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -47,11 +47,11 @@ impl SearchVault for MockSearchVault {
         Ok(())
     }
 
-    fn get_stats(&self) -> pezzottify_catalog_server::search::SearchVaultStats {
-        pezzottify_catalog_server::search::SearchVaultStats {
+    fn get_stats(&self) -> pezzottify_server::search::SearchVaultStats {
+        pezzottify_server::search::SearchVaultStats {
             indexed_items: 0,
             index_type: "Mock".to_string(),
-            state: pezzottify_catalog_server::search::IndexState::Ready,
+            state: pezzottify_server::search::IndexState::Ready,
         }
     }
 
@@ -157,12 +157,12 @@ impl TestServer {
             content_cache_age_sec: 0, // Disable caching in tests
             frontend_dir_path: None,
             disable_password_auth: false,
-            streaming_search: pezzottify_catalog_server::config::StreamingSearchSettings::default(),
-            download_manager: pezzottify_catalog_server::config::DownloadManagerSettings::default(),
+            streaming_search: pezzottify_server::config::StreamingSearchSettings::default(),
+            download_manager: pezzottify_server::config::DownloadManagerSettings::default(),
             db_dir: temp_db_dir.path().to_path_buf(),
             media_path: media_path.clone(),
-            agent: pezzottify_catalog_server::config::AgentSettings::default(),
-            ingestion: pezzottify_catalog_server::config::IngestionSettings::default(),
+            agent: pezzottify_server::config::AgentSettings::default(),
+            ingestion: pezzottify_server::config::IngestionSettings::default(),
         };
 
         // Create user manager
