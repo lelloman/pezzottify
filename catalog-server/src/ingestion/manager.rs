@@ -2710,47 +2710,98 @@ impl IngestionManager {
         let _ = self.file_handler.cleanup_job(job_id).await;
 
         // Notify completion — look up names from catalog for accuracy,
-        // falling back to detected metadata or "Unknown" defaults.
+        // falling back to download request names, detected metadata, or "Unknown" defaults.
         let (album_name, artist_name) = match &job.matched_album_id {
             Some(album_id) => {
-                let album_name = self
-                    .catalog
-                    .get_album_json(album_id)
-                    .ok()
-                    .flatten()
-                    .and_then(|v| v.get("name")?.as_str().map(String::from))
+                let catalog_album_name = match self.catalog.get_album_json(album_id) {
+                    Ok(Some(v)) => v.get("name").and_then(|n| n.as_str()).map(String::from),
+                    Ok(None) => {
+                        warn!(
+                            "Job {} - album {} not found in catalog for notification name",
+                            job_id, album_id
+                        );
+                        None
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Job {} - failed to look up album {} for notification name: {}",
+                            job_id, album_id, e
+                        );
+                        None
+                    }
+                };
+
+                let catalog_artist_name = match self.catalog.get_album_artist_ids(album_id) {
+                    Ok(ids) => ids.into_iter().next().and_then(|aid| {
+                        match self.catalog.get_artist_json(&aid) {
+                            Ok(Some(v)) => {
+                                v.get("name").and_then(|n| n.as_str()).map(String::from)
+                            }
+                            Ok(None) => {
+                                warn!(
+                                    "Job {} - artist {} not found in catalog for notification name",
+                                    job_id, aid
+                                );
+                                None
+                            }
+                            Err(e) => {
+                                warn!(
+                                    "Job {} - failed to look up artist {} for notification name: {}",
+                                    job_id, aid, e
+                                );
+                                None
+                            }
+                        }
+                    }),
+                    Err(e) => {
+                        warn!(
+                            "Job {} - failed to get artist IDs for album {} for notification name: {}",
+                            job_id, album_id, e
+                        );
+                        None
+                    }
+                };
+
+                let album_name = catalog_album_name
                     .or_else(|| download_request_album_name.clone())
                     .or_else(|| job.detected_album.clone())
-                    .unwrap_or_else(|| "Unknown Album".to_string());
+                    .unwrap_or_else(|| {
+                        warn!(
+                            "Job {} - all album name sources exhausted, using Unknown Album",
+                            job_id
+                        );
+                        "Unknown Album".to_string()
+                    });
 
-                let artist_name = self
-                    .catalog
-                    .get_album_artist_ids(album_id)
-                    .ok()
-                    .and_then(|ids| ids.into_iter().next())
-                    .and_then(|aid| {
-                        self.catalog
-                            .get_artist_json(&aid)
-                            .ok()
-                            .flatten()
-                            .and_then(|v| v.get("name")?.as_str().map(String::from))
-                    })
+                let artist_name = catalog_artist_name
                     .or_else(|| download_request_artist_name.clone())
                     .or_else(|| job.detected_artist.clone())
-                    .unwrap_or_else(|| "Unknown Artist".to_string());
+                    .unwrap_or_else(|| {
+                        warn!(
+                            "Job {} - all artist name sources exhausted, using Unknown Artist",
+                            job_id
+                        );
+                        "Unknown Artist".to_string()
+                    });
 
                 (album_name, artist_name)
             }
-            None => (
-                download_request_album_name
-                    .clone()
-                    .or_else(|| job.detected_album.clone())
-                    .unwrap_or_else(|| "Unknown Album".to_string()),
-                download_request_artist_name
-                    .clone()
-                    .or_else(|| job.detected_artist.clone())
-                    .unwrap_or_else(|| "Unknown Artist".to_string()),
-            ),
+            None => {
+                warn!(
+                    "Job {} - no matched_album_id at notification time, using fallbacks",
+                    job_id
+                );
+                (
+                    download_request_album_name
+                        .clone()
+                        .or_else(|| job.detected_album.clone())
+                        .unwrap_or_else(|| "Unknown Album".to_string()),
+                    download_request_artist_name
+                        .clone()
+                        .or_else(|| job.detected_artist.clone())
+                        .unwrap_or_else(|| "Unknown Artist".to_string()),
+                )
+            }
         };
 
         if let Some(notifier) = &self.notifier {

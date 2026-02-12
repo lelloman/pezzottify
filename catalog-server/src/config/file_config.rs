@@ -57,6 +57,7 @@ pub struct DownloadManagerConfig {
 #[serde(default)]
 pub struct BackgroundJobsConfig {
     pub popular_content: Option<PopularContentJobConfig>,
+    pub catalog_availability_stats: Option<CatalogAvailabilityStatsJobConfig>,
     pub whatsnew_batch: Option<IntervalJobConfig>,
     pub ingestion_cleanup: Option<IngestionCleanupJobConfig>,
     pub audit_log_cleanup: Option<AuditLogCleanupJobConfig>,
@@ -72,6 +73,13 @@ pub struct PopularContentJobConfig {
     pub lookback_days: Option<u32>,
     pub impression_lookback_days: Option<u32>,
     pub impression_retention_days: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct CatalogAvailabilityStatsJobConfig {
+    pub interval_hours: Option<u64>,
+    pub startup_delay_minutes: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]

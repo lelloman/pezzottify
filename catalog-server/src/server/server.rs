@@ -14,6 +14,7 @@ use std::{
 
 use tracing::{debug, error, info, warn};
 
+use crate::background_jobs::jobs::{CatalogAvailabilityStatsJob, CatalogAvailabilityStatsSnapshot};
 use crate::background_jobs::{JobError, JobInfo, SchedulerHandle};
 use crate::catalog_store::{CatalogStore, DiscographySort};
 use crate::{
@@ -1956,6 +1957,40 @@ async fn get_popular_content(
         }
         Err(err) => {
             error!("Error getting popular content: {}", err);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// Get latest persisted catalog availability statistics snapshot.
+async fn get_catalog_stats_snapshot(
+    _session: Session,
+    State(server_store): State<GuardedServerStore>,
+) -> Response {
+    let key = CatalogAvailabilityStatsJob::snapshot_state_key();
+    let Some(raw) = (match server_store.get_state(key) {
+        Ok(v) => v,
+        Err(err) => {
+            error!(
+                "Failed to read catalog stats snapshot from server store: {}",
+                err
+            );
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    }) else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": "catalog availability stats not available yet"
+            })),
+        )
+            .into_response();
+    };
+
+    match serde_json::from_str::<CatalogAvailabilityStatsSnapshot>(&raw) {
+        Ok(snapshot) => Json(snapshot).into_response(),
+        Err(err) => {
+            error!("Failed to deserialize catalog stats snapshot: {}", err);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
@@ -4828,6 +4863,7 @@ pub async fn make_app(
         .route("/image/{id}", get(get_image))
         .route("/whatsnew", get(get_whats_new))
         .route("/popular", get(get_popular_content))
+        .route("/catalog/stats", get(get_catalog_stats_snapshot))
         .route("/batch", post(post_batch_content))
         .route("/genres", get(get_genres))
         .route("/genre/{name}/tracks", get(get_genre_tracks))

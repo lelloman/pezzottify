@@ -289,6 +289,47 @@ pub struct GenreTracksResult {
     pub has_more: bool,
 }
 
+/// Availability counts for one catalog entity type.
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct AvailabilityCount {
+    pub total: usize,
+    pub available: usize,
+    pub unavailable: usize,
+}
+
+/// Aggregate catalog availability statistics.
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct CatalogAvailabilityStats {
+    pub artists: AvailabilityCount,
+    pub albums: AvailabilityCount,
+    pub tracks: AvailabilityCount,
+}
+
+/// Number of rows repaired during availability reconciliation.
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct AvailabilityRepairSummary {
+    pub tracks_updated: usize,
+    pub albums_updated: usize,
+    pub artists_updated: usize,
+}
+
+/// Availability update for a single item, used to sync search availability index.
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct AvailabilityItemUpdate {
+    pub id: String,
+    pub available: bool,
+}
+
+/// Result of a full availability refresh and stats computation.
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct AvailabilityRefreshResult {
+    pub stats: CatalogAvailabilityStats,
+    pub repaired: AvailabilityRepairSummary,
+    pub track_updates: Vec<AvailabilityItemUpdate>,
+    pub album_updates: Vec<AvailabilityItemUpdate>,
+    pub artist_updates: Vec<AvailabilityItemUpdate>,
+}
+
 // =============================================================================
 // Duration Fingerprint Types
 // =============================================================================

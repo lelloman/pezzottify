@@ -98,6 +98,14 @@ impression_lookback_days = 365
 # Number of days to retain impression data before pruning (default: 365)
 impression_retention_days = 365
 
+# Catalog Availability Stats Job
+# Verifies filesystem-backed availability flags and stores aggregate stats snapshot.
+[background_jobs.catalog_availability_stats]
+# Interval in hours between runs (default: 6)
+interval_hours = 6
+# Delay before first run after startup (default: 60)
+startup_delay_minutes = 60
+
 # What's New Batch Job
 # Creates batches from pending What's New albums
 [background_jobs.whatsnew_batch]
