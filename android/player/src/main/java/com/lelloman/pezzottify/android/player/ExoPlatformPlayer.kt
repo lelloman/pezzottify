@@ -290,10 +290,11 @@ internal class ExoPlatformPlayer(
         pendingTrackIndex = null
         mutableIsPlaying.value = playWhenReady
         if (sessionToken == null) {
-            sessionToken =
+            val newSessionToken =
                 SessionToken(context, ComponentName(context, PlaybackService::class.java))
+            sessionToken = newSessionToken
             mutableControllerState.value = MediaControllerState.CONNECTING
-            val controllerFuture = MediaController.Builder(context, sessionToken!!).buildAsync()
+            val controllerFuture = MediaController.Builder(context, newSessionToken).buildAsync()
             controllerFuture.addListener(
                 {
                     mediaController = controllerFuture.get()

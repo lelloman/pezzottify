@@ -339,15 +339,15 @@ class PlayerImpl(
     }
 
     override fun goToPreviousPlaylist() {
-        TODO("Not yet implemented")
+        logger.warn("goToPreviousPlaylist() is not yet implemented")
     }
 
     override fun goToNextPlaylist() {
-        TODO("Not yet implemented")
+        logger.warn("goToNextPlaylist() is not yet implemented")
     }
 
     override fun moveTrack(fromIndex: Int, toIndex: Int) {
-        TODO("Not yet implemented")
+        logger.warn("moveTrack(fromIndex=$fromIndex, toIndex=$toIndex) is not yet implemented")
     }
 
     override fun addTracksToPlaylist(tracksIds: List<String>) {

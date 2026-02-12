@@ -222,33 +222,32 @@ class LocalExoPlayer(
     }
 
     private fun ensureMediaController(onReady: (MediaController) -> Unit) {
-        if (mediaController != null) {
-            onReady(mediaController!!)
+        mediaController?.let { controller ->
+            onReady(controller)
             return
         }
 
-        if (sessionToken == null) {
-            sessionToken = SessionToken(
-                context,
-                ComponentName(context, LocalPlaybackService::class.java)
-            )
-        }
+        val newSessionToken = sessionToken ?: SessionToken(
+            context,
+            ComponentName(context, LocalPlaybackService::class.java)
+        ).also { sessionToken = it }
 
-        val controllerFuture = MediaController.Builder(context, sessionToken!!).buildAsync()
+        val controllerFuture = MediaController.Builder(context, newSessionToken).buildAsync()
         controllerFuture.addListener(
             {
-                mediaController = controllerFuture.get()
-                mediaController?.addListener(playerListener)
-                onReady(mediaController!!)
+                val controller = controllerFuture.get()
+                mediaController = controller
+                controller.addListener(playerListener)
+                onReady(controller)
 
                 // Apply any pending play/pause action
                 pendingPlayWhenReady?.let { shouldPlay ->
-                    mediaController?.playWhenReady = shouldPlay
+                    controller.playWhenReady = shouldPlay
                     pendingPlayWhenReady = null
                 }
 
                 // Start polling if already playing
-                if (mediaController?.playWhenReady == true) {
+                if (controller.playWhenReady) {
                     startProgressPolling()
                 }
             },
