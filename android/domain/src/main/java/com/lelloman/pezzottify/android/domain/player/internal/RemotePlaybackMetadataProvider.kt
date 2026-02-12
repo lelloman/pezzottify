@@ -193,11 +193,11 @@ class RemotePlaybackMetadataProvider internal constructor(
         }
 
         val albumDataMap = albumDeferred.awaitAll()
-            .filter { it.second != null }
-            .associate { it.first to it.second!! }
+            .mapNotNull { (id, data) -> data?.let { id to data } }
+            .toMap()
         val artistDataMap = artistDeferred.awaitAll()
-            .filter { it.second != null }
-            .associate { it.first to it.second!! }
+            .mapNotNull { (id, data) -> data?.let { id to data } }
+            .toMap()
 
         // Build metadata for each track, falling back to current track info for unresolved tracks
         val currentTrackInfo = state.currentTrack

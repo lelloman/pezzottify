@@ -187,22 +187,24 @@ class ChatRepositoryImpl(
         }
 
         // Handle auth error with retry
-        if (authErrorMessage != null && !isAuthRetry) {
-            logger.info(TAG, "Auth error detected, attempting token refresh and retry")
-            val shouldRetry = authErrorHandler.onAuthError(authErrorMessage!!)
-            if (shouldRetry) {
-                logger.info(TAG, "Token refreshed, retrying LLM request")
-                processLlmResponse(iteration, isAuthRetry = true)
-                return
-            } else {
-                logger.warn(TAG, "Auth error handler did not refresh tokens, showing error to user")
-                val errorMessage = ChatMessage(
-                    id = generateId(),
-                    role = MessageRole.ASSISTANT,
-                    content = "Error: $authErrorMessage"
-                )
-                saveMessage(errorMessage)
-                return
+        if (!isAuthRetry) {
+            authErrorMessage?.let { message ->
+                logger.info(TAG, "Auth error detected, attempting token refresh and retry")
+                val shouldRetry = authErrorHandler.onAuthError(message)
+                if (shouldRetry) {
+                    logger.info(TAG, "Token refreshed, retrying LLM request")
+                    processLlmResponse(iteration, isAuthRetry = true)
+                    return
+                } else {
+                    logger.warn(TAG, "Auth error handler did not refresh tokens, showing error to user")
+                    val errorMessage = ChatMessage(
+                        id = generateId(),
+                        role = MessageRole.ASSISTANT,
+                        content = "Error: $message"
+                    )
+                    saveMessage(errorMessage)
+                    return
+                }
             }
         } else if (authErrorMessage != null) {
             // Already retried once, show error

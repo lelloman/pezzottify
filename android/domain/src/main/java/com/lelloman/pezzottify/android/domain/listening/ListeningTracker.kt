@@ -193,9 +193,11 @@ class ListeningTracker @Inject constructor(
             logger.debug("Saved session progress ${session.sessionId}, duration: ${duration}s")
         } else {
             // Update existing record and reset sync status so it gets re-synced
-            listeningEventStore.updateEvent(event.copy(id = session.savedEventId!!))
-            listeningEventStore.updateSyncStatus(session.savedEventId!!, SyncStatus.PendingSync)
-            logger.debug("Updated session progress ${session.sessionId}, duration: ${duration}s")
+            session.savedEventId?.let { savedEventId ->
+                listeningEventStore.updateEvent(event.copy(id = savedEventId))
+                listeningEventStore.updateSyncStatus(savedEventId, SyncStatus.PendingSync)
+                logger.debug("Updated session progress ${session.sessionId}, duration: ${duration}s")
+            }
         }
 
         // Wake up the synchronizer to process the new/updated event
@@ -213,8 +215,10 @@ class ListeningTracker @Inject constructor(
                 listeningEventStore.saveEvent(event)
             } else {
                 // Update existing record and reset sync status so it gets re-synced with final data
-                listeningEventStore.updateEvent(event.copy(id = session.savedEventId!!))
-                listeningEventStore.updateSyncStatus(session.savedEventId!!, SyncStatus.PendingSync)
+                session.savedEventId?.let { savedEventId ->
+                    listeningEventStore.updateEvent(event.copy(id = savedEventId))
+                    listeningEventStore.updateSyncStatus(savedEventId, SyncStatus.PendingSync)
+                }
             }
             logger.debug("Finalized listening session ${session.sessionId}, duration: ${finalDuration}s")
 
