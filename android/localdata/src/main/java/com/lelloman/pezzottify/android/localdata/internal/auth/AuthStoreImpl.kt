@@ -2,11 +2,12 @@ package com.lelloman.pezzottify.android.localdata.internal.auth
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.logger.Logger
+import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,12 +25,15 @@ import java.security.KeyStore
 internal class AuthStoreImpl(
     context: Context,
     private val coroutineScope: CoroutineScope,
+    loggerFactory: LoggerFactory,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : AuthStore {
 
+    private val logger: Logger = loggerFactory.getLogger(AuthStoreImpl::class)
+
     private var initialized = false
 
-    private val sharedPrefs: SharedPreferences = createEncryptedSharedPreferences(context)
+    private val sharedPrefs: SharedPreferences = createEncryptedSharedPreferences(context, logger)
 
     private val mutableAuthStateFlow =
         MutableStateFlow<AuthState>(
@@ -58,7 +62,7 @@ internal class AuthStoreImpl(
                 }
                 Result.success(Unit)
             } catch (throwable: Throwable) {
-                Log.e("AuthStore", "Error storing auth state", throwable)
+                logger.error("Error storing auth state", throwable)
                 Result.failure(throwable)
             }
         }
@@ -77,7 +81,7 @@ internal class AuthStoreImpl(
                             AuthState.LoggedOut
                         }
                     } catch (e: Exception) {
-                        Log.w("AuthStore", "Error reading auth state, defaulting to LoggedOut", e)
+                        logger.warn("Error reading auth state, defaulting to LoggedOut", e)
                         AuthState.LoggedOut
                     } finally {
                         initialized = true
@@ -105,12 +109,12 @@ internal class AuthStoreImpl(
         private const val KEY_LAST_USED_HANDLE = "LastUsedHandle"
         private const val MASTER_KEY_ALIAS = "AuthStoreMasterKeyAlias"
 
-        private fun createEncryptedSharedPreferences(context: Context): SharedPreferences {
+        private fun createEncryptedSharedPreferences(context: Context, logger: Logger): SharedPreferences {
             return try {
                 createEncryptedPrefsInternal(context)
             } catch (e: Exception) {
-                Log.w("AuthStore", "Failed to create encrypted prefs, clearing corrupted key", e)
-                clearCorruptedKeyAndPrefs(context)
+                logger.warn("Failed to create encrypted prefs, clearing corrupted key", e)
+                clearCorruptedKeyAndPrefs(context, logger)
                 createEncryptedPrefsInternal(context)
             }
         }
@@ -129,16 +133,16 @@ internal class AuthStoreImpl(
             )
         }
 
-        private fun clearCorruptedKeyAndPrefs(context: Context) {
+        private fun clearCorruptedKeyAndPrefs(context: Context, logger: Logger) {
             try {
                 val keyStore = KeyStore.getInstance("AndroidKeyStore")
                 keyStore.load(null)
                 if (keyStore.containsAlias(MASTER_KEY_ALIAS)) {
                     keyStore.deleteEntry(MASTER_KEY_ALIAS)
-                    Log.i("AuthStore", "Deleted corrupted keystore entry")
+                    logger.info("Deleted corrupted keystore entry")
                 }
             } catch (e: Exception) {
-                Log.e("AuthStore", "Failed to delete keystore entry", e)
+                logger.error("Failed to delete keystore entry", e)
             }
 
             val sharedPrefsDir = File(context.filesDir.parent, "shared_prefs")
@@ -152,10 +156,10 @@ internal class AuthStoreImpl(
                     val file = File(sharedPrefsDir, fileName)
                     if (file.exists()) {
                         file.delete()
-                        Log.i("AuthStore", "Deleted corrupted file: $fileName")
+                        logger.info("Deleted corrupted file: $fileName")
                     }
                 } catch (e: Exception) {
-                    Log.e("AuthStore", "Failed to delete file: $fileName", e)
+                    logger.error("Failed to delete file: $fileName", e)
                 }
             }
         }

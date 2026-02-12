@@ -59,7 +59,8 @@ class LocalDataModule {
     fun provideAuthStore(
         @ApplicationContext context: Context,
         coroutineScope: CoroutineScope,
-    ): AuthStore = AuthStoreImpl(context, coroutineScope)
+        loggerFactory: LoggerFactory,
+    ): AuthStore = AuthStoreImpl(context, coroutineScope, loggerFactory)
 
     @Provides
     @Singleton
