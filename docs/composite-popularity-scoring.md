@@ -1,8 +1,12 @@
 # Composite Popularity Scoring
 
+**Status**: ✅ **IMPLEMENTED**
+**Implemented**: 2025-12-xx (exact date TBD - see git history)
+**Last Updated**: 2026-02-13 (marked as implemented)
+
 ## Overview
 
-This document describes the implementation plan for a composite popularity scoring system that combines three data sources:
+This document describes the **implemented** composite popularity scoring system that combines three data sources:
 
 1. **Listening data** (70% weight) - Based on actual play counts from Pezzottify users
 2. **Impression data** (25% weight) - Based on page views (artist/album/track screens)
@@ -10,24 +14,50 @@ This document describes the implementation plan for a composite popularity scori
 
 The goal is to prioritize content that Pezzottify users actually engage with, rather than relying solely on Spotify's global popularity metrics.
 
-## Current State
+## Implementation Status ✅
+
+**This feature has been fully implemented and is in production use.**
+
+### What's Implemented:
+- ✅ `item_impressions` table for tracking page views
+- ✅ Extended `item_popularity` table with `listening_score`, `impression_score`, `spotify_score` columns
+- ✅ `POST /v1/user/impression` endpoint for recording page views
+- ✅ Composite score calculation with weight redistribution (70/25/5 weights)
+- ✅ Impression aggregation in `PopularContentJob`
+- ✅ Impression pruning based on retention period
+
+### What's NOT Implemented (from original plan):
+- ❌ Web client impression tracking (clients don't call the endpoint yet)
+- ❌ Android client impression tracking
+- ⚠️  Consider adding time decay to impressions (future consideration)
+- ⚠️  Consider user deduplication per day (future consideration)
+
+## Current State (as of implementation)
 
 ### Listening Data
 - Stored in `listening_events` table (user database)
 - Aggregated by `PopularContentJob` every 6 hours
-- Last 30 days lookback window
-- Updates `item_popularity.score` in search database
+- Last 30 days lookback window (configurable)
+- Normalized to 0.0-1.0 range for composite scoring
+
+### Impression Data
+- Stored in `item_impressions` table (search database)
+- Tracked via `POST /v1/user/impression` endpoint
+- 365-day lookback window for aggregation
+- 365-day retention period for pruning
 
 ### Spotify Popularity
 - Static `popularity` field (0-100) on `artists`, `albums`, `tracks` tables
-- Currently only used for initial search index ordering (popular items indexed first)
-- Not used in search ranking
+- Normalized to 0.0-1.0 range for composite scoring
+- Used as fallback when listening/impression data unavailable
 
 ### Search Ranking
-- Uses `item_popularity.score` with 50% max boost
-- Items without listening data get no boost (score = 0)
+- Uses composite score with weight redistribution:
+  - All sources available: 70% listening / 25% impression / 5% Spotify
+  - Missing sources trigger weight redistribution to remaining sources
+- Applied via `POPULARITY_WEIGHT = 0.5` factor in search ranking
 
-## Proposed Changes
+## Proposed Changes (original design - now implemented)
 
 ### 1. New Table: `item_impressions`
 
