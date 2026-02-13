@@ -59,6 +59,8 @@ import com.lelloman.pezzottify.android.mapping.toThemeMode
 import com.lelloman.pezzottify.android.mapping.toTrackAvailability
 import com.lelloman.pezzottify.android.oidc.OidcCallbackHandler
 import com.lelloman.pezzottify.android.ui.screen.about.AboutScreenViewModel
+import com.lelloman.pezzottify.android.ui.screen.about.CatalogStatItem
+import com.lelloman.pezzottify.android.ui.screen.about.CatalogStats
 import com.lelloman.pezzottify.android.ui.screen.login.LoginViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.MainScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.content.album.AlbumScreenViewModel
@@ -346,6 +348,7 @@ class InteractorsModule {
         buildInfo: BuildInfo,
         configStore: ConfigStore,
         webSocketManager: WebSocketManager,
+        remoteApiClient: RemoteApiClient,
     ): AboutScreenViewModel.Interactor = object : AboutScreenViewModel.Interactor {
         override fun getVersionName(): String = buildInfo.versionName
 
@@ -357,6 +360,30 @@ class InteractorsModule {
             when (state) {
                 is DomainConnectionState.Connected -> state.serverVersion
                 else -> "disconnected"
+            }
+        }
+
+        override suspend fun getCatalogStats(): CatalogStats? {
+            val response = remoteApiClient.getCatalogStats()
+            return when (response) {
+                is RemoteApiResponse.Success -> {
+                    val counts = response.data.counts
+                    CatalogStats(
+                        artists = CatalogStatItem(
+                            available = counts.artists.available,
+                            unavailable = counts.artists.unavailable,
+                        ),
+                        albums = CatalogStatItem(
+                            available = counts.albums.available,
+                            unavailable = counts.albums.unavailable,
+                        ),
+                        tracks = CatalogStatItem(
+                            available = counts.tracks.available,
+                            unavailable = counts.tracks.unavailable,
+                        ),
+                    )
+                }
+                else -> null
             }
         }
     }

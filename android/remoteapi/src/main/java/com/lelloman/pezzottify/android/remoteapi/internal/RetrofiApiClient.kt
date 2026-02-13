@@ -20,6 +20,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.DevicesResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DeviceSharePolicy
 import com.lelloman.pezzottify.android.domain.remoteapi.SubmitBugReportResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.CatalogStatsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventItem
 import com.lelloman.pezzottify.android.domain.remoteapi.response.MyDownloadRequestsResponse
@@ -104,6 +105,11 @@ internal interface RetrofitApiClient {
         @Query("albums_limit") albumsLimit: Int,
         @Query("artists_limit") artistsLimit: Int,
     ): Response<PopularContentResponse>
+
+    @GET("/v1/content/catalog/stats")
+    suspend fun getCatalogStats(
+        @Header("Authorization") authToken: String,
+    ): Response<CatalogStatsResponse>
 
     @GET("/v1/content/whatsnew")
     suspend fun getWhatsNew(

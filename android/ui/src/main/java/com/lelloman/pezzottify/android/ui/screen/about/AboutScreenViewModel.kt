@@ -34,6 +34,10 @@ class AboutScreenViewModel @Inject constructor(
                 mutableState.update { it.copy(serverVersion = serverVersion) }
             }
         }
+        viewModelScope.launch {
+            val stats = interactor.getCatalogStats()
+            mutableState.update { it.copy(catalogStats = stats, catalogStatsLoading = false) }
+        }
     }
 
     interface Interactor {
@@ -41,5 +45,6 @@ class AboutScreenViewModel @Inject constructor(
         fun getGitCommit(): String
         fun getServerUrl(): String
         fun observeServerVersion(): Flow<String>
+        suspend fun getCatalogStats(): CatalogStats?
     }
 }

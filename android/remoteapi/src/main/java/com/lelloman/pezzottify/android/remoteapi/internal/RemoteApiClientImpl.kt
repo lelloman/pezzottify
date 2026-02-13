@@ -7,6 +7,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiCredentialsProv
 import com.lelloman.pezzottify.android.domain.remoteapi.request.BatchContentRequest as DomainBatchContentRequest
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.BatchContentResponse as DomainBatchContentResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.CatalogStatsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.BatchItemResult as DomainBatchItemResult
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
@@ -290,6 +291,13 @@ internal class RemoteApiClientImpl(
             )
             .returnFromRetrofitResponse()
     }
+
+    override suspend fun getCatalogStats(): RemoteApiResponse<CatalogStatsResponse> =
+        catchingNetworkError {
+            getRetrofit()
+                .getCatalogStats(authToken = authToken)
+                .returnFromRetrofitResponse()
+        }
 
     override suspend fun getWhatsNew(limit: Int): RemoteApiResponse<WhatsNewResponse> =
         catchingNetworkError {
