@@ -53,6 +53,7 @@ pub trait CatalogStore: Send + Sync {
         limit: usize,
         offset: usize,
         sort: super::DiscographySort,
+        appears_on: bool,
     ) -> Result<Option<super::ArtistDiscography>>;
 
     // =========================================================================

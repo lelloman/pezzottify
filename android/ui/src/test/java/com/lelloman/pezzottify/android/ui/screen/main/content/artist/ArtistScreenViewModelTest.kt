@@ -163,6 +163,7 @@ class ArtistScreenViewModelTest {
     private class FakeInteractor : ArtistScreenViewModel.Interactor {
         val likedContentIds = mutableSetOf<String>()
         val discographyStates = mutableMapOf<String, MutableStateFlow<ArtistScreenViewModel.DiscographyUiState>>()
+        val appearsOnStates = mutableMapOf<String, MutableStateFlow<ArtistScreenViewModel.DiscographyUiState>>()
 
         var loggedViewedArtistId: String? = null
         var lastToggleLikeContentId: String? = null
@@ -196,6 +197,25 @@ class ArtistScreenViewModelTest {
         }
 
         override suspend fun fetchMoreDiscography(artistId: String) {
+            // No-op for tests
+        }
+
+        override fun observeAppearsOnState(artistId: String): Flow<ArtistScreenViewModel.DiscographyUiState> =
+            appearsOnStates.getOrPut(artistId) {
+                MutableStateFlow(
+                    ArtistScreenViewModel.DiscographyUiState(
+                        albumIds = emptyList(),
+                        isLoading = false,
+                        hasMore = false,
+                    )
+                )
+            }
+
+        override suspend fun fetchFirstAppearsOnPage(artistId: String) {
+            // No-op for tests
+        }
+
+        override suspend fun fetchMoreAppearsOn(artistId: String) {
             // No-op for tests
         }
 

@@ -290,7 +290,13 @@ async fn get_artist(ctx: &ToolContext, id: &str) -> ToolResult {
     // Get discography (first page, sorted by popularity)
     let discography = ctx
         .catalog_store
-        .get_discography(id, 20, 0, crate::catalog_store::DiscographySort::Popularity)
+        .get_discography(
+            id,
+            20,
+            0,
+            crate::catalog_store::DiscographySort::Popularity,
+            false,
+        )
         .map_err(|e| McpError::ToolExecutionFailed(e.to_string()))?;
 
     let result = serde_json::json!({

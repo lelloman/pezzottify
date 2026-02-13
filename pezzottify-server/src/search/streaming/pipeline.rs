@@ -215,6 +215,7 @@ impl<'a> StreamingSearchPipeline<'a> {
             self.config.albums_limit,
             0,
             crate::catalog_store::DiscographySort::Popularity,
+            false,
         ) {
             let mut albums: Vec<AlbumSummary> = Vec::new();
 

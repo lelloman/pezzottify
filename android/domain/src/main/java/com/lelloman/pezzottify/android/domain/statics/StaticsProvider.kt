@@ -243,6 +243,21 @@ class StaticsProvider internal constructor(
      */
     suspend fun fetchMoreDiscography(artistId: String) = discographyCacheFetcher.fetchMoreAlbums(artistId)
 
+    /**
+     * Observe "appears on" discography state for an artist.
+     */
+    fun observeAppearsOnState(artistId: String) = discographyCacheFetcher.observeDiscography(artistId, isAppearsOn = true)
+
+    /**
+     * Fetch the first page of "appears on" albums for an artist.
+     */
+    suspend fun fetchFirstAppearsOnPage(artistId: String) = discographyCacheFetcher.fetchFirstPage(artistId, isAppearsOn = true)
+
+    /**
+     * Fetch more "appears on" albums for an artist.
+     */
+    suspend fun fetchMoreAppearsOn(artistId: String) = discographyCacheFetcher.fetchMoreAlbums(artistId, isAppearsOn = true)
+
     fun clearCache() {
         staticsCache.clearAll()
         logger.debug("Cache cleared")

@@ -96,6 +96,8 @@ private fun ArtistScreenContent(
             isLiked = state.isLiked,
             hasMoreAlbums = state.hasMoreAlbums,
             isLoadingMoreAlbums = state.isLoadingMoreAlbums,
+            hasMoreFeatures = state.hasMoreFeatures,
+            isLoadingMoreFeatures = state.isLoadingMoreFeatures,
             contentResolver = contentResolver,
             navController = navController,
             actions = actions
@@ -123,6 +125,8 @@ fun ArtistLoadedScreen(
     isLiked: Boolean,
     hasMoreAlbums: Boolean,
     isLoadingMoreAlbums: Boolean,
+    hasMoreFeatures: Boolean = false,
+    isLoadingMoreFeatures: Boolean = false,
     contentResolver: ContentResolver,
     navController: NavController,
     actions: ArtistScreenActions
@@ -142,9 +146,12 @@ fun ArtistLoadedScreen(
     }
 
     // Load more when we reach the end and there's more to load
-    androidx.compose.runtime.LaunchedEffect(reachedEnd, hasMoreAlbums, isLoadingMoreAlbums) {
+    androidx.compose.runtime.LaunchedEffect(reachedEnd, hasMoreAlbums, isLoadingMoreAlbums, hasMoreFeatures, isLoadingMoreFeatures) {
         if (reachedEnd && hasMoreAlbums && !isLoadingMoreAlbums) {
             actions.loadMoreAlbums()
+        }
+        if (reachedEnd && !hasMoreAlbums && hasMoreFeatures && !isLoadingMoreFeatures) {
+            actions.loadMoreFeatures()
         }
     }
 
@@ -257,7 +264,7 @@ fun ArtistLoadedScreen(
                 }
             }
 
-            // Features
+            // Features (Appears In)
             if (features.isNotEmpty()) {
                 item {
                     Text(
@@ -272,6 +279,25 @@ fun ArtistLoadedScreen(
                     contentResolver = contentResolver,
                     navController = navController
                 )
+
+                // Loading indicator for more features
+                if (isLoadingMoreFeatures || hasMoreFeatures) {
+                    item(key = "features-loading") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isLoadingMoreFeatures) {
+                                androidx.compose.material3.CircularProgressIndicator(
+                                    modifier = Modifier.size(32.dp),
+                                    strokeWidth = 3.dp
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
 

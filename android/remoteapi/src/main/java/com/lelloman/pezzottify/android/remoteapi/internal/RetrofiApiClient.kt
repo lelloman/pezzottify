@@ -71,6 +71,7 @@ internal interface RetrofitApiClient {
         @Path("artistId") artistId: String,
         @Query("offset") offset: Int? = null,
         @Query("limit") limit: Int? = null,
+        @Query("appears_on") appearsOn: Boolean? = null,
     ): Response<ArtistDiscographyResponse>
 
     @GET("/v1/content/album/{albumId}/resolved")

@@ -55,7 +55,8 @@ interface RemoteApiClient {
     suspend fun getArtistDiscography(
         artistId: String,
         offset: Int? = null,
-        limit: Int? = null
+        limit: Int? = null,
+        appearsOn: Boolean = false
     ): RemoteApiResponse<ArtistDiscographyResponse>
 
     suspend fun getAlbum(albumId: String): RemoteApiResponse<AlbumResponse>

@@ -227,12 +227,14 @@ export const useRemoteStore = defineStore("remote", () => {
 
   const fetchArtistDiscography = async (
     artistId,
-    { limit = 50, offset = 0, sort = "popularity" } = {},
+    { limit = 50, offset = 0, sort = "popularity", appears_on } = {},
   ) => {
     try {
+      const params = { limit, offset, sort };
+      if (appears_on) params.appears_on = true;
       const response = await axios.get(
         `/v1/content/artist/${artistId}/discography`,
-        { params: { limit, offset, sort } },
+        { params },
       );
       return response.data;
     } catch (error) {

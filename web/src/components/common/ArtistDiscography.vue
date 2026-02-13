@@ -1,7 +1,7 @@
 <template>
   <div class="discographyContainer">
     <div class="header">
-      <h1>Discography</h1>
+      <h1>{{ appearsOn ? 'Appears In' : 'Discography' }}</h1>
       <div class="sortSelector">
         <label>Sort by:</label>
         <select v-model="sortOrder" @change="resetAndLoad">
@@ -22,7 +22,7 @@
     <div v-if="error" class="error">{{ error }}</div>
 
     <div v-if="!isLoading && !hasMore && albums.length > 0" class="endMessage">
-      End of discography ({{ total }} albums)
+      {{ appearsOn ? `End of features (${total} albums)` : `End of discography (${total} albums)` }}
     </div>
 
     <div ref="sentinelRef" class="sentinel"></div>
@@ -38,6 +38,10 @@ const props = defineProps({
   artistId: {
     type: String,
     required: true,
+  },
+  appearsOn: {
+    type: Boolean,
+    default: false,
   },
 });
 
@@ -66,6 +70,7 @@ const loadMore = async () => {
       limit: PAGE_SIZE,
       offset: offset.value,
       sort: sortOrder.value,
+      appears_on: props.appearsOn,
     });
 
     if (response) {
