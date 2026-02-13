@@ -35,7 +35,7 @@ class CatalogApiClient:
             },
         ) as resp:
             resp.raise_for_status()
-            return await resp.json()
+            return await resp.json(content_type=None)
 
     async def like_content(self, content_type: str, content_id: str) -> None:
         session = await self._ensure_session()
@@ -57,18 +57,18 @@ class CatalogApiClient:
             f"{self.base_url}/v1/user/liked/{content_type}",
         ) as resp:
             resp.raise_for_status()
-            return await resp.json()
+            return await resp.json(content_type=None)
 
     async def create_playlist(
         self, name: str, track_ids: list[str] | None = None
-    ) -> dict:
+    ) -> str:
         session = await self._ensure_session()
         async with session.post(
             f"{self.base_url}/v1/user/playlist",
             json={"name": name, "track_ids": track_ids or []},
         ) as resp:
             resp.raise_for_status()
-            return await resp.json()
+            return await resp.json(content_type=None)
 
     async def delete_playlist(self, playlist_id: str) -> None:
         session = await self._ensure_session()
@@ -77,13 +77,23 @@ class CatalogApiClient:
         ) as resp:
             resp.raise_for_status()
 
-    async def get_playlists(self) -> list[dict]:
+    async def get_playlists(self) -> list[str]:
+        """Get list of playlist IDs for the current user."""
         session = await self._ensure_session()
         async with session.get(
             f"{self.base_url}/v1/user/playlists",
         ) as resp:
             resp.raise_for_status()
-            return await resp.json()
+            return await resp.json(content_type=None)
+
+    async def get_playlist(self, playlist_id: str) -> dict:
+        """Get a single playlist by ID with full details."""
+        session = await self._ensure_session()
+        async with session.get(
+            f"{self.base_url}/v1/user/playlist/{playlist_id}",
+        ) as resp:
+            resp.raise_for_status()
+            return await resp.json(content_type=None)
 
     async def get_sync_state(self) -> dict:
         session = await self._ensure_session()
@@ -91,7 +101,7 @@ class CatalogApiClient:
             f"{self.base_url}/v1/sync/state",
         ) as resp:
             resp.raise_for_status()
-            return await resp.json()
+            return await resp.json(content_type=None)
 
     async def get_sync_events(self, since: int) -> dict:
         session = await self._ensure_session()
@@ -100,7 +110,7 @@ class CatalogApiClient:
             params={"since": since},
         ) as resp:
             resp.raise_for_status()
-            return await resp.json()
+            return await resp.json(content_type=None)
 
     async def get_album(self, album_id: str) -> dict:
         session = await self._ensure_session()
@@ -108,7 +118,7 @@ class CatalogApiClient:
             f"{self.base_url}/v1/content/album/{album_id}",
         ) as resp:
             resp.raise_for_status()
-            return await resp.json()
+            return await resp.json(content_type=None)
 
     async def get_artist(self, artist_id: str) -> dict:
         session = await self._ensure_session()
@@ -116,7 +126,9 @@ class CatalogApiClient:
             f"{self.base_url}/v1/content/artist/{artist_id}",
         ) as resp:
             resp.raise_for_status()
-            return await resp.json()
+            data = await resp.json(content_type=None)
+            # Unwrap {"artist": {...}, "related_artists": [...]}
+            return data.get("artist", data) if isinstance(data, dict) else data
 
     async def get_track(self, track_id: str) -> dict:
         session = await self._ensure_session()
@@ -124,7 +136,7 @@ class CatalogApiClient:
             f"{self.base_url}/v1/content/track/{track_id}",
         ) as resp:
             resp.raise_for_status()
-            return await resp.json()
+            return await resp.json(content_type=None)
 
     async def search(self, query: str) -> dict:
         session = await self._ensure_session()
@@ -133,7 +145,7 @@ class CatalogApiClient:
             json={"query": query},
         ) as resp:
             resp.raise_for_status()
-            return await resp.json()
+            return await resp.json(content_type=None)
 
     async def get_session(self) -> dict:
         session = await self._ensure_session()
@@ -141,7 +153,7 @@ class CatalogApiClient:
             f"{self.base_url}/v1/auth/session",
         ) as resp:
             resp.raise_for_status()
-            return await resp.json()
+            return await resp.json(content_type=None)
 
     async def close(self) -> None:
         if self._session and not self._session.closed:

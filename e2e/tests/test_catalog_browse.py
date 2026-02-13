@@ -2,6 +2,8 @@
 
 import pytest
 
+from helpers.api_client import CatalogApiClient
+from helpers.async_runner import run_async
 from helpers.constants import (
     ALBUM_1_ID,
     ALBUM_1_TITLE,
@@ -20,58 +22,97 @@ pytestmark = pytest.mark.web
 class TestCatalogBrowseApi:
     """Verify catalog content is accessible via the API."""
 
-    async def test_get_artist(self, user_api):
-        data = await user_api.get_artist(ARTIST_1_ID)
-        assert data["id"] == ARTIST_1_ID
-        assert data["name"] == ARTIST_1_NAME
+    def test_get_artist(self, config):
+        async def _test():
+            api = CatalogApiClient(config.server_url)
+            try:
+                await api.login(TEST_USER, TEST_PASS, device_uuid="browse-artist")
+                data = await api.get_artist(ARTIST_1_ID)
+                assert data["id"] == ARTIST_1_ID
+                assert data["name"] == ARTIST_1_NAME
+            finally:
+                await api.close()
 
-    async def test_get_album(self, user_api):
-        data = await user_api.get_album(ALBUM_1_ID)
-        assert data["id"] == ALBUM_1_ID
-        assert data["name"] == ALBUM_1_TITLE
+        run_async(_test())
 
-    async def test_get_track(self, user_api):
-        data = await user_api.get_track(TRACK_1_ID)
-        assert data["id"] == TRACK_1_ID
-        assert data["name"] == TRACK_1_TITLE
+    def test_get_album(self, config):
+        async def _test():
+            api = CatalogApiClient(config.server_url)
+            try:
+                await api.login(TEST_USER, TEST_PASS, device_uuid="browse-album")
+                data = await api.get_album(ALBUM_1_ID)
+                assert data["id"] == ALBUM_1_ID
+                assert data["name"] == ALBUM_1_TITLE
+            finally:
+                await api.close()
 
-    async def test_search_artist(self, user_api):
-        data = await user_api.search("Test Band")
-        # Search should return results containing the artist
-        assert data is not None
+        run_async(_test())
 
-    async def test_search_album(self, user_api):
-        data = await user_api.search("Jazz Collection")
-        assert data is not None
+    def test_get_track(self, config):
+        async def _test():
+            api = CatalogApiClient(config.server_url)
+            try:
+                await api.login(TEST_USER, TEST_PASS, device_uuid="browse-track")
+                data = await api.get_track(TRACK_1_ID)
+                assert data["id"] == TRACK_1_ID
+                assert data["name"] == TRACK_1_TITLE
+            finally:
+                await api.close()
+
+        run_async(_test())
+
+    def test_search_artist(self, config):
+        async def _test():
+            api = CatalogApiClient(config.server_url)
+            try:
+                await api.login(TEST_USER, TEST_PASS, device_uuid="search-artist")
+                data = await api.search("Test Band")
+                assert data is not None
+            finally:
+                await api.close()
+
+        run_async(_test())
+
+    def test_search_album(self, config):
+        async def _test():
+            api = CatalogApiClient(config.server_url)
+            try:
+                await api.login(TEST_USER, TEST_PASS, device_uuid="search-album")
+                data = await api.search("Jazz Collection")
+                assert data is not None
+            finally:
+                await api.close()
+
+        run_async(_test())
 
 
 class TestCatalogBrowseWeb:
     """Verify catalog pages render correctly in the browser."""
 
-    async def test_artist_page_shows_name(self, web):
-        await web.login_password(TEST_USER, TEST_PASS)
-        await web.navigate_to(f"/artist/{ARTIST_1_ID}")
-        await web.page.wait_for_timeout(2000)
-        content = await web.page.content()
+    def test_artist_page_shows_name(self, web):
+        web.login_password(TEST_USER, TEST_PASS)
+        web.navigate_to(f"/artist/{ARTIST_1_ID}")
+        web.page.wait_for_timeout(2000)
+        content = web.page.content()
         assert ARTIST_1_NAME in content
 
-    async def test_album_page_shows_title(self, web):
-        await web.login_password(TEST_USER, TEST_PASS)
-        await web.navigate_to(f"/album/{ALBUM_1_ID}")
-        await web.page.wait_for_timeout(2000)
-        content = await web.page.content()
+    def test_album_page_shows_title(self, web):
+        web.login_password(TEST_USER, TEST_PASS)
+        web.navigate_to(f"/album/{ALBUM_1_ID}")
+        web.page.wait_for_timeout(2000)
+        content = web.page.content()
         assert ALBUM_1_TITLE in content
 
-    async def test_track_page_shows_title(self, web):
-        await web.login_password(TEST_USER, TEST_PASS)
-        await web.navigate_to(f"/track/{TRACK_1_ID}")
-        await web.page.wait_for_timeout(2000)
-        content = await web.page.content()
+    def test_track_page_shows_title(self, web):
+        web.login_password(TEST_USER, TEST_PASS)
+        web.navigate_to(f"/track/{TRACK_1_ID}")
+        web.page.wait_for_timeout(2000)
+        content = web.page.content()
         assert TRACK_1_TITLE in content
 
-    async def test_search_page(self, web):
-        await web.login_password(TEST_USER, TEST_PASS)
-        await web.navigate_to("/search/Test")
-        await web.page.wait_for_timeout(3000)
+    def test_search_page(self, web):
+        web.login_password(TEST_USER, TEST_PASS)
+        web.navigate_to("/search/Test")
+        web.page.wait_for_timeout(3000)
         # Verify the page loaded without errors
         assert "/login" not in web.page.url

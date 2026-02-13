@@ -1,5 +1,5 @@
 [tool.pytest.ini_options]
-asyncio_mode = "auto"
+asyncio_mode = "strict"
 testpaths = ["tests"]
 addopts = "--html=/test-results/report.html --self-contained-html"
 markers = [

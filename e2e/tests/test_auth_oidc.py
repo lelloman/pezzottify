@@ -10,26 +10,26 @@ pytestmark = [pytest.mark.web, pytest.mark.auth]
 
 
 class TestOidcLogin:
-    async def test_oidc_button_visible(self, web):
+    def test_oidc_button_visible(self, web):
         """The OIDC login button is visible on the login page."""
-        await web.page.goto("/login")
+        web.page.goto("/login")
         oidc_btn = web.page.locator("button.oidc-button")
-        assert await oidc_btn.is_visible()
+        assert oidc_btn.is_visible()
 
-    async def test_oidc_login_redirects_to_provider(self, web):
+    def test_oidc_login_redirects_to_provider(self, web):
         """Clicking OIDC button redirects to the OIDC provider."""
-        await web.page.goto("/login")
-        await web.page.locator("button.oidc-button").first.click()
+        web.page.goto("/login")
+        web.page.locator("button.oidc-button").first.click()
         # Should redirect to mock-oidc
-        await web.page.wait_for_timeout(3000)
+        web.page.wait_for_timeout(3000)
         # URL should contain the OIDC authority or we should see a login form
         url = web.page.url
         assert "mock-oidc" in url or "/login" not in url
 
-    async def test_oidc_full_flow(self, web):
+    def test_oidc_full_flow(self, web):
         """Complete OIDC login flow through mock OIDC provider."""
         try:
-            await web.login_oidc()
+            web.login_oidc()
             # Should be redirected back to app, away from login
             assert "/login" not in web.page.url
         except Exception:

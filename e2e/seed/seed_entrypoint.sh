@@ -9,6 +9,12 @@ echo "=== E2E Seed Entrypoint ==="
 echo "DB_DIR=$DB_DIR"
 echo "MEDIA_DIR=$MEDIA_DIR"
 
+# Skip if already seeded (idempotent re-runs)
+if [ -f "$DB_DIR/catalog.db" ] && [ -f "$DB_DIR/user.db" ]; then
+    echo "=== Seed data already exists, skipping ==="
+    exit 0
+fi
+
 # Create directories
 mkdir -p "$DB_DIR"
 mkdir -p "$MEDIA_DIR/audio"

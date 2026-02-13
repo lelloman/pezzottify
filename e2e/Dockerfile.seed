@@ -1,4 +1,4 @@
-FROM pezzottify-e2e-pezzottify-server:latest AS cli-source
+FROM pezzottify-e2e-server:latest AS cli-source
 
 FROM python:3.12-slim
 

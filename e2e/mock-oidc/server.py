@@ -19,6 +19,15 @@ from flask import Flask, request, jsonify, redirect, Response
 
 app = Flask(__name__)
 
+
+@app.after_request
+def add_cors_headers(response):
+    """Allow cross-origin requests from any origin (needed for browser OIDC flow)."""
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    return response
+
 # --- Configuration -----------------------------------------------------------
 
 ISSUER = os.environ.get("MOCK_OIDC_ISSUER", "http://mock-oidc:8080")

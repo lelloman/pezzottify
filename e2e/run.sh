@@ -62,7 +62,7 @@ echo "=== Building pezzottify-server image (needed by seed container) ==="
 docker compose build pezzottify-server
 
 echo "=== Building and starting services ==="
-docker compose $PROFILE_ARGS up --build -d
+docker compose $PROFILE_ARGS up --build -d --scale test-runner=0
 
 echo "=== Waiting for pezzottify-server to be healthy ==="
 timeout=120
