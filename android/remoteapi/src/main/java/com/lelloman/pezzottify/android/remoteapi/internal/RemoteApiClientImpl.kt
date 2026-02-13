@@ -191,11 +191,18 @@ internal class RemoteApiClientImpl(
     override suspend fun getArtistDiscography(
         artistId: String,
         offset: Int?,
-        limit: Int?
+        limit: Int?,
+        appearsOn: Boolean
     ): RemoteApiResponse<ArtistDiscographyResponse> =
         catchingNetworkError {
             getRetrofit()
-                .getArtistDiscography(authToken = authToken, artistId = artistId, offset = offset, limit = limit)
+                .getArtistDiscography(
+                    authToken = authToken,
+                    artistId = artistId,
+                    offset = offset,
+                    limit = limit,
+                    appearsOn = if (appearsOn) true else null
+                )
                 .returnFromRetrofitResponse()
         }
 

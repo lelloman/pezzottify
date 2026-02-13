@@ -44,6 +44,9 @@ data class DiscographyState(
  * 1. Call observeDiscography(artistId) to get a Flow of current state
  * 2. Call fetchFirstPage(artistId) when artist screen opens
  * 3. Call fetchMoreAlbums(artistId) when user scrolls to load more
+ *
+ * All methods accept an optional isAppearsOn parameter to fetch "appears on"
+ * albums separately from primary discography.
  */
 @Singleton
 class DiscographyCacheFetcher @Inject constructor(
@@ -58,6 +61,9 @@ class DiscographyCacheFetcher @Inject constructor(
         const val PAGE_SIZE = 20
     }
 
+    private fun stateKey(artistId: String, isAppearsOn: Boolean): String =
+        if (isAppearsOn) "$artistId:ao" else artistId
+
     // Track server totals per artist (so we know if there's more to fetch)
     private val serverTotals = MutableStateFlow<Map<String, Int>>(emptyMap())
 
@@ -70,12 +76,12 @@ class DiscographyCacheFetcher @Inject constructor(
     // Track errors per artist
     private val errors = MutableStateFlow<Map<String, String?>>(emptyMap())
 
-    // Mutex per artist to prevent concurrent fetches
+    // Mutex per key to prevent concurrent fetches
     private val fetchMutexes = mutableMapOf<String, Mutex>()
 
-    private fun getMutex(artistId: String): Mutex {
+    private fun getMutex(key: String): Mutex {
         return synchronized(fetchMutexes) {
-            fetchMutexes.getOrPut(artistId) { Mutex() }
+            fetchMutexes.getOrPut(key) { Mutex() }
         }
     }
 
@@ -88,22 +94,28 @@ class DiscographyCacheFetcher @Inject constructor(
      * - Loading state
      * - Any errors
      */
-    fun observeDiscography(artistId: String): Flow<DiscographyState> {
+    fun observeDiscography(artistId: String, isAppearsOn: Boolean = false): Flow<DiscographyState> {
+        val key = stateKey(artistId, isAppearsOn)
+        val albumIdsFlow = if (isAppearsOn) {
+            skeletonStore.observeAppearsOnAlbumIdsForArtist(artistId)
+        } else {
+            skeletonStore.observeAlbumIdsForArtist(artistId)
+        }
         return combine(
-            skeletonStore.observeAlbumIdsForArtist(artistId),
+            albumIdsFlow,
             serverTotals,
             currentOffsets,
             loadingStates,
             errors
         ) { albumIds, totals, offsets, loading, errs ->
-            val total = totals[artistId]
-            val offset = offsets[artistId] ?: 0
+            val total = totals[key]
+            val offset = offsets[key] ?: 0
             DiscographyState(
                 albumIds = albumIds,
                 totalOnServer = total,
-                isLoading = loading[artistId] == true,
+                isLoading = loading[key] == true,
                 hasMore = total != null && offset < total,
-                error = errs[artistId]
+                error = errs[key]
             )
         }
     }
@@ -115,49 +127,56 @@ class DiscographyCacheFetcher @Inject constructor(
      * to ensure proper ordering (by availability, then popularity/date).
      * Call this when the artist screen opens.
      */
-    suspend fun fetchFirstPage(artistId: String): FetchPageResult = withContext(Dispatchers.IO) {
-        val mutex = getMutex(artistId)
+    suspend fun fetchFirstPage(artistId: String, isAppearsOn: Boolean = false): FetchPageResult = withContext(Dispatchers.IO) {
+        val key = stateKey(artistId, isAppearsOn)
+        val mutex = getMutex(key)
 
         // Prevent concurrent fetches for same artist
         if (!mutex.tryLock()) {
-            logger.debug("fetchFirstPage($artistId) already in progress, skipping")
+            logger.debug("fetchFirstPage($key) already in progress, skipping")
             return@withContext FetchPageResult.Success(0, true)
         }
 
         try {
-            setLoading(artistId, true)
-            clearError(artistId)
+            setLoading(key, true)
+            clearError(key)
 
-            logger.info("fetchFirstPage($artistId) pageSize=$PAGE_SIZE")
+            logger.info("fetchFirstPage($key) pageSize=$PAGE_SIZE")
 
             // Fetch first page from server
             when (val response = remoteApiClient.getArtistDiscography(
                 artistId = artistId,
                 offset = 0,
-                limit = PAGE_SIZE
+                limit = PAGE_SIZE,
+                appearsOn = isAppearsOn
             )) {
                 is RemoteApiResponse.Success -> {
                     val data = response.data
 
                     // Update server total and reset offset
-                    setServerTotal(artistId, data.total)
-                    setCurrentOffset(artistId, data.albums.size)
+                    setServerTotal(key, data.total)
+                    setCurrentOffset(key, data.albums.size)
 
                     // Clear existing albums and insert fresh data with order index
-                    skeletonStore.deleteAlbumsForArtist(artistId)
+                    if (isAppearsOn) {
+                        skeletonStore.deleteAppearsOnAlbumsForArtist(artistId)
+                    } else {
+                        skeletonStore.deleteAlbumsForArtist(artistId)
+                    }
 
                     val albumArtists = data.albums.mapIndexed { index, album ->
                         AlbumArtistRelationship(
                             artistId = artistId,
                             albumId = album.id,
-                            orderIndex = index
+                            orderIndex = index,
+                            isAppearsOn = isAppearsOn
                         )
                     }
                     skeletonStore.insertAlbumArtists(albumArtists)
 
                     val hasMore = data.albums.size < data.total
 
-                    logger.info("fetchFirstPage($artistId) fetched ${data.albums.size} albums, total=${data.total}, hasMore=$hasMore")
+                    logger.info("fetchFirstPage($key) fetched ${data.albums.size} albums, total=${data.total}, hasMore=$hasMore")
 
                     FetchPageResult.Success(
                         fetchedCount = data.albums.size,
@@ -166,13 +185,13 @@ class DiscographyCacheFetcher @Inject constructor(
                 }
                 is RemoteApiResponse.Error -> {
                     val errorMsg = "Failed to fetch discography: $response"
-                    logger.error("fetchFirstPage($artistId) $errorMsg")
-                    setError(artistId, errorMsg)
+                    logger.error("fetchFirstPage($key) $errorMsg")
+                    setError(key, errorMsg)
                     FetchPageResult.Error(errorMsg)
                 }
             }
         } finally {
-            setLoading(artistId, false)
+            setLoading(key, false)
             mutex.unlock()
         }
     }
@@ -183,57 +202,60 @@ class DiscographyCacheFetcher @Inject constructor(
      * Call this when the user scrolls down to load more albums.
      * Albums are appended to the existing cache with correct order indices.
      */
-    suspend fun fetchMoreAlbums(artistId: String): FetchPageResult = withContext(Dispatchers.IO) {
-        val mutex = getMutex(artistId)
+    suspend fun fetchMoreAlbums(artistId: String, isAppearsOn: Boolean = false): FetchPageResult = withContext(Dispatchers.IO) {
+        val key = stateKey(artistId, isAppearsOn)
+        val mutex = getMutex(key)
 
         // Prevent concurrent fetches for same artist
         if (!mutex.tryLock()) {
-            logger.debug("fetchMoreAlbums($artistId) already in progress, skipping")
+            logger.debug("fetchMoreAlbums($key) already in progress, skipping")
             return@withContext FetchPageResult.Success(0, true)
         }
 
         try {
-            setLoading(artistId, true)
-            clearError(artistId)
+            setLoading(key, true)
+            clearError(key)
 
-            val offset = currentOffsets.value[artistId] ?: 0
-            val total = serverTotals.value[artistId]
+            val offset = currentOffsets.value[key] ?: 0
+            val total = serverTotals.value[key]
 
             // Check if we already have all albums
             if (total != null && offset >= total) {
-                logger.info("fetchMoreAlbums($artistId) already complete: offset=$offset >= total=$total")
+                logger.info("fetchMoreAlbums($key) already complete: offset=$offset >= total=$total")
                 return@withContext FetchPageResult.AlreadyComplete
             }
 
-            logger.info("fetchMoreAlbums($artistId) offset=$offset, pageSize=$PAGE_SIZE")
+            logger.info("fetchMoreAlbums($key) offset=$offset, pageSize=$PAGE_SIZE")
 
             // Fetch next page from server
             when (val response = remoteApiClient.getArtistDiscography(
                 artistId = artistId,
                 offset = offset,
-                limit = PAGE_SIZE
+                limit = PAGE_SIZE,
+                appearsOn = isAppearsOn
             )) {
                 is RemoteApiResponse.Success -> {
                     val data = response.data
 
                     // Update server total and offset
-                    setServerTotal(artistId, data.total)
+                    setServerTotal(key, data.total)
                     val newOffset = offset + data.albums.size
-                    setCurrentOffset(artistId, newOffset)
+                    setCurrentOffset(key, newOffset)
 
                     // Append albums with correct order index
                     val albumArtists = data.albums.mapIndexed { index, album ->
                         AlbumArtistRelationship(
                             artistId = artistId,
                             albumId = album.id,
-                            orderIndex = offset + index
+                            orderIndex = offset + index,
+                            isAppearsOn = isAppearsOn
                         )
                     }
                     skeletonStore.insertAlbumArtists(albumArtists)
 
                     val hasMore = newOffset < data.total
 
-                    logger.info("fetchMoreAlbums($artistId) fetched ${data.albums.size} albums, offset=$newOffset/${data.total}, hasMore=$hasMore")
+                    logger.info("fetchMoreAlbums($key) fetched ${data.albums.size} albums, offset=$newOffset/${data.total}, hasMore=$hasMore")
 
                     FetchPageResult.Success(
                         fetchedCount = data.albums.size,
@@ -242,38 +264,38 @@ class DiscographyCacheFetcher @Inject constructor(
                 }
                 is RemoteApiResponse.Error -> {
                     val errorMsg = "Failed to fetch more albums: $response"
-                    logger.error("fetchMoreAlbums($artistId) $errorMsg")
-                    setError(artistId, errorMsg)
+                    logger.error("fetchMoreAlbums($key) $errorMsg")
+                    setError(key, errorMsg)
                     FetchPageResult.Error(errorMsg)
                 }
             }
         } finally {
-            setLoading(artistId, false)
+            setLoading(key, false)
             mutex.unlock()
         }
     }
 
-    private fun setServerTotal(artistId: String, total: Int) {
-        serverTotals.value = serverTotals.value + (artistId to total)
+    private fun setServerTotal(key: String, total: Int) {
+        serverTotals.value = serverTotals.value + (key to total)
     }
 
-    private fun setCurrentOffset(artistId: String, offset: Int) {
-        currentOffsets.value = currentOffsets.value + (artistId to offset)
+    private fun setCurrentOffset(key: String, offset: Int) {
+        currentOffsets.value = currentOffsets.value + (key to offset)
     }
 
-    private fun setLoading(artistId: String, loading: Boolean) {
+    private fun setLoading(key: String, loading: Boolean) {
         loadingStates.value = if (loading) {
-            loadingStates.value + (artistId to true)
+            loadingStates.value + (key to true)
         } else {
-            loadingStates.value - artistId
+            loadingStates.value - key
         }
     }
 
-    private fun setError(artistId: String, error: String) {
-        errors.value = errors.value + (artistId to error)
+    private fun setError(key: String, error: String) {
+        errors.value = errors.value + (key to error)
     }
 
-    private fun clearError(artistId: String) {
-        errors.value = errors.value - artistId
+    private fun clearError(key: String) {
+        errors.value = errors.value - key
     }
 }

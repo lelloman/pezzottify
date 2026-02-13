@@ -1362,6 +1362,7 @@ mod tests {
                 _limit: usize,
                 _offset: usize,
                 _sort: crate::catalog_store::DiscographySort,
+                _appears_on: bool,
             ) -> anyhow::Result<Option<crate::catalog_store::ArtistDiscography>> {
                 Ok(None)
             }

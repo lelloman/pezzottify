@@ -340,6 +340,7 @@ impl AgentTool for GetArtistDetailsTool {
                 50,                                               // limit
                 0,                                                // offset
                 crate::catalog_store::DiscographySort::default(), // Use default (Popularity)
+                false,                                            // appears_on
             )
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 

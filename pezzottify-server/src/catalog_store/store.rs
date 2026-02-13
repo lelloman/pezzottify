@@ -610,6 +610,7 @@ impl SqliteCatalogStore {
         limit: usize,
         offset: usize,
         sort: DiscographySort,
+        appears_on: bool,
     ) -> Result<Option<ArtistDiscography>> {
         let read_conn = self.get_read_conn();
         let conn = read_conn.lock().unwrap();
@@ -619,10 +620,19 @@ impl SqliteCatalogStore {
             None => return Ok(None),
         };
 
+        let where_clause = if appears_on {
+            "aa.artist_rowid = ?1 AND aa.is_appears_on = 1"
+        } else {
+            "aa.artist_rowid = ?1 AND aa.is_appears_on = 0 AND a.album_type != 'single'"
+        };
+
         let total: usize = conn.query_row(
-            "SELECT COUNT(*) FROM artist_albums aa
-             INNER JOIN albums a ON a.rowid = aa.album_rowid
-             WHERE aa.artist_rowid = ?1 AND aa.is_appears_on = 0 AND a.album_type != 'single'",
+            &format!(
+                "SELECT COUNT(*) FROM artist_albums aa
+                 INNER JOIN albums a ON a.rowid = aa.album_rowid
+                 WHERE {}",
+                where_clause
+            ),
             params![artist_rowid],
             |row| row.get::<_, i64>(0),
         )? as usize;
@@ -649,10 +659,10 @@ impl SqliteCatalogStore {
                     a.label, a.popularity, a.release_date, a.release_date_precision, a.album_availability
              FROM albums a
              INNER JOIN artist_albums aa ON a.rowid = aa.album_rowid
-             WHERE aa.artist_rowid = ?1 AND aa.is_appears_on = 0 AND a.album_type != 'single'
+             WHERE {}
              ORDER BY {}
              LIMIT ?2 OFFSET ?3",
-            order_clause
+            where_clause, order_clause
         );
 
         let mut albums_stmt = conn.prepare_cached(&query)?;
@@ -1013,8 +1023,9 @@ impl CatalogStore for SqliteCatalogStore {
         limit: usize,
         offset: usize,
         sort: DiscographySort,
+        appears_on: bool,
     ) -> Result<Option<ArtistDiscography>> {
-        SqliteCatalogStore::get_discography(self, id, limit, offset, sort)
+        SqliteCatalogStore::get_discography(self, id, limit, offset, sort, appears_on)
     }
 
     fn get_album_image_url(&self, album_id: &str) -> Result<Option<ImageUrl>> {

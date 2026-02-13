@@ -57,6 +57,7 @@ impl CatalogStore for NullCatalogStore {
         _limit: usize,
         _offset: usize,
         _sort: super::DiscographySort,
+        _appears_on: bool,
     ) -> Result<Option<super::ArtistDiscography>> {
         Ok(None)
     }

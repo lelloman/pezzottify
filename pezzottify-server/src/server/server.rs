@@ -1018,12 +1018,13 @@ async fn get_artist_discography(
         Some("release_date") => DiscographySort::ReleaseDate,
         _ => DiscographySort::Popularity, // default
     };
+    let appears_on = query.appears_on.unwrap_or(false);
 
     let catalog_store = Arc::clone(&catalog_store);
     let id = id.clone();
 
     match tokio::task::spawn_blocking(move || {
-        catalog_store.get_discography(&id, limit, offset, sort)
+        catalog_store.get_discography(&id, limit, offset, sort, appears_on)
     })
     .await
     {
@@ -3619,6 +3620,7 @@ struct DiscographyQuery {
     pub limit: Option<usize>,
     pub offset: Option<usize>,
     pub sort: Option<String>,
+    pub appears_on: Option<bool>,
 }
 
 #[derive(Deserialize, Debug)]

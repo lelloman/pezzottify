@@ -17,11 +17,14 @@ internal interface SkeletonDao {
     // Cache Queries
     // =========================================================================
 
-    @Query("SELECT ${SkeletonAlbumArtist.COLUMN_ALBUM_ID} FROM ${SkeletonAlbumArtist.TABLE_NAME} WHERE ${SkeletonAlbumArtist.COLUMN_ARTIST_ID} = :artistId ORDER BY ${SkeletonAlbumArtist.COLUMN_ORDER_INDEX}")
+    @Query("SELECT ${SkeletonAlbumArtist.COLUMN_ALBUM_ID} FROM ${SkeletonAlbumArtist.TABLE_NAME} WHERE ${SkeletonAlbumArtist.COLUMN_ARTIST_ID} = :artistId AND ${SkeletonAlbumArtist.COLUMN_IS_APPEARS_ON} = 0 ORDER BY ${SkeletonAlbumArtist.COLUMN_ORDER_INDEX}")
     suspend fun getAlbumIdsForArtist(artistId: String): List<String>
 
-    @Query("SELECT ${SkeletonAlbumArtist.COLUMN_ALBUM_ID} FROM ${SkeletonAlbumArtist.TABLE_NAME} WHERE ${SkeletonAlbumArtist.COLUMN_ARTIST_ID} = :artistId ORDER BY ${SkeletonAlbumArtist.COLUMN_ORDER_INDEX}")
+    @Query("SELECT ${SkeletonAlbumArtist.COLUMN_ALBUM_ID} FROM ${SkeletonAlbumArtist.TABLE_NAME} WHERE ${SkeletonAlbumArtist.COLUMN_ARTIST_ID} = :artistId AND ${SkeletonAlbumArtist.COLUMN_IS_APPEARS_ON} = 0 ORDER BY ${SkeletonAlbumArtist.COLUMN_ORDER_INDEX}")
     fun observeAlbumIdsForArtist(artistId: String): kotlinx.coroutines.flow.Flow<List<String>>
+
+    @Query("SELECT ${SkeletonAlbumArtist.COLUMN_ALBUM_ID} FROM ${SkeletonAlbumArtist.TABLE_NAME} WHERE ${SkeletonAlbumArtist.COLUMN_ARTIST_ID} = :artistId AND ${SkeletonAlbumArtist.COLUMN_IS_APPEARS_ON} = 1 ORDER BY ${SkeletonAlbumArtist.COLUMN_ORDER_INDEX}")
+    fun observeAppearsOnAlbumIdsForArtist(artistId: String): kotlinx.coroutines.flow.Flow<List<String>>
 
     @Query("SELECT ${SkeletonTrack.COLUMN_ID} FROM ${SkeletonTrack.TABLE_NAME} WHERE ${SkeletonTrack.COLUMN_ALBUM_ID} = :albumId")
     suspend fun getTrackIdsForAlbum(albumId: String): List<String>
@@ -43,8 +46,11 @@ internal interface SkeletonDao {
     // Delete Operations
     // =========================================================================
 
-    @Query("DELETE FROM ${SkeletonAlbumArtist.TABLE_NAME} WHERE ${SkeletonAlbumArtist.COLUMN_ARTIST_ID} = :artistId")
+    @Query("DELETE FROM ${SkeletonAlbumArtist.TABLE_NAME} WHERE ${SkeletonAlbumArtist.COLUMN_ARTIST_ID} = :artistId AND ${SkeletonAlbumArtist.COLUMN_IS_APPEARS_ON} = 0")
     suspend fun deleteAlbumsForArtist(artistId: String)
+
+    @Query("DELETE FROM ${SkeletonAlbumArtist.TABLE_NAME} WHERE ${SkeletonAlbumArtist.COLUMN_ARTIST_ID} = :artistId AND ${SkeletonAlbumArtist.COLUMN_IS_APPEARS_ON} = 1")
+    suspend fun deleteAppearsOnAlbumsForArtist(artistId: String)
 
     @Query("DELETE FROM ${SkeletonTrack.TABLE_NAME}")
     suspend fun deleteAllTracks()

@@ -18,6 +18,9 @@ internal class SkeletonStoreImpl @Inject constructor(
     override fun observeAlbumIdsForArtist(artistId: String): kotlinx.coroutines.flow.Flow<List<String>> =
         skeletonDao.observeAlbumIdsForArtist(artistId)
 
+    override fun observeAppearsOnAlbumIdsForArtist(artistId: String): kotlinx.coroutines.flow.Flow<List<String>> =
+        skeletonDao.observeAppearsOnAlbumIdsForArtist(artistId)
+
     override suspend fun getTrackIdsForAlbum(albumId: String): List<String> =
         withContext(Dispatchers.IO) {
             skeletonDao.getTrackIdsForAlbum(albumId)
@@ -41,12 +44,13 @@ internal class SkeletonStoreImpl @Inject constructor(
             }
             skeletonDao.insertAlbums(albums)
 
-            // Now insert the relationships with order index
+            // Now insert the relationships with order index and appears-on flag
             val daoAlbumArtists = albumArtists.map { relationship ->
                 com.lelloman.pezzottify.android.localdata.internal.skeleton.model.SkeletonAlbumArtist(
                     artistId = relationship.artistId,
                     albumId = relationship.albumId,
-                    orderIndex = relationship.orderIndex
+                    orderIndex = relationship.orderIndex,
+                    isAppearsOn = relationship.isAppearsOn
                 )
             }
             skeletonDao.insertAlbumArtists(daoAlbumArtists)
@@ -56,6 +60,13 @@ internal class SkeletonStoreImpl @Inject constructor(
         withContext(Dispatchers.IO) {
             runCatching {
                 skeletonDao.deleteAlbumsForArtist(artistId)
+            }
+        }
+
+    override suspend fun deleteAppearsOnAlbumsForArtist(artistId: String): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                skeletonDao.deleteAppearsOnAlbumsForArtist(artistId)
             }
         }
 

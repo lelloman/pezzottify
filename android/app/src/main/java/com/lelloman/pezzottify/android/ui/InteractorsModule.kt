@@ -1171,6 +1171,23 @@ class InteractorsModule {
             staticsProvider.fetchMoreDiscography(artistId)
         }
 
+        override fun observeAppearsOnState(artistId: String) =
+            staticsProvider.observeAppearsOnState(artistId).map { domainState ->
+                ArtistScreenViewModel.DiscographyUiState(
+                    albumIds = domainState.albumIds,
+                    hasMore = domainState.hasMore,
+                    isLoading = domainState.isLoading
+                )
+            }
+
+        override suspend fun fetchFirstAppearsOnPage(artistId: String) {
+            staticsProvider.fetchFirstAppearsOnPage(artistId)
+        }
+
+        override suspend fun fetchMoreAppearsOn(artistId: String) {
+            staticsProvider.fetchMoreAppearsOn(artistId)
+        }
+
         override suspend fun retryErroredItems(itemIds: List<String>) {
             staticsProvider.retryErroredItems(itemIds)
         }

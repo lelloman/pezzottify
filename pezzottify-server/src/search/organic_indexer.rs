@@ -312,6 +312,7 @@ impl OrganicIndexer {
             1000, // Large limit for indexing
             0,
             crate::catalog_store::DiscographySort::Popularity,
+            false,
         ) {
             for album in discography.albums.iter() {
                 if !self.is_indexed(&album.id, HashedItemType::Album) {

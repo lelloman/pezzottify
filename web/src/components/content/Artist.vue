@@ -21,6 +21,9 @@
     <div class="discographyContainer">
       <ArtistDiscography :artistId="artistId" />
     </div>
+    <div class="discographyContainer">
+      <ArtistDiscography :artistId="artistId" :appearsOn="true" />
+    </div>
   </div>
 
   <div v-else>

@@ -31,16 +31,18 @@ class ArtistScreenViewModel @AssistedInject constructor(
         viewModelScope.launch {
             // Clear error states to force retry of previously failed items
             interactor.retryErroredItems(listOf(artistId))
-            // Fetch first page of albums (always fetch fresh to get proper ordering)
+            // Fetch first page of albums and appears-on albums
             interactor.fetchFirstDiscographyPage(artistId)
+            interactor.fetchFirstAppearsOnPage(artistId)
         }
     }
 
     val state = combine(
         contentResolver.resolveArtist(artistId),
         interactor.observeDiscographyState(artistId),
-        interactor.isLiked(artistId)
-    ) { artistContent, discographyState, isLiked ->
+        interactor.isLiked(artistId),
+        interactor.observeAppearsOnState(artistId)
+    ) { artistContent, discographyState, isLiked, appearsOnState ->
         when (artistContent) {
             is Content.Loading -> ArtistScreenState()
             is Content.Error -> ArtistScreenState(
@@ -51,13 +53,15 @@ class ArtistScreenViewModel @AssistedInject constructor(
                 ArtistScreenState(
                     artist = artistContent.data,
                     albums = discographyState.albumIds,
-                    features = emptyList(), // TODO: features not currently supported
+                    features = appearsOnState.albumIds,
                     relatedArtists = artistContent.data.related,
                     isError = false,
                     isLoading = false,
                     isLiked = isLiked,
                     hasMoreAlbums = discographyState.hasMore,
                     isLoadingMoreAlbums = discographyState.isLoading,
+                    hasMoreFeatures = appearsOnState.hasMore,
+                    isLoadingMoreFeatures = appearsOnState.isLoading,
                 )
             }
         }
@@ -84,6 +88,12 @@ class ArtistScreenViewModel @AssistedInject constructor(
         }
     }
 
+    override fun loadMoreFeatures() {
+        viewModelScope.launch {
+            interactor.fetchMoreAppearsOn(artistId)
+        }
+    }
+
     /**
      * UI-layer representation of discography state.
      */
@@ -100,6 +110,9 @@ class ArtistScreenViewModel @AssistedInject constructor(
         fun observeDiscographyState(artistId: String): Flow<DiscographyUiState>
         suspend fun fetchFirstDiscographyPage(artistId: String)
         suspend fun fetchMoreDiscography(artistId: String)
+        fun observeAppearsOnState(artistId: String): Flow<DiscographyUiState>
+        suspend fun fetchFirstAppearsOnPage(artistId: String)
+        suspend fun fetchMoreAppearsOn(artistId: String)
         suspend fun retryErroredItems(itemIds: List<String>)
     }
 

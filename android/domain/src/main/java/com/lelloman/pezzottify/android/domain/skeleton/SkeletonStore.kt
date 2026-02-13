@@ -20,8 +20,15 @@ interface SkeletonStore {
     /**
      * Observe album IDs for a given artist as a Flow.
      * This is reactive and will emit updates when cache data changes.
+     * Only returns primary albums (not appears-on).
      */
     fun observeAlbumIdsForArtist(artistId: String): kotlinx.coroutines.flow.Flow<List<String>>
+
+    /**
+     * Observe "appears on" album IDs for a given artist as a Flow.
+     * Returns albums where the artist is featured/guest, not the primary artist.
+     */
+    fun observeAppearsOnAlbumIdsForArtist(artistId: String): kotlinx.coroutines.flow.Flow<List<String>>
 
     /**
      * Get all track IDs for a given album from cache.
@@ -36,10 +43,15 @@ interface SkeletonStore {
     suspend fun insertAlbumArtists(albumArtists: List<AlbumArtistRelationship>)
 
     /**
-     * Delete all cached album IDs for a given artist.
+     * Delete all cached primary album IDs for a given artist.
      * Used to invalidate cache when needed.
      */
     suspend fun deleteAlbumsForArtist(artistId: String): Result<Unit>
+
+    /**
+     * Delete all cached "appears on" album IDs for a given artist.
+     */
+    suspend fun deleteAppearsOnAlbumsForArtist(artistId: String): Result<Unit>
 
     /**
      * Clear all skeleton cache data.
@@ -55,7 +67,8 @@ interface SkeletonStore {
 data class AlbumArtistRelationship(
     val artistId: String,
     val albumId: String,
-    val orderIndex: Int = 0
+    val orderIndex: Int = 0,
+    val isAppearsOn: Boolean = false
 )
 
 /**

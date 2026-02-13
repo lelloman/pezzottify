@@ -65,13 +65,16 @@ internal data class SkeletonAlbumArtist(
     @ColumnInfo(name = COLUMN_ARTIST_ID)
     val artistId: String,
     @ColumnInfo(name = COLUMN_ORDER_INDEX, defaultValue = "0")
-    val orderIndex: Int = 0
+    val orderIndex: Int = 0,
+    @ColumnInfo(name = COLUMN_IS_APPEARS_ON, defaultValue = "0")
+    val isAppearsOn: Boolean = false
 ) {
     companion object {
         const val TABLE_NAME = "skeleton_album_artists"
         const val COLUMN_ALBUM_ID = "album_id"
         const val COLUMN_ARTIST_ID = "artist_id"
         const val COLUMN_ORDER_INDEX = "order_index"
+        const val COLUMN_IS_APPEARS_ON = "is_appears_on"
     }
 }
 
