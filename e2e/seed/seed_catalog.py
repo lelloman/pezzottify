@@ -1,6 +1,6 @@
 """Creates a seeded catalog.db for E2E tests.
 
-Schema matches pezzottify-server/src/catalog_store/schema.rs at version 4.
+Schema matches pezzottify-server/src/catalog_store/schema.rs at version 5.
 Data mirrors pezzottify-server/tests/common/fixtures.rs.
 """
 
@@ -30,11 +30,11 @@ TRACK_5_TITLE = "Upbeat Jazz"
 
 # BASE_DB_VERSION from sqlite_persistence/versioned_schema.rs
 BASE_DB_VERSION = 99999
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 def create_schema(conn: sqlite3.Connection) -> None:
-    """Create catalog schema at version 4 (latest)."""
+    """Create catalog schema at version 5 (latest)."""
     conn.executescript("""
         CREATE TABLE artists (
             rowid INTEGER PRIMARY KEY,
@@ -42,7 +42,9 @@ def create_schema(conn: sqlite3.Connection) -> None:
             name TEXT NOT NULL,
             followers_total INTEGER NOT NULL,
             popularity INTEGER NOT NULL,
-            artist_available INTEGER NOT NULL DEFAULT 0
+            artist_available INTEGER NOT NULL DEFAULT 0,
+            mbid TEXT,
+            mbid_lookup_status INTEGER NOT NULL DEFAULT 0
         );
         CREATE INDEX idx_artists_id ON artists(id);
         CREATE INDEX idx_artists_available ON artists(artist_available);
@@ -128,6 +130,15 @@ def create_schema(conn: sqlite3.Connection) -> None:
             url TEXT NOT NULL
         );
         CREATE INDEX idx_artist_images_artist ON artist_images(artist_rowid);
+
+        CREATE TABLE related_artists (
+            artist_rowid INTEGER NOT NULL,
+            related_artist_rowid INTEGER NOT NULL,
+            match_score REAL NOT NULL,
+            UNIQUE(artist_rowid, related_artist_rowid)
+        );
+        CREATE INDEX idx_related_artists_artist ON related_artists(artist_rowid);
+        CREATE INDEX idx_related_artists_related ON related_artists(related_artist_rowid);
     """)
 
 
