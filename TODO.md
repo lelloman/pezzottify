@@ -11,6 +11,10 @@
   Combines listening data (70%), impressions (25%), and Spotify popularity (5%) with weight redistribution.
   Includes `item_impressions` table, `POST /v1/user/impression` endpoint, and updated `PopularContentJob`.
   See `docs/composite-popularity-scoring.md` for details.
+- **E2E Testing Infrastructure** - Fully implemented.
+  Docker Compose-based E2E testing with Python pytest test runner.
+  Coordinates pezzottify-server, LelloAuth OIDC provider, web clients (Playwright), and Android emulators (ADB).
+  See `docs/e2e-testing-implementation-plan.md` for details.
 
 ## [android]
 
