@@ -4,6 +4,13 @@
 
 - **Skeleton sync removed** - Dead code removed (`src/skeleton/`, `src/server/skeleton.rs`, `tests/e2e_skeleton_tests.rs`).
   Android now uses on-demand discography API (`/v1/content/artist/{id}/discography`) instead.
+- **Related Artists enrichment** - Implemented via Last.fm + MusicBrainz API integration.
+  Two-phase background job implementation with MusicBrainz mbid storage and Last.fm similar artists lookup.
+  See `docs/related-artists-design.md` for details.
+- **Composite Popularity Scoring** - Fully implemented.
+  Combines listening data (70%), impressions (25%), and Spotify popularity (5%) with weight redistribution.
+  Includes `item_impressions` table, `POST /v1/user/impression` endpoint, and updated `PopularContentJob`.
+  See `docs/composite-popularity-scoring.md` for details.
 
 ## [android]
 

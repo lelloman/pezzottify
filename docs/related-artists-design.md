@@ -1,5 +1,7 @@
 # Related Artists via Last.fm + MusicBrainz
 
+**Status**: ✅ **IMPLEMENTED**
+
 ## Problem
 
 Spotify's Web API (`/artists/{id}/related-artists`) is aggressively rate-limited (429), making it unusable for fetching similar artists through the downloader. The librespot Mercury API has a `related` field on artist metadata but it always returns empty.
