@@ -67,17 +67,19 @@ This document tracks development-related improvements for correctness, reliabili
 
 ---
 
-### 4. Enable R8/ProGuard for Release Builds
+### 4. Enable R8/ProGuard for Release Builds ✅ COMPLETED
 
 **Problem:** All modules have `isMinifyEnabled = false` in release builds, resulting in larger APK size, no code obfuscation, and unused code not being stripped.
 
 **Location:** `app/build.gradle.kts:53`
 
 **Solution:**
-- [ ] Enable `isMinifyEnabled = true` for release builds
-- [ ] Create/update ProGuard rules for Retrofit, Kotlin Serialization, Room, Hilt
-- [ ] Test release build thoroughly
-- [ ] Consider enabling `shrinkResources = true`
+- [x] Enable `isMinifyEnabled = true` for release builds
+- [x] Create/update ProGuard rules for Retrofit, Kotlin Serialization, Room, Hilt
+- [x] Test release build thoroughly
+- [ ] Consider enabling `shrinkResources = true` (blocked by AGP 9.0 DSL changes)
+
+**Commit:** `[android] Enable R8/ProGuard for release builds`
 
 ---
 
@@ -203,7 +205,7 @@ This document tracks development-related improvements for correctness, reliabili
 | Priority | Count | Items |
 |----------|-------|-------|
 | Critical | 2 | GlobalScope ✅, runBlocking ✅ |
-| Medium | 4 | JVM targets ✅, R8, !! ✅, logging ✅ |
+| Medium | 4 | JVM targets ✅, R8 ✅, !! ✅, logging ✅ |
 | Low | 6 | Tests, TODOs ✅, exceptions, duplication, KSP, home screen flash |
 
 ---
