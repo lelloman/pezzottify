@@ -649,6 +649,57 @@ export const useRemoteStore = defineStore("remote", () => {
   };
 
   // =====================================================
+  // User Download API
+  // =====================================================
+
+  const fetchDownloadLimits = async () => {
+    try {
+      const response = await axios.get("/v1/download/limits");
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch download limits:", error);
+      return null;
+    }
+  };
+
+  const fetchMyDownloadRequests = async (limit = 100, offset = 0) => {
+    try {
+      const response = await axios.get("/v1/download/my-requests", {
+        params: { limit, offset },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch my download requests:", error);
+      return null;
+    }
+  };
+
+  const fetchDownloadStatus = async () => {
+    try {
+      const response = await axios.get("/v1/download/status");
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch download status:", error);
+      return null;
+    }
+  };
+
+  const requestTrackDownload = async (trackId) => {
+    try {
+      const response = await axios.post("/v1/download/request/track", {
+        track_id: trackId,
+      });
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error("Failed to request track download:", error);
+      if (error.response?.data) {
+        return { error: error.response.data };
+      }
+      return { error: "Failed to request download" };
+    }
+  };
+
+  // =====================================================
   // Admin API - Download Manager (DownloadManagerAdmin)
   // =====================================================
 
@@ -1182,6 +1233,11 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchJobAuditLogByJob,
     fetchRelevanceFilter,
     updateRelevanceFilter,
+    // User Download API
+    fetchDownloadLimits,
+    fetchMyDownloadRequests,
+    fetchDownloadStatus,
+    requestTrackDownload,
     // Admin API - Download Manager
     fetchDownloadStats,
     fetchDownloadQueue,

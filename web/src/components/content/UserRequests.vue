@@ -110,13 +110,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useUserStore } from "@/store/user";
+import { useRemoteStore } from "@/store/remote";
 import { formatImageUrl } from "@/utils.js";
 
 const router = useRouter();
 const userStore = useUserStore();
+const remoteStore = useRemoteStore();
 
 const limits = ref(null);
 const requests = ref([]);
@@ -147,9 +149,9 @@ const completedRequests = computed(() => {
 
 const fetchLimits = async () => {
   try {
-    const response = await fetch("/v1/download/limits");
-    if (response.ok) {
-      limits.value = await response.json();
+    const data = await remoteStore.fetchDownloadLimits();
+    if (data) {
+      limits.value = data;
     }
   } catch (error) {
     console.error("Error fetching limits:", error);
@@ -158,9 +160,8 @@ const fetchLimits = async () => {
 
 const fetchRequests = async () => {
   try {
-    const response = await fetch("/v1/download/my-requests");
-    if (response.ok) {
-      const data = await response.json();
+    const data = await remoteStore.fetchMyDownloadRequests();
+    if (data) {
       // Server returns { requests: [...], stats: {...} }
       requests.value = data.requests || [];
       // Also use the stats if limits weren't fetched separately
@@ -180,28 +181,27 @@ const fetchCatalogItem = async (request) => {
   const key = getCatalogKey(request);
   if (catalogData.value[key]) return; // Already fetched
 
-  const typeMap = {
-    ALBUM: "album",
-    ARTIST: "artist",
-    TRACK: "track",
-  };
-  const contentType = typeMap[request.content_type] || "album";
-  const endpoint =
-    contentType === "artist"
-      ? `/v1/content/artist/${request.content_id}`
-      : `/v1/content/${contentType}/${request.content_id}/resolved`;
-
   try {
-    const response = await fetch(endpoint);
-    if (response.ok) {
-      const data = await response.json();
+    let data = null;
+    switch (request.content_type) {
+      case "ALBUM":
+        data = await remoteStore.fetchResolvedAlbum(request.content_id);
+        break;
+      case "ARTIST":
+        data = await remoteStore.fetchArtist(request.content_id);
+        break;
+      case "TRACK":
+        data = await remoteStore.fetchResolvedTrack(request.content_id);
+        break;
+    }
+    if (data) {
       catalogData.value = {
         ...catalogData.value,
         [key]: { ...data, type: request.content_type },
       };
     }
   } catch (error) {
-    console.error(`Error fetching ${contentType}:`, error);
+    console.error(`Error fetching catalog item:`, error);
   }
 };
 
@@ -304,12 +304,49 @@ const getContentLink = (request) => {
   return `/${routeType}/${request.content_id}`;
 };
 
+// Auto-refresh while there are pending requests
+let autoRefreshInterval = null;
+
+const startAutoRefresh = () => {
+  if (autoRefreshInterval) return;
+  autoRefreshInterval = setInterval(async () => {
+    if (pendingRequests.value.length > 0) {
+      await Promise.all([fetchLimits(), fetchRequests()]);
+      fetchCatalogData();
+    } else {
+      stopAutoRefresh();
+    }
+  }, 10000);
+};
+
+const stopAutoRefresh = () => {
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval);
+    autoRefreshInterval = null;
+  }
+};
+
+// Re-fetch when sync events update download state
+watch(
+  () => userStore.downloadRequests,
+  () => {
+    fetchRequests().then(() => fetchCatalogData());
+  },
+);
+
 onMounted(async () => {
   isLoading.value = true;
   await Promise.all([fetchLimits(), fetchRequests()]);
   // Fetch catalog data for completed items (don't block initial render)
   fetchCatalogData();
   isLoading.value = false;
+  if (pendingRequests.value.length > 0) {
+    startAutoRefresh();
+  }
+});
+
+onUnmounted(() => {
+  stopAutoRefresh();
 });
 </script>
 
