@@ -29,6 +29,8 @@
     <string name="catalog_artists_count" tools:ignore="PluralsCandidate">%1$d artists</string>
     <string name="catalog_albums_count" tools:ignore="PluralsCandidate">%1$d albums</string>
     <string name="catalog_tracks_count" tools:ignore="PluralsCandidate">%1$d tracks</string>
+    <string name="catalog_stats_unavailable">Catalog statistics not available</string>
+    <string name="catalog_stat_na">%1$s n/a</string>
     <!-- ABOUT SCREEN -->
 
     <!-- MAIN SCREEN -->

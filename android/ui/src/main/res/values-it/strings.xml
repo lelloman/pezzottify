@@ -28,6 +28,8 @@
     <string name="catalog_artists_count">%1$d artisti</string>
     <string name="catalog_albums_count">%1$d album</string>
     <string name="catalog_tracks_count">%1$d brani</string>
+    <string name="catalog_stats_unavailable">Statistiche del catalogo non disponibili</string>
+    <string name="catalog_stat_na">%1$s n/d</string>
     <!-- ABOUT SCREEN -->
 
     <!-- MAIN SCREEN -->

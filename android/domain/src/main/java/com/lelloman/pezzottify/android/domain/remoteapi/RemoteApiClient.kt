@@ -5,6 +5,7 @@ import com.lelloman.pezzottify.android.domain.listening.ListeningEventSyncData
 import com.lelloman.pezzottify.android.domain.remoteapi.request.BatchContentRequest
 import com.lelloman.pezzottify.android.domain.remoteapi.response.AlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistDiscographyResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.CatalogStatsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.BatchContentResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
@@ -81,6 +82,11 @@ interface RemoteApiClient {
         albumsLimit: Int = 10,
         artistsLimit: Int = 10,
     ): RemoteApiResponse<PopularContentResponse>
+
+    /**
+     * Get catalog availability statistics (total/available/unavailable per content type).
+     */
+    suspend fun getCatalogStats(): RemoteApiResponse<CatalogStatsResponse>
 
     /**
      * Get recent catalog updates ("What's New").

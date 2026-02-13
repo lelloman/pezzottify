@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -19,6 +18,7 @@ import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -136,29 +136,53 @@ fun AboutScreenInternal(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Catalog stats cards
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                CatalogStatCard(
-                    icon = Icons.Outlined.Person,
-                    count = 15_000_000,
-                    label = stringResource(R.string.filter_artists),
-                    modifier = Modifier.weight(1f)
-                )
-                CatalogStatCard(
-                    icon = Icons.Outlined.Album,
-                    count = 45_000_000,
-                    label = stringResource(R.string.filter_albums),
-                    modifier = Modifier.weight(1f)
-                )
-                CatalogStatCard(
-                    icon = Icons.Outlined.MusicNote,
-                    count = 250_000_000,
-                    label = stringResource(R.string.filter_tracks),
-                    modifier = Modifier.weight(1f)
-                )
+            when {
+                state.catalogStatsLoading -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    }
+                }
+
+                state.catalogStats != null -> {
+                    val stats = state.catalogStats
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        CatalogStatCard(
+                            icon = Icons.Outlined.Person,
+                            available = stats.artists.available,
+                            unavailable = stats.artists.unavailable,
+                            label = stringResource(R.string.filter_artists),
+                            modifier = Modifier.weight(1f)
+                        )
+                        CatalogStatCard(
+                            icon = Icons.Outlined.Album,
+                            available = stats.albums.available,
+                            unavailable = stats.albums.unavailable,
+                            label = stringResource(R.string.filter_albums),
+                            modifier = Modifier.weight(1f)
+                        )
+                        CatalogStatCard(
+                            icon = Icons.Outlined.MusicNote,
+                            available = stats.tracks.available,
+                            unavailable = stats.tracks.unavailable,
+                            label = stringResource(R.string.filter_tracks),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                else -> {
+                    Text(
+                        text = stringResource(R.string.catalog_stats_unavailable),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -169,7 +193,8 @@ fun AboutScreenInternal(
 @Composable
 private fun CatalogStatCard(
     icon: ImageVector,
-    count: Int,
+    available: Int,
+    unavailable: Int,
     label: String,
     modifier: Modifier = Modifier
 ) {
@@ -193,7 +218,7 @@ private fun CatalogStatCard(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = formatCount(count),
+                text = formatCount(available),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -202,6 +227,13 @@ private fun CatalogStatCard(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (unavailable > 0) {
+                Text(
+                    text = stringResource(R.string.catalog_stat_na, formatCount(unavailable)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+            }
         }
     }
 }
@@ -209,7 +241,6 @@ private fun CatalogStatCard(
 private fun formatCount(count: Int): String {
     return when {
         count >= 1_000_000 -> String.format(Locale.US, "%.1fM", count / 1_000_000.0)
-        count >= 10_000 -> String.format(Locale.US, "%.1fK", count / 1_000.0)
         count >= 1_000 -> String.format(Locale.US, "%.1fK", count / 1_000.0)
         else -> count.toString()
     }
@@ -234,6 +265,11 @@ fun AboutScreenPreview() {
             gitCommit = "abc1234",
             serverUrl = "https://music.example.com",
             serverVersion = "0.5.0 (def5678)",
+            catalogStats = CatalogStats(
+                artists = CatalogStatItem(available = 1200, unavailable = 50),
+                albums = CatalogStatItem(available = 3500, unavailable = 120),
+                tracks = CatalogStatItem(available = 25000, unavailable = 800),
+            ),
         )
     )
 }
