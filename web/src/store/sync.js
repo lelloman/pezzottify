@@ -113,6 +113,22 @@ export const useSyncStore = defineStore("sync", () => {
         userStore.applyNotificationRead(payload.notification_id, payload.read_at);
         break;
 
+      case "download_request_created":
+        userStore.applyDownloadRequestCreated(payload);
+        break;
+
+      case "download_status_changed":
+        userStore.applyDownloadStatusChanged(payload);
+        break;
+
+      case "download_progress_updated":
+        userStore.applyDownloadProgressUpdated(payload);
+        break;
+
+      case "download_completed":
+        userStore.applyDownloadCompleted(payload);
+        break;
+
       case "catalog_invalidation": {
         // Invalidate cached content when catalog changes
         const contentType = payload.content_type; // "album", "artist", "track"

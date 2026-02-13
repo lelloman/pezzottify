@@ -19,6 +19,7 @@ export const useUserStore = defineStore("user", () => {
   const settings = ref({});
   const permissions = ref([]);
   const notifications = ref([]);
+  const downloadRequests = ref(new Map());
 
   // Pending settings that failed to sync - key -> { value, retryCount }
   const pendingSettings = ref({});
@@ -441,6 +442,63 @@ export const useUserStore = defineStore("user", () => {
   };
 
   // =====================================================
+  // Download Request Sync Event Methods
+  // =====================================================
+
+  const applyDownloadRequestCreated = (payload) => {
+    const newMap = new Map(downloadRequests.value);
+    newMap.set(payload.content_id, {
+      request_id: payload.request_id,
+      content_id: payload.content_id,
+      content_type: payload.content_type,
+      content_name: payload.content_name,
+      artist_name: payload.artist_name,
+      queue_position: payload.queue_position,
+      status: "PENDING",
+    });
+    downloadRequests.value = newMap;
+  };
+
+  const applyDownloadStatusChanged = (payload) => {
+    const newMap = new Map(downloadRequests.value);
+    const existing = newMap.get(payload.content_id) || { content_id: payload.content_id };
+    newMap.set(payload.content_id, {
+      ...existing,
+      request_id: payload.request_id,
+      status: payload.status,
+      queue_position: payload.queue_position ?? existing.queue_position,
+      error_message: payload.error_message ?? existing.error_message,
+    });
+    downloadRequests.value = newMap;
+  };
+
+  const applyDownloadProgressUpdated = (payload) => {
+    const newMap = new Map(downloadRequests.value);
+    const existing = newMap.get(payload.content_id) || { content_id: payload.content_id };
+    newMap.set(payload.content_id, {
+      ...existing,
+      request_id: payload.request_id,
+      progress: payload.progress,
+    });
+    downloadRequests.value = newMap;
+  };
+
+  const applyDownloadCompleted = (payload) => {
+    const newMap = new Map(downloadRequests.value);
+    const existing = newMap.get(payload.content_id) || { content_id: payload.content_id };
+    newMap.set(payload.content_id, {
+      ...existing,
+      request_id: payload.request_id,
+      status: "COMPLETED",
+    });
+    downloadRequests.value = newMap;
+  };
+
+  const getDownloadRequest = (contentId) => {
+    return downloadRequests.value.get(contentId) || null;
+  };
+
+  // =====================================================
   // Permission Check Helpers
   // =====================================================
 
@@ -518,6 +576,7 @@ export const useUserStore = defineStore("user", () => {
     pendingSettings.value = {};
     permissions.value = [];
     notifications.value = [];
+    downloadRequests.value = new Map();
     isInitialized.value = false;
     isInitializing.value = false;
     // Clear playlist refs
@@ -533,6 +592,7 @@ export const useUserStore = defineStore("user", () => {
     settings,
     permissions,
     notifications,
+    downloadRequests,
     isInitialized,
     isInitializing,
 
@@ -567,6 +627,11 @@ export const useUserStore = defineStore("user", () => {
     applyPermissionsReset,
     applyNotificationCreated,
     applyNotificationRead,
+    applyDownloadRequestCreated,
+    applyDownloadStatusChanged,
+    applyDownloadProgressUpdated,
+    applyDownloadCompleted,
+    getDownloadRequest,
 
     // Full sync setter methods
     setLikedAlbums,

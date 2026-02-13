@@ -27,11 +27,12 @@
       </div>
       <div v-else-if="downloadRequestState === 'pending'" class="downloadRequestContent statusPending">
         <span class="statusIcon">⏳</span>
-        <span>Download queued{{ queuePosition ? ` (#${queuePosition})` : '' }}</span>
+        <span>Download queued{{ effectiveQueuePosition ? ` (#${effectiveQueuePosition})` : '' }}</span>
       </div>
       <div v-else-if="downloadRequestState === 'in_progress'" class="downloadRequestContent statusInProgress">
         <span class="statusIcon">⬇️</span>
-        <span>Downloading...</span>
+        <span v-if="downloadProgress">Downloading {{ downloadProgress.completed }}/{{ downloadProgress.total_children }} tracks</span>
+        <span v-else>Downloading...</span>
       </div>
       <div v-else-if="downloadRequestState === 'completed'" class="downloadRequestContent statusCompleted">
         <span class="statusIcon">✅</span>
@@ -274,8 +275,31 @@ const showDownloadSection = computed(() => {
   return canRequest && unavailable;
 });
 
+const syncedDownloadRequest = computed(() => {
+  return userStore.getDownloadRequest(props.albumId);
+});
+
+const downloadProgress = computed(() => {
+  return syncedDownloadRequest.value?.progress || null;
+});
+
+const effectiveQueuePosition = computed(() => {
+  return syncedDownloadRequest.value?.queue_position || queuePosition.value;
+});
+
 const downloadRequestState = computed(() => {
   if (downloadError.value) return 'error';
+
+  // Prefer synced state (real-time) over API-fetched state
+  const synced = syncedDownloadRequest.value;
+  if (synced) {
+    const status = synced.status?.toLowerCase();
+    if (status === 'pending') return 'pending';
+    if (status === 'in_progress') return 'in_progress';
+    if (status === 'completed') return 'completed';
+    if (status === 'failed') return 'failed';
+  }
+
   if (!existingRequest.value) return 'can_request';
 
   const status = existingRequest.value.status?.toLowerCase();
@@ -291,9 +315,8 @@ const fetchDownloadRequest = async () => {
   if (!userStore.canRequestContent) return;
 
   try {
-    const response = await fetch('/v1/download/my-requests');
-    if (response.ok) {
-      const data = await response.json();
+    const data = await remoteStore.fetchMyDownloadRequests();
+    if (data) {
       const requests = data.requests || [];
       const request = requests.find(r => r.content_id === props.albumId);
       if (request) {
