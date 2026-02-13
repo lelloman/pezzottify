@@ -1395,7 +1395,7 @@ impl IngestionManager {
                             .await;
                     }
 
-                    self.map_tracks(job_id).await?;
+                    self.map_tracks(job_id, false).await?;
 
                     let job_after_map = self.store.get_job(job_id)?.unwrap();
                     if job_after_map.tracks_matched == 0 {
@@ -1559,7 +1559,7 @@ impl IngestionManager {
                 }
 
                 // Continue to track mapping and conversion
-                self.map_tracks(job_id).await?;
+                self.map_tracks(job_id, false).await?;
 
                 // Fail if no tracks could be matched
                 let job_after_map = self.store.get_job(job_id)?.unwrap();
@@ -1866,7 +1866,7 @@ impl IngestionManager {
         );
 
         // Continue to track mapping and conversion
-        self.map_tracks(&job_id).await?;
+        self.map_tracks(&job_id, false).await?;
 
         // Fail if no tracks could be matched
         let job_after_map = self.store.get_job(&job_id)?.unwrap();
@@ -2132,7 +2132,14 @@ impl IngestionManager {
     // =========================================================================
 
     /// Map files to tracks within the matched album.
-    pub async fn map_tracks(&self, job_id: &str) -> Result<(), IngestionError> {
+    ///
+    /// If `skip_duration_review` is true, duration mismatches will not create a review
+    /// (used when called from resolve_review to avoid infinite loops).
+    pub async fn map_tracks(
+        &self,
+        job_id: &str,
+        skip_duration_review: bool,
+    ) -> Result<(), IngestionError> {
         let mut job = self
             .store
             .get_job(job_id)?
@@ -2371,8 +2378,8 @@ impl IngestionManager {
             }
         }
 
-        if !duration_mismatches.is_empty() {
-            // Flag for review due to duration mismatches
+        if !duration_mismatches.is_empty() && !skip_duration_review {
+            // Flag for review due to duration mismatches (unless skipped)
             let question = format!(
                 "Duration mismatch detected for {} track(s):\n{}",
                 duration_mismatches.len(),
@@ -2901,7 +2908,8 @@ impl IngestionManager {
             );
 
             // Continue to track mapping and conversion
-            self.map_tracks(job_id).await?;
+            // Skip duration review since user already approved this album
+            self.map_tracks(job_id, true).await?;
 
             // Fail if no tracks could be matched
             let job_after_map = self.store.get_job(job_id)?.unwrap();
