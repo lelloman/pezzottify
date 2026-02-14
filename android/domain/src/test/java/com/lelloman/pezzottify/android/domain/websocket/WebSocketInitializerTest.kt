@@ -37,6 +37,7 @@ class WebSocketInitializerTest {
     private lateinit var isInForegroundFlow: MutableStateFlow<Boolean>
     private lateinit var isNetworkAvailableFlow: MutableStateFlow<Boolean>
     private lateinit var isPlayingFlow: MutableStateFlow<Boolean>
+    private lateinit var isKeptAliveExternallyFlow: MutableStateFlow<Boolean>
     private lateinit var connectionStateFlow: MutableStateFlow<ConnectionState>
 
     @Before
@@ -53,10 +54,12 @@ class WebSocketInitializerTest {
         isInForegroundFlow = MutableStateFlow(false)
         isNetworkAvailableFlow = MutableStateFlow(true)
         isPlayingFlow = MutableStateFlow(false)
+        isKeptAliveExternallyFlow = MutableStateFlow(false)
         connectionStateFlow = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
 
         every { authStore.getAuthState() } returns authStateFlow
         every { appLifecycleObserver.isInForeground } returns isInForegroundFlow
+        every { appLifecycleObserver.isKeptAliveExternally } returns isKeptAliveExternallyFlow
         every { networkConnectivityObserver.isNetworkAvailable } returns isNetworkAvailableFlow
         every { player.isPlaying } returns isPlayingFlow
         every { webSocketManager.connectionState } returns connectionStateFlow
@@ -178,6 +181,34 @@ class WebSocketInitializerTest {
 
             // catchUp should not be called again since wasDisconnected is false
             coVerify(exactly = 0) { syncManager.catchUp() }
+        } finally {
+            initializerScope.cancel()
+        }
+    }
+
+    @Test
+    fun `connects when kept alive externally while not in foreground`() = runTest {
+        val testDispatcher = StandardTestDispatcher(testScheduler)
+        val initializerScope = CoroutineScope(Job() + testDispatcher)
+
+        try {
+            val webSocketInitializer = createWebSocketInitializer(initializerScope)
+
+            webSocketInitializer.initialize()
+            advanceUntilIdle()
+
+            // Authenticated, network available, not in foreground, not playing, but kept alive externally
+            authStateFlow.value = AuthState.LoggedIn(
+                userHandle = "user",
+                authToken = "token",
+                remoteUrl = "http://server",
+            )
+            isInForegroundFlow.value = false
+            isPlayingFlow.value = false
+            isKeptAliveExternallyFlow.value = true
+            advanceUntilIdle()
+
+            coVerify { webSocketManager.connect() }
         } finally {
             initializerScope.cancel()
         }

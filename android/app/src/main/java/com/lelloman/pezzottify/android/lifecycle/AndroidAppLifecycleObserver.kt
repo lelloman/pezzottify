@@ -13,6 +13,13 @@ class AndroidAppLifecycleObserver : AppLifecycleObserver, DefaultLifecycleObserv
     private val _isInForeground = MutableStateFlow(false)
     override val isInForeground: StateFlow<Boolean> = _isInForeground.asStateFlow()
 
+    private val _isKeptAliveExternally = MutableStateFlow(false)
+    override val isKeptAliveExternally: StateFlow<Boolean> = _isKeptAliveExternally.asStateFlow()
+
+    fun setKeptAliveExternally(value: Boolean) {
+        _isKeptAliveExternally.value = value
+    }
+
     init {
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
     }
