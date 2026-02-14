@@ -179,6 +179,16 @@ async fn try_oidc_session(token: &str, ctx: &ServerState) -> Option<Session> {
                                         device_id, user_id, e
                                     );
                                 }
+                                // Enforce per-user device limit
+                                if let Err(e) = user_manager.enforce_user_device_limit(
+                                    user_id,
+                                    super::server::MAX_DEVICES_PER_USER,
+                                ) {
+                                    debug!(
+                                        "Failed to enforce device limit for user {}: {}",
+                                        user_id, e
+                                    );
+                                }
                                 debug!(
                                     "Registered new device for OIDC session: device_id={}, uuid={}, type={:?}",
                                     device_id, device_uuid, registered_device_type
