@@ -62,12 +62,14 @@ class WebSocketInitializer internal constructor(
                 appLifecycleObserver.isInForeground,
                 networkConnectivityObserver.isNetworkAvailable,
                 player.isPlaying,
-            ) { authState, isInForeground, isNetworkAvailable, isPlaying ->
+                appLifecycleObserver.isKeptAliveExternally,
+            ) { values ->
                 ConnectionDecision(
-                    isAuthenticated = authState is AuthState.LoggedIn,
-                    isInForeground = isInForeground,
-                    isNetworkAvailable = isNetworkAvailable,
-                    isMusicPlaying = isPlaying,
+                    isAuthenticated = values[0] is AuthState.LoggedIn,
+                    isInForeground = values[1] as Boolean,
+                    isNetworkAvailable = values[2] as Boolean,
+                    isMusicPlaying = values[3] as Boolean,
+                    isKeptAliveExternally = values[4] as Boolean,
                 )
             }
                 .distinctUntilChanged()
@@ -108,7 +110,7 @@ class WebSocketInitializer internal constructor(
 
             val shouldConnect = decision.isAuthenticated &&
                 decision.isNetworkAvailable &&
-                (decision.isInForeground || decision.isMusicPlaying)
+                (decision.isInForeground || decision.isMusicPlaying || decision.isKeptAliveExternally)
 
             val currentState = webSocketManager.connectionState.value
             val isConnected = currentState is ConnectionState.Connected ||
@@ -127,6 +129,7 @@ class WebSocketInitializer internal constructor(
         val isInForeground: Boolean,
         val isNetworkAvailable: Boolean,
         val isMusicPlaying: Boolean,
+        val isKeptAliveExternally: Boolean,
     )
 
     companion object {

@@ -15,8 +15,13 @@ class LifecycleModule {
 
     @Provides
     @Singleton
-    fun provideAppLifecycleObserver(): AppLifecycleObserver =
+    fun provideAndroidAppLifecycleObserver(): AndroidAppLifecycleObserver =
         AndroidAppLifecycleObserver()
+
+    @Provides
+    @Singleton
+    fun provideAppLifecycleObserver(impl: AndroidAppLifecycleObserver): AppLifecycleObserver =
+        impl
 
     @Provides
     @Singleton
