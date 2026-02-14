@@ -56,7 +56,7 @@ use axum::extract::Request;
 use axum::middleware::Next;
 use tower_governor::governor::GovernorConfigBuilder;
 
-const MAX_DEVICES_PER_USER: usize = 6;
+pub(super) const MAX_DEVICES_PER_USER: usize = 6;
 
 #[derive(Serialize)]
 struct ServerStats {
