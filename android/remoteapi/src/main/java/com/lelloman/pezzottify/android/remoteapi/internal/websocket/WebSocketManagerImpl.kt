@@ -173,7 +173,15 @@ internal class WebSocketManagerImpl(
         val message = ClientMessage(type = type, payload = jsonPayload)
         val messageJson = json.encodeToString(message)
         logger.debug("Sending message: $messageJson")
-        ws.send(messageJson)
+        val sent = ws.send(messageJson)
+        if (!sent) {
+            logger.warn("WebSocket send failed (connection dead), triggering reconnect")
+            heartbeatJob?.cancel()
+            heartbeatJob = null
+            webSocket = null
+            _connectionState.value = ConnectionState.Error("Connection lost")
+            scheduleReconnect()
+        }
     }
 
     private fun anyToJsonElement(value: Any?): JsonElement = when (value) {
