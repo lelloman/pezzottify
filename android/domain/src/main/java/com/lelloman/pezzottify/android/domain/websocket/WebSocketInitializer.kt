@@ -105,12 +105,16 @@ class WebSocketInitializer internal constructor(
     private fun handleConnectionDecision(decision: ConnectionDecision) {
         debounceJob?.cancel()
         debounceJob = scope.launch {
-            // Debounce to avoid rapid connect/disconnect
-            delay(DEBOUNCE_MS)
-
             val shouldConnect = decision.isAuthenticated &&
                 decision.isNetworkAvailable &&
                 (decision.isInForeground || decision.isMusicPlaying || decision.isKeptAliveExternally)
+
+            // Use a longer debounce for disconnect to handle the keep-alive → foreground
+            // transition on Android TV: when PezzotTV (launcher) goes to background and unbinds
+            // the KeepAliveService, isKeptAliveExternally becomes false before
+            // ProcessLifecycleOwner updates isInForeground to true for the launching app.
+            val debounceMs = if (shouldConnect) CONNECT_DEBOUNCE_MS else DISCONNECT_DEBOUNCE_MS
+            delay(debounceMs)
 
             val currentState = webSocketManager.connectionState.value
             val isConnected = currentState is ConnectionState.Connected ||
@@ -133,6 +137,7 @@ class WebSocketInitializer internal constructor(
     )
 
     companion object {
-        private const val DEBOUNCE_MS = 500L
+        private const val CONNECT_DEBOUNCE_MS = 500L
+        private const val DISCONNECT_DEBOUNCE_MS = 2000L
     }
 }
