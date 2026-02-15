@@ -144,12 +144,16 @@ class AndroidSystemNotificationHelper @Inject constructor(
         albumId: String,
         albumName: String,
         artistName: String,
+        notificationIds: List<String>,
     ) {
+        val idsArray = notificationIds.toTypedArray()
+
         // Create an intent to open the app and navigate to the album screen
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(EXTRA_NAVIGATE_TO, DESTINATION_ALBUM)
             putExtra(EXTRA_ALBUM_ID, albumId)
+            putExtra(EXTRA_NOTIFICATION_IDS, idsArray)
         }
 
         val pendingIntent = PendingIntent.getActivity(
@@ -158,6 +162,8 @@ class AndroidSystemNotificationHelper @Inject constructor(
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+
+        val deleteIntent = createDeleteIntent(idsArray, albumId.hashCode())
 
         val title = context.getString(R.string.notification_download_completed_title)
         val contentText = context.getString(R.string.notification_download_completed_body, albumName, artistName)
@@ -168,6 +174,7 @@ class AndroidSystemNotificationHelper @Inject constructor(
             .setContentText(contentText)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingIntent)
+            .setDeleteIntent(deleteIntent)
             .setAutoCancel(true)
             .build()
 
@@ -187,19 +194,22 @@ class AndroidSystemNotificationHelper @Inject constructor(
     }
 
     @Suppress("NotificationPermission") // Permission is checked manually before notify()
-    override fun showDownloadsCompletedNotification(downloads: List<DownloadCompletedData>) {
+    override fun showDownloadsCompletedNotification(downloads: List<DownloadCompletedData>, notificationIds: List<String>) {
         if (downloads.isEmpty()) return
 
         // Single download — delegate to the existing single-album notification
         if (downloads.size == 1) {
             val d = downloads.first()
-            showDownloadCompletedNotification(d.albumId, d.albumName, d.artistName)
+            showDownloadCompletedNotification(d.albumId, d.albumName, d.artistName, notificationIds)
             return
         }
+
+        val idsArray = notificationIds.toTypedArray()
 
         // Multiple downloads — show one grouped notification
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_NOTIFICATION_IDS, idsArray)
         }
 
         val pendingIntent = PendingIntent.getActivity(
@@ -208,6 +218,8 @@ class AndroidSystemNotificationHelper @Inject constructor(
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+
+        val deleteIntent = createDeleteIntent(idsArray, DOWNLOADS_BATCH_NOTIFICATION_ID)
 
         val title = context.getString(R.string.notification_downloads_completed_title)
         val summary = context.resources.getQuantityString(
@@ -222,6 +234,7 @@ class AndroidSystemNotificationHelper @Inject constructor(
             .setStyle(NotificationCompat.BigTextStyle().bigText("$summary\n$details"))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingIntent)
+            .setDeleteIntent(deleteIntent)
             .setAutoCancel(true)
             .build()
 
@@ -239,11 +252,25 @@ class AndroidSystemNotificationHelper @Inject constructor(
         notificationManager.notify(DOWNLOADS_BATCH_NOTIFICATION_ID, notification)
     }
 
+    private fun createDeleteIntent(notificationIds: Array<String>, requestCode: Int): PendingIntent {
+        val intent = Intent(context, NotificationActionReceiver::class.java).apply {
+            action = NotificationActionReceiver.ACTION_NOTIFICATION_DISMISSED
+            putExtra(NotificationActionReceiver.EXTRA_NOTIFICATION_IDS, notificationIds)
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
     companion object {
         const val WHATSNEW_CHANNEL_ID = "whatsnew"
         const val DOWNLOADS_CHANNEL_ID = "downloads"
         const val EXTRA_NAVIGATE_TO = "navigate_to"
         const val EXTRA_ALBUM_ID = "album_id"
+        const val EXTRA_NOTIFICATION_IDS = "notification_ids"
         const val DESTINATION_WHATSNEW = "whatsnew"
         const val DESTINATION_ALBUM = "album"
         private const val DOWNLOADS_BATCH_NOTIFICATION_ID = 0x50455A5A // "PEZZ"

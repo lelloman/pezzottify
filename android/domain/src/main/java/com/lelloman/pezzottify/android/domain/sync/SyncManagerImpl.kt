@@ -86,7 +86,8 @@ class SyncManagerImpl internal constructor(
     private var currentRetryDelay: Duration = minRetryDelay
 
     // Debounce download completion notifications so multiple arrivals get grouped
-    private val pendingDownloadNotifications = mutableListOf<DownloadCompletedData>()
+    // Each entry pairs the internal notification ID with the download data
+    private val pendingDownloadNotifications = mutableListOf<Pair<String, DownloadCompletedData>>()
     private var downloadNotificationFlushJob: Job? = null
 
     override suspend fun initialize(): Boolean = withContext(dispatcher) {
@@ -379,7 +380,7 @@ class SyncManagerImpl internal constructor(
                             DownloadCompletedData.serializer(),
                             event.notification.data
                         )
-                        scheduleDownloadNotification(data)
+                        scheduleDownloadNotification(event.notification.id, data)
                     } catch (e: Exception) {
                         logger.error("Failed to parse download completed notification data", e)
                     }
@@ -411,9 +412,9 @@ class SyncManagerImpl internal constructor(
         }
     }
 
-    private fun scheduleDownloadNotification(data: DownloadCompletedData) {
+    private fun scheduleDownloadNotification(notificationId: String, data: DownloadCompletedData) {
         synchronized(pendingDownloadNotifications) {
-            pendingDownloadNotifications.add(data)
+            pendingDownloadNotifications.add(notificationId to data)
         }
         downloadNotificationFlushJob?.cancel()
         downloadNotificationFlushJob = scope.launch {
@@ -423,13 +424,15 @@ class SyncManagerImpl internal constructor(
     }
 
     private fun flushDownloadNotifications() {
-        val downloads: List<DownloadCompletedData>
+        val pending: List<Pair<String, DownloadCompletedData>>
         synchronized(pendingDownloadNotifications) {
-            downloads = pendingDownloadNotifications.toList()
+            pending = pendingDownloadNotifications.toList()
             pendingDownloadNotifications.clear()
         }
-        if (downloads.isNotEmpty()) {
-            systemNotificationHelper.showDownloadsCompletedNotification(downloads)
+        if (pending.isNotEmpty()) {
+            val notificationIds = pending.map { it.first }
+            val downloads = pending.map { it.second }
+            systemNotificationHelper.showDownloadsCompletedNotification(downloads, notificationIds)
             logger.debug("Showed grouped download notification for ${downloads.size} album(s)")
         }
     }
@@ -443,6 +446,7 @@ class SyncManagerImpl internal constructor(
      */
     internal fun showSystemNotificationsForUnread(notifications: List<com.lelloman.pezzottify.android.domain.notifications.Notification>) {
         val cutoffMs = System.currentTimeMillis() - NOTIFICATION_RECENCY_WINDOW_MS
+        val notificationIds = mutableListOf<String>()
         val downloads = mutableListOf<DownloadCompletedData>()
 
         for (notification in notifications) {
@@ -457,13 +461,14 @@ class SyncManagerImpl internal constructor(
                         notification.data
                     )
                 )
+                notificationIds.add(notification.id)
             } catch (e: Exception) {
                 logger.error("Failed to parse download completed notification data during full sync", e)
             }
         }
 
         if (downloads.isNotEmpty()) {
-            systemNotificationHelper.showDownloadsCompletedNotification(downloads)
+            systemNotificationHelper.showDownloadsCompletedNotification(downloads, notificationIds)
             logger.debug("Showed grouped system notification for ${downloads.size} unread download(s)")
         }
     }

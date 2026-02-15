@@ -36,6 +36,7 @@ interface SystemNotificationHelper {
         albumId: String,
         albumName: String,
         artistName: String,
+        notificationIds: List<String>,
     )
 
     /**
@@ -43,6 +44,7 @@ interface SystemNotificationHelper {
      * If the list has one item, behaves the same as [showDownloadCompletedNotification].
      *
      * @param downloads The list of completed downloads to summarize
+     * @param notificationIds The internal notification IDs associated with these downloads
      */
-    fun showDownloadsCompletedNotification(downloads: List<DownloadCompletedData>)
+    fun showDownloadsCompletedNotification(downloads: List<DownloadCompletedData>, notificationIds: List<String>)
 }

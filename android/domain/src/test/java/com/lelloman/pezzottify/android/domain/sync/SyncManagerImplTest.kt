@@ -644,11 +644,13 @@ class SyncManagerImplTest {
 
         syncManager.showSystemNotificationsForUnread(listOf(notification))
 
-        val slot = slot<List<DownloadCompletedData>>()
-        verify { systemNotificationHelper.showDownloadsCompletedNotification(capture(slot)) }
-        assertThat(slot.captured).hasSize(1)
-        assertThat(slot.captured[0].albumId).isEqualTo("album-1")
-        assertThat(slot.captured[0].albumName).isEqualTo("Test Album")
+        val downloadsSlot = slot<List<DownloadCompletedData>>()
+        val idsSlot = slot<List<String>>()
+        verify { systemNotificationHelper.showDownloadsCompletedNotification(capture(downloadsSlot), capture(idsSlot)) }
+        assertThat(downloadsSlot.captured).hasSize(1)
+        assertThat(downloadsSlot.captured[0].albumId).isEqualTo("album-1")
+        assertThat(downloadsSlot.captured[0].albumName).isEqualTo("Test Album")
+        assertThat(idsSlot.captured).containsExactly("notif-1")
     }
 
     @Test
@@ -667,9 +669,11 @@ class SyncManagerImplTest {
             createDownloadNotification("notif-2", data2),
         ))
 
-        val slot = slot<List<DownloadCompletedData>>()
-        verify { systemNotificationHelper.showDownloadsCompletedNotification(capture(slot)) }
-        assertThat(slot.captured).hasSize(2)
+        val downloadsSlot = slot<List<DownloadCompletedData>>()
+        val idsSlot = slot<List<String>>()
+        verify { systemNotificationHelper.showDownloadsCompletedNotification(capture(downloadsSlot), capture(idsSlot)) }
+        assertThat(downloadsSlot.captured).hasSize(2)
+        assertThat(idsSlot.captured).containsExactly("notif-1", "notif-2")
     }
 
     @Test
@@ -682,7 +686,7 @@ class SyncManagerImplTest {
 
         syncManager.showSystemNotificationsForUnread(listOf(notification))
 
-        verify(exactly = 0) { systemNotificationHelper.showDownloadsCompletedNotification(any()) }
+        verify(exactly = 0) { systemNotificationHelper.showDownloadsCompletedNotification(any(), any()) }
     }
 
     @Test
@@ -696,7 +700,7 @@ class SyncManagerImplTest {
 
         syncManager.showSystemNotificationsForUnread(listOf(notification))
 
-        verify(exactly = 0) { systemNotificationHelper.showDownloadsCompletedNotification(any()) }
+        verify(exactly = 0) { systemNotificationHelper.showDownloadsCompletedNotification(any(), any()) }
     }
 
     // endregion
@@ -727,16 +731,18 @@ class SyncManagerImplTest {
         syncManager.catchUp()
 
         // Before debounce fires, no notification shown
-        verify(exactly = 0) { systemNotificationHelper.showDownloadsCompletedNotification(any()) }
+        verify(exactly = 0) { systemNotificationHelper.showDownloadsCompletedNotification(any(), any()) }
 
         // Advance past the debounce window
         testScope.advanceTimeBy(3000)
 
-        val slot = slot<List<DownloadCompletedData>>()
-        verify { systemNotificationHelper.showDownloadsCompletedNotification(capture(slot)) }
-        assertThat(slot.captured).hasSize(2)
-        assertThat(slot.captured[0].albumId).isEqualTo("album-1")
-        assertThat(slot.captured[1].albumId).isEqualTo("album-2")
+        val downloadsSlot = slot<List<DownloadCompletedData>>()
+        val idsSlot = slot<List<String>>()
+        verify { systemNotificationHelper.showDownloadsCompletedNotification(capture(downloadsSlot), capture(idsSlot)) }
+        assertThat(downloadsSlot.captured).hasSize(2)
+        assertThat(downloadsSlot.captured[0].albumId).isEqualTo("album-1")
+        assertThat(downloadsSlot.captured[1].albumId).isEqualTo("album-2")
+        assertThat(idsSlot.captured).containsExactly("notif-6", "notif-7")
     }
 
     @Test
@@ -752,9 +758,11 @@ class SyncManagerImplTest {
         syncManager.handleSyncMessage(event)
         testScope.advanceTimeBy(3000)
 
-        val slot = slot<List<DownloadCompletedData>>()
-        verify { systemNotificationHelper.showDownloadsCompletedNotification(capture(slot)) }
-        assertThat(slot.captured).hasSize(1)
+        val downloadsSlot = slot<List<DownloadCompletedData>>()
+        val idsSlot = slot<List<String>>()
+        verify { systemNotificationHelper.showDownloadsCompletedNotification(capture(downloadsSlot), capture(idsSlot)) }
+        assertThat(downloadsSlot.captured).hasSize(1)
+        assertThat(idsSlot.captured).hasSize(1)
     }
 
     // endregion
