@@ -10,8 +10,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
+import com.lelloman.pezzottify.android.domain.notifications.NotificationRepository
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
+import com.lelloman.pezzottify.android.notifications.AndroidSystemNotificationHelper
 import com.lelloman.pezzottify.android.oidc.OidcCallbackHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import com.lelloman.pezzottify.android.ui.AppUi
 import com.lelloman.pezzottify.android.mapping.toAppFontFamily
 import com.lelloman.pezzottify.android.mapping.toColorPalette as toColorPalette
@@ -34,7 +40,12 @@ class MainActivity : ComponentActivity() {
     lateinit var userSettingsStore: UserSettingsStore
 
     @Inject
+    lateinit var notificationRepository: NotificationRepository
+
+    @Inject
     lateinit var oidcCallbackHandler: OidcCallbackHandler
+
+    private val markAsReadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,6 +53,9 @@ class MainActivity : ComponentActivity() {
 
         // Check for OIDC callback in initial intent
         handleOidcCallback(intent)
+
+        // Mark internal notifications as read when launched from system notification click
+        markNotificationsAsReadFromIntent(intent)
 
         setContent {
             setSingletonImageLoaderFactory { imageLoader }
@@ -60,11 +74,27 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleOidcCallback(intent)
+        markNotificationsAsReadFromIntent(intent)
     }
 
     private fun handleOidcCallback(intent: Intent) {
         if (oidcCallbackHandler.isOidcCallback(intent)) {
             oidcCallbackHandler.handleCallback(intent)
+        }
+    }
+
+    private fun markNotificationsAsReadFromIntent(intent: Intent) {
+        val notificationIds = intent.getStringArrayExtra(AndroidSystemNotificationHelper.EXTRA_NOTIFICATION_IDS)
+            ?: return
+        if (notificationIds.isEmpty()) return
+
+        // Remove the extra so it doesn't get processed again on config change
+        intent.removeExtra(AndroidSystemNotificationHelper.EXTRA_NOTIFICATION_IDS)
+
+        markAsReadScope.launch {
+            for (id in notificationIds) {
+                notificationRepository.markAsRead(id)
+            }
         }
     }
 }
