@@ -140,11 +140,8 @@ pub trait DownloadQueueStore: Send + Sync {
     /// Get rate limit status for a user.
     fn get_user_stats(&self, user_id: &str) -> Result<UserLimitStatus>;
 
-    /// Increment user's request count and queue count.
+    /// Increment user's daily request count.
     fn increment_user_requests(&self, user_id: &str) -> Result<()>;
-
-    /// Decrement user's queue count (when item completes/fails).
-    fn decrement_user_queue(&self, user_id: &str) -> Result<()>;
 
     /// Reset daily request counts for all users. Returns number of users reset.
     fn reset_daily_user_stats(&self) -> Result<usize>;
@@ -1127,54 +1124,53 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
     fn get_user_stats(&self, user_id: &str) -> Result<UserLimitStatus> {
         let conn = self.conn.lock().unwrap();
 
-        // Try to get existing stats
-        let result = conn
+        // Get daily request count from stats table
+        let daily_stats = conn
             .query_row(
-                r#"SELECT requests_today, requests_in_queue, last_request_date
+                r#"SELECT requests_today, last_request_date
                    FROM user_request_stats
                    WHERE user_id = ?1"#,
                 [user_id],
                 |row| {
                     Ok((
                         row.get::<_, i32>("requests_today")?,
-                        row.get::<_, i32>("requests_in_queue")?,
                         row.get::<_, Option<String>>("last_request_date")?,
                     ))
                 },
             )
             .optional()?;
 
+        // Count active items directly from the queue (source of truth)
+        let in_queue: i32 = conn.query_row(
+            r#"SELECT COUNT(*) FROM download_queue
+               WHERE requested_by_user_id = ?1
+               AND status IN ('PENDING', 'IN_PROGRESS', 'RETRY_WAITING')"#,
+            [user_id],
+            |row| row.get(0),
+        )?;
+
         // Default limits (these could be made configurable)
         const MAX_REQUESTS_PER_DAY: i32 = 50;
         const MAX_QUEUE_SIZE: i32 = 100;
 
-        match result {
-            Some((requests_today, in_queue, last_date)) => {
-                // Check if we need to reset (date changed)
+        let requests_today = match daily_stats {
+            Some((requests_today, last_date)) => {
                 let today = Self::today_date_string();
-                let effective_requests = if last_date.as_deref() == Some(&today) {
+                if last_date.as_deref() == Some(&today) {
                     requests_today
                 } else {
                     0 // Reset since it's a new day
-                };
+                }
+            }
+            None => 0,
+        };
 
-                Ok(UserLimitStatus::available(
-                    effective_requests,
-                    MAX_REQUESTS_PER_DAY,
-                    in_queue,
-                    MAX_QUEUE_SIZE,
-                ))
-            }
-            None => {
-                // No record yet - user has full quota
-                Ok(UserLimitStatus::available(
-                    0,
-                    MAX_REQUESTS_PER_DAY,
-                    0,
-                    MAX_QUEUE_SIZE,
-                ))
-            }
-        }
+        Ok(UserLimitStatus::available(
+            requests_today,
+            MAX_REQUESTS_PER_DAY,
+            in_queue,
+            MAX_QUEUE_SIZE,
+        ))
     }
 
     fn increment_user_requests(&self, user_id: &str) -> Result<()> {
@@ -1185,31 +1181,15 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
         // Insert or update - if it's a new day, reset requests_today
         conn.execute(
             r#"INSERT INTO user_request_stats (user_id, requests_today, requests_in_queue, last_request_date, last_updated_at)
-               VALUES (?1, 1, 1, ?2, ?3)
+               VALUES (?1, 1, 0, ?2, ?3)
                ON CONFLICT(user_id) DO UPDATE SET
                    requests_today = CASE
                        WHEN last_request_date = ?2 THEN requests_today + 1
                        ELSE 1
                    END,
-                   requests_in_queue = requests_in_queue + 1,
                    last_request_date = ?2,
                    last_updated_at = ?3"#,
             rusqlite::params![user_id, today, now],
-        )?;
-
-        Ok(())
-    }
-
-    fn decrement_user_queue(&self, user_id: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        let now = Self::now();
-
-        conn.execute(
-            r#"UPDATE user_request_stats
-               SET requests_in_queue = MAX(0, requests_in_queue - 1),
-                   last_updated_at = ?1
-               WHERE user_id = ?2"#,
-            rusqlite::params![now, user_id],
         )?;
 
         Ok(())
@@ -3317,61 +3297,51 @@ mod tests {
 
         let stats = store.get_user_stats("user-1").unwrap();
         assert_eq!(stats.requests_today, 1);
-        assert_eq!(stats.in_queue, 1);
+        // in_queue comes from actual queue items, not the counter
+        assert_eq!(stats.in_queue, 0);
 
         // Increment again
         store.increment_user_requests("user-1").unwrap();
 
         let stats = store.get_user_stats("user-1").unwrap();
         assert_eq!(stats.requests_today, 2);
-        assert_eq!(stats.in_queue, 2);
     }
 
     #[test]
-    fn test_decrement_user_queue() {
+    fn test_in_queue_counts_active_items() {
         let store = SqliteDownloadQueueStore::in_memory().unwrap();
 
-        // Setup - add some requests
-        store.increment_user_requests("user-1").unwrap();
-        store.increment_user_requests("user-1").unwrap();
-        store.increment_user_requests("user-1").unwrap();
+        // Enqueue actual items for user-1
+        for i in 0..3 {
+            let item = QueueItem::new(
+                format!("item-{}", i),
+                DownloadContentType::Album,
+                format!("album-{}", i),
+                QueuePriority::User,
+                RequestSource::User,
+                5,
+            )
+            .with_user("user-1".to_string());
+            store.enqueue(item).unwrap();
+        }
 
         let stats = store.get_user_stats("user-1").unwrap();
         assert_eq!(stats.in_queue, 3);
 
-        // Decrement
-        store.decrement_user_queue("user-1").unwrap();
+        // Complete one item - should no longer count
+        store.claim_for_processing("item-0").unwrap();
+        store.mark_completed("item-0", 1000, 100).unwrap();
 
         let stats = store.get_user_stats("user-1").unwrap();
         assert_eq!(stats.in_queue, 2);
-        // Note: requests_today stays the same
-        assert_eq!(stats.requests_today, 3);
-    }
 
-    #[test]
-    fn test_decrement_user_queue_not_negative() {
-        let store = SqliteDownloadQueueStore::in_memory().unwrap();
-
-        // Setup with one item
-        store.increment_user_requests("user-1").unwrap();
-        store.decrement_user_queue("user-1").unwrap();
+        // Fail another - should no longer count
+        store.claim_for_processing("item-1").unwrap();
+        let error = DownloadError::new(DownloadErrorType::NotFound, "Not found");
+        store.mark_failed("item-1", &error).unwrap();
 
         let stats = store.get_user_stats("user-1").unwrap();
-        assert_eq!(stats.in_queue, 0);
-
-        // Decrement again - should not go negative
-        store.decrement_user_queue("user-1").unwrap();
-
-        let stats = store.get_user_stats("user-1").unwrap();
-        assert_eq!(stats.in_queue, 0);
-    }
-
-    #[test]
-    fn test_decrement_user_queue_nonexistent_user() {
-        let store = SqliteDownloadQueueStore::in_memory().unwrap();
-
-        // Should not fail for nonexistent user (just no-op)
-        store.decrement_user_queue("nonexistent").unwrap();
+        assert_eq!(stats.in_queue, 1);
     }
 
     #[test]
@@ -3425,8 +3395,18 @@ mod tests {
     fn test_user_stats_workflow() {
         let store = SqliteDownloadQueueStore::in_memory().unwrap();
 
-        // User makes 3 download requests
-        for _ in 0..3 {
+        // User makes 3 download requests with actual queue items
+        for i in 0..3 {
+            let item = QueueItem::new(
+                format!("item-{}", i),
+                DownloadContentType::Album,
+                format!("album-{}", i),
+                QueuePriority::User,
+                RequestSource::User,
+                5,
+            )
+            .with_user("user-1".to_string());
+            store.enqueue(item).unwrap();
             store.increment_user_requests("user-1").unwrap();
         }
 
@@ -3435,20 +3415,23 @@ mod tests {
         assert_eq!(stats.in_queue, 3);
 
         // One item completes
-        store.decrement_user_queue("user-1").unwrap();
+        store.claim_for_processing("item-0").unwrap();
+        store.mark_completed("item-0", 1000, 100).unwrap();
 
         let stats = store.get_user_stats("user-1").unwrap();
         assert_eq!(stats.requests_today, 3); // Still 3 (counts requests made, not in queue)
         assert_eq!(stats.in_queue, 2);
 
         // Another item completes
-        store.decrement_user_queue("user-1").unwrap();
+        store.claim_for_processing("item-1").unwrap();
+        store.mark_completed("item-1", 1000, 100).unwrap();
 
         let stats = store.get_user_stats("user-1").unwrap();
         assert_eq!(stats.in_queue, 1);
 
         // Last item completes
-        store.decrement_user_queue("user-1").unwrap();
+        store.claim_for_processing("item-2").unwrap();
+        store.mark_completed("item-2", 1000, 100).unwrap();
 
         let stats = store.get_user_stats("user-1").unwrap();
         assert_eq!(stats.in_queue, 0);
@@ -3459,13 +3442,33 @@ mod tests {
     fn test_multiple_users_independent() {
         let store = SqliteDownloadQueueStore::in_memory().unwrap();
 
-        // User 1 makes 5 requests
-        for _ in 0..5 {
+        // User 1 makes 3 requests with queue items
+        for i in 0..3 {
+            let item = QueueItem::new(
+                format!("u1-item-{}", i),
+                DownloadContentType::Album,
+                format!("album-{}", i),
+                QueuePriority::User,
+                RequestSource::User,
+                5,
+            )
+            .with_user("user-1".to_string());
+            store.enqueue(item).unwrap();
             store.increment_user_requests("user-1").unwrap();
         }
 
-        // User 2 makes 2 requests
-        for _ in 0..2 {
+        // User 2 makes 2 requests with queue items
+        for i in 0..2 {
+            let item = QueueItem::new(
+                format!("u2-item-{}", i),
+                DownloadContentType::Album,
+                format!("album-u2-{}", i),
+                QueuePriority::User,
+                RequestSource::User,
+                5,
+            )
+            .with_user("user-2".to_string());
+            store.enqueue(item).unwrap();
             store.increment_user_requests("user-2").unwrap();
         }
 
@@ -3473,14 +3476,19 @@ mod tests {
         let stats1 = store.get_user_stats("user-1").unwrap();
         let stats2 = store.get_user_stats("user-2").unwrap();
 
-        assert_eq!(stats1.requests_today, 5);
+        assert_eq!(stats1.requests_today, 3);
+        assert_eq!(stats1.in_queue, 3);
         assert_eq!(stats2.requests_today, 2);
+        assert_eq!(stats2.in_queue, 2);
 
-        // Decrement user 1's queue
-        store.decrement_user_queue("user-1").unwrap();
+        // Complete one of user 1's items
+        store.claim_for_processing("u1-item-0").unwrap();
+        store.mark_completed("u1-item-0", 1000, 100).unwrap();
 
         // User 2 should be unaffected
+        let stats1 = store.get_user_stats("user-1").unwrap();
         let stats2 = store.get_user_stats("user-2").unwrap();
+        assert_eq!(stats1.in_queue, 2);
         assert_eq!(stats2.in_queue, 2);
     }
 
