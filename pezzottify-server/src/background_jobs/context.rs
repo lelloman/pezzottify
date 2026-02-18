@@ -1,5 +1,6 @@
 use crate::catalog_store::CatalogStore;
 use crate::download_manager::DownloadSyncNotifier;
+use crate::enrichment_store::EnrichmentStore;
 use crate::search::SearchVault;
 use crate::server_store::ServerStore;
 use crate::user::{FullUserStore, UserManager};
@@ -43,6 +44,9 @@ pub struct JobContext {
 
     /// Access to sync notifier for emitting catalog events.
     pub sync_notifier: Option<GuardedSyncNotifier>,
+
+    /// Access to enrichment store for audio features and metadata enrichment.
+    pub enrichment_store: Option<Arc<dyn EnrichmentStore>>,
 }
 
 impl JobContext {
@@ -62,6 +66,7 @@ impl JobContext {
             user_manager,
             search_vault: None,
             sync_notifier: None,
+            enrichment_store: None,
         }
     }
 
@@ -82,6 +87,7 @@ impl JobContext {
             user_manager,
             search_vault: Some(search_vault),
             sync_notifier: None,
+            enrichment_store: None,
         }
     }
 
@@ -102,6 +108,7 @@ impl JobContext {
             user_manager,
             search_vault: None,
             sync_notifier: Some(sync_notifier),
+            enrichment_store: None,
         }
     }
 
@@ -123,7 +130,14 @@ impl JobContext {
             user_manager,
             search_vault: Some(search_vault),
             sync_notifier: Some(sync_notifier),
+            enrichment_store: None,
         }
+    }
+
+    /// Set the enrichment store on this context.
+    pub fn with_enrichment_store(mut self, store: Arc<dyn EnrichmentStore>) -> Self {
+        self.enrichment_store = Some(store);
+        self
     }
 
     /// Check if cancellation has been requested.

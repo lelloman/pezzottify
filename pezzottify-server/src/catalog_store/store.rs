@@ -1483,6 +1483,22 @@ impl CatalogStore for SqliteCatalogStore {
         Ok(ids)
     }
 
+    fn list_available_track_ids_with_audio_uri(&self, limit: usize, offset: usize) -> Result<Vec<(String, String)>> {
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, audio_uri FROM tracks \
+             WHERE track_available = 1 AND audio_uri IS NOT NULL \
+             LIMIT ?1 OFFSET ?2",
+        )?;
+        let pairs = stmt
+            .query_map(params![limit as i64, offset as i64], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })?
+            .collect::<Result<Vec<(String, String)>, _>>()?;
+        Ok(pairs)
+    }
+
     // =========================================================================
     // CRUD Operations (with transactions)
     // =========================================================================

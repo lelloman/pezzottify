@@ -102,6 +102,10 @@ impl CatalogStore for NullCatalogStore {
         Ok(Vec::new())
     }
 
+    fn list_available_track_ids_with_audio_uri(&self, _limit: usize, _offset: usize) -> Result<Vec<(String, String)>> {
+        Ok(Vec::new())
+    }
+
     fn create_artist(&self, _artist: &super::Artist) -> Result<()> {
         anyhow::bail!("NullCatalogStore does not support write operations")
     }

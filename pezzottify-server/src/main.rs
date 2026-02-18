@@ -10,11 +10,12 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 
 // Import modules from the library crate
 use pezzottify_server::background_jobs::jobs::{
-    CatalogAvailabilityStatsJob, DevicePruningJob, IngestionCleanupJob, PopularContentJob,
-    RelatedArtistsEnrichmentJob, WhatsNewBatchJob,
+    AudioAnalysisJob, CatalogAvailabilityStatsJob, DevicePruningJob, IngestionCleanupJob,
+    PopularContentJob, RelatedArtistsEnrichmentJob, WhatsNewBatchJob,
 };
 use pezzottify_server::background_jobs::{create_scheduler, GuardedSearchVault, JobContext};
 use pezzottify_server::catalog_store::{CatalogStore, SqliteCatalogStore};
+use pezzottify_server::enrichment_store::SqliteEnrichmentStore;
 use pezzottify_server::config;
 use pezzottify_server::ingestion::{IngestionStore, SqliteIngestionStore};
 use pezzottify_server::search::{Fts5LevenshteinSearchVault, NoopSearchVault};
@@ -237,7 +238,24 @@ async fn main() -> Result<()> {
     let shutdown_token = CancellationToken::new();
     let (hook_sender, hook_receiver) = tokio::sync::mpsc::channel(100);
 
-    let job_context = JobContext::with_search_vault(
+    // Create enrichment store if audio analysis is enabled
+    let enrichment_store = if app_config.audio_analysis.is_some() {
+        info!(
+            "Initializing enrichment store at {:?}",
+            app_config.enrichment_db_path()
+        );
+        match SqliteEnrichmentStore::new(app_config.enrichment_db_path()) {
+            Ok(store) => Some(Arc::new(store)),
+            Err(e) => {
+                error!("Failed to create enrichment store: {:?}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let mut job_context = JobContext::with_search_vault(
         shutdown_token.child_token(),
         catalog_store.clone() as Arc<dyn CatalogStore>,
         user_store.clone() as Arc<dyn user::FullUserStore>,
@@ -245,6 +263,12 @@ async fn main() -> Result<()> {
         user_manager.clone(),
         guarded_search_vault.clone(),
     );
+
+    if let Some(ref store) = enrichment_store {
+        job_context = job_context.with_enrichment_store(
+            store.clone() as Arc<dyn pezzottify_server::enrichment_store::EnrichmentStore>,
+        );
+    }
 
     let (mut scheduler, scheduler_handle) = create_scheduler(
         server_store.clone(),
@@ -313,6 +337,18 @@ async fn main() -> Result<()> {
             Err(e) => {
                 error!("Failed to create related artists enrichment job: {}", e);
             }
+        }
+    }
+
+    // Register audio analysis job if configured (requires enrichment store in context)
+    if let Some(ref aa_settings) = app_config.audio_analysis {
+        if enrichment_store.is_some() {
+            scheduler
+                .register_job(Arc::new(AudioAnalysisJob::new(aa_settings.clone())))
+                .await;
+            info!("Registered audio analysis job");
+        } else {
+            error!("Audio analysis enabled but enrichment store failed to initialize");
         }
     }
 

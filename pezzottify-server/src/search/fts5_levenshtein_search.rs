@@ -1402,6 +1402,9 @@ mod tests {
             fn list_all_track_ids(&self) -> anyhow::Result<Vec<String>> {
                 Ok(vec![])
             }
+            fn list_available_track_ids_with_audio_uri(&self, _limit: usize, _offset: usize) -> anyhow::Result<Vec<(String, String)>> {
+                Ok(vec![])
+            }
             fn create_artist(&self, _artist: &crate::catalog_store::Artist) -> anyhow::Result<()> {
                 anyhow::bail!("MockCatalogStore does not support write operations")
             }

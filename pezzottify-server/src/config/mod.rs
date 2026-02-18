@@ -1,11 +1,11 @@
 mod file_config;
 
 pub use file_config::{
-    AgentConfig, AgentLlmConfig, AuditLogCleanupJobConfig, BackgroundJobsConfig,
-    CatalogAvailabilityStatsJobConfig, CatalogStoreConfig, DevicePruningJobConfig,
-    DownloadManagerConfig, FileConfig, IngestionCleanupJobConfig, IngestionConfig,
-    IntervalJobConfig, OidcConfig, PopularContentJobConfig, RelatedArtistsConfig, SearchConfig,
-    StreamingSearchConfig as StreamingSearchFileConfig,
+    AgentConfig, AgentLlmConfig, AudioAnalysisConfig, AuditLogCleanupJobConfig,
+    BackgroundJobsConfig, CatalogAvailabilityStatsJobConfig, CatalogStoreConfig,
+    DevicePruningJobConfig, DownloadManagerConfig, FileConfig, IngestionCleanupJobConfig,
+    IngestionConfig, IntervalJobConfig, OidcConfig, PopularContentJobConfig,
+    RelatedArtistsConfig, SearchConfig, StreamingSearchConfig as StreamingSearchFileConfig,
 };
 
 use crate::server::RequestsLoggingLevel;
@@ -111,6 +111,7 @@ pub struct AppConfig {
     pub agent: AgentSettings,
     pub ingestion: IngestionSettings,
     pub related_artists: Option<RelatedArtistsSettings>,
+    pub audio_analysis: Option<AudioAnalysisSettings>,
 }
 
 impl AppConfig {
@@ -396,6 +397,19 @@ impl AppConfig {
             })
         });
 
+        // Audio analysis settings from file config
+        let audio_analysis = file.audio_analysis.and_then(|aa| {
+            if !aa.enabled.unwrap_or(false) {
+                return None;
+            }
+            Some(AudioAnalysisSettings {
+                enabled: true,
+                interval_hours: aa.interval_hours.unwrap_or(6),
+                batch_size: aa.batch_size.unwrap_or(100),
+                delay_ms: aa.delay_ms.unwrap_or(500),
+            })
+        });
+
         Ok(Self {
             db_dir,
             media_path,
@@ -415,6 +429,7 @@ impl AppConfig {
             agent,
             ingestion,
             related_artists,
+            audio_analysis,
         })
     }
 
@@ -436,6 +451,10 @@ impl AppConfig {
 
     pub fn search_db_path(&self) -> PathBuf {
         self.db_dir.join("search.db")
+    }
+
+    pub fn enrichment_db_path(&self) -> PathBuf {
+        self.db_dir.join("enrichment.db")
     }
 
     pub fn ingestion_db_path(&self) -> PathBuf {
@@ -658,6 +677,15 @@ pub struct RelatedArtistsSettings {
     pub batch_size: usize,
     pub similar_artists_limit: usize,
     pub interval_hours: u64,
+}
+
+/// Settings for audio analysis via rustentia.
+#[derive(Debug, Clone)]
+pub struct AudioAnalysisSettings {
+    pub enabled: bool,
+    pub interval_hours: u64,
+    pub batch_size: usize,
+    pub delay_ms: u64,
 }
 
 /// Settings for the ingestion feature.
