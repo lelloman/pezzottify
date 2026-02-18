@@ -398,11 +398,6 @@ impl DownloadManager {
         let deleted = self.queue_store.delete_item(item_id)?;
 
         if deleted {
-            // Decrement user queue count if there was a user
-            if let Some(user_id) = &item.requested_by_user_id {
-                let _ = self.queue_store.decrement_user_queue(user_id);
-            }
-
             info!(
                 "Deleted queue item: {} ({})",
                 item_id,
