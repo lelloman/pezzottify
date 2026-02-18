@@ -7,6 +7,7 @@ pub mod background_jobs;
 pub mod catalog_store;
 pub mod config;
 pub mod download_manager;
+pub mod enrichment_store;
 pub mod ingestion;
 pub mod mcp;
 pub mod notifications;

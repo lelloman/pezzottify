@@ -7,6 +7,7 @@
 // pub mod audit_log_cleanup;
 // pub mod expand_artists_base;
 // pub mod missing_files_watchdog;
+pub mod audio_analysis;
 pub mod catalog_availability_stats;
 pub mod device_pruning;
 pub mod ingestion_cleanup;
@@ -17,6 +18,7 @@ pub mod whatsnew_batch;
 // pub use audit_log_cleanup::AuditLogCleanupJob;
 // pub use expand_artists_base::ExpandArtistsBaseJob;
 // pub use missing_files_watchdog::MissingFilesWatchdogJob;
+pub use audio_analysis::AudioAnalysisJob;
 pub use catalog_availability_stats::{
     CatalogAvailabilityStatsJob, CatalogAvailabilityStatsSnapshot,
 };

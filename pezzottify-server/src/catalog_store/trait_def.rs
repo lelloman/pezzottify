@@ -150,6 +150,10 @@ pub trait CatalogStore: Send + Sync {
     /// List all track IDs in the catalog.
     fn list_all_track_ids(&self) -> Result<Vec<String>>;
 
+    /// List available track IDs with their audio URIs, paginated.
+    /// Returns (track_id, audio_uri) pairs for tracks where track_available = 1.
+    fn list_available_track_ids_with_audio_uri(&self, limit: usize, offset: usize) -> Result<Vec<(String, String)>>;
+
     // =========================================================================
     // CRUD Operations
     // =========================================================================

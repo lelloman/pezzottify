@@ -66,6 +66,7 @@ openidconnect = "4.0"
 jsonwebtoken = "9"
 indicatif = "0.17"
 mockall = { version = "0.13", optional = true }
+rustentia = { path = "../../rustentia" }
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json", "cookies"] }

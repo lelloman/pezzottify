@@ -407,6 +407,13 @@ impl JobScheduler {
             ),
         };
 
+        // Propagate optional enrichment store
+        let ctx = if let Some(ref store) = self.job_context.enrichment_store {
+            ctx.with_enrichment_store(Arc::clone(store))
+        } else {
+            ctx
+        };
+
         let server_store = Arc::clone(&self.server_store);
         let job_id_owned = job_id.to_string();
         let shared_state = Arc::clone(&self.shared_state);

@@ -27,6 +27,7 @@ pub struct FileConfig {
     pub agent: Option<AgentConfig>,
     pub ingestion: Option<IngestionConfig>,
     pub related_artists: Option<RelatedArtistsConfig>,
+    pub audio_analysis: Option<AudioAnalysisConfig>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]
@@ -245,6 +246,20 @@ pub struct RelatedArtistsConfig {
     pub similar_artists_limit: Option<usize>,
     /// Interval in hours between job runs.
     pub interval_hours: Option<u64>,
+}
+
+/// Configuration for audio analysis via rustentia.
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct AudioAnalysisConfig {
+    /// Whether the audio analysis job is enabled.
+    pub enabled: Option<bool>,
+    /// Interval in hours between job runs.
+    pub interval_hours: Option<u64>,
+    /// Number of tracks to process per job run.
+    pub batch_size: Option<usize>,
+    /// Delay in milliseconds between track analyses (CPU throttling).
+    pub delay_ms: Option<u64>,
 }
 
 impl FileConfig {
