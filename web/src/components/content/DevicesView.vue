@@ -307,7 +307,7 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onUnmounted, watch } from "vue";
+import { computed, ref, onMounted, onActivated, onDeactivated, watch } from "vue";
 import axios from "axios";
 import { usePlaybackSessionStore } from "@/store/playbackSession";
 import { usePlaybackStore } from "@/store/playback";
@@ -441,7 +441,15 @@ onMounted(() => {
   }, 500);
 });
 
-onUnmounted(() => {
+onActivated(() => {
+  if (!interpolationTimer) {
+    interpolationTimer = setInterval(() => {
+      tickCount.value++;
+    }, 500);
+  }
+});
+
+onDeactivated(() => {
   if (interpolationTimer) {
     clearInterval(interpolationTimer);
     interpolationTimer = null;

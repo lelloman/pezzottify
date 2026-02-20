@@ -1,23 +1,25 @@
 <template>
   <main class="mainContent">
-    <div v-if="searchQuery">
-      <SearchResults v-if="useOrganicSearch" :results="results" />
-      <StreamingSearchResults
-        v-else
-        :sections="streamingSections"
-        :isLoading="isStreamingLoading"
+    <keep-alive :max="5">
+      <SearchWrapper
+        v-if="searchQuery"
+        :key="'search-' + searchQuery"
+        :useOrganicSearch="useOrganicSearch"
+        :results="results"
+        :streamingSections="streamingSections"
+        :isStreamingLoading="isStreamingLoading"
       />
-    </div>
-    <Track v-else-if="trackId" :trackId="trackId" />
-    <Album v-else-if="albumId" :albumId="albumId" />
-    <Artist v-else-if="artistId" :artistId="artistId" />
-    <UserPlaylist v-else-if="playlistId" :playlistId="playlistId" />
-    <UserSettings v-else-if="isSettingsRoute" />
-    <UserRequests v-else-if="isRequestsRoute" />
-    <GenreList v-else-if="isGenresRoute" />
-    <GenreDetail v-else-if="genreName" :genreName="genreName" />
-    <DevicesView v-else-if="isDevicesRoute" />
-    <HomePage v-else />
+      <Track v-else-if="trackId" :key="'track-' + trackId" :trackId="trackId" />
+      <Album v-else-if="albumId" :key="'album-' + albumId" :albumId="albumId" />
+      <Artist v-else-if="artistId" :key="'artist-' + artistId" :artistId="artistId" />
+      <UserPlaylist v-else-if="playlistId" :key="'playlist-' + playlistId" :playlistId="playlistId" />
+      <UserSettings v-else-if="isSettingsRoute" />
+      <UserRequests v-else-if="isRequestsRoute" />
+      <GenreList v-else-if="isGenresRoute" />
+      <GenreDetail v-else-if="genreName" :key="'genre-' + genreName" :genreName="genreName" />
+      <DevicesView v-else-if="isDevicesRoute" />
+      <HomePage v-else />
+    </keep-alive>
   </main>
 </template>
 
@@ -36,8 +38,7 @@ import DevicesView from "@/components/content/DevicesView.vue";
 import { useRoute } from "vue-router";
 import { useDebugStore } from "@/store/debug";
 import { storeToRefs } from "pinia";
-import SearchResults from "./SearchResults.vue";
-import StreamingSearchResults from "./StreamingSearchResults.vue";
+import SearchWrapper from "./SearchWrapper.vue";
 import { streamingSearch } from "@/services/streamingSearch";
 
 const debugStore = useDebugStore();

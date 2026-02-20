@@ -110,7 +110,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { ref, computed, onMounted, onActivated, onDeactivated, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useUserStore } from "@/store/user";
 import { useRemoteStore } from "@/store/remote";
@@ -345,7 +345,13 @@ onMounted(async () => {
   }
 });
 
-onUnmounted(() => {
+onActivated(() => {
+  if (pendingRequests.value.length > 0) {
+    startAutoRefresh();
+  }
+});
+
+onDeactivated(() => {
   stopAutoRefresh();
 });
 </script>
