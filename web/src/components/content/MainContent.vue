@@ -1,5 +1,5 @@
 <template>
-  <main class="mainContent">
+  <main ref="mainEl" class="mainContent">
     <keep-alive :max="5">
       <SearchWrapper
         v-if="searchQuery"
@@ -24,7 +24,7 @@
 </template>
 
 <script setup>
-import { ref, watch, computed, onUnmounted } from "vue";
+import { ref, watch, computed, onUnmounted, nextTick } from "vue";
 import Track from "@/components/content/Track.vue";
 import Album from "@/components/content/Album.vue";
 import Artist from "@/components/content/Artist.vue";
@@ -60,6 +60,47 @@ const isRequestsRoute = computed(() => route.name === "requests");
 const isGenresRoute = computed(() => route.name === "genres");
 const isDevicesRoute = computed(() => route.name === "devices");
 const genreName = ref(route.params.genreName || "");
+
+// Scroll position persistence across navigations
+const mainEl = ref(null);
+const scrollPositions = new Map();
+
+function currentRouteKey() {
+  if (searchQuery.value) return "search-" + searchQuery.value;
+  if (trackId.value) return "track-" + trackId.value;
+  if (albumId.value) return "album-" + albumId.value;
+  if (artistId.value) return "artist-" + artistId.value;
+  if (playlistId.value) return "playlist-" + playlistId.value;
+  if (genreName.value) return "genre-" + genreName.value;
+  if (isSettingsRoute.value) return "settings";
+  if (isRequestsRoute.value) return "requests";
+  if (isGenresRoute.value) return "genres";
+  if (isDevicesRoute.value) return "devices";
+  return "home";
+}
+
+let previousRouteKey = currentRouteKey();
+
+watch(
+  () => route.fullPath,
+  () => {
+    // Save scroll position for the page we're leaving
+    if (mainEl.value) {
+      scrollPositions.set(previousRouteKey, mainEl.value.scrollTop);
+    }
+
+    nextTick(() => {
+      const newKey = currentRouteKey();
+      previousRouteKey = newKey;
+
+      // Restore scroll position for the page we're navigating to
+      if (mainEl.value) {
+        const saved = scrollPositions.get(newKey);
+        mainEl.value.scrollTop = saved != null ? saved : 0;
+      }
+    });
+  },
+);
 
 const fetchCatalogResults = async (query, filters) => {
   const requestBody = {
