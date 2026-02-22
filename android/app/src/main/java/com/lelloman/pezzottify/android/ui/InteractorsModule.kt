@@ -1855,7 +1855,7 @@ class InteractorsModule {
                     response.requests.map { request ->
                         com.lelloman.pezzottify.android.ui.screen.main.myrequests.UiDownloadRequest(
                             id = request.id,
-                            albumName = request.contentName,
+                            albumName = request.contentName ?: request.contentId,
                             artistName = request.artistName ?: "",
                             status = when (request.status) {
                                 com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadQueueStatus.Pending ->
