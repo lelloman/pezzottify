@@ -69,7 +69,7 @@ data class DownloadRequestItem(
     val contentId: String,
     /** Display name (album/artist name) */
     @SerialName("content_name")
-    val contentName: String,
+    val contentName: String? = null,
     /** Artist name for display */
     @SerialName("artist_name")
     val artistName: String? = null,
