@@ -20,7 +20,11 @@ pub trait EnrichmentStore: Send + Sync {
 
     /// Get track IDs that exist in the catalog but not in audio_features.
     /// `catalog_track_ids` is the list of available track IDs from the catalog store.
-    fn get_tracks_needing_analysis(&self, catalog_track_ids: &[String], limit: usize) -> Result<Vec<String>>;
+    fn get_tracks_needing_analysis(
+        &self,
+        catalog_track_ids: &[String],
+        limit: usize,
+    ) -> Result<Vec<String>>;
 
     // =========================================================================
     // Artist Enrichment
@@ -34,7 +38,11 @@ pub trait EnrichmentStore: Send + Sync {
 
     /// Get artist IDs that exist in the catalog but not in artist_enrichment.
     /// `catalog_artist_ids` is the list of artist IDs from the catalog store.
-    fn get_artists_needing_enrichment(&self, catalog_artist_ids: &[String], limit: usize) -> Result<Vec<String>>;
+    fn get_artists_needing_enrichment(
+        &self,
+        catalog_artist_ids: &[String],
+        limit: usize,
+    ) -> Result<Vec<String>>;
 
     // =========================================================================
     // Album Enrichment
@@ -48,7 +56,11 @@ pub trait EnrichmentStore: Send + Sync {
 
     /// Get album IDs that exist in the catalog but not in album_enrichment.
     /// `catalog_album_ids` is the list of album IDs from the catalog store.
-    fn get_albums_needing_enrichment(&self, catalog_album_ids: &[String], limit: usize) -> Result<Vec<String>>;
+    fn get_albums_needing_enrichment(
+        &self,
+        catalog_album_ids: &[String],
+        limit: usize,
+    ) -> Result<Vec<String>>;
 
     // =========================================================================
     // Statistics

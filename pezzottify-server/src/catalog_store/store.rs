@@ -1483,7 +1483,11 @@ impl CatalogStore for SqliteCatalogStore {
         Ok(ids)
     }
 
-    fn list_available_track_ids_with_audio_uri(&self, limit: usize, offset: usize) -> Result<Vec<(String, String)>> {
+    fn list_available_track_ids_with_audio_uri(
+        &self,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<(String, String)>> {
         let read_conn = self.get_read_conn();
         let conn = read_conn.lock().unwrap();
         let mut stmt = conn.prepare(
