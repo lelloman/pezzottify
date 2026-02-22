@@ -102,7 +102,11 @@ impl CatalogStore for NullCatalogStore {
         Ok(Vec::new())
     }
 
-    fn list_available_track_ids_with_audio_uri(&self, _limit: usize, _offset: usize) -> Result<Vec<(String, String)>> {
+    fn list_available_track_ids_with_audio_uri(
+        &self,
+        _limit: usize,
+        _offset: usize,
+    ) -> Result<Vec<(String, String)>> {
         Ok(Vec::new())
     }
 

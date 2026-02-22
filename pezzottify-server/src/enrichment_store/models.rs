@@ -18,14 +18,14 @@ pub struct AudioFeatures {
     pub chords_scale: String,     // "major" or "minor"
     pub chords_changes_rate: f64, // harmonic complexity (chord changes per second)
     // -- Loudness --
-    pub loudness: f64,            // EBU R128 integrated loudness (LUFS)
-    pub average_loudness: f64,    // RMS energy (0.0-1.0)
-    pub dynamic_complexity: f64,  // loudness variance over time
+    pub loudness: f64,           // EBU R128 integrated loudness (LUFS)
+    pub average_loudness: f64,   // RMS energy (0.0-1.0)
+    pub dynamic_complexity: f64, // loudness variance over time
     // -- Timbre --
     pub spectral_complexity: f64, // timbral complexity (0.0-1.0)
     // -- Classifiers (SVM) --
-    pub vocal_instrumental: f64,  // 0.0=instrumental, 1.0=vocal-heavy
-    pub valence: f64,             // 0.0=sad/dark, 1.0=happy/bright
+    pub vocal_instrumental: f64, // 0.0=instrumental, 1.0=vocal-heavy
+    pub valence: f64,            // 0.0=sad/dark, 1.0=happy/bright
     // -- Metadata --
     pub analyzed_at: i64,
     pub analyzer_version: String,

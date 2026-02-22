@@ -51,7 +51,10 @@ fn migrate_if_needed(conn: &mut Connection) -> Result<()> {
     }
 
     let tx = conn.transaction()?;
-    for schema in ENRICHMENT_VERSIONED_SCHEMAS.iter().skip(current_version + 1) {
+    for schema in ENRICHMENT_VERSIONED_SCHEMAS
+        .iter()
+        .skip(current_version + 1)
+    {
         if let Some(migration_fn) = schema.migration {
             info!(
                 "Migrating enrichment db from version {} to {}",
@@ -255,9 +258,7 @@ impl EnrichmentStore for SqliteEnrichmentStore {
         let conn = self.read_conn.lock().unwrap();
 
         // Check each candidate against the enrichment DB
-        let mut stmt = conn.prepare_cached(
-            "SELECT 1 FROM audio_features WHERE track_id = ?1",
-        )?;
+        let mut stmt = conn.prepare_cached("SELECT 1 FROM audio_features WHERE track_id = ?1")?;
 
         let mut result = Vec::with_capacity(limit.min(catalog_track_ids.len()));
         for id in catalog_track_ids {
@@ -412,8 +413,7 @@ impl EnrichmentStore for SqliteEnrichmentStore {
         limit: usize,
     ) -> Result<Vec<String>> {
         let conn = self.read_conn.lock().unwrap();
-        let mut stmt =
-            conn.prepare_cached("SELECT 1 FROM album_enrichment WHERE album_id = ?1")?;
+        let mut stmt = conn.prepare_cached("SELECT 1 FROM album_enrichment WHERE album_id = ?1")?;
 
         let mut result = Vec::with_capacity(limit.min(catalog_album_ids.len()));
         for id in catalog_album_ids {
@@ -611,7 +611,10 @@ mod tests {
         assert_eq!(result.source, "test-agent");
 
         // Not found
-        assert!(store.get_artist_enrichment("nonexistent").unwrap().is_none());
+        assert!(store
+            .get_artist_enrichment("nonexistent")
+            .unwrap()
+            .is_none());
     }
 
     #[test]

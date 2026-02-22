@@ -4,8 +4,8 @@ pub use file_config::{
     AgentConfig, AgentLlmConfig, AudioAnalysisConfig, AuditLogCleanupJobConfig,
     BackgroundJobsConfig, CatalogAvailabilityStatsJobConfig, CatalogStoreConfig,
     DevicePruningJobConfig, DownloadManagerConfig, FileConfig, IngestionCleanupJobConfig,
-    IngestionConfig, IntervalJobConfig, OidcConfig, PopularContentJobConfig,
-    RelatedArtistsConfig, SearchConfig, StreamingSearchConfig as StreamingSearchFileConfig,
+    IngestionConfig, IntervalJobConfig, OidcConfig, PopularContentJobConfig, RelatedArtistsConfig,
+    SearchConfig, StreamingSearchConfig as StreamingSearchFileConfig,
 };
 
 use crate::server::RequestsLoggingLevel;

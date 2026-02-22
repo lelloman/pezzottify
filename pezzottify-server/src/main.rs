@@ -15,8 +15,8 @@ use pezzottify_server::background_jobs::jobs::{
 };
 use pezzottify_server::background_jobs::{create_scheduler, GuardedSearchVault, JobContext};
 use pezzottify_server::catalog_store::{CatalogStore, SqliteCatalogStore};
-use pezzottify_server::enrichment_store::SqliteEnrichmentStore;
 use pezzottify_server::config;
+use pezzottify_server::enrichment_store::SqliteEnrichmentStore;
 use pezzottify_server::ingestion::{IngestionStore, SqliteIngestionStore};
 use pezzottify_server::search::{Fts5LevenshteinSearchVault, NoopSearchVault};
 use pezzottify_server::server::{metrics, run_server, RequestsLoggingLevel};
@@ -266,7 +266,7 @@ async fn main() -> Result<()> {
 
     if let Some(ref store) = enrichment_store {
         job_context = job_context.with_enrichment_store(
-            store.clone() as Arc<dyn pezzottify_server::enrichment_store::EnrichmentStore>,
+            store.clone() as Arc<dyn pezzottify_server::enrichment_store::EnrichmentStore>
         );
     }
 
