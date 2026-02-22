@@ -971,7 +971,15 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
         let mut stmt = conn.prepare(
             r#"SELECT * FROM download_queue
                WHERE requested_by_user_id = ?1 AND parent_id IS NULL
-               ORDER BY created_at DESC
+               ORDER BY
+                   CASE status
+                       WHEN 'IN_PROGRESS' THEN 0
+                       WHEN 'PENDING' THEN 1
+                       WHEN 'RETRY_WAITING' THEN 2
+                       WHEN 'FAILED' THEN 3
+                       WHEN 'COMPLETED' THEN 4
+                   END,
+                   created_at DESC
                LIMIT ?2 OFFSET ?3"#,
         )?;
 
