@@ -650,6 +650,17 @@ impl UserLimitStatus {
             can_request: requests_today < max_per_day && in_queue < max_queue,
         }
     }
+
+    /// Create a status with no limits (for admin users).
+    pub fn unlimited() -> Self {
+        Self {
+            requests_today: 0,
+            max_per_day: i32::MAX,
+            in_queue: 0,
+            max_queue: i32::MAX,
+            can_request: true,
+        }
+    }
 }
 
 /// System-wide capacity status for download rate limiting.

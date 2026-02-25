@@ -1158,7 +1158,7 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
         )?;
 
         // Default limits (these could be made configurable)
-        const MAX_REQUESTS_PER_DAY: i32 = 50;
+        const MAX_REQUESTS_PER_DAY: i32 = 8;
         const MAX_QUEUE_SIZE: i32 = 100;
 
         let requests_today = match daily_stats {
