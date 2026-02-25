@@ -139,7 +139,8 @@ async fn get_user_limits(
     };
 
     let user_id = session.user_id.to_string();
-    match manager.get_user_limits(&user_id) {
+    let is_admin = session.has_permission(Permission::DownloadManagerAdmin);
+    match manager.get_user_limits(&user_id, is_admin) {
         Ok(limits) => Json(limits).into_response(),
         Err(e) => {
             warn!("Failed to get user limits: {}", e);
@@ -177,7 +178,8 @@ async fn get_my_requests(
         }
     };
 
-    let stats = match manager.get_user_limits(&user_id) {
+    let is_admin = session.has_permission(Permission::DownloadManagerAdmin);
+    let stats = match manager.get_user_limits(&user_id, is_admin) {
         Ok(s) => s,
         Err(e) => {
             warn!("Failed to get user limits: {}", e);
@@ -200,9 +202,10 @@ async fn request_track(
     };
 
     let user_id = session.user_id.to_string();
+    let is_admin = session.has_permission(Permission::DownloadManagerAdmin);
     debug!("User {} requesting track {}", user_id, body.track_id);
 
-    match manager.request_track(&user_id, &body.track_id).await {
+    match manager.request_track(&user_id, &body.track_id, is_admin).await {
         Ok(item) => Json(RequestResponse {
             success: true,
             message: "Track queued for download".to_string(),
@@ -242,7 +245,8 @@ async fn request_album(
         user_id, body.album_id, body.album_name, body.artist_name
     );
 
-    match manager.request_album(&user_id, &body.album_id).await {
+    let is_admin = session.has_permission(Permission::DownloadManagerAdmin);
+    match manager.request_album(&user_id, &body.album_id, is_admin).await {
         Ok(items) => Json(AlbumRequestResponse {
             request_id: items.first().map(|i| i.id.clone()).unwrap_or_default(),
             status: "PENDING".to_string(),

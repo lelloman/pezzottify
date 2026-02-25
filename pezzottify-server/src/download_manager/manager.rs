@@ -216,11 +216,18 @@ impl DownloadManager {
     /// - Track exists in catalog
     /// - Track is not already available
     /// - Track is not already in queue
-    pub async fn request_track(&self, user_id: &str, track_id: &str) -> Result<QueueItem> {
-        // Check user limits
-        let limits = self.queue_store.get_user_stats(user_id)?;
-        if !limits.can_request {
-            return Err(anyhow!("User has reached request limit"));
+    pub async fn request_track(
+        &self,
+        user_id: &str,
+        track_id: &str,
+        is_admin: bool,
+    ) -> Result<QueueItem> {
+        // Check user limits (admins are unlimited)
+        if !is_admin {
+            let limits = self.queue_store.get_user_stats(user_id)?;
+            if !limits.can_request {
+                return Err(anyhow!("User has reached request limit"));
+            }
         }
 
         // Check if track exists in catalog
@@ -271,11 +278,18 @@ impl DownloadManager {
     /// Creates a queue item for the album. The item will be picked up by an
     /// external script that downloads content and uploads it via the ingestion system.
     /// Returns the queued item wrapped in a Vec (for compatibility).
-    pub async fn request_album(&self, user_id: &str, album_id: &str) -> Result<Vec<QueueItem>> {
-        // Check user limits
-        let limits = self.queue_store.get_user_stats(user_id)?;
-        if !limits.can_request {
-            return Err(anyhow!("User has reached request limit"));
+    pub async fn request_album(
+        &self,
+        user_id: &str,
+        album_id: &str,
+        is_admin: bool,
+    ) -> Result<Vec<QueueItem>> {
+        // Check user limits (admins are unlimited)
+        if !is_admin {
+            let limits = self.queue_store.get_user_stats(user_id)?;
+            if !limits.can_request {
+                return Err(anyhow!("User has reached request limit"));
+            }
         }
 
         // Get resolved album with all tracks
@@ -344,7 +358,10 @@ impl DownloadManager {
     }
 
     /// Get rate limit status for a user.
-    pub fn get_user_limits(&self, user_id: &str) -> Result<UserLimitStatus> {
+    pub fn get_user_limits(&self, user_id: &str, is_admin: bool) -> Result<UserLimitStatus> {
+        if is_admin {
+            return Ok(UserLimitStatus::unlimited());
+        }
         self.queue_store.get_user_stats(user_id)
     }
 
