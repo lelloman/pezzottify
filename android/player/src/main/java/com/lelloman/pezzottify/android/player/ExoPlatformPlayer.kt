@@ -10,7 +10,7 @@ import com.lelloman.pezzottify.android.logger.Logger
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
-import com.google.common.util.concurrent.MoreExecutors
+import androidx.core.content.ContextCompat
 import com.lelloman.pezzottify.android.domain.player.ControlsAndStatePlayer
 import com.lelloman.pezzottify.android.domain.player.ControlsAndStatePlayer.SeekEvent
 import com.lelloman.pezzottify.android.domain.player.PlatformPlayer
@@ -303,7 +303,7 @@ internal class ExoPlatformPlayer(
                     updateControllerState()
                     loadPlaylistWhenMediaControllerIsReady(tracksUrls, playWhenReady)
                 },
-                MoreExecutors.directExecutor()
+                ContextCompat.getMainExecutor(context)
             )
         } else {
             loadPlaylistWhenMediaControllerIsReady(tracksUrls, playWhenReady)
@@ -400,6 +400,7 @@ internal class ExoPlatformPlayer(
                         startProgressPolling()
                     }
                     if (hasContent) {
+                        mutableCurrentTrackIndex.value = controller.currentMediaItemIndex
                         action(controller)
                         logger.debug("reconnectAndExecute() - action executed successfully")
                     } else {
@@ -409,7 +410,7 @@ internal class ExoPlatformPlayer(
                     logger.warn("reconnectAndExecute() - controller built but not connected")
                 }
             },
-            MoreExecutors.directExecutor()
+            ContextCompat.getMainExecutor(context)
         )
     }
 
