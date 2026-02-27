@@ -138,27 +138,39 @@ class PlaybackMetadataProviderImpl(
 
         // Build metadata for each track
         val baseUrl = configStore.baseUrl.value.trimEnd('/')
-        val tracksMetadata = tracksIds.mapNotNull { trackId ->
-            val track = trackDataMap[trackId] ?: return@mapNotNull null
-            val album = albumDataMap[track.albumId]
-            val artistNames = track.artistsIds.mapNotNull { artistDataMap[it]?.name }
+        val tracksMetadata = tracksIds.map { trackId ->
+            val track = trackDataMap[trackId]
+            if (track != null) {
+                val album = albumDataMap[track.albumId]
+                val artistNames = track.artistsIds.mapNotNull { artistDataMap[it]?.name }
 
-            val artworkUrl = album?.displayImageId?.let { imageId ->
-                "$baseUrl/v1/content/image/$imageId"
+                val artworkUrl = album?.displayImageId?.let { imageId ->
+                    "$baseUrl/v1/content/image/$imageId"
+                }
+
+                TrackMetadata(
+                    trackId = trackId,
+                    trackName = track.name,
+                    artistNames = artistNames,
+                    primaryArtistId = track.artistsIds.firstOrNull() ?: "",
+                    albumId = track.albumId,
+                    albumName = album?.name ?: "",
+                    artworkUrl = artworkUrl,
+                    imageId = album?.displayImageId,
+                    durationSeconds = track.durationSeconds,
+                    availability = track.availability,
+                )
+            } else {
+                TrackMetadata(
+                    trackId = trackId,
+                    trackName = trackId,
+                    artistNames = emptyList(),
+                    albumId = "",
+                    albumName = "",
+                    artworkUrl = null,
+                    durationSeconds = 0,
+                )
             }
-
-            TrackMetadata(
-                trackId = trackId,
-                trackName = track.name,
-                artistNames = artistNames,
-                primaryArtistId = track.artistsIds.firstOrNull() ?: "",
-                albumId = track.albumId,
-                albumName = album?.name ?: "",
-                artworkUrl = artworkUrl,
-                imageId = album?.displayImageId,
-                durationSeconds = track.durationSeconds,
-                availability = track.availability,
-            )
         }
 
         val updatedIndex = platformPlayer.currentTrackIndex.value ?: 0

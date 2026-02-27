@@ -267,6 +267,7 @@ class PlaybackService : MediaSessionService() {
     override fun onDestroy() {
         metadataObserverJob?.cancel()
         artworkLoadJob?.cancel()
+        playerServiceEventsEmitter.shutdown()
         serviceScope.cancel()
         unregisterReceiver(becomingNoisyReceiver)
         releasePlayerAndSession()
