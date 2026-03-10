@@ -38,11 +38,11 @@ pub struct ScoredCandidate {
 /// Configuration for fingerprint matching.
 #[derive(Debug, Clone)]
 pub struct FingerprintConfig {
-    /// Duration tolerance per track in milliseconds (default: 2000ms = 2s).
+    /// Duration tolerance per track in milliseconds (default: 6000ms = 6s).
     pub track_tolerance_ms: i64,
     /// Threshold for auto-ingest (Success ticket).
-    /// Requires 100% match and delta < this value.
-    pub auto_ingest_delta_threshold_ms: i64,
+    /// Requires 100% match and average delta per track < this value.
+    pub auto_ingest_avg_delta_threshold_ms: i64,
     /// Minimum score for Review ticket (below this is Failure).
     pub review_score_threshold: f32,
     /// Maximum candidates to return for review.
@@ -52,8 +52,8 @@ pub struct FingerprintConfig {
 impl Default for FingerprintConfig {
     fn default() -> Self {
         Self {
-            track_tolerance_ms: 2000,
-            auto_ingest_delta_threshold_ms: 1000,
+            track_tolerance_ms: 6000,
+            auto_ingest_avg_delta_threshold_ms: 2000,
             review_score_threshold: 0.90,
             max_candidates: 5,
         }
@@ -147,8 +147,13 @@ pub fn match_album_by_fingerprint<C: CatalogStore + ?Sized>(
     // Determine ticket type based on best match
     let (matched_album, match_score, total_delta_ms, ticket_type) =
         if let Some(best) = scored.first() {
+            let avg_delta = if track_count > 0 {
+                best.delta_ms / track_count as i64
+            } else {
+                best.delta_ms
+            };
             let ticket_type =
-                if best.score >= 1.0 && best.delta_ms < config.auto_ingest_delta_threshold_ms {
+                if best.score >= 1.0 && avg_delta < config.auto_ingest_avg_delta_threshold_ms {
                     TicketType::Success
                 } else if best.score >= config.review_score_threshold {
                     TicketType::Review
@@ -205,9 +210,9 @@ pub fn match_album_with_fallbacks<C: CatalogStore + ?Sized>(
 
     debug!("Exact match failed, trying relaxed tolerance");
 
-    // Fallback 1: Widen track tolerance to 5 seconds
+    // Fallback 1: Widen track tolerance to 10 seconds
     let relaxed_config = FingerprintConfig {
-        track_tolerance_ms: 5000,
+        track_tolerance_ms: 10000,
         ..config.clone()
     };
     let result = match_album_by_fingerprint(uploaded_durations, catalog_store, &relaxed_config)?;
