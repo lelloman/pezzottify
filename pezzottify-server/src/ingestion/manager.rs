@@ -1738,7 +1738,12 @@ impl IngestionManager {
             job_id, album_id, fp_score, fp_matches, total_tracks, fp_delta, metadata_score
         );
 
-        if fp_score >= 1.0 && fp_delta < fp_config.auto_ingest_delta_threshold_ms {
+        let fp_avg_delta = if total_tracks > 0 {
+            fp_delta / total_tracks as i64
+        } else {
+            fp_delta
+        };
+        if fp_score >= 1.0 && fp_avg_delta < fp_config.auto_ingest_avg_delta_threshold_ms {
             // Perfect fingerprint match — auto-proceed
         } else if fp_score >= 0.9 {
             // High but not perfect — review with details
