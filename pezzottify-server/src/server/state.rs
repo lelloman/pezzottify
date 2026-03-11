@@ -1,6 +1,7 @@
 use axum::extract::FromRef;
 
 use crate::background_jobs::SchedulerHandle;
+use crate::backup::DbRegistry;
 use crate::catalog_store::CatalogStore;
 use crate::download_manager::DownloadManager;
 use crate::ingestion::IngestionManager;
@@ -31,6 +32,7 @@ pub type HttpClient = reqwest::Client;
 pub type OptionalDownloadManager = Option<Arc<DownloadManager>>;
 pub type OptionalIngestionManager = Option<Arc<IngestionManager>>;
 pub type GuardedPlaybackSessionManager = Arc<PlaybackSessionManager>;
+pub type GuardedDbRegistry = Arc<DbRegistry>;
 
 #[derive(Clone)]
 pub struct ServerState {
@@ -52,6 +54,8 @@ pub struct ServerState {
     pub ingestion_manager: OptionalIngestionManager,
     /// Playback session manager for multi-device playback sync
     pub playback_session_manager: GuardedPlaybackSessionManager,
+    /// Database registry for backup checkpoint operations
+    pub db_registry: GuardedDbRegistry,
 }
 
 unsafe impl Send for ServerState {}
@@ -144,5 +148,11 @@ impl FromRef<ServerState> for OptionalIngestionManager {
 impl FromRef<ServerState> for GuardedPlaybackSessionManager {
     fn from_ref(input: &ServerState) -> Self {
         input.playback_session_manager.clone()
+    }
+}
+
+impl FromRef<ServerState> for GuardedDbRegistry {
+    fn from_ref(input: &ServerState) -> Self {
+        input.db_registry.clone()
     }
 }

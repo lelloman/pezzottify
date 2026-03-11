@@ -105,6 +105,7 @@ impl SqliteCatalogStore {
         db_path: P,
         media_base_path: M,
         read_pool_size: usize,
+        db_registry: &crate::backup::DbRegistry,
     ) -> Result<Self> {
         let db_path_ref = db_path.as_ref();
 
@@ -119,7 +120,7 @@ impl SqliteCatalogStore {
 
         migrate_if_needed(&mut write_conn)?;
 
-        write_conn.pragma_update(None, "journal_mode", "WAL")?;
+        db_registry.register(db_path_ref.to_path_buf(), &write_conn)?;
 
         let artist_count: i64 = write_conn
             .query_row("SELECT COUNT(*) FROM artists", [], |r| r.get(0))
@@ -2497,8 +2498,13 @@ mod tests {
     #[tokio::test]
     async fn test_concurrent_reads_no_blocking() {
         let temp_dir = tempfile::TempDir::new().unwrap();
-        let store =
-            SqliteCatalogStore::new(temp_dir.path().join("test.db"), temp_dir.path(), 4).unwrap();
+        let store = SqliteCatalogStore::new(
+            temp_dir.path().join("test.db"),
+            temp_dir.path(),
+            4,
+            &crate::backup::DbRegistry::new(),
+        )
+        .unwrap();
 
         let handles: Vec<_> = (0..10)
             .map(|_| {
@@ -2521,8 +2527,13 @@ mod tests {
     #[test]
     fn test_refresh_availability_respects_cancellation() {
         let temp_dir = tempfile::TempDir::new().unwrap();
-        let store =
-            SqliteCatalogStore::new(temp_dir.path().join("test.db"), temp_dir.path(), 1).unwrap();
+        let store = SqliteCatalogStore::new(
+            temp_dir.path().join("test.db"),
+            temp_dir.path(),
+            1,
+            &crate::backup::DbRegistry::new(),
+        )
+        .unwrap();
 
         // Seed one minimal track graph so refresh work would normally proceed.
         {
@@ -2570,8 +2581,13 @@ mod tests {
     #[test]
     fn test_refresh_availability_mid_run_cancellation_rolls_back() {
         let temp_dir = tempfile::TempDir::new().unwrap();
-        let store =
-            SqliteCatalogStore::new(temp_dir.path().join("test.db"), temp_dir.path(), 1).unwrap();
+        let store = SqliteCatalogStore::new(
+            temp_dir.path().join("test.db"),
+            temp_dir.path(),
+            1,
+            &crate::backup::DbRegistry::new(),
+        )
+        .unwrap();
 
         // Seed enough rows to ensure cancellation can happen during processing.
         {

@@ -121,15 +121,19 @@ impl TestServer {
         let (temp_db_dir, db_path) =
             create_test_db_with_users().expect("Failed to create test database");
 
+        // Create database registry for backup checkpoint control
+        let db_registry = Arc::new(pezzottify_server::backup::DbRegistry::new());
+
         // Open SQLite catalog store
         let catalog_store = Arc::new(
-            SqliteCatalogStore::new(&catalog_db_path, &media_path, 4)
+            SqliteCatalogStore::new(&catalog_db_path, &media_path, 4, &db_registry)
                 .expect("Failed to open catalog store"),
         );
 
         // Create user store
-        let user_store: Arc<dyn FullUserStore> =
-            Arc::new(SqliteUserStore::new(&db_path).expect("Failed to open user store"));
+        let user_store: Arc<dyn FullUserStore> = Arc::new(
+            SqliteUserStore::new(&db_path, &db_registry).expect("Failed to open user store"),
+        );
         let user_store_for_test = user_store.clone();
 
         // Create search vault (use mock for speed in tests)
@@ -174,7 +178,8 @@ impl TestServer {
         // Create server store for testing
         let server_db_path = temp_db_dir.path().join("server.db");
         let server_store: Arc<dyn ServerStore> = Arc::new(
-            SqliteServerStore::new(&server_db_path).expect("Failed to create server store"),
+            SqliteServerStore::new(&server_db_path, &db_registry)
+                .expect("Failed to create server store"),
         );
         let server_store_for_test = server_store.clone();
 
@@ -187,6 +192,7 @@ impl TestServer {
             None, // scheduler_handle
             server_store,
             None, // oidc_config
+            db_registry,
         )
         .await
         .expect("Failed to build app");

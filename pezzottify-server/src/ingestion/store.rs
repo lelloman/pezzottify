@@ -99,7 +99,7 @@ pub struct SqliteIngestionStore {
 
 impl SqliteIngestionStore {
     /// Open or create an ingestion database.
-    pub fn open(path: &Path) -> Result<Self> {
+    pub fn open(path: &Path, db_registry: &crate::backup::DbRegistry) -> Result<Self> {
         let conn = Connection::open(path)
             .with_context(|| format!("Failed to open ingestion database: {:?}", path))?;
 
@@ -112,6 +112,8 @@ impl SqliteIngestionStore {
         // Run migrations if needed
         super::schema::migrate_v2_to_v3(&conn)?;
         super::schema::migrate_v3_to_v4(&conn)?;
+
+        db_registry.register(path.to_path_buf(), &conn)?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),

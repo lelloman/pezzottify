@@ -3221,6 +3221,31 @@ async fn reboot_server(session: Session) -> Response {
     (StatusCode::ACCEPTED, "Server reboot initiated").into_response()
 }
 
+async fn admin_prepare_backup(
+    session: Session,
+    State(db_registry): State<super::state::GuardedDbRegistry>,
+) -> Response {
+    info!("Backup prepare requested by user_id={}", session.user_id);
+
+    let result =
+        tokio::task::spawn_blocking(move || crate::backup::prepare_backup(&db_registry)).await;
+
+    match result {
+        Ok(backup_result) => {
+            let status = if backup_result.all_succeeded {
+                StatusCode::OK
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            (status, axum::Json(backup_result)).into_response()
+        }
+        Err(e) => {
+            error!("Backup prepare task panicked: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 // ============================================================================
 // Admin Job API handlers
 // ============================================================================
@@ -4561,6 +4586,7 @@ impl ServerState {
         _user_store: Arc<dyn FullUserStore>,
         scheduler_handle: Option<SchedulerHandle>,
         server_store: Arc<dyn crate::server_store::ServerStore>,
+        db_registry: Arc<crate::backup::DbRegistry>,
     ) -> ServerState {
         // Create connection manager
         let ws_connection_manager = Arc::new(super::websocket::ConnectionManager::new());
@@ -4605,6 +4631,7 @@ impl ServerState {
             download_manager: None, // Will be set by make_app if download manager is enabled
             ingestion_manager: None, // Will be set by make_app if ingestion is enabled
             playback_session_manager,
+            db_registry,
         }
     }
 }
@@ -4619,6 +4646,7 @@ pub async fn make_app(
     scheduler_handle: Option<SchedulerHandle>,
     server_store: Arc<dyn crate::server_store::ServerStore>,
     oidc_config: Option<crate::config::OidcConfig>,
+    db_registry: Arc<crate::backup::DbRegistry>,
 ) -> Result<Router> {
     // Initialize OIDC client if configured
     let oidc_client = match oidc_config {
@@ -4655,6 +4683,7 @@ pub async fn make_app(
         user_store.clone(),
         scheduler_handle,
         server_store,
+        db_registry,
     );
     state.oidc_client = oidc_client;
 
@@ -4680,7 +4709,10 @@ pub async fn make_app(
     if config.download_manager.enabled {
         info!("Initializing download manager...");
         let queue_db_path = config.db_dir.join("download_queue.db");
-        match crate::download_manager::SqliteDownloadQueueStore::new(&queue_db_path) {
+        match crate::download_manager::SqliteDownloadQueueStore::new(
+            &queue_db_path,
+            &state.db_registry,
+        ) {
             Ok(queue_store) => {
                 let manager = Arc::new(crate::download_manager::DownloadManager::new(
                     Arc::new(queue_store),
@@ -4727,7 +4759,7 @@ pub async fn make_app(
     if config.ingestion.enabled {
         info!("Initializing ingestion manager...");
         let ingestion_db_path = config.ingestion_db_path();
-        match crate::ingestion::SqliteIngestionStore::open(&ingestion_db_path) {
+        match crate::ingestion::SqliteIngestionStore::open(&ingestion_db_path, &state.db_registry) {
             Ok(store) => {
                 // Parse bitrate from string like "320k" to u32
                 let target_bitrate = config
@@ -5100,6 +5132,7 @@ pub async fn make_app(
     // Admin server routes (requires ServerAdmin permission)
     let admin_server_routes: Router = Router::new()
         .route("/reboot", post(reboot_server))
+        .route("/backup/prepare", post(admin_prepare_backup))
         .route("/jobs", get(admin_list_jobs))
         .route("/jobs/audit", get(admin_get_job_audit_log))
         .route("/jobs/{job_id}", get(admin_get_job))
@@ -5335,6 +5368,7 @@ pub async fn run_server(
     media_path: std::path::PathBuf,
     agent: crate::config::AgentSettings,
     ingestion: crate::config::IngestionSettings,
+    db_registry: Arc<crate::backup::DbRegistry>,
 ) -> Result<()> {
     let disable_password_auth = oidc_config
         .as_ref()
@@ -5364,6 +5398,7 @@ pub async fn run_server(
         scheduler_handle,
         server_store,
         oidc_config,
+        db_registry,
     )
     .await?;
 
@@ -5668,6 +5703,7 @@ mod tests {
             None, // no scheduler_handle
             server_store,
             None, // no oidc_config
+            Arc::new(crate::backup::DbRegistry::new()),
         )
         .await
         .unwrap();
@@ -6211,7 +6247,8 @@ mod tests {
         fn create_test_store() -> (SqliteUserStore, TempDir) {
             let temp_dir = TempDir::new().unwrap();
             let temp_file_path = temp_dir.path().join("test.db");
-            let store = SqliteUserStore::new(&temp_file_path).unwrap();
+            let store =
+                SqliteUserStore::new(&temp_file_path, &crate::backup::DbRegistry::new()).unwrap();
             (store, temp_dir)
         }
 

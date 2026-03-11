@@ -1045,7 +1045,11 @@ pub struct SqliteUserStore {
 }
 
 impl SqliteUserStore {
-    pub fn new<T: AsRef<Path>>(db_path: T) -> Result<Self> {
+    pub fn new<T: AsRef<Path>>(
+        db_path: T,
+        db_registry: &crate::backup::DbRegistry,
+    ) -> Result<Self> {
+        let db_path_ref = db_path.as_ref().to_path_buf();
         let mut conn = if db_path.as_ref().exists() {
             Connection::open_with_flags(
                 db_path,
@@ -1084,6 +1088,8 @@ impl SqliteUserStore {
         }
 
         Self::migrate_if_needed(&mut conn, version)?;
+
+        db_registry.register(db_path_ref, &conn)?;
 
         Ok(SqliteUserStore {
             conn: Arc::new(Mutex::new(conn)),
@@ -3487,7 +3493,8 @@ mod tests {
     fn create_tmp_store() -> (SqliteUserStore, TempDir) {
         let temp_dir = TempDir::new().unwrap();
         let temp_file_path = temp_dir.path().join("test.db");
-        let store = SqliteUserStore::new(&temp_file_path).unwrap();
+        let store =
+            SqliteUserStore::new(&temp_file_path, &crate::backup::DbRegistry::new()).unwrap();
         (store, temp_dir)
     }
 
@@ -3618,7 +3625,8 @@ mod tests {
         }
 
         // Now open with SqliteUserStore, which should trigger migration to latest
-        let store = SqliteUserStore::new(&temp_file_path).unwrap();
+        let store =
+            SqliteUserStore::new(&temp_file_path, &crate::backup::DbRegistry::new()).unwrap();
 
         // Verify we're now at the latest version
         {
@@ -3766,7 +3774,8 @@ mod tests {
         }
 
         // Now open with SqliteUserStore, which should trigger migration to latest
-        let store = SqliteUserStore::new(&temp_file_path).unwrap();
+        let store =
+            SqliteUserStore::new(&temp_file_path, &crate::backup::DbRegistry::new()).unwrap();
 
         // Verify we're now at the latest version
         {

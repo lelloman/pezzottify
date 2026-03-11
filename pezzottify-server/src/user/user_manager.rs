@@ -1047,7 +1047,9 @@ mod tests {
     fn create_test_manager() -> (UserManager, TempDir) {
         let temp_dir = TempDir::new().unwrap();
         let temp_file_path = temp_dir.path().join("test.db");
-        let user_store = Arc::new(SqliteUserStore::new(&temp_file_path).unwrap());
+        let user_store = Arc::new(
+            SqliteUserStore::new(&temp_file_path, &crate::backup::DbRegistry::new()).unwrap(),
+        );
         let catalog_store: Arc<dyn CatalogStore> = Arc::new(NullCatalogStore);
         let manager = UserManager::new(catalog_store, user_store);
         (manager, temp_dir)
