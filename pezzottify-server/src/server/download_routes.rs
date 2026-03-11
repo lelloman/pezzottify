@@ -205,7 +205,10 @@ async fn request_track(
     let is_admin = session.has_permission(Permission::DownloadManagerAdmin);
     debug!("User {} requesting track {}", user_id, body.track_id);
 
-    match manager.request_track(&user_id, &body.track_id, is_admin).await {
+    match manager
+        .request_track(&user_id, &body.track_id, is_admin)
+        .await
+    {
         Ok(item) => Json(RequestResponse {
             success: true,
             message: "Track queued for download".to_string(),
@@ -246,7 +249,10 @@ async fn request_album(
     );
 
     let is_admin = session.has_permission(Permission::DownloadManagerAdmin);
-    match manager.request_album(&user_id, &body.album_id, is_admin).await {
+    match manager
+        .request_album(&user_id, &body.album_id, is_admin)
+        .await
+    {
         Ok(items) => Json(AlbumRequestResponse {
             request_id: items.first().map(|i| i.id.clone()).unwrap_or_default(),
             status: "PENDING".to_string(),
