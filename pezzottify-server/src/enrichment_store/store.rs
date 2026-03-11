@@ -71,7 +71,10 @@ fn migrate_if_needed(conn: &mut Connection) -> Result<()> {
 
 impl SqliteEnrichmentStore {
     /// Create a new SqliteEnrichmentStore.
-    pub fn new<P: AsRef<Path>>(db_path: P) -> Result<Self> {
+    pub fn new<P: AsRef<Path>>(
+        db_path: P,
+        db_registry: &crate::backup::DbRegistry,
+    ) -> Result<Self> {
         let db_path_ref = db_path.as_ref();
 
         let mut write_conn = Connection::open_with_flags(
@@ -85,9 +88,7 @@ impl SqliteEnrichmentStore {
 
         migrate_if_needed(&mut write_conn)?;
 
-        write_conn
-            .pragma_update(None, "journal_mode", "WAL")
-            .context("Failed to set WAL mode on enrichment write connection")?;
+        db_registry.register(db_path_ref.to_path_buf(), &write_conn)?;
 
         let read_conn = Connection::open_with_flags(
             db_path_ref,
@@ -446,7 +447,8 @@ mod tests {
     fn create_test_store() -> (SqliteEnrichmentStore, TempDir) {
         let tmp = TempDir::new().unwrap();
         let db_path = tmp.path().join("enrichment.db");
-        let store = SqliteEnrichmentStore::new(&db_path).unwrap();
+        let store =
+            SqliteEnrichmentStore::new(&db_path, &crate::backup::DbRegistry::new()).unwrap();
         (store, tmp)
     }
 

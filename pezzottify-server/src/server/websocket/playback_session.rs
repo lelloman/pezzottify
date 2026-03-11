@@ -873,7 +873,11 @@ mod tests {
     async fn setup() -> (Arc<ConnectionManager>, PlaybackSessionManager) {
         let conn_manager = Arc::new(ConnectionManager::new());
         let temp_dir = tempdir().unwrap();
-        let store = SqliteUserStore::new(temp_dir.path().join("user.db")).unwrap();
+        let store = SqliteUserStore::new(
+            temp_dir.path().join("user.db"),
+            &crate::backup::DbRegistry::new(),
+        )
+        .unwrap();
         let user_store: Arc<dyn crate::user::FullUserStore> = Arc::new(store);
         let catalog_store: Arc<dyn crate::catalog_store::CatalogStore> = Arc::new(NullCatalogStore);
         let user_manager = Arc::new(Mutex::new(UserManager::new(catalog_store, user_store)));
@@ -889,7 +893,11 @@ mod tests {
     ) {
         let conn_manager = Arc::new(ConnectionManager::new());
         let temp_dir = tempdir().unwrap();
-        let store = SqliteUserStore::new(temp_dir.path().join("user.db")).unwrap();
+        let store = SqliteUserStore::new(
+            temp_dir.path().join("user.db"),
+            &crate::backup::DbRegistry::new(),
+        )
+        .unwrap();
         let user_store: Arc<dyn crate::user::FullUserStore> = Arc::new(store);
         let catalog_store: Arc<dyn crate::catalog_store::CatalogStore> = Arc::new(NullCatalogStore);
         let user_manager = Arc::new(Mutex::new(UserManager::new(catalog_store, user_store)));

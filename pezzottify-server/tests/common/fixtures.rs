@@ -209,7 +209,7 @@ pub fn create_test_db_with_users() -> Result<(TempDir, String)> {
     let db_path = temp_dir.path().join("test.db");
 
     {
-        let store = SqliteUserStore::new(&db_path)?;
+        let store = SqliteUserStore::new(&db_path, &pezzottify_server::backup::DbRegistry::new())?;
 
         // Create regular test user
         let user_id =
@@ -275,7 +275,8 @@ pub fn create_combined_test_setup() -> Result<(TempDir, PathBuf, PathBuf, PathBu
     // Create user DB in same temp directory
     let user_db_path = temp_dir.path().join("users.db");
     {
-        let store = SqliteUserStore::new(&user_db_path)?;
+        let store =
+            SqliteUserStore::new(&user_db_path, &pezzottify_server::backup::DbRegistry::new())?;
 
         // Create test users
         create_user_with_password_and_role(&store, TEST_USER, TEST_PASS, UserRole::Regular)?;

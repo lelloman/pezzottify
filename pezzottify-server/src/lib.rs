@@ -4,6 +4,7 @@
 
 pub mod agent;
 pub mod background_jobs;
+pub mod backup;
 pub mod catalog_store;
 pub mod config;
 pub mod download_manager;

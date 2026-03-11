@@ -840,7 +840,8 @@ fn main() -> Result<()> {
         })?
     };
 
-    let user_store = SqliteUserStore::new(auth_store_file_path.clone())?;
+    let db_registry = pezzottify_server::backup::DbRegistry::new();
+    let user_store = SqliteUserStore::new(auth_store_file_path.clone(), &db_registry)?;
     let catalog_store = Arc::new(NullCatalogStore);
     let mut user_manager = UserManager::new(catalog_store, Arc::new(user_store));
 

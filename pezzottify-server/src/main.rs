@@ -14,6 +14,7 @@ use pezzottify_server::background_jobs::jobs::{
     PopularContentJob, RelatedArtistsEnrichmentJob, WhatsNewBatchJob,
 };
 use pezzottify_server::background_jobs::{create_scheduler, GuardedSearchVault, JobContext};
+use pezzottify_server::backup::DbRegistry;
 use pezzottify_server::catalog_store::{CatalogStore, SqliteCatalogStore};
 use pezzottify_server::config;
 use pezzottify_server::enrichment_store::SqliteEnrichmentStore;
@@ -160,6 +161,9 @@ async fn main() -> Result<()> {
     info!("  media_path: {:?}", app_config.media_path);
     info!("  port: {}", app_config.port);
 
+    // Create database registry for backup checkpoint control
+    let db_registry = Arc::new(DbRegistry::new());
+
     // Create catalog store (will create DB if not exists)
     if !app_config.catalog_db_path().exists() {
         info!(
@@ -171,6 +175,7 @@ async fn main() -> Result<()> {
         app_config.catalog_db_path(),
         &app_config.media_path,
         app_config.catalog_store.read_pool_size,
+        &db_registry,
     )?);
 
     // Initialize metrics system
@@ -189,14 +194,20 @@ async fn main() -> Result<()> {
             app_config.user_db_path()
         );
     }
-    let user_store = Arc::new(SqliteUserStore::new(app_config.user_db_path())?);
+    let user_store = Arc::new(SqliteUserStore::new(
+        app_config.user_db_path(),
+        &db_registry,
+    )?);
 
     // Create server store for background job history
     info!(
         "Initializing server store at {:?}",
         app_config.server_db_path()
     );
-    let server_store = Arc::new(SqliteServerStore::new(app_config.server_db_path())?);
+    let server_store = Arc::new(SqliteServerStore::new(
+        app_config.server_db_path(),
+        &db_registry,
+    )?);
 
     // Create UserManager early so it can be shared with job scheduler
     let user_manager = Arc::new(std::sync::Mutex::new(UserManager::new(
@@ -219,6 +230,7 @@ async fn main() -> Result<()> {
                 );
                 let vault = Arc::new(Fts5LevenshteinSearchVault::new_lazy(
                     &app_config.search_db_path(),
+                    &db_registry,
                 )?);
 
                 // No background build - search index grows organically via OrganicIndexer
@@ -244,7 +256,7 @@ async fn main() -> Result<()> {
             "Initializing enrichment store at {:?}",
             app_config.enrichment_db_path()
         );
-        match SqliteEnrichmentStore::new(app_config.enrichment_db_path()) {
+        match SqliteEnrichmentStore::new(app_config.enrichment_db_path(), &db_registry) {
             Ok(store) => Some(Arc::new(store)),
             Err(e) => {
                 error!("Failed to create enrichment store: {:?}", e);
@@ -302,7 +314,7 @@ async fn main() -> Result<()> {
     // Register ingestion cleanup job if ingestion is enabled
     if app_config.ingestion.enabled {
         let ingestion_db_path = app_config.ingestion_db_path();
-        match SqliteIngestionStore::open(&ingestion_db_path) {
+        match SqliteIngestionStore::open(&ingestion_db_path, &db_registry) {
             Ok(store) => {
                 let ingestion_store: Arc<dyn IngestionStore> = Arc::new(store);
                 let temp_dir = app_config.ingestion_temp_dir();
@@ -440,6 +452,25 @@ async fn main() -> Result<()> {
         }
     });
 
+    // Spawn periodic passive WAL checkpoint task (hourly)
+    let checkpoint_registry = db_registry.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60 * 60));
+        // Skip the first immediate tick
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            let registry = checkpoint_registry.clone();
+            if let Err(e) = tokio::task::spawn_blocking(move || {
+                pezzottify_server::backup::passive_checkpoint_all(&registry);
+            })
+            .await
+            {
+                error!("Passive checkpoint task panicked: {}", e);
+            }
+        }
+    });
+
     info!("Ready to serve at port {}!", app_config.port);
     info!("Metrics available at port {}!", app_config.metrics_port);
 
@@ -464,6 +495,7 @@ async fn main() -> Result<()> {
             app_config.media_path.clone(),
             app_config.agent.clone(),
             app_config.ingestion.clone(),
+            db_registry.clone(),
         ) => {
             info!("HTTP server stopped: {:?}", result);
             shutdown_token.cancel();

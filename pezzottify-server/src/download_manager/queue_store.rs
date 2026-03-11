@@ -229,7 +229,10 @@ impl SqliteDownloadQueueStore {
     ///
     /// # Arguments
     /// * `db_path` - Path to the SQLite database file
-    pub fn new<P: AsRef<Path>>(db_path: P) -> Result<Self> {
+    pub fn new<P: AsRef<Path>>(
+        db_path: P,
+        db_registry: &crate::backup::DbRegistry,
+    ) -> Result<Self> {
         let conn = if db_path.as_ref().exists() {
             Connection::open_with_flags(
                 &db_path,
@@ -286,6 +289,8 @@ impl SqliteDownloadQueueStore {
 
         // Run migrations if needed
         Self::migrate_if_needed(&conn, version)?;
+
+        db_registry.register(db_path.as_ref().to_path_buf(), &conn)?;
 
         Ok(SqliteDownloadQueueStore {
             conn: Arc::new(Mutex::new(conn)),
@@ -1711,7 +1716,8 @@ mod tests {
         let dir = tempdir().unwrap();
         let db_path = dir.path().join("download_queue.db");
 
-        let store = SqliteDownloadQueueStore::new(&db_path).unwrap();
+        let store =
+            SqliteDownloadQueueStore::new(&db_path, &crate::backup::DbRegistry::new()).unwrap();
 
         // Verify database file was created
         assert!(db_path.exists());
@@ -1735,11 +1741,13 @@ mod tests {
 
         // Create database
         {
-            let _store = SqliteDownloadQueueStore::new(&db_path).unwrap();
+            let _store =
+                SqliteDownloadQueueStore::new(&db_path, &crate::backup::DbRegistry::new()).unwrap();
         }
 
         // Reopen database
-        let store = SqliteDownloadQueueStore::new(&db_path).unwrap();
+        let store =
+            SqliteDownloadQueueStore::new(&db_path, &crate::backup::DbRegistry::new()).unwrap();
 
         // Verify tables exist
         let conn = store.conn.lock().unwrap();

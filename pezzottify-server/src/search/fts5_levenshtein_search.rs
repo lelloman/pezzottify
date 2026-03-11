@@ -43,12 +43,12 @@ const UPSERT_SUB_BATCH_YIELD_MS: u64 = 10;
 ///
 /// For blocking initialization (old behavior):
 /// ```ignore
-/// let vault = Fts5LevenshteinSearchVault::new(catalog_store, db_path)?;
+/// let vault = Fts5LevenshteinSearchVault::new(catalog_store, db_path, &db_registry)?;
 /// ```
 ///
 /// For non-blocking background indexing:
 /// ```ignore
-/// let vault = Fts5LevenshteinSearchVault::new_lazy(db_path)?;
+/// let vault = Fts5LevenshteinSearchVault::new_lazy(db_path, &db_registry)?;
 /// vault.start_background_build(catalog_store);
 /// // Search works immediately, returns partial results during build
 /// ```
@@ -73,8 +73,12 @@ impl Fts5LevenshteinSearchVault {
     /// # Arguments
     /// * `catalog_store` - The catalog store to index content from
     /// * `db_path` - Path to the search database file
-    pub fn new(catalog_store: Arc<dyn CatalogStore>, db_path: &Path) -> Result<Self> {
-        Self::with_max_distance(catalog_store, db_path, 2)
+    pub fn new(
+        catalog_store: Arc<dyn CatalogStore>,
+        db_path: &Path,
+        db_registry: &crate::backup::DbRegistry,
+    ) -> Result<Self> {
+        Self::with_max_distance(catalog_store, db_path, 2, db_registry)
     }
 
     /// Create a lazy vault that doesn't index on construction.
@@ -84,10 +88,10 @@ impl Fts5LevenshteinSearchVault {
     ///
     /// If a valid index already exists on disk, it will be loaded.
     /// If a partial build was interrupted, it will be detected and can be resumed.
-    pub fn new_lazy(db_path: &Path) -> Result<Self> {
+    pub fn new_lazy(db_path: &Path, db_registry: &crate::backup::DbRegistry) -> Result<Self> {
         // Create write connection first (handles table creation)
         let write_conn = Connection::open(db_path)?;
-        write_conn.pragma_update(None, "journal_mode", "WAL")?;
+        db_registry.register(db_path.to_path_buf(), &write_conn)?;
         Self::create_tables(&write_conn)?;
 
         // Create separate read connection for search queries
@@ -150,9 +154,10 @@ impl Fts5LevenshteinSearchVault {
         catalog_store: Arc<dyn CatalogStore>,
         db_path: &Path,
         max_edit_distance: usize,
+        db_registry: &crate::backup::DbRegistry,
     ) -> Result<Self> {
         let write_conn = Connection::open(db_path)?;
-        write_conn.pragma_update(None, "journal_mode", "WAL")?;
+        db_registry.register(db_path.to_path_buf(), &write_conn)?;
         Self::create_tables(&write_conn)?;
 
         // Create separate read connection
@@ -1556,7 +1561,10 @@ mod tests {
         let db_path = temp_dir.path().join("search.db");
 
         // Create lazy vault
-        let vault = Arc::new(Fts5LevenshteinSearchVault::new_lazy(&db_path).unwrap());
+        let vault = Arc::new(
+            Fts5LevenshteinSearchVault::new_lazy(&db_path, &crate::backup::DbRegistry::new())
+                .unwrap(),
+        );
 
         // Initially empty
         let stats = vault.get_stats();
@@ -1621,7 +1629,9 @@ mod tests {
             },
         ]));
 
-        let vault = Fts5LevenshteinSearchVault::new(catalog, &db_path).unwrap();
+        let vault =
+            Fts5LevenshteinSearchVault::new(catalog, &db_path, &crate::backup::DbRegistry::new())
+                .unwrap();
 
         // Exact search
         let results = vault.search("Beatles", 10, None);
@@ -1669,7 +1679,9 @@ mod tests {
         ];
 
         let catalog = Arc::new(MockCatalogStore::with_version(items, 1));
-        let vault = Fts5LevenshteinSearchVault::new(catalog, &db_path).unwrap();
+        let vault =
+            Fts5LevenshteinSearchVault::new(catalog, &db_path, &crate::backup::DbRegistry::new())
+                .unwrap();
 
         // Search without filter - should find all 3
         let results = vault.search("Beatles", 10, None);
@@ -1711,7 +1723,9 @@ mod tests {
         }
 
         // Now create a new lazy vault - it should detect the partial build
-        let vault = Fts5LevenshteinSearchVault::new_lazy(&db_path).unwrap();
+        let vault =
+            Fts5LevenshteinSearchVault::new_lazy(&db_path, &crate::backup::DbRegistry::new())
+                .unwrap();
 
         let stats = vault.get_stats();
         assert_eq!(stats.indexed_items, 2);
@@ -1797,7 +1811,10 @@ mod tests {
         }
 
         // Create vault and resume build
-        let vault = Arc::new(Fts5LevenshteinSearchVault::new_lazy(&db_path).unwrap());
+        let vault = Arc::new(
+            Fts5LevenshteinSearchVault::new_lazy(&db_path, &crate::backup::DbRegistry::new())
+                .unwrap(),
+        );
         let catalog = Arc::new(MockCatalogStore::new(items));
 
         vault.start_background_build(catalog);
@@ -1832,7 +1849,10 @@ mod tests {
             is_available: true,
         }];
 
-        let vault = Arc::new(Fts5LevenshteinSearchVault::new_lazy(&db_path).unwrap());
+        let vault = Arc::new(
+            Fts5LevenshteinSearchVault::new_lazy(&db_path, &crate::backup::DbRegistry::new())
+                .unwrap(),
+        );
         let catalog = Arc::new(MockCatalogStore::new(items));
 
         vault.start_background_build(catalog);
@@ -1856,7 +1876,9 @@ mod tests {
         );
 
         // Creating a new vault should show Ready state
-        let vault2 = Fts5LevenshteinSearchVault::new_lazy(&db_path).unwrap();
+        let vault2 =
+            Fts5LevenshteinSearchVault::new_lazy(&db_path, &crate::backup::DbRegistry::new())
+                .unwrap();
         assert_eq!(vault2.get_stats().state, IndexState::Ready);
     }
 
@@ -1898,7 +1920,9 @@ mod tests {
         ];
 
         let catalog = Arc::new(MockCatalogStore::new(items));
-        let vault = Fts5LevenshteinSearchVault::new(catalog, &db_path).unwrap();
+        let vault =
+            Fts5LevenshteinSearchVault::new(catalog, &db_path, &crate::backup::DbRegistry::new())
+                .unwrap();
 
         // Regular search should return all 4 items
         let all_results = vault.search("Beatles", 10, None);
@@ -1959,7 +1983,9 @@ mod tests {
         ];
 
         let catalog = Arc::new(MockCatalogStore::new(items));
-        let vault = Fts5LevenshteinSearchVault::new(catalog, &db_path).unwrap();
+        let vault =
+            Fts5LevenshteinSearchVault::new(catalog, &db_path, &crate::backup::DbRegistry::new())
+                .unwrap();
 
         // Initially, only track1 should be available when searching for "day"
         let results = vault.search_with_availability("Song", 10, None, true);
@@ -1999,7 +2025,9 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("search.db");
 
-        let vault = Fts5LevenshteinSearchVault::new_lazy(&db_path).unwrap();
+        let vault =
+            Fts5LevenshteinSearchVault::new_lazy(&db_path, &crate::backup::DbRegistry::new())
+                .unwrap();
 
         // Record impressions
         vault.record_impression("artist1", HashedItemType::Artist);
@@ -2032,7 +2060,9 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("search.db");
 
-        let vault = Fts5LevenshteinSearchVault::new_lazy(&db_path).unwrap();
+        let vault =
+            Fts5LevenshteinSearchVault::new_lazy(&db_path, &crate::backup::DbRegistry::new())
+                .unwrap();
 
         // Insert impressions with different dates directly
         {
@@ -2075,7 +2105,9 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("search.db");
 
-        let vault = Fts5LevenshteinSearchVault::new_lazy(&db_path).unwrap();
+        let vault =
+            Fts5LevenshteinSearchVault::new_lazy(&db_path, &crate::backup::DbRegistry::new())
+                .unwrap();
 
         // Insert impressions with different dates
         {

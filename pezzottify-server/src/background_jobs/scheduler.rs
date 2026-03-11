@@ -648,7 +648,8 @@ mod tests {
     ) {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("server.db");
-        let server_store = Arc::new(SqliteServerStore::new(&db_path).unwrap());
+        let server_store =
+            Arc::new(SqliteServerStore::new(&db_path, &crate::backup::DbRegistry::new()).unwrap());
 
         let (hook_sender, hook_receiver) = mpsc::channel(100);
         let shutdown_token = CancellationToken::new();
@@ -658,8 +659,10 @@ mod tests {
 
         // For user store, we need to create a real one since it's complex
         let user_db_path = temp_dir.path().join("user.db");
-        let user_store: Arc<dyn crate::user::FullUserStore> =
-            Arc::new(crate::user::SqliteUserStore::new(&user_db_path).unwrap());
+        let user_store: Arc<dyn crate::user::FullUserStore> = Arc::new(
+            crate::user::SqliteUserStore::new(&user_db_path, &crate::backup::DbRegistry::new())
+                .unwrap(),
+        );
 
         // Create user manager for job context
         let user_manager = Arc::new(std::sync::Mutex::new(crate::user::UserManager::new(
@@ -940,15 +943,18 @@ mod tests {
     async fn test_job_execution_on_startup_hook() {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("server.db");
-        let server_store = Arc::new(SqliteServerStore::new(&db_path).unwrap());
+        let server_store =
+            Arc::new(SqliteServerStore::new(&db_path, &crate::backup::DbRegistry::new()).unwrap());
 
         let (hook_sender, hook_receiver) = mpsc::channel(100);
         let shutdown_token = CancellationToken::new();
 
         let catalog_store: Arc<dyn crate::catalog_store::CatalogStore> = Arc::new(NullCatalogStore);
         let user_db_path = temp_dir.path().join("user.db");
-        let user_store: Arc<dyn crate::user::FullUserStore> =
-            Arc::new(crate::user::SqliteUserStore::new(&user_db_path).unwrap());
+        let user_store: Arc<dyn crate::user::FullUserStore> = Arc::new(
+            crate::user::SqliteUserStore::new(&user_db_path, &crate::backup::DbRegistry::new())
+                .unwrap(),
+        );
         let user_manager = Arc::new(std::sync::Mutex::new(crate::user::UserManager::new(
             catalog_store.clone(),
             user_store.clone(),
@@ -1009,15 +1015,18 @@ mod tests {
     async fn test_failed_job_records_error() {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("server.db");
-        let server_store = Arc::new(SqliteServerStore::new(&db_path).unwrap());
+        let server_store =
+            Arc::new(SqliteServerStore::new(&db_path, &crate::backup::DbRegistry::new()).unwrap());
 
         let (_hook_sender, hook_receiver) = mpsc::channel(100);
         let shutdown_token = CancellationToken::new();
 
         let catalog_store: Arc<dyn crate::catalog_store::CatalogStore> = Arc::new(NullCatalogStore);
         let user_db_path = temp_dir.path().join("user.db");
-        let user_store: Arc<dyn crate::user::FullUserStore> =
-            Arc::new(crate::user::SqliteUserStore::new(&user_db_path).unwrap());
+        let user_store: Arc<dyn crate::user::FullUserStore> = Arc::new(
+            crate::user::SqliteUserStore::new(&user_db_path, &crate::backup::DbRegistry::new())
+                .unwrap(),
+        );
         let user_manager = Arc::new(std::sync::Mutex::new(crate::user::UserManager::new(
             catalog_store.clone(),
             user_store.clone(),
@@ -1080,15 +1089,18 @@ mod tests {
     async fn test_hook_triggered_job_execution() {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("server.db");
-        let server_store = Arc::new(SqliteServerStore::new(&db_path).unwrap());
+        let server_store =
+            Arc::new(SqliteServerStore::new(&db_path, &crate::backup::DbRegistry::new()).unwrap());
 
         let (hook_sender, hook_receiver) = mpsc::channel(100);
         let shutdown_token = CancellationToken::new();
 
         let catalog_store: Arc<dyn crate::catalog_store::CatalogStore> = Arc::new(NullCatalogStore);
         let user_db_path = temp_dir.path().join("user.db");
-        let user_store: Arc<dyn crate::user::FullUserStore> =
-            Arc::new(crate::user::SqliteUserStore::new(&user_db_path).unwrap());
+        let user_store: Arc<dyn crate::user::FullUserStore> = Arc::new(
+            crate::user::SqliteUserStore::new(&user_db_path, &crate::backup::DbRegistry::new())
+                .unwrap(),
+        );
         let user_manager = Arc::new(std::sync::Mutex::new(crate::user::UserManager::new(
             catalog_store.clone(),
             user_store.clone(),
@@ -1176,15 +1188,18 @@ mod tests {
     async fn test_running_job_marked_in_state() {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("server.db");
-        let server_store = Arc::new(SqliteServerStore::new(&db_path).unwrap());
+        let server_store =
+            Arc::new(SqliteServerStore::new(&db_path, &crate::backup::DbRegistry::new()).unwrap());
 
         let (_hook_sender, hook_receiver) = mpsc::channel(100);
         let shutdown_token = CancellationToken::new();
 
         let catalog_store: Arc<dyn crate::catalog_store::CatalogStore> = Arc::new(NullCatalogStore);
         let user_db_path = temp_dir.path().join("user.db");
-        let user_store: Arc<dyn crate::user::FullUserStore> =
-            Arc::new(crate::user::SqliteUserStore::new(&user_db_path).unwrap());
+        let user_store: Arc<dyn crate::user::FullUserStore> = Arc::new(
+            crate::user::SqliteUserStore::new(&user_db_path, &crate::backup::DbRegistry::new())
+                .unwrap(),
+        );
         let user_manager = Arc::new(std::sync::Mutex::new(crate::user::UserManager::new(
             catalog_store.clone(),
             user_store.clone(),

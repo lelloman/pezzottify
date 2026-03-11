@@ -16,7 +16,10 @@ pub struct SqliteServerStore {
 }
 
 impl SqliteServerStore {
-    pub fn new<P: AsRef<Path>>(db_path: P) -> Result<Self> {
+    pub fn new<P: AsRef<Path>>(
+        db_path: P,
+        db_registry: &crate::backup::DbRegistry,
+    ) -> Result<Self> {
         let path = db_path.as_ref();
         let is_new_db = !path.exists();
 
@@ -63,6 +66,8 @@ impl SqliteServerStore {
                 Self::migrate_if_needed(&mut conn, db_version as usize)?;
             }
         }
+
+        db_registry.register(path.to_path_buf(), &conn)?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -781,7 +786,7 @@ mod tests {
     fn create_test_store() -> TestStore {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("server.db");
-        let store = SqliteServerStore::new(&db_path).unwrap();
+        let store = SqliteServerStore::new(&db_path, &crate::backup::DbRegistry::new()).unwrap();
         TestStore {
             store,
             _temp_dir: temp_dir,
