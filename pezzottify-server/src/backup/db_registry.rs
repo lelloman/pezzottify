@@ -14,11 +14,17 @@ pub struct DbRegistry {
     paths: Mutex<Vec<PathBuf>>,
 }
 
-impl DbRegistry {
-    pub fn new() -> Self {
+impl Default for DbRegistry {
+    fn default() -> Self {
         DbRegistry {
             paths: Mutex::new(Vec::new()),
         }
+    }
+}
+
+impl DbRegistry {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Register a database. Enables WAL mode and disables auto-checkpoint on the connection.
