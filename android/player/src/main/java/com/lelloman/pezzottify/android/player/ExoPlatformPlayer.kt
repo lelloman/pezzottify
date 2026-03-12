@@ -171,7 +171,7 @@ internal class ExoPlatformPlayer(
             // Handle recovery based on error type
             if (isRecoverable) {
                 logger.info("Transient error detected - will auto-retry")
-                autoRetryJob = coroutineScope.launch {
+                autoRetryJob = coroutineScope.launch(Dispatchers.Main) {
                     delay(2500) // Wait 2.5 seconds before retry
                     if (mutablePlayerError.value?.isRecoverable == true) {
                         logger.info("Auto-retrying playback after transient error")
