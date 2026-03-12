@@ -4577,7 +4577,7 @@ async fn admin_get_changelog_entity_history(
 impl ServerState {
     /// Create a new ServerState with an already-guarded search vault.
     /// This allows sharing the search vault with background tasks.
-    #[allow(clippy::arc_with_non_send_sync)]
+    #[allow(clippy::arc_with_non_send_sync, clippy::too_many_arguments)]
     fn new_with_guarded_search_vault(
         config: ServerConfig,
         catalog_store: Arc<dyn CatalogStore>,
