@@ -210,6 +210,64 @@ pub trait CatalogStore: Send + Sync {
     fn get_album_artist_ids(&self, album_id: &str) -> Result<Vec<String>>;
 
     // =========================================================================
+    // Generic Embeddings
+    // =========================================================================
+
+    /// Upsert one generic embedding for a catalog entity.
+    fn upsert_entity_embedding(
+        &self,
+        _embedding: &super::EntityEmbeddingUpsert,
+    ) -> Result<super::EntityEmbedding> {
+        Err(anyhow::anyhow!(
+            "upsert_entity_embedding not supported by this catalog store"
+        ))
+    }
+
+    /// Get one embedding by entity and namespace.
+    fn get_entity_embedding(
+        &self,
+        _entity_type: &str,
+        _entity_id: &str,
+        _namespace: &str,
+        _include_vector: bool,
+    ) -> Result<Option<super::EntityEmbedding>> {
+        Ok(None)
+    }
+
+    /// List embeddings attached to one entity.
+    fn list_entity_embeddings(
+        &self,
+        _entity_type: &str,
+        _entity_id: &str,
+        _include_vector: bool,
+    ) -> Result<Vec<super::EntityEmbedding>> {
+        Ok(Vec::new())
+    }
+
+    /// Delete one embedding by entity and namespace.
+    fn delete_entity_embedding(
+        &self,
+        _entity_type: &str,
+        _entity_id: &str,
+        _namespace: &str,
+    ) -> Result<bool> {
+        Err(anyhow::anyhow!(
+            "delete_entity_embedding not supported by this catalog store"
+        ))
+    }
+
+    /// Brute-force nearest-neighbor search inside one embedding namespace.
+    fn search_entity_embeddings(
+        &self,
+        _namespace: &str,
+        _query: &[f32],
+        _entity_type: Option<&str>,
+        _limit: usize,
+    ) -> Result<Vec<super::EntityEmbeddingSearchResult>> {
+        Ok(Vec::new())
+    }
+
+    // =========================================================================
     // Popularity Data
     // =========================================================================
 

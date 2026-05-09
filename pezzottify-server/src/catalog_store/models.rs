@@ -4,6 +4,7 @@
 //! where primary keys are integer rowids with unique text Spotify IDs.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 // =============================================================================
 // Enumerations
@@ -252,6 +253,56 @@ pub struct ResolvedTrack {
     pub track: Track,
     pub album: Album,
     pub artists: Vec<TrackArtist>,
+}
+
+/// Generic embedding attached to a catalog entity.
+///
+/// Embeddings are intentionally model-agnostic. The namespace identifies the
+/// embedding family/version, while metadata/model JSON describe how it was
+/// produced and how callers should interpret it.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EntityEmbedding {
+    pub entity_type: String,
+    pub entity_id: String,
+    pub namespace: String,
+    pub dim: usize,
+    pub dtype: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vector: Option<Vec<f32>>,
+    pub vector_norm: f64,
+    #[serde(default)]
+    pub metadata: Value,
+    #[serde(default)]
+    pub model: Value,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Clone, Debug)]
+pub struct EntityEmbeddingUpsert {
+    pub entity_type: String,
+    pub entity_id: String,
+    pub namespace: String,
+    pub vector: Vec<f32>,
+    pub dtype: String,
+    pub metadata: Value,
+    pub model: Value,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct EntityEmbeddingSearchResult {
+    pub entity_type: String,
+    pub entity_id: String,
+    pub namespace: String,
+    pub score: f32,
+    pub dim: usize,
+    pub dtype: String,
+    pub vector_norm: f64,
+    #[serde(default)]
+    pub metadata: Value,
+    #[serde(default)]
+    pub model: Value,
+    pub updated_at: i64,
 }
 
 /// Sort order for discography
