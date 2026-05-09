@@ -7,8 +7,9 @@ use super::models::*;
 use super::schema::CATALOG_VERSIONED_SCHEMAS;
 use super::trait_def::{CatalogStore, SearchableContentType, SearchableItem};
 use crate::sqlite_persistence::BASE_DB_VERSION;
-use anyhow::{Context, Result};
-use rusqlite::{params, Connection};
+use anyhow::{anyhow, Context, Result};
+use chrono::Utc;
+use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -160,6 +161,77 @@ impl SqliteCatalogStore {
     fn get_read_conn(&self) -> Arc<Mutex<Connection>> {
         let index = self.read_index.fetch_add(1, Ordering::SeqCst) % self.read_pool.len();
         self.read_pool[index].clone()
+    }
+
+    fn encode_f32_vector(vector: &[f32]) -> Vec<u8> {
+        let mut out = Vec::with_capacity(vector.len() * std::mem::size_of::<f32>());
+        for value in vector {
+            out.extend_from_slice(&value.to_le_bytes());
+        }
+        out
+    }
+
+    fn decode_f32_vector(blob: &[u8]) -> Result<Vec<f32>> {
+        if blob.len() % std::mem::size_of::<f32>() != 0 {
+            return Err(anyhow!(
+                "invalid float32 vector blob length: {}",
+                blob.len()
+            ));
+        }
+        Ok(blob
+            .chunks_exact(std::mem::size_of::<f32>())
+            .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+            .collect())
+    }
+
+    fn vector_norm(vector: &[f32]) -> f64 {
+        vector
+            .iter()
+            .map(|value| f64::from(*value) * f64::from(*value))
+            .sum::<f64>()
+            .sqrt()
+    }
+
+    fn dot_product(left: &[f32], right: &[f32]) -> f32 {
+        left.iter()
+            .zip(right.iter())
+            .map(|(a, b)| a * b)
+            .sum::<f32>()
+    }
+
+    fn row_to_embedding(
+        row: &rusqlite::Row,
+        include_vector: bool,
+    ) -> rusqlite::Result<EntityEmbedding> {
+        let metadata_json: String = row.get("metadata_json")?;
+        let model_json: String = row.get("model_json")?;
+        let vector = if include_vector {
+            let blob: Vec<u8> = row.get("vector_blob")?;
+            Some(Self::decode_f32_vector(&blob).map_err(|err| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    blob.len(),
+                    rusqlite::types::Type::Blob,
+                    err.into(),
+                )
+            })?)
+        } else {
+            None
+        };
+        Ok(EntityEmbedding {
+            entity_type: row.get("entity_type")?,
+            entity_id: row.get("entity_id")?,
+            namespace: row.get("namespace")?,
+            dim: row.get::<_, i64>("dim")? as usize,
+            dtype: row.get("dtype")?,
+            vector,
+            vector_norm: row.get("vector_norm")?,
+            metadata: serde_json::from_str(&metadata_json)
+                .unwrap_or(serde_json::Value::Object(Default::default())),
+            model: serde_json::from_str(&model_json)
+                .unwrap_or(serde_json::Value::Object(Default::default())),
+            created_at: row.get("created_at")?,
+            updated_at: row.get("updated_at")?,
+        })
     }
 
     /// Compute track availability from an already-fetched audio_uri.
@@ -2157,6 +2229,209 @@ impl CatalogStore for SqliteCatalogStore {
         Ok(artist_ids)
     }
 
+    fn upsert_entity_embedding(
+        &self,
+        embedding: &EntityEmbeddingUpsert,
+    ) -> Result<EntityEmbedding> {
+        if embedding.vector.is_empty() {
+            return Err(anyhow!("embedding vector cannot be empty"));
+        }
+        if embedding.dtype != "float32" {
+            return Err(anyhow!(
+                "unsupported embedding dtype '{}'; only float32 is currently supported",
+                embedding.dtype
+            ));
+        }
+
+        let conn = self.write_conn.lock().unwrap();
+        let now = Utc::now().timestamp();
+        let vector_blob = Self::encode_f32_vector(&embedding.vector);
+        let vector_norm = Self::vector_norm(&embedding.vector);
+        let metadata_json = serde_json::to_string(&embedding.metadata)?;
+        let model_json = serde_json::to_string(&embedding.model)?;
+
+        conn.execute(
+            "INSERT INTO entity_embeddings (
+                entity_type, entity_id, namespace, dim, dtype, vector_blob, vector_norm,
+                metadata_json, model_json, created_at, updated_at
+             )
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)
+             ON CONFLICT(entity_type, entity_id, namespace) DO UPDATE SET
+                dim = excluded.dim,
+                dtype = excluded.dtype,
+                vector_blob = excluded.vector_blob,
+                vector_norm = excluded.vector_norm,
+                metadata_json = excluded.metadata_json,
+                model_json = excluded.model_json,
+                updated_at = excluded.updated_at",
+            params![
+                embedding.entity_type,
+                embedding.entity_id,
+                embedding.namespace,
+                embedding.vector.len() as i64,
+                embedding.dtype,
+                vector_blob,
+                vector_norm,
+                metadata_json,
+                model_json,
+                now,
+            ],
+        )?;
+
+        self.get_entity_embedding(
+            &embedding.entity_type,
+            &embedding.entity_id,
+            &embedding.namespace,
+            true,
+        )?
+        .ok_or_else(|| anyhow!("failed to read back upserted embedding"))
+    }
+
+    fn get_entity_embedding(
+        &self,
+        entity_type: &str,
+        entity_id: &str,
+        namespace: &str,
+        include_vector: bool,
+    ) -> Result<Option<EntityEmbedding>> {
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+        conn.query_row(
+            "SELECT entity_type, entity_id, namespace, dim, dtype, vector_blob, vector_norm,
+                    metadata_json, model_json, created_at, updated_at
+             FROM entity_embeddings
+             WHERE entity_type = ?1 AND entity_id = ?2 AND namespace = ?3",
+            params![entity_type, entity_id, namespace],
+            |row| Self::row_to_embedding(row, include_vector),
+        )
+        .optional()
+        .map_err(Into::into)
+    }
+
+    fn list_entity_embeddings(
+        &self,
+        entity_type: &str,
+        entity_id: &str,
+        include_vector: bool,
+    ) -> Result<Vec<EntityEmbedding>> {
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+        let mut stmt = conn.prepare_cached(
+            "SELECT entity_type, entity_id, namespace, dim, dtype, vector_blob, vector_norm,
+                    metadata_json, model_json, created_at, updated_at
+             FROM entity_embeddings
+             WHERE entity_type = ?1 AND entity_id = ?2
+             ORDER BY namespace",
+        )?;
+        let rows = stmt.query_map(params![entity_type, entity_id], |row| {
+            Self::row_to_embedding(row, include_vector)
+        })?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(Into::into)
+    }
+
+    fn delete_entity_embedding(
+        &self,
+        entity_type: &str,
+        entity_id: &str,
+        namespace: &str,
+    ) -> Result<bool> {
+        let conn = self.write_conn.lock().unwrap();
+        let changed = conn.execute(
+            "DELETE FROM entity_embeddings
+             WHERE entity_type = ?1 AND entity_id = ?2 AND namespace = ?3",
+            params![entity_type, entity_id, namespace],
+        )?;
+        Ok(changed > 0)
+    }
+
+    fn search_entity_embeddings(
+        &self,
+        namespace: &str,
+        query: &[f32],
+        entity_type: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<EntityEmbeddingSearchResult>> {
+        if query.is_empty() {
+            return Err(anyhow!("query vector cannot be empty"));
+        }
+        let query_norm = Self::vector_norm(query);
+        if query_norm <= f64::EPSILON {
+            return Err(anyhow!("query vector norm is zero"));
+        }
+        let limit = limit.max(1);
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+
+        let mut results = Vec::new();
+        let mut push_row = |row: &rusqlite::Row| -> Result<()> {
+            let dim: i64 = row.get("dim")?;
+            if dim as usize != query.len() {
+                return Ok(());
+            }
+            let dtype: String = row.get("dtype")?;
+            if dtype != "float32" {
+                return Ok(());
+            }
+            let blob: Vec<u8> = row.get("vector_blob")?;
+            let vector = Self::decode_f32_vector(&blob)?;
+            let vector_norm: f64 = row.get("vector_norm")?;
+            if vector_norm <= f64::EPSILON {
+                return Ok(());
+            }
+            let score = f64::from(Self::dot_product(query, &vector)) / (query_norm * vector_norm);
+            let metadata_json: String = row.get("metadata_json")?;
+            let model_json: String = row.get("model_json")?;
+            results.push(EntityEmbeddingSearchResult {
+                entity_type: row.get("entity_type")?,
+                entity_id: row.get("entity_id")?,
+                namespace: row.get("namespace")?,
+                score: score as f32,
+                dim: dim as usize,
+                dtype,
+                vector_norm,
+                metadata: serde_json::from_str(&metadata_json)
+                    .unwrap_or(serde_json::Value::Object(Default::default())),
+                model: serde_json::from_str(&model_json)
+                    .unwrap_or(serde_json::Value::Object(Default::default())),
+                updated_at: row.get("updated_at")?,
+            });
+            Ok(())
+        };
+
+        if let Some(entity_type) = entity_type {
+            let mut stmt = conn.prepare_cached(
+                "SELECT entity_type, entity_id, namespace, dim, dtype, vector_blob, vector_norm,
+                        metadata_json, model_json, updated_at
+                 FROM entity_embeddings
+                 WHERE namespace = ?1 AND entity_type = ?2",
+            )?;
+            let mut rows = stmt.query(params![namespace, entity_type])?;
+            while let Some(row) = rows.next()? {
+                push_row(row)?;
+            }
+        } else {
+            let mut stmt = conn.prepare_cached(
+                "SELECT entity_type, entity_id, namespace, dim, dtype, vector_blob, vector_norm,
+                        metadata_json, model_json, updated_at
+                 FROM entity_embeddings
+                 WHERE namespace = ?1",
+            )?;
+            let mut rows = stmt.query(params![namespace])?;
+            while let Some(row) = rows.next()? {
+                push_row(row)?;
+            }
+        }
+        results.sort_by(|left, right| {
+            right
+                .score
+                .partial_cmp(&left.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        results.truncate(limit);
+        Ok(results)
+    }
+
     fn get_items_popularity(
         &self,
         items: &[(String, SearchableContentType)],
@@ -2492,8 +2767,43 @@ impl CatalogStore for SqliteCatalogStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::catalog_store::schema::CATALOG_VERSIONED_SCHEMAS;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
+
+    fn create_test_store() -> (SqliteCatalogStore, tempfile::TempDir) {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let store = SqliteCatalogStore::new(
+            temp_dir.path().join("test.db"),
+            temp_dir.path(),
+            2,
+            &crate::backup::DbRegistry::new(),
+        )
+        .unwrap();
+        (store, temp_dir)
+    }
+
+    fn sample_embedding(
+        entity_id: &str,
+        namespace: &str,
+        vector: Vec<f32>,
+    ) -> EntityEmbeddingUpsert {
+        EntityEmbeddingUpsert {
+            entity_type: "track".to_string(),
+            entity_id: entity_id.to_string(),
+            namespace: namespace.to_string(),
+            vector,
+            dtype: "float32".to_string(),
+            metadata: serde_json::json!({
+                "source": "unit-test",
+                "normalized": false
+            }),
+            model: serde_json::json!({
+                "name": "test-model",
+                "version": "v1"
+            }),
+        }
+    }
 
     #[tokio::test]
     async fn test_concurrent_reads_no_blocking() {
@@ -2522,6 +2832,204 @@ mod tests {
         for handle in handles {
             handle.await.unwrap();
         }
+    }
+
+    #[test]
+    fn test_entity_embedding_upsert_get_list_and_delete() {
+        let (store, _temp_dir) = create_test_store();
+        let upsert = sample_embedding("track1", "musicfm.mean.v1", vec![1.0, 2.0, 2.0]);
+
+        let stored = store.upsert_entity_embedding(&upsert).unwrap();
+        assert_eq!(stored.entity_type, "track");
+        assert_eq!(stored.entity_id, "track1");
+        assert_eq!(stored.namespace, "musicfm.mean.v1");
+        assert_eq!(stored.dim, 3);
+        assert_eq!(stored.dtype, "float32");
+        assert_eq!(stored.vector.as_ref().unwrap(), &vec![1.0, 2.0, 2.0]);
+        assert!((stored.vector_norm - 3.0).abs() < 1e-9);
+        assert_eq!(stored.metadata["source"], "unit-test");
+        assert_eq!(stored.model["name"], "test-model");
+
+        let without_vector = store
+            .get_entity_embedding("track", "track1", "musicfm.mean.v1", false)
+            .unwrap()
+            .unwrap();
+        assert!(without_vector.vector.is_none());
+
+        let listed = store
+            .list_entity_embeddings("track", "track1", false)
+            .unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].namespace, "musicfm.mean.v1");
+        assert!(listed[0].vector.is_none());
+
+        assert!(store
+            .delete_entity_embedding("track", "track1", "musicfm.mean.v1")
+            .unwrap());
+        assert!(store
+            .get_entity_embedding("track", "track1", "musicfm.mean.v1", true)
+            .unwrap()
+            .is_none());
+        assert!(!store
+            .delete_entity_embedding("track", "track1", "musicfm.mean.v1")
+            .unwrap());
+    }
+
+    #[test]
+    fn test_entity_embedding_unique_namespace_overwrites_existing_row() {
+        let (store, _temp_dir) = create_test_store();
+        store
+            .upsert_entity_embedding(&sample_embedding(
+                "track1",
+                "ast.instruments.v1",
+                vec![1.0, 0.0],
+            ))
+            .unwrap();
+        let updated = EntityEmbeddingUpsert {
+            metadata: serde_json::json!({"source": "updated"}),
+            model: serde_json::json!({"name": "test-model", "version": "v2"}),
+            ..sample_embedding("track1", "ast.instruments.v1", vec![0.0, 1.0, 0.0])
+        };
+        let stored = store.upsert_entity_embedding(&updated).unwrap();
+
+        assert_eq!(stored.dim, 3);
+        assert_eq!(stored.vector.as_ref().unwrap(), &vec![0.0, 1.0, 0.0]);
+        assert_eq!(stored.metadata["source"], "updated");
+        assert_eq!(stored.model["version"], "v2");
+        assert!(stored.updated_at >= stored.created_at);
+
+        let listed = store
+            .list_entity_embeddings("track", "track1", true)
+            .unwrap();
+        assert_eq!(listed.len(), 1);
+    }
+
+    #[test]
+    fn test_entity_embedding_multiple_namespaces_per_entity() {
+        let (store, _temp_dir) = create_test_store();
+        store
+            .upsert_entity_embedding(&sample_embedding("track1", "ast.instruments.v1", vec![1.0]))
+            .unwrap();
+        store
+            .upsert_entity_embedding(&sample_embedding("track1", "musicfm.mean.v1", vec![2.0]))
+            .unwrap();
+
+        let listed = store
+            .list_entity_embeddings("track", "track1", false)
+            .unwrap();
+        let namespaces: Vec<_> = listed.iter().map(|item| item.namespace.as_str()).collect();
+        assert_eq!(namespaces, vec!["ast.instruments.v1", "musicfm.mean.v1"]);
+    }
+
+    #[test]
+    fn test_entity_embedding_search_orders_by_cosine_similarity() {
+        let (store, _temp_dir) = create_test_store();
+        store
+            .upsert_entity_embedding(&sample_embedding("close", "test.space.v1", vec![1.0, 0.0]))
+            .unwrap();
+        store
+            .upsert_entity_embedding(&sample_embedding(
+                "diagonal",
+                "test.space.v1",
+                vec![1.0, 1.0],
+            ))
+            .unwrap();
+        store
+            .upsert_entity_embedding(&sample_embedding(
+                "opposite",
+                "test.space.v1",
+                vec![-1.0, 0.0],
+            ))
+            .unwrap();
+        store
+            .upsert_entity_embedding(&sample_embedding("other", "other.space.v1", vec![1.0, 0.0]))
+            .unwrap();
+
+        let results = store
+            .search_entity_embeddings("test.space.v1", &[1.0, 0.0], Some("track"), 10)
+            .unwrap();
+        let ids: Vec<_> = results.iter().map(|item| item.entity_id.as_str()).collect();
+        assert_eq!(ids, vec!["close", "diagonal", "opposite"]);
+        assert!((results[0].score - 1.0).abs() < 1e-6);
+        assert!(results[1].score > 0.70 && results[1].score < 0.72);
+        assert!((results[2].score + 1.0).abs() < 1e-6);
+
+        let limited = store
+            .search_entity_embeddings("test.space.v1", &[1.0, 0.0], None, 2)
+            .unwrap();
+        assert_eq!(limited.len(), 2);
+    }
+
+    #[test]
+    fn test_entity_embedding_search_skips_dimension_mismatch() {
+        let (store, _temp_dir) = create_test_store();
+        store
+            .upsert_entity_embedding(&sample_embedding("two-d", "mixed.v1", vec![1.0, 0.0]))
+            .unwrap();
+        store
+            .upsert_entity_embedding(&sample_embedding(
+                "three-d",
+                "mixed.v1",
+                vec![1.0, 0.0, 0.0],
+            ))
+            .unwrap();
+
+        let results = store
+            .search_entity_embeddings("mixed.v1", &[1.0, 0.0], None, 10)
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].entity_id, "two-d");
+    }
+
+    #[test]
+    fn test_entity_embedding_rejects_empty_and_unsupported_dtype() {
+        let (store, _temp_dir) = create_test_store();
+        let empty = sample_embedding("track1", "bad.v1", vec![]);
+        assert!(store.upsert_entity_embedding(&empty).is_err());
+
+        let bad_dtype = EntityEmbeddingUpsert {
+            dtype: "float16".to_string(),
+            ..sample_embedding("track1", "bad.v1", vec![1.0])
+        };
+        assert!(store.upsert_entity_embedding(&bad_dtype).is_err());
+
+        assert!(store
+            .search_entity_embeddings("bad.v1", &[], None, 10)
+            .is_err());
+        assert!(store
+            .search_entity_embeddings("bad.v1", &[0.0, 0.0], None, 10)
+            .is_err());
+    }
+
+    #[test]
+    fn test_catalog_migration_v5_to_v6_adds_entity_embeddings() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("migration.db");
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            CATALOG_VERSIONED_SCHEMAS[5].create(&conn).unwrap();
+            conn.pragma_update(
+                None,
+                "user_version",
+                crate::sqlite_persistence::BASE_DB_VERSION + 5,
+            )
+            .unwrap();
+        }
+
+        let store = SqliteCatalogStore::new(
+            &db_path,
+            temp_dir.path(),
+            1,
+            &crate::backup::DbRegistry::new(),
+        )
+        .unwrap();
+        store
+            .upsert_entity_embedding(&sample_embedding("track1", "musicfm.mean.v1", vec![1.0]))
+            .unwrap();
+        let stored = store
+            .get_entity_embedding("track", "track1", "musicfm.mean.v1", true)
+            .unwrap();
+        assert!(stored.is_some());
     }
 
     #[test]

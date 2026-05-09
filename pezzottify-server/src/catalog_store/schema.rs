@@ -173,6 +173,47 @@ const RELATED_ARTISTS_TABLE: Table = Table {
 };
 
 // =============================================================================
+// Generic Embeddings
+// =============================================================================
+
+/// Generic vector embeddings for any catalog entity.
+const ENTITY_EMBEDDINGS_TABLE: Table = Table {
+    name: "entity_embeddings",
+    columns: &[
+        sqlite_column!("entity_type", &SqlType::Text, non_null = true),
+        sqlite_column!("entity_id", &SqlType::Text, non_null = true),
+        sqlite_column!("namespace", &SqlType::Text, non_null = true),
+        sqlite_column!("dim", &SqlType::Integer, non_null = true),
+        sqlite_column!("dtype", &SqlType::Text, non_null = true),
+        sqlite_column!("vector_blob", &SqlType::Blob, non_null = true),
+        sqlite_column!("vector_norm", &SqlType::Real, non_null = true),
+        sqlite_column!(
+            "metadata_json",
+            &SqlType::Text,
+            non_null = true,
+            default_value = Some("'{}'")
+        ),
+        sqlite_column!(
+            "model_json",
+            &SqlType::Text,
+            non_null = true,
+            default_value = Some("'{}'")
+        ),
+        sqlite_column!("created_at", &SqlType::Integer, non_null = true),
+        sqlite_column!("updated_at", &SqlType::Integer, non_null = true),
+    ],
+    indices: &[
+        ("idx_entity_embeddings_entity", "entity_type, entity_id"),
+        ("idx_entity_embeddings_namespace", "namespace"),
+        (
+            "idx_entity_embeddings_lookup",
+            "namespace, entity_type, entity_id",
+        ),
+    ],
+    unique_constraints: &[&["entity_type", "entity_id", "namespace"]],
+};
+
+// =============================================================================
 // Image Tables - Spotify CDN URLs
 // =============================================================================
 
@@ -393,6 +434,56 @@ pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             Ok(())
         }),
     },
+    VersionedSchema {
+        version: 6,
+        tables: &[
+            ARTISTS_TABLE,
+            ALBUMS_TABLE,
+            TRACKS_TABLE,
+            TRACK_ARTISTS_TABLE,
+            ARTIST_ALBUMS_TABLE,
+            ARTIST_GENRES_TABLE,
+            ALBUM_IMAGES_TABLE,
+            ARTIST_IMAGES_TABLE,
+            RELATED_ARTISTS_TABLE,
+            ENTITY_EMBEDDINGS_TABLE,
+        ],
+        migration: Some(|tx: &rusqlite::Connection| {
+            tx.execute(
+                "CREATE TABLE IF NOT EXISTS entity_embeddings (
+                    entity_type TEXT NOT NULL,
+                    entity_id TEXT NOT NULL,
+                    namespace TEXT NOT NULL,
+                    dim INTEGER NOT NULL,
+                    dtype TEXT NOT NULL,
+                    vector_blob BLOB NOT NULL,
+                    vector_norm REAL NOT NULL,
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
+                    model_json TEXT NOT NULL DEFAULT '{}',
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    UNIQUE(entity_type, entity_id, namespace)
+                )",
+                [],
+            )?;
+            tx.execute(
+                "CREATE INDEX IF NOT EXISTS idx_entity_embeddings_entity
+                 ON entity_embeddings(entity_type, entity_id)",
+                [],
+            )?;
+            tx.execute(
+                "CREATE INDEX IF NOT EXISTS idx_entity_embeddings_namespace
+                 ON entity_embeddings(namespace)",
+                [],
+            )?;
+            tx.execute(
+                "CREATE INDEX IF NOT EXISTS idx_entity_embeddings_lookup
+                 ON entity_embeddings(namespace, entity_type, entity_id)",
+                [],
+            )?;
+            Ok(())
+        }),
+    },
 ];
 
 #[cfg(test)]
@@ -406,6 +497,23 @@ mod tests {
         let schema = &CATALOG_VERSIONED_SCHEMAS[0];
         schema.create(&conn).unwrap();
         schema.validate(&conn).unwrap();
+    }
+
+    #[test]
+    fn test_latest_schema_creates_entity_embeddings() {
+        let conn = Connection::open_in_memory().unwrap();
+        let schema = CATALOG_VERSIONED_SCHEMAS.last().unwrap();
+        schema.create(&conn).unwrap();
+        schema.validate(&conn).unwrap();
+
+        let table_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='entity_embeddings'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_count, 1);
     }
 
     #[test]
