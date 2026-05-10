@@ -118,6 +118,18 @@ impl CatalogStore for NullCatalogStore {
         Ok(Vec::new())
     }
 
+    fn get_track_embedding_coverage(
+        &self,
+        _namespaces: &[String],
+    ) -> Result<super::TrackEmbeddingCoverage> {
+        Ok(super::TrackEmbeddingCoverage {
+            available_tracks: 0,
+            fully_embedded_tracks: 0,
+            tracks_missing_any_embedding: 0,
+            namespaces: Vec::new(),
+        })
+    }
+
     fn create_artist(&self, _artist: &super::Artist) -> Result<()> {
         anyhow::bail!("NullCatalogStore does not support write operations")
     }

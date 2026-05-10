@@ -125,6 +125,68 @@
 
     <h2 class="sectionTitle jobsTitle">Background Jobs</h2>
 
+    <div class="embeddingCoverageCard">
+      <div class="coverageHeader">
+        <div>
+          <h3 class="controlTitle">Audio Embedding Coverage</h3>
+          <p class="controlDescription">
+            Available tracks with MusicFM/AST embeddings stored in the catalog.
+          </p>
+        </div>
+        <button
+          class="refreshButton small"
+          :disabled="embeddingCoverageLoading"
+          @click="loadEmbeddingCoverage"
+        >
+          {{ embeddingCoverageLoading ? "Refreshing..." : "Refresh" }}
+        </button>
+      </div>
+
+      <div v-if="embeddingCoverageLoading" class="loadingMessage">
+        Loading embedding coverage...
+      </div>
+      <div v-else-if="embeddingCoverageError" class="errorMessage">
+        {{ embeddingCoverageError }}
+      </div>
+      <div v-else-if="embeddingCoverage" class="coverageBody">
+        <div class="coverageStats">
+          <div class="coverageStat">
+            <span class="statValue">{{ formatNumber(embeddingCoverage.coverage.available_tracks) }}</span>
+            <span class="statLabel">Available tracks</span>
+          </div>
+          <div class="coverageStat">
+            <span class="statValue">{{ formatNumber(embeddingCoverage.coverage.fully_embedded_tracks) }}</span>
+            <span class="statLabel">Complete</span>
+          </div>
+          <div class="coverageStat warning">
+            <span class="statValue">{{ formatNumber(embeddingCoverage.coverage.tracks_missing_any_embedding) }}</span>
+            <span class="statLabel">Missing any embedding</span>
+          </div>
+        </div>
+
+        <div class="coverageNamespaces">
+          <div
+            v-for="namespace in embeddingCoverage.coverage.namespaces"
+            :key="namespace.namespace"
+            class="namespaceRow"
+          >
+            <div class="namespaceInfo">
+              <span class="namespaceName">{{ namespace.namespace }}</span>
+              <span class="namespaceModel">{{ modelForNamespace(namespace.namespace) }}</span>
+            </div>
+            <div class="namespaceCounts">
+              <span>{{ formatNumber(namespace.embedded_tracks) }} present</span>
+              <span>{{ formatNumber(namespace.missing_tracks) }} missing</span>
+            </div>
+          </div>
+        </div>
+
+        <p v-if="!embeddingCoverage.enabled" class="coverageWarning">
+          Embedding sync is not enabled in server config; these counts use the default namespaces.
+        </p>
+      </div>
+    </div>
+
     <div v-if="jobsLoading" class="loadingMessage">Loading jobs...</div>
     <div v-else-if="jobsError" class="errorMessage">{{ jobsError }}</div>
     <div v-else-if="jobs.length === 0" class="emptyMessage">
@@ -168,6 +230,21 @@
             @change="missingFilesMode = $event.target.checked ? 'actual' : 'dry_run'"
           />
           <span class="modeLabel">{{ missingFilesMode === 'actual' ? 'Actual (will queue downloads)' : 'Dry-run (preview only)' }}</span>
+        </label>
+      </div>
+      <div v-if="job.id === 'track_embedding_sync'" class="jobOptions embeddingOptions">
+        <label class="numberOption">
+          <span>Max tracks</span>
+          <input
+            v-model.number="embeddingMaxTracks"
+            type="number"
+            min="1"
+            step="100"
+          />
+        </label>
+        <label class="modeToggle">
+          <input v-model="embeddingForce" type="checkbox" />
+          <span class="modeLabel">Force regenerate</span>
         </label>
       </div>
       <button
@@ -266,10 +343,15 @@ const jobsLoading = ref(true);
 const jobsError = ref(null);
 const triggeringJobs = reactive({});
 const triggerError = ref(null);
+const embeddingCoverage = ref(null);
+const embeddingCoverageLoading = ref(true);
+const embeddingCoverageError = ref(null);
 
 // Job-specific options
 const expandArtistsMode = ref("dry_run"); // "dry_run" or "actual"
 const missingFilesMode = ref("dry_run"); // "dry_run" or "actual"
+const embeddingMaxTracks = ref(1000);
+const embeddingForce = ref(false);
 
 // Audit log state
 const auditEntries = ref([]);
@@ -367,6 +449,18 @@ const loadJobs = async () => {
   jobsLoading.value = false;
 };
 
+const loadEmbeddingCoverage = async () => {
+  embeddingCoverageLoading.value = true;
+  embeddingCoverageError.value = null;
+  const data = await remoteStore.fetchAudioEmbeddingCoverage();
+  if (data === null) {
+    embeddingCoverageError.value = "Failed to load embedding coverage";
+  } else {
+    embeddingCoverage.value = data;
+  }
+  embeddingCoverageLoading.value = false;
+};
+
 const triggerJob = async (jobId) => {
   triggeringJobs[jobId] = true;
   triggerError.value = null;
@@ -377,6 +471,11 @@ const triggerJob = async (jobId) => {
     params = { mode: expandArtistsMode.value };
   } else if (jobId === "missing_files_watchdog") {
     params = { mode: missingFilesMode.value };
+  } else if (jobId === "track_embedding_sync") {
+    params = {
+      max_tracks: Math.max(1, Number(embeddingMaxTracks.value) || 1000),
+      force: embeddingForce.value,
+    };
   }
 
   const result = await remoteStore.triggerBackgroundJob(jobId, params);
@@ -388,6 +487,9 @@ const triggerJob = async (jobId) => {
     await loadJobs();
     // Refresh audit log to show the new entry
     await loadAuditLog();
+    if (jobId === "track_embedding_sync") {
+      await loadEmbeddingCoverage();
+    }
   }
 
   triggeringJobs[jobId] = false;
@@ -421,6 +523,15 @@ const formatDuration = (durationMs) => {
   if (durationMs < 1000) return `${durationMs}ms`;
   const seconds = (durationMs / 1000).toFixed(1);
   return `${seconds}s`;
+};
+
+const formatNumber = (value) => {
+  return Number(value || 0).toLocaleString();
+};
+
+const modelForNamespace = (namespace) => {
+  const spec = embeddingCoverage.value?.specs?.find((item) => item.namespace === namespace);
+  return spec ? spec.model : "unknown model";
 };
 
 const formatDetails = (details) => {
@@ -543,6 +654,7 @@ const formatDetails = (details) => {
 
 onMounted(() => {
   loadRelevanceFilter();
+  loadEmbeddingCoverage();
   loadJobs();
   loadAuditLog();
 });
@@ -626,6 +738,102 @@ onMounted(() => {
 
 .jobsTitle {
   margin-top: var(--spacing-8);
+}
+
+.embeddingCoverageCard {
+  padding: var(--spacing-4);
+  margin-bottom: var(--spacing-4);
+  background-color: var(--bg-elevated-base);
+  border-radius: var(--radius-lg);
+}
+
+.coverageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-4);
+  margin-bottom: var(--spacing-4);
+}
+
+.coverageBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+}
+
+.coverageStats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spacing-3);
+}
+
+.coverageStat {
+  padding: var(--spacing-3);
+  background-color: var(--bg-highlight);
+  border-radius: var(--radius-md);
+}
+
+.coverageStat.warning .statValue {
+  color: #f59e0b;
+}
+
+.statValue {
+  display: block;
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  color: var(--text-base);
+}
+
+.statLabel {
+  display: block;
+  margin-top: var(--spacing-1);
+  font-size: var(--text-xs);
+  color: var(--text-subdued);
+}
+
+.coverageNamespaces {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.namespaceRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-3);
+  padding: var(--spacing-3);
+  background-color: var(--bg-base);
+  border-radius: var(--radius-md);
+}
+
+.namespaceInfo,
+.namespaceCounts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+}
+
+.namespaceName {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-base);
+}
+
+.namespaceModel,
+.namespaceCounts {
+  font-size: var(--text-xs);
+  color: var(--text-subdued);
+}
+
+.namespaceCounts {
+  align-items: flex-end;
+  white-space: nowrap;
+}
+
+.coverageWarning {
+  margin: 0;
+  color: #f59e0b;
+  font-size: var(--text-xs);
 }
 
 .loadingMessage,
@@ -716,6 +924,13 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
+.embeddingOptions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-3);
+}
+
 .modeToggle {
   display: flex;
   align-items: center;
@@ -733,6 +948,23 @@ onMounted(() => {
 .modeLabel {
   color: var(--text-subdued);
   white-space: nowrap;
+}
+
+.numberOption {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  color: var(--text-subdued);
+  font-size: var(--text-sm);
+}
+
+.numberOption input {
+  width: 90px;
+  padding: var(--spacing-1) var(--spacing-2);
+  color: var(--text-base);
+  background-color: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
 }
 
 .auditTitle {
@@ -837,6 +1069,16 @@ onMounted(() => {
 
 .refreshButton:hover {
   background-color: var(--bg-elevated-base);
+}
+
+.refreshButton.small {
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+.refreshButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .searchTitle {

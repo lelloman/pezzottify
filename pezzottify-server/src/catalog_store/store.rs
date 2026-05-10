@@ -1621,6 +1621,84 @@ impl CatalogStore for SqliteCatalogStore {
         Ok(pairs)
     }
 
+    fn get_track_embedding_coverage(
+        &self,
+        namespaces: &[String],
+    ) -> Result<super::TrackEmbeddingCoverage> {
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+        let available_tracks: usize = conn.query_row(
+            "SELECT COUNT(*)
+             FROM tracks
+             WHERE track_available = 1
+               AND audio_uri IS NOT NULL",
+            [],
+            |r| r.get(0),
+        )?;
+
+        if namespaces.is_empty() {
+            return Ok(super::TrackEmbeddingCoverage {
+                available_tracks,
+                fully_embedded_tracks: available_tracks,
+                tracks_missing_any_embedding: 0,
+                namespaces: Vec::new(),
+            });
+        }
+
+        let mut namespace_stats = Vec::with_capacity(namespaces.len());
+        for namespace in namespaces {
+            let embedded_tracks: usize = conn.query_row(
+                "SELECT COUNT(DISTINCT e.entity_id)
+                 FROM entity_embeddings e
+                 JOIN tracks t ON t.id = e.entity_id
+                 WHERE e.entity_type = 'track'
+                   AND e.namespace = ?1
+                   AND t.track_available = 1
+                   AND t.audio_uri IS NOT NULL",
+                params![namespace],
+                |r| r.get(0),
+            )?;
+            namespace_stats.push(super::TrackEmbeddingNamespaceCoverage {
+                namespace: namespace.clone(),
+                embedded_tracks,
+                missing_tracks: available_tracks.saturating_sub(embedded_tracks),
+            });
+        }
+
+        let missing_predicates = namespaces
+            .iter()
+            .map(|_| {
+                "NOT EXISTS (
+                    SELECT 1 FROM entity_embeddings e
+                    WHERE e.entity_type = 'track'
+                      AND e.entity_id = t.id
+                      AND e.namespace = ?
+                )"
+            })
+            .collect::<Vec<_>>()
+            .join(" OR ");
+        let fully_sql = format!(
+            "SELECT COUNT(*)
+             FROM tracks t
+             WHERE t.track_available = 1
+               AND t.audio_uri IS NOT NULL
+               AND NOT ({missing_predicates})"
+        );
+        let params = namespaces
+            .iter()
+            .map(|namespace| Value::Text(namespace.clone()))
+            .collect::<Vec<_>>();
+        let fully_embedded_tracks: usize =
+            conn.query_row(&fully_sql, params_from_iter(params), |r| r.get(0))?;
+
+        Ok(super::TrackEmbeddingCoverage {
+            available_tracks,
+            fully_embedded_tracks,
+            tracks_missing_any_embedding: available_tracks.saturating_sub(fully_embedded_tracks),
+            namespaces: namespace_stats,
+        })
+    }
+
     // =========================================================================
     // CRUD Operations (with transactions)
     // =========================================================================
@@ -3071,6 +3149,71 @@ mod tests {
             .unwrap();
         assert_eq!(tracks.len(), 1);
         assert_eq!(tracks[0], ("track_a".to_string(), "a.mp3".to_string()));
+    }
+
+    #[test]
+    fn test_get_track_embedding_coverage_counts_per_namespace_and_fully_embedded() {
+        let (store, _temp_dir) = create_test_store();
+        seed_available_track(&store, "track_missing_all", Some("a.mp3"), true);
+        seed_available_track(&store, "track_missing_ast", Some("b.mp3"), true);
+        seed_available_track(&store, "track_complete", Some("c.mp3"), true);
+        seed_available_track(&store, "track_unavailable", Some("d.mp3"), false);
+        seed_available_track(&store, "track_no_audio", None, true);
+
+        store
+            .upsert_entity_embedding(&sample_embedding(
+                "track_missing_ast",
+                "musicfm.mean.v1",
+                vec![1.0],
+            ))
+            .unwrap();
+        store
+            .upsert_entity_embedding(&sample_embedding(
+                "track_complete",
+                "musicfm.mean.v1",
+                vec![1.0],
+            ))
+            .unwrap();
+        store
+            .upsert_entity_embedding(&sample_embedding(
+                "track_complete",
+                "ast.audioset.v1",
+                vec![1.0],
+            ))
+            .unwrap();
+        store
+            .upsert_entity_embedding(&sample_embedding(
+                "track_unavailable",
+                "musicfm.mean.v1",
+                vec![1.0],
+            ))
+            .unwrap();
+
+        let coverage = store
+            .get_track_embedding_coverage(&[
+                "musicfm.mean.v1".to_string(),
+                "ast.audioset.v1".to_string(),
+            ])
+            .unwrap();
+
+        assert_eq!(coverage.available_tracks, 3);
+        assert_eq!(coverage.fully_embedded_tracks, 1);
+        assert_eq!(coverage.tracks_missing_any_embedding, 2);
+        assert_eq!(
+            coverage.namespaces,
+            vec![
+                crate::catalog_store::TrackEmbeddingNamespaceCoverage {
+                    namespace: "musicfm.mean.v1".to_string(),
+                    embedded_tracks: 2,
+                    missing_tracks: 1,
+                },
+                crate::catalog_store::TrackEmbeddingNamespaceCoverage {
+                    namespace: "ast.audioset.v1".to_string(),
+                    embedded_tracks: 1,
+                    missing_tracks: 2,
+                },
+            ]
+        );
     }
 
     #[test]

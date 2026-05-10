@@ -4,7 +4,23 @@
 //! The database is primarily read-only (imported from Spotify dump).
 
 use anyhow::Result;
+use serde::Serialize;
 use std::path::PathBuf;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TrackEmbeddingNamespaceCoverage {
+    pub namespace: String,
+    pub embedded_tracks: usize,
+    pub missing_tracks: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TrackEmbeddingCoverage {
+    pub available_tracks: usize,
+    pub fully_embedded_tracks: usize,
+    pub tracks_missing_any_embedding: usize,
+    pub namespaces: Vec<TrackEmbeddingNamespaceCoverage>,
+}
 
 /// Trait for catalog storage backends.
 pub trait CatalogStore: Send + Sync {
@@ -165,6 +181,19 @@ pub trait CatalogStore: Send + Sync {
         _limit: usize,
     ) -> Result<Vec<(String, String)>> {
         Ok(Vec::new())
+    }
+
+    /// Count embedding coverage for available tracks across requested namespaces.
+    fn get_track_embedding_coverage(
+        &self,
+        _namespaces: &[String],
+    ) -> Result<TrackEmbeddingCoverage> {
+        Ok(TrackEmbeddingCoverage {
+            available_tracks: 0,
+            fully_embedded_tracks: 0,
+            tracks_missing_any_embedding: 0,
+            namespaces: Vec::new(),
+        })
     }
 
     // =========================================================================
