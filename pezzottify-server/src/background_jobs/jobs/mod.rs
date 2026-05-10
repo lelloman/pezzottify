@@ -13,6 +13,7 @@ pub mod device_pruning;
 pub mod ingestion_cleanup;
 pub mod popular_content;
 pub mod related_artists_enrichment;
+pub mod track_embedding_sync;
 pub mod whatsnew_batch;
 
 // pub use audit_log_cleanup::AuditLogCleanupJob;
@@ -26,4 +27,5 @@ pub use device_pruning::DevicePruningJob;
 pub use ingestion_cleanup::IngestionCleanupJob;
 pub use popular_content::PopularContentJob;
 pub use related_artists_enrichment::RelatedArtistsEnrichmentJob;
+pub use track_embedding_sync::TrackEmbeddingSyncJob;
 pub use whatsnew_batch::WhatsNewBatchJob;

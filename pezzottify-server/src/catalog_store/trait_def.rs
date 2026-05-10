@@ -158,6 +158,15 @@ pub trait CatalogStore: Send + Sync {
         offset: usize,
     ) -> Result<Vec<(String, String)>>;
 
+    /// List available tracks that are missing at least one requested embedding namespace.
+    fn list_available_tracks_missing_embeddings(
+        &self,
+        _namespaces: &[String],
+        _limit: usize,
+    ) -> Result<Vec<(String, String)>> {
+        Ok(Vec::new())
+    }
+
     // =========================================================================
     // CRUD Operations
     // =========================================================================

@@ -79,6 +79,26 @@ read_pool_size = 4
 # similar_artists_limit = 20
 # interval_hours = 12
 
+# Audio Embeddings
+# Periodically generates missing track embeddings through Simple-AI.
+# The default specs are:
+# - musicfm-msd / musicfm.mean.v1
+# - ast-audioset / ast.audioset.v1
+# - ast-audioset / ast.instruments.v1
+# [audio_embeddings]
+# enabled = true
+# simple_ai_base_url = "http://simple-ai:8000"
+# api_key_env = "SIMPLE_AI_API_KEY"
+# interval_hours = 24
+# jitter_minutes = 120
+# max_tracks_per_run = 1000
+# request_timeout_secs = 300
+#
+# Optional custom specs override the defaults:
+# [[audio_embeddings.specs]]
+# model = "musicfm-msd"
+# namespace = "musicfm.mean.v1"
+
 # Background Jobs settings
 [background_jobs]
 

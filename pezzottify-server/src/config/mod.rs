@@ -1,11 +1,12 @@
 mod file_config;
 
 pub use file_config::{
-    AgentConfig, AgentLlmConfig, AudioAnalysisConfig, AuditLogCleanupJobConfig,
-    BackgroundJobsConfig, CatalogAvailabilityStatsJobConfig, CatalogStoreConfig,
-    DevicePruningJobConfig, DownloadManagerConfig, FileConfig, IngestionCleanupJobConfig,
-    IngestionConfig, IntervalJobConfig, OidcConfig, PopularContentJobConfig, RelatedArtistsConfig,
-    SearchConfig, StreamingSearchConfig as StreamingSearchFileConfig,
+    AgentConfig, AgentLlmConfig, AudioAnalysisConfig, AudioEmbeddingSpecConfig,
+    AudioEmbeddingsConfig, AuditLogCleanupJobConfig, BackgroundJobsConfig,
+    CatalogAvailabilityStatsJobConfig, CatalogStoreConfig, DevicePruningJobConfig,
+    DownloadManagerConfig, FileConfig, IngestionCleanupJobConfig, IngestionConfig,
+    IntervalJobConfig, OidcConfig, PopularContentJobConfig, RelatedArtistsConfig, SearchConfig,
+    StreamingSearchConfig as StreamingSearchFileConfig,
 };
 
 use crate::server::RequestsLoggingLevel;
@@ -112,6 +113,7 @@ pub struct AppConfig {
     pub ingestion: IngestionSettings,
     pub related_artists: Option<RelatedArtistsSettings>,
     pub audio_analysis: Option<AudioAnalysisSettings>,
+    pub audio_embeddings: Option<AudioEmbeddingsSettings>,
 }
 
 impl AppConfig {
@@ -410,6 +412,50 @@ impl AppConfig {
             })
         });
 
+        let audio_embeddings = match file.audio_embeddings {
+            Some(ae) if ae.enabled.unwrap_or(false) => {
+                let api_key = ae
+                    .api_key
+                    .or_else(|| {
+                        ae.api_key_env
+                            .as_deref()
+                            .and_then(|name| std::env::var(name).ok())
+                    })
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "audio_embeddings.api_key or audio_embeddings.api_key_env must be specified when audio embeddings are enabled"
+                        )
+                    })?;
+                let simple_ai_base_url = ae.simple_ai_base_url.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "audio_embeddings.simple_ai_base_url must be specified when audio embeddings are enabled"
+                    )
+                })?;
+                let specs = match ae.specs {
+                    Some(specs) if !specs.is_empty() => specs
+                        .into_iter()
+                        .map(|spec| AudioEmbeddingSpec {
+                            model: spec.model,
+                            namespace: spec.namespace,
+                        })
+                        .collect(),
+                    _ => AudioEmbeddingSpec::defaults(),
+                };
+
+                Some(AudioEmbeddingsSettings {
+                    enabled: true,
+                    simple_ai_base_url,
+                    api_key,
+                    interval_hours: ae.interval_hours.unwrap_or(24),
+                    jitter_minutes: ae.jitter_minutes.unwrap_or(120),
+                    max_tracks_per_run: ae.max_tracks_per_run.unwrap_or(1000),
+                    request_timeout_secs: ae.request_timeout_secs.unwrap_or(300),
+                    specs,
+                })
+            }
+            _ => None,
+        };
+
         Ok(Self {
             db_dir,
             media_path,
@@ -430,6 +476,7 @@ impl AppConfig {
             ingestion,
             related_artists,
             audio_analysis,
+            audio_embeddings,
         })
     }
 
@@ -688,6 +735,44 @@ pub struct AudioAnalysisSettings {
     pub delay_ms: u64,
 }
 
+/// Settings for track audio embedding synchronization via Simple-AI.
+#[derive(Debug, Clone)]
+pub struct AudioEmbeddingsSettings {
+    pub enabled: bool,
+    pub simple_ai_base_url: String,
+    pub api_key: String,
+    pub interval_hours: u64,
+    pub jitter_minutes: u64,
+    pub max_tracks_per_run: usize,
+    pub request_timeout_secs: u64,
+    pub specs: Vec<AudioEmbeddingSpec>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AudioEmbeddingSpec {
+    pub model: String,
+    pub namespace: String,
+}
+
+impl AudioEmbeddingSpec {
+    pub fn defaults() -> Vec<Self> {
+        vec![
+            Self {
+                model: "musicfm-msd".to_string(),
+                namespace: "musicfm.mean.v1".to_string(),
+            },
+            Self {
+                model: "ast-audioset".to_string(),
+                namespace: "ast.audioset.v1".to_string(),
+            },
+            Self {
+                model: "ast-audioset".to_string(),
+                namespace: "ast.instruments.v1".to_string(),
+            },
+        ]
+    }
+}
+
 /// Settings for the ingestion feature.
 #[derive(Debug, Clone)]
 pub struct IngestionSettings {
@@ -891,6 +976,113 @@ mod tests {
 
         let config = AppConfig::resolve(&cli, Some(file_config)).unwrap();
         assert!(!config.download_manager.enabled);
+    }
+
+    #[test]
+    fn test_resolve_audio_embeddings_defaults() {
+        let temp_dir = make_temp_db_dir();
+        let cli = CliConfig {
+            db_dir: Some(temp_dir.path().to_path_buf()),
+            ..Default::default()
+        };
+        let file_config = FileConfig {
+            audio_embeddings: Some(AudioEmbeddingsConfig {
+                enabled: Some(true),
+                simple_ai_base_url: Some("http://simple-ai:8000".to_string()),
+                api_key: Some("secret".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let config = AppConfig::resolve(&cli, Some(file_config)).unwrap();
+        let settings = config.audio_embeddings.unwrap();
+
+        assert!(settings.enabled);
+        assert_eq!(settings.simple_ai_base_url, "http://simple-ai:8000");
+        assert_eq!(settings.api_key, "secret");
+        assert_eq!(settings.interval_hours, 24);
+        assert_eq!(settings.jitter_minutes, 120);
+        assert_eq!(settings.max_tracks_per_run, 1000);
+        assert_eq!(settings.request_timeout_secs, 300);
+        assert_eq!(settings.specs, AudioEmbeddingSpec::defaults());
+    }
+
+    #[test]
+    fn test_resolve_audio_embeddings_custom_specs_and_limits() {
+        let temp_dir = make_temp_db_dir();
+        let cli = CliConfig {
+            db_dir: Some(temp_dir.path().to_path_buf()),
+            ..Default::default()
+        };
+        let file_config = FileConfig {
+            audio_embeddings: Some(AudioEmbeddingsConfig {
+                enabled: Some(true),
+                simple_ai_base_url: Some("http://simple-ai:8000".to_string()),
+                api_key: Some("secret".to_string()),
+                interval_hours: Some(12),
+                jitter_minutes: Some(30),
+                max_tracks_per_run: Some(42),
+                request_timeout_secs: Some(60),
+                specs: Some(vec![AudioEmbeddingSpecConfig {
+                    model: "custom-model".to_string(),
+                    namespace: "custom.namespace.v1".to_string(),
+                }]),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let config = AppConfig::resolve(&cli, Some(file_config)).unwrap();
+        let settings = config.audio_embeddings.unwrap();
+
+        assert_eq!(settings.interval_hours, 12);
+        assert_eq!(settings.jitter_minutes, 30);
+        assert_eq!(settings.max_tracks_per_run, 42);
+        assert_eq!(settings.request_timeout_secs, 60);
+        assert_eq!(
+            settings.specs,
+            vec![AudioEmbeddingSpec {
+                model: "custom-model".to_string(),
+                namespace: "custom.namespace.v1".to_string(),
+            }]
+        );
+    }
+
+    #[test]
+    fn test_resolve_audio_embeddings_requires_endpoint_and_key_when_enabled() {
+        let temp_dir = make_temp_db_dir();
+        let cli = CliConfig {
+            db_dir: Some(temp_dir.path().to_path_buf()),
+            ..Default::default()
+        };
+        let missing_key = FileConfig {
+            audio_embeddings: Some(AudioEmbeddingsConfig {
+                enabled: Some(true),
+                simple_ai_base_url: Some("http://simple-ai:8000".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let result = AppConfig::resolve(&cli, Some(missing_key));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("audio_embeddings.api_key"));
+
+        let missing_endpoint = FileConfig {
+            audio_embeddings: Some(AudioEmbeddingsConfig {
+                enabled: Some(true),
+                api_key: Some("secret".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let result = AppConfig::resolve(&cli, Some(missing_endpoint));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("audio_embeddings.simple_ai_base_url"));
     }
 
     #[test]

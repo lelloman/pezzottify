@@ -3,6 +3,7 @@ use super::handle::{SchedulerCommand, SharedJobState};
 use super::job::{BackgroundJob, HookEvent, JobError, JobSchedule, ShutdownBehavior};
 use crate::server::metrics;
 use crate::server_store::{JobRunStatus, ServerStore};
+use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -71,6 +72,22 @@ impl JobScheduler {
     /// Get the number of registered jobs.
     pub async fn job_count(&self) -> usize {
         self.shared_state.read().await.jobs.len()
+    }
+
+    fn scheduled_interval(schedule: JobSchedule) -> Option<Duration> {
+        match schedule {
+            JobSchedule::Interval(interval) => Some(interval),
+            JobSchedule::JitteredInterval { interval, jitter } => {
+                if jitter.is_zero() {
+                    Some(interval)
+                } else {
+                    let jitter_secs = rand::rng().random_range(0..=jitter.as_secs());
+                    Some(interval + Duration::from_secs(jitter_secs))
+                }
+            }
+            JobSchedule::Combined { interval, .. } => interval,
+            _ => None,
+        }
     }
 
     /// Main scheduler loop.
@@ -202,6 +219,13 @@ impl JobScheduler {
                     Some(state.next_run_at)
                 } else {
                     // No schedule state - run immediately on first interval
+                    Some(now)
+                }
+            }
+            JobSchedule::JitteredInterval { .. } => {
+                if let Ok(Some(state)) = self.server_store.get_schedule_state(job_id) {
+                    Some(state.next_run_at)
+                } else {
                     Some(now)
                 }
             }
@@ -340,11 +364,7 @@ impl JobScheduler {
 
         // Initialize schedule state for interval-based jobs to prevent tight loops
         // before the job completes. This sets next_run_at to now + interval.
-        let interval = match job.schedule() {
-            JobSchedule::Interval(int) => Some(int),
-            JobSchedule::Combined { interval, .. } => interval,
-            _ => None,
-        };
+        let interval = Self::scheduled_interval(job.schedule());
         if let Some(interval) = interval {
             let next_run =
                 chrono::Utc::now() + chrono::Duration::from_std(interval).unwrap_or_default();
@@ -486,11 +506,7 @@ impl JobScheduler {
             }
         };
 
-        let interval = match job.schedule() {
-            JobSchedule::Interval(int) => Some(int),
-            JobSchedule::Combined { interval, .. } => interval,
-            _ => None,
-        };
+        let interval = Self::scheduled_interval(job.schedule());
 
         if let Some(interval) = interval {
             let next_run =

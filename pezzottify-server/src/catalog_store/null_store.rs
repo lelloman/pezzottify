@@ -110,6 +110,14 @@ impl CatalogStore for NullCatalogStore {
         Ok(Vec::new())
     }
 
+    fn list_available_tracks_missing_embeddings(
+        &self,
+        _namespaces: &[String],
+        _limit: usize,
+    ) -> Result<Vec<(String, String)>> {
+        Ok(Vec::new())
+    }
+
     fn create_artist(&self, _artist: &super::Artist) -> Result<()> {
         anyhow::bail!("NullCatalogStore does not support write operations")
     }

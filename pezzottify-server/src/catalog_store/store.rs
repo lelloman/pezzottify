@@ -9,7 +9,7 @@ use super::trait_def::{CatalogStore, SearchableContentType, SearchableItem};
 use crate::sqlite_persistence::BASE_DB_VERSION;
 use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, params_from_iter, types::Value, Connection, OptionalExtension};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1576,6 +1576,51 @@ impl CatalogStore for SqliteCatalogStore {
         Ok(pairs)
     }
 
+    fn list_available_tracks_missing_embeddings(
+        &self,
+        namespaces: &[String],
+        limit: usize,
+    ) -> Result<Vec<(String, String)>> {
+        if namespaces.is_empty() || limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let missing_predicates = namespaces
+            .iter()
+            .map(|_| {
+                "NOT EXISTS (
+                    SELECT 1 FROM entity_embeddings e
+                    WHERE e.entity_type = 'track'
+                      AND e.entity_id = t.id
+                      AND e.namespace = ?
+                )"
+            })
+            .collect::<Vec<_>>()
+            .join(" OR ");
+        let sql = format!(
+            "SELECT t.id, t.audio_uri
+             FROM tracks t
+             WHERE t.track_available = 1
+               AND t.audio_uri IS NOT NULL
+               AND ({missing_predicates})
+             ORDER BY t.id
+             LIMIT ?"
+        );
+
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+        let mut stmt = conn.prepare(&sql)?;
+        let mut params = namespaces
+            .iter()
+            .map(|namespace| Value::Text(namespace.clone()))
+            .collect::<Vec<_>>();
+        params.push(Value::Integer(limit as i64));
+        let pairs = stmt
+            .query_map(params_from_iter(params), |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<Result<Vec<(String, String)>, _>>()?;
+        Ok(pairs)
+    }
+
     // =========================================================================
     // CRUD Operations (with transactions)
     // =========================================================================
@@ -2805,6 +2850,44 @@ mod tests {
         }
     }
 
+    fn seed_available_track(
+        store: &SqliteCatalogStore,
+        track_id: &str,
+        audio_uri: Option<&str>,
+        available: bool,
+    ) {
+        let conn = store.write_conn.lock().unwrap();
+        conn.execute(
+            "INSERT OR IGNORE INTO artists (id, name, followers_total, popularity, artist_available, mbid_lookup_status)
+             VALUES ('artist1', 'Artist 1', 0, 0, 0, 0)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT OR IGNORE INTO albums (id, name, album_type, label, popularity, release_date, release_date_precision, album_availability)
+             VALUES ('album1', 'Album 1', 'album', '', 0, '2024', 'year', 'missing')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO tracks (id, name, album_rowid, track_number, popularity, disc_number, duration_ms, explicit, audio_uri, track_available)
+             VALUES (?1, ?2, (SELECT rowid FROM albums WHERE id='album1'), 1, 0, 1, 1000, 0, ?3, ?4)",
+            params![
+                track_id,
+                format!("Track {track_id}"),
+                audio_uri,
+                if available { 1 } else { 0 }
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO track_artists (track_rowid, artist_rowid, role)
+             VALUES ((SELECT rowid FROM tracks WHERE id=?1), (SELECT rowid FROM artists WHERE id='artist1'), 0)",
+            params![track_id],
+        )
+        .unwrap();
+    }
+
     #[tokio::test]
     async fn test_concurrent_reads_no_blocking() {
         let temp_dir = tempfile::TempDir::new().unwrap();
@@ -2919,6 +3002,75 @@ mod tests {
             .unwrap();
         let namespaces: Vec<_> = listed.iter().map(|item| item.namespace.as_str()).collect();
         assert_eq!(namespaces, vec!["ast.instruments.v1", "musicfm.mean.v1"]);
+    }
+
+    #[test]
+    fn test_list_available_tracks_missing_embeddings_selects_incomplete_tracks() {
+        let (store, _temp_dir) = create_test_store();
+        seed_available_track(&store, "track_missing_all", Some("a.mp3"), true);
+        seed_available_track(&store, "track_missing_ast", Some("b.mp3"), true);
+        seed_available_track(&store, "track_complete", Some("c.mp3"), true);
+        seed_available_track(&store, "track_unavailable", Some("d.mp3"), false);
+        seed_available_track(&store, "track_no_audio", None, true);
+
+        store
+            .upsert_entity_embedding(&sample_embedding(
+                "track_missing_ast",
+                "musicfm.mean.v1",
+                vec![1.0],
+            ))
+            .unwrap();
+        store
+            .upsert_entity_embedding(&sample_embedding(
+                "track_complete",
+                "musicfm.mean.v1",
+                vec![1.0],
+            ))
+            .unwrap();
+        store
+            .upsert_entity_embedding(&sample_embedding(
+                "track_complete",
+                "ast.audioset.v1",
+                vec![1.0],
+            ))
+            .unwrap();
+
+        let tracks = store
+            .list_available_tracks_missing_embeddings(
+                &["musicfm.mean.v1".to_string(), "ast.audioset.v1".to_string()],
+                10,
+            )
+            .unwrap();
+
+        assert_eq!(
+            tracks,
+            vec![
+                ("track_missing_all".to_string(), "a.mp3".to_string()),
+                ("track_missing_ast".to_string(), "b.mp3".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_list_available_tracks_missing_embeddings_honors_limit_and_empty_input() {
+        let (store, _temp_dir) = create_test_store();
+        seed_available_track(&store, "track_a", Some("a.mp3"), true);
+        seed_available_track(&store, "track_b", Some("b.mp3"), true);
+
+        assert!(store
+            .list_available_tracks_missing_embeddings(&[], 10)
+            .unwrap()
+            .is_empty());
+        assert!(store
+            .list_available_tracks_missing_embeddings(&["musicfm.mean.v1".to_string()], 0)
+            .unwrap()
+            .is_empty());
+
+        let tracks = store
+            .list_available_tracks_missing_embeddings(&["musicfm.mean.v1".to_string()], 1)
+            .unwrap();
+        assert_eq!(tracks.len(), 1);
+        assert_eq!(tracks[0], ("track_a".to_string(), "a.mp3".to_string()));
     }
 
     #[test]
