@@ -589,6 +589,16 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  const fetchAudioEmbeddingCoverage = async () => {
+    try {
+      const response = await axios.get("/v1/admin/embeddings/coverage");
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch audio embedding coverage:", error);
+      return null;
+    }
+  };
+
   const triggerBackgroundJob = async (jobId, params = null) => {
     try {
       const body = params ? { params } : {};
@@ -1230,6 +1240,7 @@ export const useRemoteStore = defineStore("remote", () => {
     // Admin API - Server Control
     rebootServer,
     fetchBackgroundJobs,
+    fetchAudioEmbeddingCoverage,
     triggerBackgroundJob,
     fetchJobAuditLog,
     fetchJobAuditLogByJob,

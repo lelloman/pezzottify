@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use crate::config::{
-    AgentSettings, DownloadManagerSettings, IngestionSettings, StreamingSearchSettings,
+    AgentSettings, AudioEmbeddingsSettings, DownloadManagerSettings, IngestionSettings,
+    StreamingSearchSettings,
 };
 
 use super::RequestsLoggingLevel;
@@ -27,6 +28,8 @@ pub struct ServerConfig {
     pub agent: AgentSettings,
     /// Ingestion configuration.
     pub ingestion: IngestionSettings,
+    /// Optional audio embedding synchronization configuration.
+    pub audio_embeddings: Option<AudioEmbeddingsSettings>,
 }
 
 impl Default for ServerConfig {
@@ -43,6 +46,7 @@ impl Default for ServerConfig {
             media_path: PathBuf::from("."),
             agent: AgentSettings::default(),
             ingestion: IngestionSettings::default(),
+            audio_embeddings: None,
         }
     }
 }

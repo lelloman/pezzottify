@@ -17,6 +17,7 @@ use tracing::{debug, error, info, warn};
 use crate::background_jobs::jobs::{CatalogAvailabilityStatsJob, CatalogAvailabilityStatsSnapshot};
 use crate::background_jobs::{JobError, JobInfo, SchedulerHandle};
 use crate::catalog_store::{CatalogStore, DiscographySort};
+use crate::config::AudioEmbeddingSpec;
 use crate::{
     server::stream_track::stream_track,
     user::{
@@ -3255,6 +3256,19 @@ struct ListJobsResponse {
     jobs: Vec<JobInfo>,
 }
 
+#[derive(Serialize)]
+struct AdminAudioEmbeddingSpecInfo {
+    model: String,
+    namespace: String,
+}
+
+#[derive(Serialize)]
+struct AdminAudioEmbeddingCoverageResponse {
+    enabled: bool,
+    specs: Vec<AdminAudioEmbeddingSpecInfo>,
+    coverage: crate::catalog_store::TrackEmbeddingCoverage,
+}
+
 async fn admin_list_jobs(
     session: Session,
     State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
@@ -3280,6 +3294,56 @@ async fn admin_list_jobs(
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to list jobs"})),
+            )
+                .into_response()
+        }
+    }
+}
+
+async fn admin_get_audio_embedding_coverage(
+    session: Session,
+    State(state): State<ServerState>,
+) -> Response {
+    let (enabled, specs) = match state.config.audio_embeddings.as_ref() {
+        Some(settings) => (settings.enabled, settings.specs.clone()),
+        None => (false, AudioEmbeddingSpec::defaults()),
+    };
+    let namespaces = specs
+        .iter()
+        .map(|spec| spec.namespace.clone())
+        .collect::<Vec<_>>();
+
+    match state
+        .catalog_store
+        .get_track_embedding_coverage(&namespaces)
+    {
+        Ok(coverage) => {
+            debug!(
+                "User {} retrieved audio embedding coverage: missing_any={}",
+                session.user_id, coverage.tracks_missing_any_embedding
+            );
+            let specs = specs
+                .into_iter()
+                .map(|spec| AdminAudioEmbeddingSpecInfo {
+                    model: spec.model,
+                    namespace: spec.namespace,
+                })
+                .collect();
+            (
+                StatusCode::OK,
+                Json(AdminAudioEmbeddingCoverageResponse {
+                    enabled,
+                    specs,
+                    coverage,
+                }),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            error!("Failed to get audio embedding coverage: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to get audio embedding coverage"})),
             )
                 .into_response()
         }
@@ -5141,6 +5205,10 @@ pub async fn make_app(
         .route("/jobs/{job_id}/trigger", post(admin_trigger_job))
         .route("/jobs/{job_id}/history", get(admin_get_job_history))
         .route("/jobs/{job_id}/audit", get(admin_get_job_audit_log_by_job))
+        .route(
+            "/embeddings/coverage",
+            get(admin_get_audio_embedding_coverage),
+        )
         .route("/bug-reports", get(admin_list_bug_reports))
         .route("/bug-report/{id}", get(admin_get_bug_report))
         .route("/bug-report/{id}", delete(admin_delete_bug_report))
@@ -5370,6 +5438,7 @@ pub async fn run_server(
     media_path: std::path::PathBuf,
     agent: crate::config::AgentSettings,
     ingestion: crate::config::IngestionSettings,
+    audio_embeddings: Option<crate::config::AudioEmbeddingsSettings>,
     db_registry: Arc<crate::backup::DbRegistry>,
 ) -> Result<()> {
     let disable_password_auth = oidc_config
@@ -5389,6 +5458,7 @@ pub async fn run_server(
         media_path,
         agent,
         ingestion,
+        audio_embeddings,
     };
 
     let app = make_app(

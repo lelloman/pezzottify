@@ -506,6 +506,7 @@ async fn main() -> Result<()> {
             app_config.media_path.clone(),
             app_config.agent.clone(),
             app_config.ingestion.clone(),
+            app_config.audio_embeddings.clone(),
             db_registry.clone(),
         ) => {
             info!("HTTP server stopped: {:?}", result);
