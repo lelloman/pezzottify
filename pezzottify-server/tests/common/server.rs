@@ -167,6 +167,7 @@ impl TestServer {
             media_path: media_path.clone(),
             agent: pezzottify_server::config::AgentSettings::default(),
             ingestion: pezzottify_server::config::IngestionSettings::default(),
+            audio_embeddings: None,
         };
 
         // Create user manager

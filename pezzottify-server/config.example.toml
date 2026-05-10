@@ -98,6 +98,30 @@ read_pool_size = 4
 # [[audio_embeddings.specs]]
 # model = "musicfm-msd"
 # namespace = "musicfm.mean.v1"
+#
+# Derived album embeddings are materialized into entity_embeddings with
+# entity_type = "album" when every catalog track is present on disk and has
+# the required source embedding.
+# [audio_embeddings.album_derivations]
+# enabled = true
+# interval_hours = 24
+# jitter_minutes = 120
+# max_albums_per_run = 1000
+#
+# Default derived album namespaces:
+# - album.musicfm.median.v1 from musicfm.mean.v1
+# - album.ast.median.v1 from ast.audioset.v1
+# - album.ast.essence.q25.v1 from ast.audioset.v1
+# - album.ast_instruments.median.v1 from ast.instruments.v1
+# - album.ast_instruments.essence.q25.v1 from ast.instruments.v1
+#
+# Artist factual/cultural embedding namespace contract:
+# - artist.fact.genres.v1
+# - artist.fact.instruments.v1
+# - artist.fact.roles.v1
+# - artist.fact.years.v1
+# - artist.fact.places.v1
+# - artist.cultural.text_embedding.v1
 
 # Background Jobs settings
 [background_jobs]

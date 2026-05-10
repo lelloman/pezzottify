@@ -1,7 +1,8 @@
 mod file_config;
 
 pub use file_config::{
-    AgentConfig, AgentLlmConfig, AudioAnalysisConfig, AudioEmbeddingSpecConfig,
+    AgentConfig, AgentLlmConfig, AlbumEmbeddingDerivationSpecConfig,
+    AlbumEmbeddingDerivationsConfig, AudioAnalysisConfig, AudioEmbeddingSpecConfig,
     AudioEmbeddingsConfig, AuditLogCleanupJobConfig, BackgroundJobsConfig,
     CatalogAvailabilityStatsJobConfig, CatalogStoreConfig, DevicePruningJobConfig,
     DownloadManagerConfig, FileConfig, IngestionCleanupJobConfig, IngestionConfig,
@@ -442,6 +443,26 @@ impl AppConfig {
                     _ => AudioEmbeddingSpec::defaults(),
                 };
 
+                let album_file = ae.album_derivations.unwrap_or_default();
+                let album_specs = match album_file.specs {
+                    Some(specs) if !specs.is_empty() => specs
+                        .into_iter()
+                        .map(AlbumEmbeddingDerivationSpec::try_from)
+                        .collect::<Result<Vec<_>>>()?,
+                    _ => AlbumEmbeddingDerivationSpec::defaults(),
+                };
+                let album_derivations = AlbumEmbeddingDerivationsSettings {
+                    enabled: album_file.enabled.unwrap_or(true),
+                    interval_hours: album_file
+                        .interval_hours
+                        .unwrap_or_else(|| ae.interval_hours.unwrap_or(24)),
+                    jitter_minutes: album_file
+                        .jitter_minutes
+                        .unwrap_or_else(|| ae.jitter_minutes.unwrap_or(120)),
+                    max_albums_per_run: album_file.max_albums_per_run.unwrap_or(1000),
+                    specs: album_specs,
+                };
+
                 Some(AudioEmbeddingsSettings {
                     enabled: true,
                     simple_ai_base_url,
@@ -451,6 +472,7 @@ impl AppConfig {
                     max_tracks_per_run: ae.max_tracks_per_run.unwrap_or(1000),
                     request_timeout_secs: ae.request_timeout_secs.unwrap_or(300),
                     specs,
+                    album_derivations,
                 })
             }
             _ => None,
@@ -746,6 +768,7 @@ pub struct AudioEmbeddingsSettings {
     pub max_tracks_per_run: usize,
     pub request_timeout_secs: u64,
     pub specs: Vec<AudioEmbeddingSpec>,
+    pub album_derivations: AlbumEmbeddingDerivationsSettings,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -772,6 +795,120 @@ impl AudioEmbeddingSpec {
         ]
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct AlbumEmbeddingDerivationsSettings {
+    pub enabled: bool,
+    pub interval_hours: u64,
+    pub jitter_minutes: u64,
+    pub max_albums_per_run: usize,
+    pub specs: Vec<AlbumEmbeddingDerivationSpec>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AlbumEmbeddingDerivationSpec {
+    pub source_namespace: String,
+    pub target_namespace: String,
+    pub aggregation: AlbumEmbeddingAggregation,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum AlbumEmbeddingAggregation {
+    Median,
+    Quantile { quantile: f32 },
+}
+
+impl AlbumEmbeddingAggregation {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Median => "median",
+            Self::Quantile { .. } => "quantile",
+        }
+    }
+
+    pub fn quantile(&self) -> Option<f32> {
+        match self {
+            Self::Median => None,
+            Self::Quantile { quantile } => Some(*quantile),
+        }
+    }
+}
+
+impl AlbumEmbeddingDerivationSpec {
+    pub fn defaults() -> Vec<Self> {
+        vec![
+            Self {
+                source_namespace: "musicfm.mean.v1".to_string(),
+                target_namespace: "album.musicfm.median.v1".to_string(),
+                aggregation: AlbumEmbeddingAggregation::Median,
+            },
+            Self {
+                source_namespace: "ast.audioset.v1".to_string(),
+                target_namespace: "album.ast.median.v1".to_string(),
+                aggregation: AlbumEmbeddingAggregation::Median,
+            },
+            Self {
+                source_namespace: "ast.audioset.v1".to_string(),
+                target_namespace: "album.ast.essence.q25.v1".to_string(),
+                aggregation: AlbumEmbeddingAggregation::Quantile { quantile: 0.25 },
+            },
+            Self {
+                source_namespace: "ast.instruments.v1".to_string(),
+                target_namespace: "album.ast_instruments.median.v1".to_string(),
+                aggregation: AlbumEmbeddingAggregation::Median,
+            },
+            Self {
+                source_namespace: "ast.instruments.v1".to_string(),
+                target_namespace: "album.ast_instruments.essence.q25.v1".to_string(),
+                aggregation: AlbumEmbeddingAggregation::Quantile { quantile: 0.25 },
+            },
+        ]
+    }
+}
+
+impl TryFrom<AlbumEmbeddingDerivationSpecConfig> for AlbumEmbeddingDerivationSpec {
+    type Error = anyhow::Error;
+
+    fn try_from(config: AlbumEmbeddingDerivationSpecConfig) -> Result<Self> {
+        if config.source_namespace.trim().is_empty() {
+            bail!("album derivation source_namespace must not be empty");
+        }
+        if config.target_namespace.trim().is_empty() {
+            bail!("album derivation target_namespace must not be empty");
+        }
+
+        let aggregation = match config.aggregation.as_str() {
+            "median" => AlbumEmbeddingAggregation::Median,
+            "quantile" => {
+                let quantile = config.quantile.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "album derivation quantile is required for quantile aggregation"
+                    )
+                })?;
+                if !(0.0..=1.0).contains(&quantile) {
+                    bail!("album derivation quantile must be between 0.0 and 1.0");
+                }
+                AlbumEmbeddingAggregation::Quantile { quantile }
+            }
+            other => bail!("unsupported album derivation aggregation '{other}'"),
+        };
+
+        Ok(Self {
+            source_namespace: config.source_namespace,
+            target_namespace: config.target_namespace,
+            aggregation,
+        })
+    }
+}
+
+pub const ARTIST_FACTUAL_CULTURAL_EMBEDDING_NAMESPACES: &[&str] = &[
+    "artist.fact.genres.v1",
+    "artist.fact.instruments.v1",
+    "artist.fact.roles.v1",
+    "artist.fact.years.v1",
+    "artist.fact.places.v1",
+    "artist.cultural.text_embedding.v1",
+];
 
 /// Settings for the ingestion feature.
 #[derive(Debug, Clone)]
@@ -1006,6 +1143,14 @@ mod tests {
         assert_eq!(settings.max_tracks_per_run, 1000);
         assert_eq!(settings.request_timeout_secs, 300);
         assert_eq!(settings.specs, AudioEmbeddingSpec::defaults());
+        assert!(settings.album_derivations.enabled);
+        assert_eq!(settings.album_derivations.interval_hours, 24);
+        assert_eq!(settings.album_derivations.jitter_minutes, 120);
+        assert_eq!(settings.album_derivations.max_albums_per_run, 1000);
+        assert_eq!(
+            settings.album_derivations.specs,
+            AlbumEmbeddingDerivationSpec::defaults()
+        );
     }
 
     #[test]
@@ -1046,6 +1191,69 @@ mod tests {
                 model: "custom-model".to_string(),
                 namespace: "custom.namespace.v1".to_string(),
             }]
+        );
+    }
+
+    #[test]
+    fn test_resolve_audio_embeddings_custom_album_derivations() {
+        let temp_dir = make_temp_db_dir();
+        let cli = CliConfig {
+            db_dir: Some(temp_dir.path().to_path_buf()),
+            ..Default::default()
+        };
+        let file_config = FileConfig {
+            audio_embeddings: Some(AudioEmbeddingsConfig {
+                enabled: Some(true),
+                simple_ai_base_url: Some("http://simple-ai:8000".to_string()),
+                api_key: Some("secret".to_string()),
+                interval_hours: Some(12),
+                jitter_minutes: Some(30),
+                album_derivations: Some(AlbumEmbeddingDerivationsConfig {
+                    enabled: Some(false),
+                    interval_hours: Some(6),
+                    jitter_minutes: Some(5),
+                    max_albums_per_run: Some(77),
+                    specs: Some(vec![AlbumEmbeddingDerivationSpecConfig {
+                        source_namespace: "track.custom.v1".to_string(),
+                        target_namespace: "album.custom.q50.v1".to_string(),
+                        aggregation: "quantile".to_string(),
+                        quantile: Some(0.5),
+                    }]),
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let config = AppConfig::resolve(&cli, Some(file_config)).unwrap();
+        let settings = config.audio_embeddings.unwrap().album_derivations;
+
+        assert!(!settings.enabled);
+        assert_eq!(settings.interval_hours, 6);
+        assert_eq!(settings.jitter_minutes, 5);
+        assert_eq!(settings.max_albums_per_run, 77);
+        assert_eq!(
+            settings.specs,
+            vec![AlbumEmbeddingDerivationSpec {
+                source_namespace: "track.custom.v1".to_string(),
+                target_namespace: "album.custom.q50.v1".to_string(),
+                aggregation: AlbumEmbeddingAggregation::Quantile { quantile: 0.5 },
+            }]
+        );
+    }
+
+    #[test]
+    fn artist_factual_cultural_namespaces_are_standardized() {
+        assert_eq!(
+            ARTIST_FACTUAL_CULTURAL_EMBEDDING_NAMESPACES,
+            &[
+                "artist.fact.genres.v1",
+                "artist.fact.instruments.v1",
+                "artist.fact.roles.v1",
+                "artist.fact.years.v1",
+                "artist.fact.places.v1",
+                "artist.cultural.text_embedding.v1",
+            ]
         );
     }
 

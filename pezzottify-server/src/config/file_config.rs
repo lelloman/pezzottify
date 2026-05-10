@@ -285,12 +285,37 @@ pub struct AudioEmbeddingsConfig {
     pub request_timeout_secs: Option<u64>,
     /// Embedding specs to keep synchronized. Defaults to MusicFM + AST all.
     pub specs: Option<Vec<AudioEmbeddingSpecConfig>>,
+    /// Derived album embedding synchronization settings.
+    pub album_derivations: Option<AlbumEmbeddingDerivationsConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AudioEmbeddingSpecConfig {
     pub model: String,
     pub namespace: String,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct AlbumEmbeddingDerivationsConfig {
+    /// Whether derived album embeddings are materialized.
+    pub enabled: Option<bool>,
+    /// Interval in hours between scheduled runs.
+    pub interval_hours: Option<u64>,
+    /// Positive random jitter added to each scheduled interval.
+    pub jitter_minutes: Option<u64>,
+    /// Number of albums to inspect per scheduled run.
+    pub max_albums_per_run: Option<usize>,
+    /// Album derivation specs. Defaults to the supported derived namespaces.
+    pub specs: Option<Vec<AlbumEmbeddingDerivationSpecConfig>>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct AlbumEmbeddingDerivationSpecConfig {
+    pub source_namespace: String,
+    pub target_namespace: String,
+    pub aggregation: String,
+    pub quantile: Option<f32>,
 }
 
 impl FileConfig {

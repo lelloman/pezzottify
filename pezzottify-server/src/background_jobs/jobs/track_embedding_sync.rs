@@ -312,6 +312,7 @@ impl BackgroundJob for TrackEmbeddingSyncJob {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{AlbumEmbeddingDerivationSpec, AlbumEmbeddingDerivationsSettings};
 
     fn test_settings() -> AudioEmbeddingsSettings {
         AudioEmbeddingsSettings {
@@ -323,6 +324,13 @@ mod tests {
             max_tracks_per_run: 123,
             request_timeout_secs: 30,
             specs: AudioEmbeddingSpec::defaults(),
+            album_derivations: AlbumEmbeddingDerivationsSettings {
+                enabled: true,
+                interval_hours: 6,
+                jitter_minutes: 15,
+                max_albums_per_run: 1000,
+                specs: AlbumEmbeddingDerivationSpec::defaults(),
+            },
         }
     }
 

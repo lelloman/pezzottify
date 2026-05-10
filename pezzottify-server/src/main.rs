@@ -10,8 +10,9 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 
 // Import modules from the library crate
 use pezzottify_server::background_jobs::jobs::{
-    AudioAnalysisJob, CatalogAvailabilityStatsJob, DevicePruningJob, IngestionCleanupJob,
-    PopularContentJob, RelatedArtistsEnrichmentJob, TrackEmbeddingSyncJob, WhatsNewBatchJob,
+    AlbumEmbeddingSyncJob, AudioAnalysisJob, CatalogAvailabilityStatsJob, DevicePruningJob,
+    IngestionCleanupJob, PopularContentJob, RelatedArtistsEnrichmentJob, TrackEmbeddingSyncJob,
+    WhatsNewBatchJob,
 };
 use pezzottify_server::background_jobs::{create_scheduler, GuardedSearchVault, JobContext};
 use pezzottify_server::backup::DbRegistry;
@@ -373,6 +374,16 @@ async fn main() -> Result<()> {
             )))
             .await;
         info!("Registered track embedding sync job");
+
+        if ae_settings.album_derivations.enabled {
+            scheduler
+                .register_job(Arc::new(AlbumEmbeddingSyncJob::new(
+                    ae_settings.album_derivations.clone(),
+                    app_config.media_path.clone(),
+                )))
+                .await;
+            info!("Registered album embedding sync job");
+        }
     }
 
     // Delay the first catalog availability stats run after each startup.

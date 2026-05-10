@@ -5,7 +5,7 @@
 
 use anyhow::Result;
 use serde::Serialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct TrackEmbeddingNamespaceCoverage {
@@ -20,6 +20,31 @@ pub struct TrackEmbeddingCoverage {
     pub fully_embedded_tracks: usize,
     pub tracks_missing_any_embedding: usize,
     pub namespaces: Vec<TrackEmbeddingNamespaceCoverage>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AlbumTrackRef {
+    pub track_id: String,
+    pub audio_uri: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AlbumTracklist {
+    pub album_id: String,
+    pub tracks: Vec<AlbumTrackRef>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AlbumEmbeddingNamespaceCoverage {
+    pub namespace: String,
+    pub embedded_albums: usize,
+    pub missing_albums: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AlbumEmbeddingCoverage {
+    pub complete_local_albums: usize,
+    pub namespaces: Vec<AlbumEmbeddingNamespaceCoverage>,
 }
 
 /// Trait for catalog storage backends.
@@ -192,6 +217,23 @@ pub trait CatalogStore: Send + Sync {
             available_tracks: 0,
             fully_embedded_tracks: 0,
             tracks_missing_any_embedding: 0,
+            namespaces: Vec::new(),
+        })
+    }
+
+    /// List album tracklists ordered by album ID, limited by album count.
+    fn list_album_tracklists(&self, _limit: usize) -> Result<Vec<AlbumTracklist>> {
+        Ok(Vec::new())
+    }
+
+    /// Count derived album embedding coverage over albums with complete local tracklists.
+    fn get_album_embedding_coverage(
+        &self,
+        _namespaces: &[String],
+        _media_path: &Path,
+    ) -> Result<AlbumEmbeddingCoverage> {
+        Ok(AlbumEmbeddingCoverage {
+            complete_local_albums: 0,
             namespaces: Vec::new(),
         })
     }

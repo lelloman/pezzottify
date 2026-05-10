@@ -17,7 +17,7 @@ use tracing::{debug, error, info, warn};
 use crate::background_jobs::jobs::{CatalogAvailabilityStatsJob, CatalogAvailabilityStatsSnapshot};
 use crate::background_jobs::{JobError, JobInfo, SchedulerHandle};
 use crate::catalog_store::{CatalogStore, DiscographySort};
-use crate::config::AudioEmbeddingSpec;
+use crate::config::{AlbumEmbeddingDerivationSpec, AudioEmbeddingSpec};
 use crate::{
     server::stream_track::stream_track,
     user::{
@@ -3263,10 +3263,27 @@ struct AdminAudioEmbeddingSpecInfo {
 }
 
 #[derive(Serialize)]
+struct AdminAlbumEmbeddingSpecInfo {
+    source_namespace: String,
+    target_namespace: String,
+    aggregation: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    quantile: Option<f32>,
+}
+
+#[derive(Serialize)]
 struct AdminAudioEmbeddingCoverageResponse {
     enabled: bool,
     specs: Vec<AdminAudioEmbeddingSpecInfo>,
     coverage: crate::catalog_store::TrackEmbeddingCoverage,
+    album_derived: AdminAlbumEmbeddingCoverageResponse,
+}
+
+#[derive(Serialize)]
+struct AdminAlbumEmbeddingCoverageResponse {
+    enabled: bool,
+    specs: Vec<AdminAlbumEmbeddingSpecInfo>,
+    coverage: crate::catalog_store::AlbumEmbeddingCoverage,
 }
 
 async fn admin_list_jobs(
@@ -3304,20 +3321,39 @@ async fn admin_get_audio_embedding_coverage(
     session: Session,
     State(state): State<ServerState>,
 ) -> Response {
-    let (enabled, specs) = match state.config.audio_embeddings.as_ref() {
-        Some(settings) => (settings.enabled, settings.specs.clone()),
-        None => (false, AudioEmbeddingSpec::defaults()),
+    let (enabled, specs, album_enabled, album_specs) = match state.config.audio_embeddings.as_ref()
+    {
+        Some(settings) => (
+            settings.enabled,
+            settings.specs.clone(),
+            settings.album_derivations.enabled,
+            settings.album_derivations.specs.clone(),
+        ),
+        None => (
+            false,
+            AudioEmbeddingSpec::defaults(),
+            false,
+            AlbumEmbeddingDerivationSpec::defaults(),
+        ),
     };
     let namespaces = specs
         .iter()
         .map(|spec| spec.namespace.clone())
         .collect::<Vec<_>>();
+    let album_namespaces = album_specs
+        .iter()
+        .map(|spec| spec.target_namespace.clone())
+        .collect::<Vec<_>>();
 
-    match state
-        .catalog_store
-        .get_track_embedding_coverage(&namespaces)
-    {
-        Ok(coverage) => {
+    match (
+        state
+            .catalog_store
+            .get_track_embedding_coverage(&namespaces),
+        state
+            .catalog_store
+            .get_album_embedding_coverage(&album_namespaces, &state.config.media_path),
+    ) {
+        (Ok(coverage), Ok(album_coverage)) => {
             debug!(
                 "User {} retrieved audio embedding coverage: missing_any={}",
                 session.user_id, coverage.tracks_missing_any_embedding
@@ -3329,17 +3365,31 @@ async fn admin_get_audio_embedding_coverage(
                     namespace: spec.namespace,
                 })
                 .collect();
+            let album_specs = album_specs
+                .into_iter()
+                .map(|spec| AdminAlbumEmbeddingSpecInfo {
+                    source_namespace: spec.source_namespace,
+                    target_namespace: spec.target_namespace,
+                    aggregation: spec.aggregation.as_str().to_string(),
+                    quantile: spec.aggregation.quantile(),
+                })
+                .collect();
             (
                 StatusCode::OK,
                 Json(AdminAudioEmbeddingCoverageResponse {
                     enabled,
                     specs,
                     coverage,
+                    album_derived: AdminAlbumEmbeddingCoverageResponse {
+                        enabled: album_enabled,
+                        specs: album_specs,
+                        coverage: album_coverage,
+                    },
                 }),
             )
                 .into_response()
         }
-        Err(e) => {
+        (Err(e), _) | (_, Err(e)) => {
             error!("Failed to get audio embedding coverage: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
