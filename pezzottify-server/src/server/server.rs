@@ -3456,6 +3456,51 @@ async fn admin_trigger_job(
     }
 }
 
+async fn admin_cancel_job(
+    session: Session,
+    State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
+    Path(job_id): Path<String>,
+) -> Response {
+    let handle = match scheduler_handle {
+        Some(h) => h,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "Job scheduler not available"})),
+            )
+                .into_response();
+        }
+    };
+
+    info!("User {} cancelling job {}", session.user_id, job_id);
+
+    match handle.cancel_job(&job_id).await {
+        Ok(()) => (
+            StatusCode::ACCEPTED,
+            Json(serde_json::json!({"status": "cancelling", "job_id": job_id})),
+        )
+            .into_response(),
+        Err(JobError::NotFound) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Job not found"})),
+        )
+            .into_response(),
+        Err(JobError::NotRunning) => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({"error": "Job is not running"})),
+        )
+            .into_response(),
+        Err(e) => {
+            error!("Failed to cancel job {}: {}", job_id, e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("Failed to cancel job: {}", e)})),
+            )
+                .into_response()
+        }
+    }
+}
+
 async fn admin_get_job_history(
     session: Session,
     State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
@@ -5203,6 +5248,7 @@ pub async fn make_app(
         .route("/jobs/audit", get(admin_get_job_audit_log))
         .route("/jobs/{job_id}", get(admin_get_job))
         .route("/jobs/{job_id}/trigger", post(admin_trigger_job))
+        .route("/jobs/{job_id}/cancel", post(admin_cancel_job))
         .route("/jobs/{job_id}/history", get(admin_get_job_history))
         .route("/jobs/{job_id}/audit", get(admin_get_job_audit_log_by_job))
         .route(

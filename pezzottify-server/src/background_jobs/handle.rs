@@ -108,6 +108,10 @@ pub enum SchedulerCommand {
         params: Option<serde_json::Value>,
         response: oneshot::Sender<Result<(), JobError>>,
     },
+    CancelJob {
+        job_id: String,
+        response: oneshot::Sender<Result<(), JobError>>,
+    },
 }
 
 /// Shared state between scheduler and handle.
@@ -214,6 +218,23 @@ impl SchedulerHandle {
             .send(SchedulerCommand::TriggerJob {
                 job_id: job_id.to_string(),
                 params,
+                response: response_tx,
+            })
+            .await
+            .map_err(|_| JobError::ExecutionFailed("Scheduler not available".to_string()))?;
+
+        response_rx
+            .await
+            .map_err(|_| JobError::ExecutionFailed("Scheduler did not respond".to_string()))?
+    }
+
+    /// Request cooperative cancellation for a running job.
+    pub async fn cancel_job(&self, job_id: &str) -> Result<(), JobError> {
+        let (response_tx, response_rx) = oneshot::channel();
+
+        self.command_tx
+            .send(SchedulerCommand::CancelJob {
+                job_id: job_id.to_string(),
                 response: response_tx,
             })
             .await

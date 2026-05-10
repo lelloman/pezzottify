@@ -616,6 +616,22 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  const cancelBackgroundJob = async (jobId) => {
+    try {
+      const response = await axios.post(`/v1/admin/jobs/${jobId}/cancel`);
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error("Failed to cancel background job:", error);
+      if (error.response?.status === 404) {
+        return { error: "Job not found" };
+      }
+      if (error.response?.status === 409) {
+        return { error: "Job is not running" };
+      }
+      return { error: error.response?.data?.error || "Failed to cancel job" };
+    }
+  };
+
   const fetchJobAuditLog = async (limit = 50, offset = 0) => {
     try {
       const response = await axios.get("/v1/admin/jobs/audit", {
@@ -1242,6 +1258,7 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchBackgroundJobs,
     fetchAudioEmbeddingCoverage,
     triggerBackgroundJob,
+    cancelBackgroundJob,
     fetchJobAuditLog,
     fetchJobAuditLogByJob,
     fetchRelevanceFilter,

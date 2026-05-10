@@ -254,10 +254,21 @@
       >
         {{ triggeringJobs[job.id] ? "Triggering..." : job.is_running ? "Running..." : "Run Now" }}
       </button>
+      <button
+        v-if="job.is_running"
+        class="stopButton"
+        :disabled="stoppingJobs[job.id]"
+        @click="stopJob(job.id)"
+      >
+        {{ stoppingJobs[job.id] ? "Stopping..." : "Stop" }}
+      </button>
     </div>
 
     <div v-if="triggerError" class="errorMessage triggerError">
       {{ triggerError }}
+    </div>
+    <div v-if="stopError" class="errorMessage triggerError">
+      {{ stopError }}
     </div>
 
     <h2 class="sectionTitle auditTitle">Job Audit Log</h2>
@@ -342,7 +353,9 @@ const jobs = ref([]);
 const jobsLoading = ref(true);
 const jobsError = ref(null);
 const triggeringJobs = reactive({});
+const stoppingJobs = reactive({});
 const triggerError = ref(null);
+const stopError = ref(null);
 const embeddingCoverage = ref(null);
 const embeddingCoverageLoading = ref(true);
 const embeddingCoverageError = ref(null);
@@ -493,6 +506,22 @@ const triggerJob = async (jobId) => {
   }
 
   triggeringJobs[jobId] = false;
+};
+
+const stopJob = async (jobId) => {
+  stoppingJobs[jobId] = true;
+  stopError.value = null;
+
+  const result = await remoteStore.cancelBackgroundJob(jobId);
+
+  if (result.error) {
+    stopError.value = `Failed to stop job: ${result.error}`;
+  } else {
+    await loadJobs();
+    await loadAuditLog();
+  }
+
+  stoppingJobs[jobId] = false;
 };
 
 const formatLastRun = (lastRun) => {
@@ -905,6 +934,30 @@ onMounted(() => {
     background-color var(--transition-fast),
     opacity var(--transition-fast);
   flex-shrink: 0;
+}
+
+.stopButton {
+  padding: var(--spacing-2) var(--spacing-4);
+  background-color: transparent;
+  color: #dc2626;
+  border: 1px solid #dc2626;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    opacity var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.stopButton:hover:not(:disabled) {
+  background-color: rgba(220, 38, 38, 0.1);
+}
+
+.stopButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .triggerButton:hover:not(:disabled) {
