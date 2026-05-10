@@ -5,7 +5,9 @@
 
 use super::models::*;
 use super::schema::CATALOG_VERSIONED_SCHEMAS;
-use super::trait_def::{CatalogStore, SearchableContentType, SearchableItem};
+use super::trait_def::{
+    AlbumTrackRef, AlbumTracklist, CatalogStore, SearchableContentType, SearchableItem,
+};
 use crate::sqlite_persistence::BASE_DB_VERSION;
 use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
@@ -1699,6 +1701,122 @@ impl CatalogStore for SqliteCatalogStore {
         })
     }
 
+    fn list_album_tracklists(&self, limit: usize) -> Result<Vec<AlbumTracklist>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        let limit = limit.min(i64::MAX as usize);
+
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT a.id, t.id, t.audio_uri
+             FROM albums a
+             JOIN tracks t ON t.album_rowid = a.rowid
+             WHERE a.rowid IN (
+                 SELECT a2.rowid
+                 FROM albums a2
+                 WHERE EXISTS (SELECT 1 FROM tracks t2 WHERE t2.album_rowid = a2.rowid)
+                 ORDER BY a2.id
+                 LIMIT ?1
+             )
+             ORDER BY a.id, t.disc_number, t.track_number, t.id",
+        )?;
+
+        let mut rows = stmt.query(params![limit as i64])?;
+        let mut albums = Vec::<AlbumTracklist>::new();
+        while let Some(row) = rows.next()? {
+            let album_id: String = row.get(0)?;
+            let track = AlbumTrackRef {
+                track_id: row.get(1)?,
+                audio_uri: row.get(2)?,
+            };
+            if let Some(album) = albums.last_mut() {
+                if album.album_id == album_id {
+                    album.tracks.push(track);
+                    continue;
+                }
+            }
+            albums.push(AlbumTracklist {
+                album_id,
+                tracks: vec![track],
+            });
+        }
+        Ok(albums)
+    }
+
+    fn get_album_embedding_coverage(
+        &self,
+        namespaces: &[String],
+        media_path: &Path,
+    ) -> Result<super::AlbumEmbeddingCoverage> {
+        let albums = self.list_album_tracklists(usize::MAX)?;
+        let complete_album_ids = albums
+            .into_iter()
+            .filter(|album| {
+                !album.tracks.is_empty()
+                    && album.tracks.iter().all(|track| {
+                        track
+                            .audio_uri
+                            .as_deref()
+                            .filter(|uri| !uri.trim().is_empty())
+                            .map(|uri| media_path.join(uri).is_file())
+                            .unwrap_or(false)
+                    })
+            })
+            .map(|album| album.album_id)
+            .collect::<Vec<_>>();
+        let complete_local_albums = complete_album_ids.len();
+
+        if namespaces.is_empty() || complete_album_ids.is_empty() {
+            return Ok(super::AlbumEmbeddingCoverage {
+                complete_local_albums,
+                namespaces: namespaces
+                    .iter()
+                    .map(|namespace| super::AlbumEmbeddingNamespaceCoverage {
+                        namespace: namespace.clone(),
+                        embedded_albums: 0,
+                        missing_albums: complete_local_albums,
+                    })
+                    .collect(),
+            });
+        }
+
+        let placeholders = complete_album_ids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT COUNT(DISTINCT entity_id)
+             FROM entity_embeddings
+             WHERE entity_type = 'album'
+               AND namespace = ?
+               AND entity_id IN ({placeholders})"
+        );
+
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+        let mut namespace_stats = Vec::with_capacity(namespaces.len());
+        for namespace in namespaces {
+            let mut params = Vec::with_capacity(complete_album_ids.len() + 1);
+            params.push(Value::Text(namespace.clone()));
+            params.extend(complete_album_ids.iter().cloned().map(Value::Text));
+            let embedded_albums: usize =
+                conn.query_row(&sql, params_from_iter(params), |r| r.get(0))?;
+            namespace_stats.push(super::AlbumEmbeddingNamespaceCoverage {
+                namespace: namespace.clone(),
+                embedded_albums,
+                missing_albums: complete_local_albums.saturating_sub(embedded_albums),
+            });
+        }
+
+        Ok(super::AlbumEmbeddingCoverage {
+            complete_local_albums,
+            namespaces: namespace_stats,
+        })
+    }
+
     // =========================================================================
     // CRUD Operations (with transactions)
     // =========================================================================
@@ -3083,6 +3201,57 @@ mod tests {
     }
 
     #[test]
+    fn test_entity_embeddings_support_album_and_artist_entity_types() {
+        let (store, _temp_dir) = create_test_store();
+        let album = EntityEmbeddingUpsert {
+            entity_type: "album".to_string(),
+            entity_id: "album1".to_string(),
+            namespace: "album.musicfm.median.v1".to_string(),
+            vector: vec![1.0, 0.0],
+            dtype: "float32".to_string(),
+            metadata: serde_json::json!({"derived": true}),
+            model: serde_json::json!({"id": "pezzottify-derived-album-embeddings"}),
+        };
+        let artist = EntityEmbeddingUpsert {
+            entity_type: "artist".to_string(),
+            entity_id: "artist1".to_string(),
+            namespace: "artist.fact.genres.v1".to_string(),
+            vector: vec![0.0, 1.0],
+            dtype: "float32".to_string(),
+            metadata: serde_json::json!({"source": "unit-test"}),
+            model: serde_json::json!({"id": "artist-fact-test"}),
+        };
+
+        store.upsert_entity_embedding(&album).unwrap();
+        store.upsert_entity_embedding(&artist).unwrap();
+
+        let listed_album = store
+            .list_entity_embeddings("album", "album1", false)
+            .unwrap();
+        assert_eq!(listed_album.len(), 1);
+        assert_eq!(listed_album[0].namespace, "album.musicfm.median.v1");
+        let listed_artist = store
+            .list_entity_embeddings("artist", "artist1", false)
+            .unwrap();
+        assert_eq!(listed_artist.len(), 1);
+        assert_eq!(listed_artist[0].namespace, "artist.fact.genres.v1");
+
+        let album_results = store
+            .search_entity_embeddings("album.musicfm.median.v1", &[1.0, 0.0], Some("album"), 10)
+            .unwrap();
+        assert_eq!(album_results.len(), 1);
+        assert_eq!(album_results[0].entity_type, "album");
+        assert_eq!(album_results[0].entity_id, "album1");
+
+        let artist_results = store
+            .search_entity_embeddings("artist.fact.genres.v1", &[0.0, 1.0], Some("artist"), 10)
+            .unwrap();
+        assert_eq!(artist_results.len(), 1);
+        assert_eq!(artist_results[0].entity_type, "artist");
+        assert_eq!(artist_results[0].entity_id, "artist1");
+    }
+
+    #[test]
     fn test_list_available_tracks_missing_embeddings_selects_incomplete_tracks() {
         let (store, _temp_dir) = create_test_store();
         seed_available_track(&store, "track_missing_all", Some("a.mp3"), true);
@@ -3213,6 +3382,68 @@ mod tests {
                     missing_tracks: 2,
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn test_get_album_embedding_coverage_counts_complete_local_albums() {
+        let (store, temp_dir) = create_test_store();
+        {
+            let conn = store.write_conn.lock().unwrap();
+            conn.execute(
+                "INSERT OR IGNORE INTO artists (id, name, followers_total, popularity, artist_available, mbid_lookup_status)
+                 VALUES ('artist1', 'Artist 1', 0, 0, 0, 0)",
+                [],
+            )
+            .unwrap();
+            for album_id in ["complete_album", "missing_file_album", "missing_uri_album"] {
+                conn.execute(
+                    "INSERT INTO albums (id, name, album_type, label, popularity, release_date, release_date_precision, album_availability)
+                     VALUES (?1, ?2, 'album', '', 0, '2024', 'year', 'complete')",
+                    params![album_id, album_id],
+                )
+                .unwrap();
+            }
+            for (album_id, track_id, audio_uri) in [
+                ("complete_album", "track1", Some("a.ogg")),
+                ("complete_album", "track2", Some("b.ogg")),
+                ("missing_file_album", "track3", Some("c.ogg")),
+                ("missing_uri_album", "track4", None),
+            ] {
+                conn.execute(
+                    "INSERT INTO tracks (id, name, album_rowid, track_number, popularity, disc_number, duration_ms, explicit, audio_uri, track_available)
+                     VALUES (?1, ?1, (SELECT rowid FROM albums WHERE id=?2), 1, 0, 1, 1000, 0, ?3, 1)",
+                    params![track_id, album_id, audio_uri],
+                )
+                .unwrap();
+            }
+        }
+        std::fs::write(temp_dir.path().join("a.ogg"), b"a").unwrap();
+        std::fs::write(temp_dir.path().join("b.ogg"), b"b").unwrap();
+        store
+            .upsert_entity_embedding(&EntityEmbeddingUpsert {
+                entity_type: "album".to_string(),
+                entity_id: "complete_album".to_string(),
+                namespace: "album.musicfm.median.v1".to_string(),
+                vector: vec![1.0],
+                dtype: "float32".to_string(),
+                metadata: serde_json::json!({"derived": true}),
+                model: serde_json::json!({"id": "pezzottify-derived-album-embeddings"}),
+            })
+            .unwrap();
+
+        let coverage = store
+            .get_album_embedding_coverage(&["album.musicfm.median.v1".to_string()], temp_dir.path())
+            .unwrap();
+
+        assert_eq!(coverage.complete_local_albums, 1);
+        assert_eq!(
+            coverage.namespaces,
+            vec![crate::catalog_store::AlbumEmbeddingNamespaceCoverage {
+                namespace: "album.musicfm.median.v1".to_string(),
+                embedded_albums: 1,
+                missing_albums: 0,
+            }]
         );
     }
 
