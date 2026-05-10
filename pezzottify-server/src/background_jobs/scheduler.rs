@@ -152,6 +152,10 @@ impl JobScheduler {
                 let result = self.trigger_job(&job_id, params).await;
                 let _ = response.send(result);
             }
+            SchedulerCommand::CancelJob { job_id, response } => {
+                let result = self.cancel_job(&job_id).await;
+                let _ = response.send(result);
+            }
         }
     }
 
@@ -172,6 +176,35 @@ impl JobScheduler {
         drop(state);
 
         self.spawn_job(job_id, "manual", params).await;
+        Ok(())
+    }
+
+    /// Request cooperative cancellation for a running job by ID.
+    async fn cancel_job(&mut self, job_id: &str) -> Result<(), JobError> {
+        let state = self.shared_state.read().await;
+        let Some(job) = state.jobs.get(job_id) else {
+            return Err(JobError::NotFound);
+        };
+
+        if !state.running_jobs.contains(job_id) {
+            return Err(JobError::NotRunning);
+        }
+
+        if job.shutdown_behavior() != ShutdownBehavior::Cancellable {
+            return Err(JobError::ExecutionFailed(
+                "Job does not support cancellation".to_string(),
+            ));
+        }
+        drop(state);
+
+        let Some(token) = self.job_cancel_tokens.get(job_id) else {
+            return Err(JobError::ExecutionFailed(
+                "Running job has no cancellation token".to_string(),
+            ));
+        };
+
+        info!("Cancelling job by request: {}", job_id);
+        token.cancel();
         Ok(())
     }
 
@@ -656,6 +689,39 @@ mod tests {
         }
     }
 
+    struct CancellableTestJob {
+        id: &'static str,
+        started: Arc<AtomicBool>,
+        cancelled: Arc<AtomicBool>,
+    }
+
+    impl BackgroundJob for CancellableTestJob {
+        fn id(&self) -> &'static str {
+            self.id
+        }
+
+        fn name(&self) -> &'static str {
+            "Cancellable Test Job"
+        }
+
+        fn description(&self) -> &'static str {
+            "A test job that runs until cancelled"
+        }
+
+        fn schedule(&self) -> JobSchedule {
+            JobSchedule::Hook(HookEvent::OnUserCreated)
+        }
+
+        fn execute(&self, ctx: &JobContext) -> Result<(), JobError> {
+            self.started.store(true, Ordering::SeqCst);
+            while !ctx.is_cancelled() {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            self.cancelled.store(true, Ordering::SeqCst);
+            Err(JobError::Cancelled)
+        }
+    }
+
     fn create_test_scheduler() -> (
         JobScheduler,
         super::super::handle::SchedulerHandle,
@@ -1096,6 +1162,63 @@ mod tests {
             .as_ref()
             .unwrap()
             .contains("Test failure"));
+
+        shutdown_token.cancel();
+        let _ = tokio::time::timeout(Duration::from_secs(2), sched_handle).await;
+    }
+
+    #[tokio::test]
+    async fn test_cancel_running_job() {
+        let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
+        let shutdown_token = scheduler.shutdown_token.clone();
+
+        let started = Arc::new(AtomicBool::new(false));
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let job = Arc::new(CancellableTestJob {
+            id: "cancellable_job",
+            started: started.clone(),
+            cancelled: cancelled.clone(),
+        });
+        scheduler.register_job(job).await;
+
+        let sched_handle = tokio::spawn(async move {
+            scheduler.run().await;
+        });
+
+        handle.trigger_job("cancellable_job", None).await.unwrap();
+
+        for _ in 0..50 {
+            if started.load(Ordering::SeqCst) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(started.load(Ordering::SeqCst), "Job should have started");
+
+        handle.cancel_job("cancellable_job").await.unwrap();
+
+        for _ in 0..50 {
+            if cancelled.load(Ordering::SeqCst) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(
+            cancelled.load(Ordering::SeqCst),
+            "Job should observe cancellation"
+        );
+
+        for _ in 0..50 {
+            let history = handle.get_job_history("cancellable_job", 1).unwrap();
+            if history.first().and_then(|run| run.error_message.as_deref()) == Some("Cancelled") {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+
+        let history = handle.get_job_history("cancellable_job", 1).unwrap();
+        assert_eq!(history[0].status, "failed");
+        assert_eq!(history[0].error_message.as_deref(), Some("Cancelled"));
 
         shutdown_token.cancel();
         let _ = tokio::time::timeout(Duration::from_secs(2), sched_handle).await;

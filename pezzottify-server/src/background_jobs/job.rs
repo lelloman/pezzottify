@@ -60,6 +60,7 @@ pub enum ShutdownBehavior {
 pub enum JobError {
     NotFound,
     AlreadyRunning,
+    NotRunning,
     ExecutionFailed(String),
     Cancelled,
     Timeout,
@@ -70,6 +71,7 @@ impl std::fmt::Display for JobError {
         match self {
             JobError::NotFound => write!(f, "Job not found"),
             JobError::AlreadyRunning => write!(f, "Job is already running"),
+            JobError::NotRunning => write!(f, "Job is not running"),
             JobError::ExecutionFailed(msg) => write!(f, "Execution failed: {}", msg),
             JobError::Cancelled => write!(f, "Job was cancelled"),
             JobError::Timeout => write!(f, "Job timed out"),
