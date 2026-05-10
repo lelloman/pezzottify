@@ -11,7 +11,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 // Import modules from the library crate
 use pezzottify_server::background_jobs::jobs::{
     AudioAnalysisJob, CatalogAvailabilityStatsJob, DevicePruningJob, IngestionCleanupJob,
-    PopularContentJob, RelatedArtistsEnrichmentJob, WhatsNewBatchJob,
+    PopularContentJob, RelatedArtistsEnrichmentJob, TrackEmbeddingSyncJob, WhatsNewBatchJob,
 };
 use pezzottify_server::background_jobs::{create_scheduler, GuardedSearchVault, JobContext};
 use pezzottify_server::backup::DbRegistry;
@@ -362,6 +362,17 @@ async fn main() -> Result<()> {
         } else {
             error!("Audio analysis enabled but enrichment store failed to initialize");
         }
+    }
+
+    // Register track embedding sync job if configured.
+    if let Some(ref ae_settings) = app_config.audio_embeddings {
+        scheduler
+            .register_job(Arc::new(TrackEmbeddingSyncJob::new(
+                ae_settings.clone(),
+                app_config.media_path.clone(),
+            )))
+            .await;
+        info!("Registered track embedding sync job");
     }
 
     // Delay the first catalog availability stats run after each startup.

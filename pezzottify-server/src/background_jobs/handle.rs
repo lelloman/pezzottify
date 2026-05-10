@@ -26,6 +26,8 @@ pub struct JobScheduleInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value_secs: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub jitter_secs: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cron: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hooks: Option<Vec<String>>,
@@ -38,11 +40,20 @@ impl From<JobSchedule> for JobScheduleInfo {
                 schedule_type: "cron".to_string(),
                 cron: Some(expr),
                 value_secs: None,
+                jitter_secs: None,
                 hooks: None,
             },
             JobSchedule::Interval(duration) => JobScheduleInfo {
                 schedule_type: "interval".to_string(),
                 value_secs: Some(duration.as_secs()),
+                jitter_secs: None,
+                cron: None,
+                hooks: None,
+            },
+            JobSchedule::JitteredInterval { interval, jitter } => JobScheduleInfo {
+                schedule_type: "jittered_interval".to_string(),
+                value_secs: Some(interval.as_secs()),
+                jitter_secs: Some(jitter.as_secs()),
                 cron: None,
                 hooks: None,
             },
@@ -50,6 +61,7 @@ impl From<JobSchedule> for JobScheduleInfo {
                 schedule_type: "hook".to_string(),
                 hooks: Some(vec![event.to_string()]),
                 value_secs: None,
+                jitter_secs: None,
                 cron: None,
             },
             JobSchedule::Combined {
@@ -60,6 +72,7 @@ impl From<JobSchedule> for JobScheduleInfo {
                 schedule_type: "combined".to_string(),
                 cron,
                 value_secs: interval.map(|d| d.as_secs()),
+                jitter_secs: None,
                 hooks: Some(hooks.iter().map(|h| h.to_string()).collect()),
             },
         }
@@ -272,6 +285,21 @@ mod tests {
 
         assert_eq!(info.schedule_type, "interval");
         assert_eq!(info.value_secs, Some(3600));
+        assert!(info.cron.is_none());
+        assert!(info.hooks.is_none());
+    }
+
+    #[test]
+    fn test_job_schedule_info_from_jittered_interval() {
+        let schedule = JobSchedule::JitteredInterval {
+            interval: Duration::from_secs(3600),
+            jitter: Duration::from_secs(600),
+        };
+        let info: JobScheduleInfo = schedule.into();
+
+        assert_eq!(info.schedule_type, "jittered_interval");
+        assert_eq!(info.value_secs, Some(3600));
+        assert_eq!(info.jitter_secs, Some(600));
         assert!(info.cron.is_none());
         assert!(info.hooks.is_none());
     }

@@ -10,6 +10,11 @@ pub enum JobSchedule {
     Cron(String),
     /// Run at fixed intervals
     Interval(Duration),
+    /// Run at fixed intervals plus a random positive jitter.
+    JitteredInterval {
+        interval: Duration,
+        jitter: Duration,
+    },
     /// Run only in response to hooks
     Hook(HookEvent),
     /// Combination of scheduled and hook-triggered
