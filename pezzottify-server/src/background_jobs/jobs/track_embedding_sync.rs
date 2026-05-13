@@ -244,7 +244,7 @@ impl TrackEmbeddingSyncJob {
                 }
             }
 
-            if tracks_processed % 50 == 0 {
+            if tracks_processed.is_multiple_of(50) {
                 audit.log_progress(json!({
                     "tracks_processed": tracks_processed,
                     "tracks_skipped": tracks_skipped,

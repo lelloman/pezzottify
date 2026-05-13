@@ -166,7 +166,7 @@ impl SqliteCatalogStore {
     }
 
     fn encode_f32_vector(vector: &[f32]) -> Vec<u8> {
-        let mut out = Vec::with_capacity(vector.len() * std::mem::size_of::<f32>());
+        let mut out = Vec::with_capacity(std::mem::size_of_val(vector));
         for value in vector {
             out.extend_from_slice(&value.to_le_bytes());
         }
@@ -174,7 +174,7 @@ impl SqliteCatalogStore {
     }
 
     fn decode_f32_vector(blob: &[u8]) -> Result<Vec<f32>> {
-        if blob.len() % std::mem::size_of::<f32>() != 0 {
+        if !blob.len().is_multiple_of(std::mem::size_of::<f32>()) {
             return Err(anyhow!(
                 "invalid float32 vector blob length: {}",
                 blob.len()
