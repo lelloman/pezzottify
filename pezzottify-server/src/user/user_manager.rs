@@ -683,7 +683,7 @@ impl UserManager {
         }
 
         // Sort by play count descending and take top N
-        artist_tracks.sort_by(|a, b| b.1.cmp(&a.1));
+        artist_tracks.sort_by_key(|item| std::cmp::Reverse(item.1));
         let top_track_ids: Vec<String> = artist_tracks
             .into_iter()
             .take(limit)
@@ -885,7 +885,7 @@ impl UserManager {
 
         // Sort albums by play count and take top N
         let mut album_list: Vec<_> = album_plays.into_iter().collect();
-        album_list.sort_by(|a, b| b.1.cmp(&a.1));
+        album_list.sort_by_key(|item| std::cmp::Reverse(item.1));
 
         let popular_albums: Vec<PopularAlbum> = album_list
             .into_iter()
@@ -975,7 +975,7 @@ impl UserManager {
 
         // Sort artists by play count and take top N
         let mut artist_list: Vec<_> = artist_plays.into_iter().collect();
-        artist_list.sort_by(|a, b| b.1.cmp(&a.1));
+        artist_list.sort_by_key(|item| std::cmp::Reverse(item.1));
 
         let popular_artists: Vec<PopularArtist> = artist_list
             .into_iter()

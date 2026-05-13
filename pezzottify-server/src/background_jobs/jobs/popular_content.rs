@@ -252,7 +252,7 @@ impl BackgroundJob for PopularContentJob {
 
         // Sort and get top albums
         let mut album_list: Vec<_> = album_plays.into_iter().collect();
-        album_list.sort_by(|a, b| b.1.cmp(&a.1));
+        album_list.sort_by_key(|item| std::cmp::Reverse(item.1));
         let top_album_ids: Vec<_> = album_list.into_iter().take(self.albums_limit).collect();
 
         // Check for cancellation
@@ -324,7 +324,7 @@ impl BackgroundJob for PopularContentJob {
 
         // Sort and get top artists
         let mut artist_list: Vec<_> = artist_plays.into_iter().collect();
-        artist_list.sort_by(|a, b| b.1.cmp(&a.1));
+        artist_list.sort_by_key(|item| std::cmp::Reverse(item.1));
         let top_artist_ids: Vec<_> = artist_list.into_iter().take(self.artists_limit).collect();
 
         // =====================================================================

@@ -297,7 +297,7 @@ impl AlbumEmbeddingSyncJob {
                 }
             }
 
-            if albums_considered % 50 == 0 {
+            if albums_considered.is_multiple_of(50) {
                 audit.log_progress(json!({
                     "albums_considered": albums_considered,
                     "albums_complete_local": albums_complete_local,
