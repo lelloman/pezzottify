@@ -47,9 +47,9 @@ use tower_governor::GovernorLayer;
 use super::slowdown_request;
 use super::{
     embeddings, extract_user_id_for_rate_limit, http_cache, log_requests, make_search_admin_routes,
-    make_search_routes, state::*, IpKeyExtractor, RequestsLoggingLevel, ServerConfig,
-    UserOrIpKeyExtractor, CONTENT_READ_PER_MINUTE, GLOBAL_PER_MINUTE, LOGIN_PER_MINUTE,
-    SEARCH_PER_MINUTE, STREAM_PER_MINUTE, WRITE_PER_MINUTE,
+    make_search_routes, recommendation_routes, state::*, IpKeyExtractor, RequestsLoggingLevel,
+    ServerConfig, UserOrIpKeyExtractor, CONTENT_READ_PER_MINUTE, GLOBAL_PER_MINUTE,
+    LOGIN_PER_MINUTE, SEARCH_PER_MINUTE, STREAM_PER_MINUTE, WRITE_PER_MINUTE,
 };
 use crate::server::session::Session;
 use crate::user::auth::AuthTokenValue;
@@ -5062,6 +5062,7 @@ pub async fn make_app(
         .route("/genre/{name}/tracks", get(get_genre_tracks))
         .route("/genre/{name}/radio", get(get_genre_radio))
         .merge(embeddings::read_routes())
+        .merge(recommendation_routes())
         .layer(GovernorLayer::new(content_read_rate_limit.clone()))
         .with_state(state.clone());
 

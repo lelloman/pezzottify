@@ -4,6 +4,7 @@ mod embeddings;
 mod http_layers;
 mod ingestion_routes;
 pub mod metrics;
+mod recommendations;
 // TODO: Re-enable after updating for Spotify schema (depends on downloader)
 // pub mod proxy;
 mod search;
@@ -20,6 +21,7 @@ pub use config::ServerConfig;
 pub use download_routes::download_routes;
 pub use http_layers::*;
 pub use ingestion_routes::ingestion_routes;
+pub use recommendations::recommendation_routes;
 use search::{make_search_admin_routes, make_search_routes};
 #[allow(unused_imports)] // Used by main.rs
 pub use server::run_server;

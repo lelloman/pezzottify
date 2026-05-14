@@ -14,6 +14,7 @@ data class SettingsScreenState(
     val isCacheEnabled: Boolean = true,
     val storageInfo: StorageInfo? = null,
     val notifyWhatsNewEnabled: Boolean = false,
+    val smartContinuationEnabled: Boolean = false,
     val backgroundSyncInterval: BackgroundSyncInterval = BackgroundSyncInterval.Default,
     val smartSearchEnabled: Boolean = true,
     val excludeUnavailableEnabled: Boolean = true,

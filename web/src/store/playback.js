@@ -10,9 +10,13 @@ import { defineStore } from "pinia";
 import { computed, ref, shallowRef, watch } from "vue";
 import { useStaticsStore } from "./statics";
 import { LocalOutlet } from "./playbackOutlets/LocalOutlet";
+import { useRemoteStore } from "./remote";
+import { useUserStore } from "./user";
 
 export const usePlaybackStore = defineStore("playback", () => {
   const staticsStore = useStaticsStore();
+  const remoteStore = useRemoteStore();
+  const userStore = useUserStore();
 
   // ============================================
   // Constants
@@ -47,6 +51,7 @@ export const usePlaybackStore = defineStore("playback", () => {
   // Queue/playlist
   const playlistsHistory = ref(null);
   const currentPlaylistIndex = ref(null);
+  const smartContinuationInFlightSignature = ref(null);
 
   // ============================================
   // Session store reference (set externally to avoid circular imports)
@@ -463,6 +468,42 @@ export const usePlaybackStore = defineStore("playback", () => {
     type: PLAYBACK_CONTEXTS.userMix,
   });
 
+  const currentQueueSignature = () => {
+    const tracksIds = currentPlaylist.value?.tracksIds || [];
+    return `${currentTrackIndex.value ?? "none"}:${tracksIds.join(",")}`;
+  };
+
+  const maybeFetchSmartContinuation = async () => {
+    if (mode.value !== "local") return;
+    if (!userStore.isSmartContinuationEnabled) return;
+    if (!currentPlaylist.value || currentTrackIndex.value === null) return;
+
+    const tracksIds = currentPlaylist.value.tracksIds || [];
+    if (tracksIds.length === 0 || currentTrackIndex.value !== tracksIds.length - 1) {
+      return;
+    }
+
+    const signature = currentQueueSignature();
+    if (smartContinuationInFlightSignature.value === signature) return;
+    smartContinuationInFlightSignature.value = signature;
+
+    const contextTrackIds = tracksIds
+      .slice(0, currentTrackIndex.value + 1)
+      .slice(-10);
+    const nextTrackIds = await remoteStore.fetchContinuationRecommendations({
+      contextTrackIds,
+      excludeTrackIds: tracksIds,
+      count: 1,
+    });
+
+    if (smartContinuationInFlightSignature.value !== signature) return;
+    smartContinuationInFlightSignature.value = null;
+    if (currentQueueSignature() !== signature) return;
+    if (nextTrackIds.length > 0) {
+      addTracksToPlaylist(nextTrackIds.slice(0, 1));
+    }
+  };
+
   // ============================================
   // Playlist management
   // ============================================
@@ -591,6 +632,15 @@ export const usePlaybackStore = defineStore("playback", () => {
     if (autoPlay) {
       play();
     }
+  };
+
+  const setRadioFromItem = async (entityType, entityId, count = 50) => {
+    if (mode.value === "remote") return [];
+    const trackIds = await remoteStore.fetchRadioTrackIds(entityType, entityId, count);
+    if (trackIds.length > 0) {
+      setPlaylistFromTrackIds(trackIds, 0, true);
+    }
+    return trackIds;
   };
 
   // ============================================
@@ -947,6 +997,13 @@ export const usePlaybackStore = defineStore("playback", () => {
     }
   };
 
+  watch(
+    [currentTrackIndex, currentPlaylist, () => userStore.isSmartContinuationEnabled],
+    () => {
+      maybeFetchSmartContinuation();
+    },
+  );
+
   // ============================================
   // Exports
   // ============================================
@@ -976,6 +1033,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     setTrack,
     setUserPlaylist,
     setPlaylistFromTrackIds,
+    setRadioFromItem,
 
     // Playback controls
     play,

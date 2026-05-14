@@ -8,6 +8,8 @@ import com.lelloman.pezzottify.android.domain.player.internal.PlayerImpl
 import com.lelloman.pezzottify.android.domain.player.internal.RemotePlaybackController
 import com.lelloman.pezzottify.android.domain.player.internal.RemotePlaybackMetadataProvider
 import com.lelloman.pezzottify.android.domain.playbacksession.PlaybackSessionHandler
+import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
+import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
 import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylistStore
 import com.lelloman.pezzottify.android.logger.LoggerFactory
@@ -31,6 +33,8 @@ class PlayerModule {
         configStore: ConfigStore,
         userPlaylistStore: UserPlaylistStore,
         playbackStateStore: PlaybackStateStore,
+        userSettingsStore: UserSettingsStore,
+        remoteApiClient: RemoteApiClient,
         applicationScope: CoroutineScope,
     ): PlayerImpl = PlayerImpl(
         staticsProvider = staticsProvider,
@@ -39,6 +43,8 @@ class PlayerModule {
         configStore = configStore,
         userPlaylistStore = userPlaylistStore,
         playbackStateStore = playbackStateStore,
+        userSettingsStore = userSettingsStore,
+        remoteApiClient = remoteApiClient,
         coroutineScope = applicationScope,
     )
 

@@ -85,6 +85,16 @@ if (props.canRemoveFromPlaylist) {
 
 menuItems.value.push({
   icon: markRaw(PlaylistPlusIcon),
+  name: "Listen to radio",
+  action: () => {
+    if (trackId.value) {
+      playback.setRadioFromItem("track", trackId.value);
+    }
+  },
+});
+
+menuItems.value.push({
+  icon: markRaw(PlaylistPlusIcon),
   name: "Add to queue",
   action: () => handleAddToQueueClick(),
 });

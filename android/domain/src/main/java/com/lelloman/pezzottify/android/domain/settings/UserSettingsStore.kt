@@ -20,6 +20,12 @@ interface UserSettingsStore {
     val isNotifyWhatsNewEnabled: StateFlow<Boolean>
 
     /**
+     * Whether clients should add a recommended track when the active queue
+     * reaches its last track. This setting is synced with the server.
+     */
+    val isSmartContinuationEnabled: StateFlow<Boolean>
+
+    /**
      * How often to run background sync when the app is not running.
      * This is a local-only setting.
      */
@@ -43,6 +49,7 @@ interface UserSettingsStore {
     suspend fun setInMemoryCacheEnabled(enabled: Boolean)
     suspend fun setFileLoggingEnabled(enabled: Boolean)
     suspend fun setNotifyWhatsNewEnabled(enabled: Boolean)
+    suspend fun setSmartContinuationEnabled(enabled: Boolean)
     fun setBackgroundSyncInterval(interval: BackgroundSyncInterval)
     fun setSmartSearchEnabled(enabled: Boolean)
     fun setExcludeUnavailableEnabled(enabled: Boolean)

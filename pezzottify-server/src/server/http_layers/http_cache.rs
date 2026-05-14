@@ -11,10 +11,12 @@ pub async fn http_cache(
     let response = next.run(request).await.into_response();
 
     let (mut parts, body) = response.into_parts();
-    parts.headers.insert(
-        "Cache-Control",
-        format!("max-age={}", max_age_sec).parse().unwrap(),
-    );
+    if !parts.headers.contains_key("Cache-Control") {
+        parts.headers.insert(
+            "Cache-Control",
+            format!("max-age={}", max_age_sec).parse().unwrap(),
+        );
+    }
 
     axum::http::Response::from_parts(parts, body)
 }

@@ -47,16 +47,40 @@
         </label>
       </div>
     </div>
+
+    <div class="settings-section">
+      <h2 class="section-title">Playback</h2>
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">Smart Continuation</span>
+          <span class="setting-description">
+            Automatically add a related track when the current queue reaches its
+            final track.
+          </span>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" v-model="smartContinuationEnabled" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { useDebugStore } from "@/store/debug";
+import { useUserStore } from "@/store/user";
 import { storeToRefs } from "pinia";
+import { computed } from "vue";
 
 const debugStore = useDebugStore();
 const { useOrganicSearch, imagesEnabled, excludeUnavailable } =
   storeToRefs(debugStore);
+const userStore = useUserStore();
+const smartContinuationEnabled = computed({
+  get: () => userStore.isSmartContinuationEnabled,
+  set: (enabled) => userStore.setSmartContinuationEnabled(enabled),
+});
 
 </script>
 

@@ -234,6 +234,14 @@ export const useUserStore = defineStore("user", () => {
     return settings.value[key];
   };
 
+  const isSmartContinuationEnabled = computed(() => {
+    return settings.value.smart_continuation_enabled === true;
+  });
+
+  const setSmartContinuationEnabled = (enabled) => {
+    return setSetting("smart_continuation_enabled", enabled);
+  };
+
   // Check if a setting has a pending sync
   const isSettingPending = (key) => {
     return key in pendingSettings.value;
@@ -610,6 +618,8 @@ export const useUserStore = defineStore("user", () => {
     putPlaylistRef,
     getSetting,
     setSetting,
+    isSmartContinuationEnabled,
+    setSmartContinuationEnabled,
     isSettingPending,
     hasPendingSettings,
     retryPendingSettings,

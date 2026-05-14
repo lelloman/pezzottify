@@ -173,6 +173,18 @@ interface RemoteApiClient {
      */
     suspend fun updateUserSettings(settings: List<UserSetting>): RemoteApiResponse<Unit>
 
+    suspend fun getContinuationRecommendations(
+        contextTrackIds: List<String>,
+        excludeTrackIds: List<String>,
+        count: Int = 1,
+    ): RemoteApiResponse<List<String>>
+
+    suspend fun getRadioTrackIds(
+        entityType: String,
+        entityId: String,
+        count: Int = 50,
+    ): RemoteApiResponse<List<String>>
+
     /**
      * Get devices registered for the current user.
      */

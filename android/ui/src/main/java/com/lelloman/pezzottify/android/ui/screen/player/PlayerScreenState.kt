@@ -26,6 +26,7 @@ data class PlayerScreenState(
     val isMuted: Boolean = false,
     val shuffleEnabled: Boolean = false,
     val repeatMode: RepeatModeUi = RepeatModeUi.OFF,
+    val smartContinuationEnabled: Boolean = false,
     val playerError: PlayerErrorUi? = null,
     val remoteDeviceName: String? = null,
     val hasOtherDeviceConnected: Boolean = false,

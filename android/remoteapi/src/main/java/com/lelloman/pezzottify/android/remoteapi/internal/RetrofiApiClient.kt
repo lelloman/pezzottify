@@ -5,6 +5,7 @@ import com.lelloman.pezzottify.android.remoteapi.internal.requests.BatchContentR
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.BatchContentResponse
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.CreatePlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.CreatePlaylistResponse
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.ContinuationRecommendationsRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ImpressionRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.RemoveTracksFromPlaylistRequest
@@ -13,6 +14,7 @@ import com.lelloman.pezzottify.android.remoteapi.internal.requests.LoginRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.RequestAlbumDownloadBody
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.SearchRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.SubmitBugReportRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.TrackIdsResponse
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdatePlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.UpdateUserSettingsRequest
 import com.lelloman.pezzottify.android.domain.remoteapi.request.DeviceSharePolicyRequest
@@ -129,6 +131,20 @@ internal interface RetrofitApiClient {
         @Query("limit") limit: Int = 20,
         @Query("offset") offset: Int = 0,
     ): Response<GenreTracksResponse>
+
+    @POST("/v1/content/recommendations/continuation")
+    suspend fun getContinuationRecommendations(
+        @Header("Authorization") authToken: String,
+        @Body request: ContinuationRecommendationsRequest,
+    ): Response<TrackIdsResponse>
+
+    @GET("/v1/content/radio/{entityType}/{entityId}")
+    suspend fun getRadioTrackIds(
+        @Header("Authorization") authToken: String,
+        @Path("entityType") entityType: String,
+        @Path("entityId") entityId: String,
+        @Query("count") count: Int = 50,
+    ): Response<TrackIdsResponse>
 
     @POST("/v1/content/search")
     suspend fun search(

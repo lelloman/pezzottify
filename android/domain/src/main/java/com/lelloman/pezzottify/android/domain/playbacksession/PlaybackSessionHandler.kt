@@ -534,6 +534,7 @@ class PlaybackSessionHandler internal constructor(
             "loadAlbum" -> handleLoadAlbumCommand(commandPayload)
             "loadPlaylist" -> handleLoadPlaylistCommand(commandPayload)
             "loadSingleTrack" -> handleLoadSingleTrackCommand(commandPayload)
+            "loadTrackIds" -> handleLoadTrackIdsCommand(commandPayload)
             "addAlbumToQueue" -> handleAddAlbumToQueueCommand(commandPayload)
             "addPlaylistToQueue" -> handleAddPlaylistToQueueCommand(commandPayload)
             "addTracksToQueue" -> handleAddTracksToQueueCommand(commandPayload)
@@ -601,6 +602,16 @@ class PlaybackSessionHandler internal constructor(
             return
         }
         player.loadSingleTrack(trackId)
+    }
+
+    private fun handleLoadTrackIdsCommand(payload: JsonElement?) {
+        val trackIds = payload?.jsonObject?.get("trackIds")?.jsonArray?.map {
+            it.jsonPrimitive.content
+        } ?: run {
+            logger.warn("loadTrackIds command missing trackIds")
+            return
+        }
+        player.loadTrackIds(trackIds)
     }
 
     private fun handleAddAlbumToQueueCommand(payload: JsonElement?) {

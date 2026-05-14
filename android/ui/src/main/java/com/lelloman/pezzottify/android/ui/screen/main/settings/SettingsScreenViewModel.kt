@@ -40,6 +40,7 @@ class SettingsScreenViewModel @Inject constructor(
                 isCacheEnabled = interactor.isCacheEnabled(),
                 storageInfo = interactor.getStorageInfo(),
                 notifyWhatsNewEnabled = interactor.isNotifyWhatsNewEnabled(),
+                smartContinuationEnabled = interactor.isSmartContinuationEnabled(),
                 backgroundSyncInterval = interactor.getBackgroundSyncInterval(),
                 smartSearchEnabled = interactor.isSmartSearchEnabled(),
                 excludeUnavailableEnabled = interactor.isExcludeUnavailableEnabled(),
@@ -79,6 +80,11 @@ class SettingsScreenViewModel @Inject constructor(
             launch {
                 interactor.observeNotifyWhatsNewEnabled().collect { enabled ->
                     mutableState.update { it.copy(notifyWhatsNewEnabled = enabled) }
+                }
+            }
+            launch {
+                interactor.observeSmartContinuationEnabled().collect { enabled ->
+                    mutableState.update { it.copy(smartContinuationEnabled = enabled) }
                 }
             }
             launch {
@@ -157,6 +163,12 @@ class SettingsScreenViewModel @Inject constructor(
     override fun setNotifyWhatsNewEnabled(enabled: Boolean) {
         viewModelScope.launch {
             interactor.setNotifyWhatsNewEnabled(enabled)
+        }
+    }
+
+    override fun setSmartContinuationEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            interactor.setSmartContinuationEnabled(enabled)
         }
     }
 
@@ -273,6 +285,7 @@ class SettingsScreenViewModel @Inject constructor(
         fun isCacheEnabled(): Boolean
         fun getStorageInfo(): StorageInfo?
         fun isNotifyWhatsNewEnabled(): Boolean
+        fun isSmartContinuationEnabled(): Boolean
         fun getBackgroundSyncInterval(): BackgroundSyncInterval
         fun isSmartSearchEnabled(): Boolean
         fun isExcludeUnavailableEnabled(): Boolean
@@ -282,6 +295,7 @@ class SettingsScreenViewModel @Inject constructor(
         fun observeCacheEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeStorageInfo(): kotlinx.coroutines.flow.Flow<StorageInfo>
         fun observeNotifyWhatsNewEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
+        fun observeSmartContinuationEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeBackgroundSyncInterval(): kotlinx.coroutines.flow.Flow<BackgroundSyncInterval>
         fun observeSmartSearchEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeExcludeUnavailableEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
@@ -291,6 +305,7 @@ class SettingsScreenViewModel @Inject constructor(
         suspend fun setFontFamily(fontFamily: AppFontFamily)
         suspend fun setCacheEnabled(enabled: Boolean)
         suspend fun setNotifyWhatsNewEnabled(enabled: Boolean)
+        suspend fun setSmartContinuationEnabled(enabled: Boolean)
         fun setBackgroundSyncInterval(interval: BackgroundSyncInterval)
         fun setSmartSearchEnabled(enabled: Boolean)
         fun setExcludeUnavailableEnabled(enabled: Boolean)

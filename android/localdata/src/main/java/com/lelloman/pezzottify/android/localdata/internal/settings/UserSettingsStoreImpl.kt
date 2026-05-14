@@ -82,6 +82,12 @@ internal class UserSettingsStoreImpl(
     }
     override val isNotifyWhatsNewEnabled: StateFlow<Boolean> = mutableNotifyWhatsNewEnabled.asStateFlow()
 
+    private val mutableSmartContinuationEnabled by lazy {
+        val enabled = prefs.getBoolean(KEY_SMART_CONTINUATION_ENABLED, DEFAULT_SMART_CONTINUATION_ENABLED)
+        MutableStateFlow(enabled)
+    }
+    override val isSmartContinuationEnabled: StateFlow<Boolean> = mutableSmartContinuationEnabled.asStateFlow()
+
     private val mutableBackgroundSyncInterval by lazy {
         val storedValue = prefs.getString(KEY_BACKGROUND_SYNC_INTERVAL, null)
         val interval = storedValue?.let { parseBackgroundSyncInterval(it) } ?: BackgroundSyncInterval.Default
@@ -116,6 +122,17 @@ internal class UserSettingsStoreImpl(
                 setting = UserSetting.NotifyWhatsNew(enabled),
                 modifiedAt = modifiedAt,
                 syncStatus = notifyWhatsNewStatus,
+            )
+        }
+        val smartContinuationStatus = prefs.getString(KEY_SMART_CONTINUATION_SYNC_STATUS, null)
+            ?.let { parseSyncStatus(it) }
+        if (smartContinuationStatus != null && smartContinuationStatus != SyncStatus.Synced) {
+            val enabled = prefs.getBoolean(KEY_SMART_CONTINUATION_ENABLED, DEFAULT_SMART_CONTINUATION_ENABLED)
+            val modifiedAt = prefs.getLong(KEY_SMART_CONTINUATION_MODIFIED_AT, System.currentTimeMillis())
+            settings[KEY_SETTING_SMART_CONTINUATION] = SyncedUserSetting(
+                setting = UserSetting.SmartContinuationEnabled(enabled),
+                modifiedAt = modifiedAt,
+                syncStatus = smartContinuationStatus,
             )
         }
         MutableStateFlow(settings.toMap())
@@ -171,6 +188,20 @@ internal class UserSettingsStoreImpl(
         }
     }
 
+    override suspend fun setSmartContinuationEnabled(enabled: Boolean) {
+        withContext(dispatcher) {
+            mutableSmartContinuationEnabled.value = enabled
+            prefs.edit()
+                .putBoolean(KEY_SMART_CONTINUATION_ENABLED, enabled)
+                .putString(KEY_SMART_CONTINUATION_SYNC_STATUS, SyncStatus.Synced.name)
+                .remove(KEY_SMART_CONTINUATION_MODIFIED_AT)
+                .commit()
+            val updatedSettings = mutableSyncedSettings.value.toMutableMap()
+            updatedSettings.remove(KEY_SETTING_SMART_CONTINUATION)
+            mutableSyncedSettings.value = updatedSettings
+        }
+    }
+
     override fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) {
         mutableBackgroundSyncInterval.value = interval
         prefs.edit().putString(KEY_BACKGROUND_SYNC_INTERVAL, interval.name).apply()
@@ -211,6 +242,28 @@ internal class UserSettingsStoreImpl(
                     }
                     mutableSyncedSettings.value = updatedSettings
                 }
+                is UserSetting.SmartContinuationEnabled -> {
+                    val enabled = setting.value
+                    val modifiedAt = System.currentTimeMillis()
+                    mutableSmartContinuationEnabled.value = enabled
+                    prefs.edit()
+                        .putBoolean(KEY_SMART_CONTINUATION_ENABLED, enabled)
+                        .putString(KEY_SMART_CONTINUATION_SYNC_STATUS, syncStatus.name)
+                        .putLong(KEY_SMART_CONTINUATION_MODIFIED_AT, modifiedAt)
+                        .commit()
+
+                    val updatedSettings = mutableSyncedSettings.value.toMutableMap()
+                    if (syncStatus == SyncStatus.Synced) {
+                        updatedSettings.remove(KEY_SETTING_SMART_CONTINUATION)
+                    } else {
+                        updatedSettings[KEY_SETTING_SMART_CONTINUATION] = SyncedUserSetting(
+                            setting = setting,
+                            modifiedAt = modifiedAt,
+                            syncStatus = syncStatus,
+                        )
+                    }
+                    mutableSyncedSettings.value = updatedSettings
+                }
             }
         }
     }
@@ -240,6 +293,22 @@ internal class UserSettingsStoreImpl(
                         mutableSyncedSettings.value = updatedSettings
                     }
                 }
+                KEY_SETTING_SMART_CONTINUATION -> {
+                    prefs.edit()
+                        .putString(KEY_SMART_CONTINUATION_SYNC_STATUS, status.name)
+                        .commit()
+
+                    val updatedSettings = mutableSyncedSettings.value.toMutableMap()
+                    val existing = updatedSettings[settingKey]
+                    if (existing != null) {
+                        if (status == SyncStatus.Synced) {
+                            updatedSettings.remove(settingKey)
+                        } else {
+                            updatedSettings[settingKey] = existing.copy(syncStatus = status)
+                        }
+                        mutableSyncedSettings.value = updatedSettings
+                    }
+                }
             }
         }
     }
@@ -247,10 +316,14 @@ internal class UserSettingsStoreImpl(
     override suspend fun clearSyncedSettings() {
         withContext(dispatcher) {
             mutableNotifyWhatsNewEnabled.value = DEFAULT_NOTIFY_WHATSNEW_ENABLED
+            mutableSmartContinuationEnabled.value = DEFAULT_SMART_CONTINUATION_ENABLED
             prefs.edit()
                 .remove(KEY_NOTIFY_WHATSNEW_ENABLED)
                 .remove(KEY_NOTIFY_WHATSNEW_SYNC_STATUS)
                 .remove(KEY_NOTIFY_WHATSNEW_MODIFIED_AT)
+                .remove(KEY_SMART_CONTINUATION_ENABLED)
+                .remove(KEY_SMART_CONTINUATION_SYNC_STATUS)
+                .remove(KEY_SMART_CONTINUATION_MODIFIED_AT)
                 .commit()
             mutableSyncedSettings.value = emptyMap()
         }
@@ -300,8 +373,13 @@ internal class UserSettingsStoreImpl(
         const val KEY_NOTIFY_WHATSNEW_SYNC_STATUS = "NotifyWhatsNewSyncStatus"
         const val KEY_NOTIFY_WHATSNEW_MODIFIED_AT = "NotifyWhatsNewModifiedAt"
         const val DEFAULT_NOTIFY_WHATSNEW_ENABLED = true
+        const val KEY_SMART_CONTINUATION_ENABLED = "SmartContinuationEnabled"
+        const val KEY_SMART_CONTINUATION_SYNC_STATUS = "SmartContinuationSyncStatus"
+        const val KEY_SMART_CONTINUATION_MODIFIED_AT = "SmartContinuationModifiedAt"
+        const val DEFAULT_SMART_CONTINUATION_ENABLED = false
         // Setting keys for synced settings map
         const val KEY_SETTING_NOTIFY_WHATSNEW = "notify_whatsnew"
+        const val KEY_SETTING_SMART_CONTINUATION = "smart_continuation_enabled"
         // Legacy value for migration - AmoledBlack was removed and converted to Amoled theme mode
         const val LEGACY_AMOLED_BLACK_PALETTE = "AmoledBlack"
         // Background sync interval (local only)

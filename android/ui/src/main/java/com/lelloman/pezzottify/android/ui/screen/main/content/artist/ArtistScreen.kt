@@ -396,6 +396,30 @@ fun ArtistLoadedScreen(
                 )
             }
         }
+
+        IconButton(
+            onClick = { actions.clickOnRadio() },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset { IntOffset(0, (headerHeight - likeButtonSize / 2).roundToPx()) }
+                .padding(end = 80.dp)
+                .size(likeButtonSize)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    modifier = Modifier.size(likeButtonSize),
+                    painter = painterResource(R.drawable.baseline_circle_24),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.surfaceVariant,
+                )
+                Icon(
+                    modifier = Modifier.size(28.dp),
+                    painter = painterResource(R.drawable.baseline_queue_music_24),
+                    contentDescription = stringResource(R.string.listen_to_radio),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 

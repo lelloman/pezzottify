@@ -43,6 +43,7 @@ import com.lelloman.pezzottify.android.remoteapi.internal.requests.BatchContentR
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.BatchItemRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.BatchTrackResult
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.CreatePlaylistRequest
+import com.lelloman.pezzottify.android.remoteapi.internal.requests.ContinuationRecommendationsRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ImpressionRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.RemoveTracksFromPlaylistRequest
 import com.lelloman.pezzottify.android.remoteapi.internal.requests.ListeningEventRequest
@@ -450,6 +451,46 @@ internal class RemoteApiClientImpl(
                     request = UpdateUserSettingsRequest(settings = settings)
                 )
                 .returnFromRetrofitResponse()
+        }
+
+    override suspend fun getContinuationRecommendations(
+        contextTrackIds: List<String>,
+        excludeTrackIds: List<String>,
+        count: Int,
+    ): RemoteApiResponse<List<String>> =
+        catchingNetworkError {
+            when (val response = getRetrofit()
+                .getContinuationRecommendations(
+                    authToken = authToken,
+                    request = ContinuationRecommendationsRequest(
+                        contextTrackIds = contextTrackIds,
+                        excludeTrackIds = excludeTrackIds,
+                        count = count,
+                    ),
+                )
+                .returnFromRetrofitResponse()) {
+                is RemoteApiResponse.Success -> RemoteApiResponse.Success(response.data.trackIds)
+                is RemoteApiResponse.Error -> response
+            }
+        }
+
+    override suspend fun getRadioTrackIds(
+        entityType: String,
+        entityId: String,
+        count: Int,
+    ): RemoteApiResponse<List<String>> =
+        catchingNetworkError {
+            when (val response = getRetrofit()
+                .getRadioTrackIds(
+                    authToken = authToken,
+                    entityType = entityType,
+                    entityId = entityId,
+                    count = count,
+                )
+                .returnFromRetrofitResponse()) {
+                is RemoteApiResponse.Success -> RemoteApiResponse.Success(response.data.trackIds)
+                is RemoteApiResponse.Error -> response
+            }
         }
 
     override suspend fun getDevices(): RemoteApiResponse<DevicesResponse> =

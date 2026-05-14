@@ -161,6 +161,13 @@ private fun SettingsScreenInternal(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
+            PlaybackSettingsSection(
+                smartContinuationEnabled = currentState.smartContinuationEnabled,
+                onSmartContinuationChanged = actions::setSmartContinuationEnabled,
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+
             // Background Sync Section
             BackgroundSyncSection(
                 selectedInterval = currentState.backgroundSyncInterval,
@@ -260,6 +267,7 @@ private fun SettingsScreenPreview() {
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
                 override fun setCacheEnabled(enabled: Boolean) {}
                 override fun setNotifyWhatsNewEnabled(enabled: Boolean) {}
+                override fun setSmartContinuationEnabled(enabled: Boolean) {}
                 override fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) {}
                 override fun setSmartSearchEnabled(enabled: Boolean) {}
                 override fun setExcludeUnavailableEnabled(enabled: Boolean) {}
@@ -298,6 +306,7 @@ private fun SettingsScreenPreviewDark() {
                 override fun selectFontFamily(fontFamily: AppFontFamily) {}
                 override fun setCacheEnabled(enabled: Boolean) {}
                 override fun setNotifyWhatsNewEnabled(enabled: Boolean) {}
+                override fun setSmartContinuationEnabled(enabled: Boolean) {}
                 override fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) {}
                 override fun setSmartSearchEnabled(enabled: Boolean) {}
                 override fun setExcludeUnavailableEnabled(enabled: Boolean) {}

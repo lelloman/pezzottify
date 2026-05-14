@@ -35,6 +35,7 @@ fun TrackActionsBottomSheet(
     onAddToPlaylist: () -> Unit,
     onPlay: (() -> Unit)? = null,
     onPlaySingle: (() -> Unit)? = null,
+    onRadio: (() -> Unit)? = null,
     onRemoveFromPlaylist: (() -> Unit)? = null,
     onViewTrack: (() -> Unit)? = null,
     onViewAlbum: (() -> Unit)? = null,
@@ -89,6 +90,17 @@ fun TrackActionsBottomSheet(
                     onDismiss()
                 }
             )
+
+            onRadio?.let { radioAction ->
+                ActionItem(
+                    iconRes = R.drawable.baseline_queue_music_24,
+                    label = stringResource(R.string.listen_to_radio),
+                    onClick = {
+                        radioAction()
+                        onDismiss()
+                    }
+                )
+            }
 
             ActionItem(
                 iconRes = R.drawable.baseline_queue_music_24,

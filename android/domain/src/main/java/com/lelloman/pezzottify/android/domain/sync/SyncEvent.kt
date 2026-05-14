@@ -39,6 +39,10 @@ sealed interface UserSetting {
     @Serializable
     @SerialName("notify_whatsnew")
     data class NotifyWhatsNew(val value: Boolean) : UserSetting
+
+    @Serializable
+    @SerialName("smart_continuation_enabled")
+    data class SmartContinuationEnabled(val value: Boolean) : UserSetting
 }
 
 /**
