@@ -1748,7 +1748,7 @@ impl CatalogStore for SqliteCatalogStore {
     fn get_album_embedding_coverage(
         &self,
         namespaces: &[String],
-        media_path: &Path,
+        _media_path: &Path,
     ) -> Result<super::AlbumEmbeddingCoverage> {
         let albums = self.list_album_tracklists(usize::MAX)?;
         let complete_album_ids = albums
@@ -1760,8 +1760,7 @@ impl CatalogStore for SqliteCatalogStore {
                             .audio_uri
                             .as_deref()
                             .filter(|uri| !uri.trim().is_empty())
-                            .map(|uri| media_path.join(uri).is_file())
-                            .unwrap_or(false)
+                            .is_some()
                     })
             })
             .map(|album| album.album_id)
@@ -3442,7 +3441,7 @@ mod tests {
                 [],
             )
             .unwrap();
-            for album_id in ["complete_album", "missing_file_album", "missing_uri_album"] {
+            for album_id in ["complete_album", "uri_only_album", "missing_uri_album"] {
                 conn.execute(
                     "INSERT INTO albums (id, name, album_type, label, popularity, release_date, release_date_precision, album_availability)
                      VALUES (?1, ?2, 'album', '', 0, '2024', 'year', 'complete')",
@@ -3453,7 +3452,7 @@ mod tests {
             for (album_id, track_id, audio_uri) in [
                 ("complete_album", "track1", Some("a.ogg")),
                 ("complete_album", "track2", Some("b.ogg")),
-                ("missing_file_album", "track3", Some("c.ogg")),
+                ("uri_only_album", "track3", Some("c.ogg")),
                 ("missing_uri_album", "track4", None),
             ] {
                 conn.execute(
@@ -3482,13 +3481,13 @@ mod tests {
             .get_album_embedding_coverage(&["album.musicfm.median.v1".to_string()], temp_dir.path())
             .unwrap();
 
-        assert_eq!(coverage.complete_local_albums, 1);
+        assert_eq!(coverage.complete_local_albums, 2);
         assert_eq!(
             coverage.namespaces,
             vec![crate::catalog_store::AlbumEmbeddingNamespaceCoverage {
                 namespace: "album.musicfm.median.v1".to_string(),
                 embedded_albums: 1,
-                missing_albums: 0,
+                missing_albums: 1,
             }]
         );
     }
