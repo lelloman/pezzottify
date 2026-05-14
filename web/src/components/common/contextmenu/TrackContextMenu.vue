@@ -7,6 +7,7 @@ import PlusIcon from "@/components/icons/PlusIcon.vue";
 import ContextMenu from "@/components/common/contextmenu/ContextMenu.vue";
 import { ref, markRaw } from "vue";
 import PlaylistPlusIcon from "@/components/icons/PlaylistPlusIcon.vue";
+import RadioIcon from "@/components/icons/RadioIcon.vue";
 import { useUserStore } from "@/store/user";
 import { usePlaybackStore } from "@/store/playback";
 import PlaylistCancelIcon from "@/components/icons/PlaylistCancelIcon.vue";
@@ -84,7 +85,7 @@ if (props.canRemoveFromPlaylist) {
 }
 
 menuItems.value.push({
-  icon: markRaw(PlaylistPlusIcon),
+  icon: markRaw(RadioIcon),
   name: "Listen to radio",
   action: () => {
     if (trackId.value) {

@@ -9,7 +9,7 @@
           :toggled="isArtistLiked"
           :clickCallback="handleClickOnFavoriteIcon"
         />
-        <PlaylistPlusIcon
+        <RadioIcon
           class="radioIcon scaleClickFeedback"
           title="Listen to radio"
           @click.stop="handleClickOnArtistRadio"
@@ -46,7 +46,7 @@ import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
 import ToggableFavoriteIcon from "@/components/common/ToggableFavoriteIcon.vue";
 import LoadArtistListItem from "@/components/common/LoadArtistListItem.vue";
 import ArtistDiscography from "@/components/common/ArtistDiscography.vue";
-import PlaylistPlusIcon from "@/components/icons/PlaylistPlusIcon.vue";
+import RadioIcon from "@/components/icons/RadioIcon.vue";
 import { usePlaybackStore } from "@/store/playback";
 
 const props = defineProps({
