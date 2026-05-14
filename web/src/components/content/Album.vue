@@ -11,7 +11,7 @@
         class="playAlbumIcon scaleClickFeedback bigIcon"
         @click.stop="handleClickOnPlayAlbum"
       />
-      <PlaylistPlusIcon
+      <RadioIcon
         class="playAlbumIcon scaleClickFeedback bigIcon radioIcon"
         title="Listen to radio"
         @click.stop="handleClickOnAlbumRadio"
@@ -104,7 +104,7 @@ import { ref, watch, onMounted, computed } from "vue";
 import { chooseAlbumCoverImageUrl } from "@/utils";
 import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
 import PlayIcon from "@/components/icons/PlayIcon.vue";
-import PlaylistPlusIcon from "@/components/icons/PlaylistPlusIcon.vue";
+import RadioIcon from "@/components/icons/RadioIcon.vue";
 import { usePlaybackStore } from "@/store/playback";
 import { useUserStore } from "@/store/user";
 import { useRemoteStore } from "@/store/remote";
