@@ -6,6 +6,8 @@ interface ArtistScreenActions {
 
     fun clickOnArtistImage(imageUrl: String?)
 
+    fun clickOnRadio()
+
     fun loadMoreAlbums()
 
     fun loadMoreFeatures()

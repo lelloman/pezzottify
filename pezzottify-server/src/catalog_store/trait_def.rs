@@ -383,6 +383,16 @@ pub trait CatalogStore: Send + Sync {
     /// Get random tracks for a genre (for radio/shuffle feature).
     fn get_random_tracks_by_genre(&self, genre: &str, limit: usize) -> Result<Vec<String>>;
 
+    /// Get available track IDs from an album in disc/track order.
+    fn get_available_album_track_ids(&self, _album_id: &str) -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+
+    /// Get the most popular available tracks credited to an artist.
+    fn get_artist_top_track_ids(&self, _artist_id: &str, _limit: usize) -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+
     // =========================================================================
     // Duration Fingerprint Matching
     // =========================================================================

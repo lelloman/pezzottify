@@ -18,5 +18,6 @@ data class SyncedUserSetting(
     val key: String
         get() = when (setting) {
             is UserSetting.NotifyWhatsNew -> "notify_whatsnew"
+            is UserSetting.SmartContinuationEnabled -> "smart_continuation_enabled"
         }
 }

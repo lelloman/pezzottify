@@ -39,6 +39,12 @@ class PlayerScreenViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            interactor.getSmartContinuationEnabled().collect { enabled ->
+                mutableState.value = mutableState.value.copy(smartContinuationEnabled = enabled)
+            }
+        }
+
+        viewModelScope.launch {
             interactor.getPlaybackState().collect { playbackState ->
                 val currentState = mutableState.value
                 mutableState.value = when (playbackState) {
@@ -108,6 +114,12 @@ class PlayerScreenViewModel @Inject constructor(
 
     override fun clickOnRepeat() = interactor.cycleRepeatMode()
 
+    override fun toggleSmartContinuation() {
+        viewModelScope.launch {
+            interactor.toggleSmartContinuation()
+        }
+    }
+
     override fun retry() = interactor.retry()
 
     override fun exitRemoteMode() = interactor.exitRemoteMode()
@@ -116,6 +128,7 @@ class PlayerScreenViewModel @Inject constructor(
         fun getPlaybackState(): Flow<PlaybackState?>
         fun getRemoteDeviceName(): Flow<String?>
         fun getHasOtherDeviceConnected(): Flow<Boolean>
+        fun getSmartContinuationEnabled(): Flow<Boolean>
         fun togglePlayPause()
         fun skipToNext()
         fun skipToPrevious()
@@ -124,6 +137,7 @@ class PlayerScreenViewModel @Inject constructor(
         fun toggleMute()
         fun toggleShuffle()
         fun cycleRepeatMode()
+        suspend fun toggleSmartContinuation()
         fun retry()
         fun exitRemoteMode()
 

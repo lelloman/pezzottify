@@ -64,6 +64,14 @@
         @update:stratDrag="startDraggingVolumeProgress"
         @update:stopDrag="handleSetVolume"
       />
+      <div
+        class="lightControlFill scaleClickFeedback scalingIcon mediumIcon smartContinuationButton"
+        :class="{ active: smartContinuationEnabled }"
+        title="Smart continuation"
+        @click="toggleSmartContinuation"
+      >
+        <PlaylistPlusIcon />
+      </div>
       <DeviceSelector />
       <ControlIconButton v-if="playback.mode === 'local'" :action="handleStop" :icon="StopIcon" />
     </div>
@@ -90,6 +98,8 @@ import { useRouter } from "vue-router";
 import TrackName from "./common/TrackName.vue";
 import { useStaticsStore } from "@/store/statics";
 import DeviceSelector from "./DeviceSelector.vue";
+import PlaylistPlusIcon from "./icons/PlaylistPlusIcon.vue";
+import { useUserStore } from "@/store/user";
 
 const ControlIconButton = {
   props: ["icon", "action", "big"],
@@ -115,6 +125,7 @@ const ControlIconButton = {
 const router = useRouter();
 const playback = usePlaybackStore();
 const staticsStore = useStaticsStore();
+const userStore = useUserStore();
 // Track whether there's any playback to display
 const hasPlayback = computed(() => {
   return playback.currentTrackId;
@@ -133,6 +144,10 @@ const computedVolumePercent = computed(() => {
     draggingVolumePercent.value ?? (playback.muted ? 0.0 : playback.volume)
   );
 });
+
+const smartContinuationEnabled = computed(
+  () => userStore.isSmartContinuationEnabled,
+);
 
 // Track display state
 const displayTrack = ref(null);
@@ -226,6 +241,10 @@ const handleSetVolume = () => {
     playback.setMuted(false);
     draggingVolumePercent.value = null;
   }
+};
+
+const toggleSmartContinuation = () => {
+  userStore.setSmartContinuationEnabled(!userStore.isSmartContinuationEnabled);
 };
 
 // ============================================
@@ -500,6 +519,10 @@ watch(
   width: 32px;
   height: 32px;
   padding: var(--spacing-1);
+}
+
+.smartContinuationButton.active {
+  color: var(--spotify-green);
 }
 
 .bigIcon {

@@ -17,6 +17,8 @@ interface SettingsScreenActions {
 
     fun setNotifyWhatsNewEnabled(enabled: Boolean)
 
+    fun setSmartContinuationEnabled(enabled: Boolean)
+
     fun setBackgroundSyncInterval(interval: BackgroundSyncInterval)
 
     fun setSmartSearchEnabled(enabled: Boolean)

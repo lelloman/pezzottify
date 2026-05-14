@@ -7,6 +7,9 @@ import com.lelloman.pezzottify.android.domain.player.PlatformPlayer
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext
 import com.lelloman.pezzottify.android.domain.player.PlaybackStateStore
+import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
+import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
+import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.statics.Album
 import com.lelloman.pezzottify.android.domain.statics.StaticsItem
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
@@ -32,6 +35,8 @@ class PlayerImpl(
     private val configStore: ConfigStore,
     private val userPlaylistStore: UserPlaylistStore,
     private val playbackStateStore: PlaybackStateStore,
+    private val userSettingsStore: UserSettingsStore,
+    private val remoteApiClient: RemoteApiClient,
     private val coroutineScope: CoroutineScope,
 ) : PezzottifyPlayer, ControlsAndStatePlayer by platformPlayer {
 
@@ -39,6 +44,9 @@ class PlayerImpl(
 
     private var loadNexPlaylistJob: Job? = null
     private var statePersistenceJob: Job? = null
+    private var smartContinuationJob: Job? = null
+    private var smartContinuationRequestJob: Job? = null
+    private var smartContinuationInFlightSignature: String? = null
     private var restorationAttempted = false
     private var restorationInProgress = false
 
@@ -90,6 +98,19 @@ class PlayerImpl(
                 )
             }
         }
+
+        smartContinuationJob?.cancel()
+        smartContinuationJob = coroutineScope.launch(Dispatchers.Main) {
+            combine(
+                playbackPlaylist,
+                platformPlayer.currentTrackIndex,
+                userSettingsStore.isSmartContinuationEnabled,
+            ) { playlist, index, enabled ->
+                SmartContinuationState(playlist, index, enabled)
+            }.collect { state ->
+                maybeFetchSmartContinuation(state)
+            }
+        }
     }
 
     private data class SaveStateData(
@@ -98,6 +119,45 @@ class PlayerImpl(
         val trackIndex: Int?,
         val progressSec: Int?,
     )
+
+    private data class SmartContinuationState(
+        val playlist: PlaybackPlaylist?,
+        val trackIndex: Int?,
+        val enabled: Boolean,
+    )
+
+    private fun maybeFetchSmartContinuation(state: SmartContinuationState) {
+        val playlist = state.playlist ?: return
+        val trackIndex = state.trackIndex ?: return
+        if (!state.enabled) return
+        if (playlist.tracksIds.isEmpty() || trackIndex != playlist.tracksIds.lastIndex) return
+
+        val signature = "$trackIndex:${playlist.tracksIds.joinToString(",")}"
+        if (smartContinuationInFlightSignature == signature) return
+
+        smartContinuationInFlightSignature = signature
+        smartContinuationRequestJob?.cancel()
+        smartContinuationRequestJob = coroutineScope.launch(Dispatchers.Main) {
+            val contextTrackIds = playlist.tracksIds
+                .take(trackIndex + 1)
+                .takeLast(10)
+            val response = remoteApiClient.getContinuationRecommendations(
+                contextTrackIds = contextTrackIds,
+                excludeTrackIds = playlist.tracksIds,
+                count = 1,
+            )
+            if (smartContinuationInFlightSignature != signature) return@launch
+            smartContinuationInFlightSignature = null
+            val currentPlaylist = mutablePlaybackPlaylist.value ?: return@launch
+            val currentIndex = platformPlayer.currentTrackIndex.value ?: return@launch
+            val currentSignature = "$currentIndex:${currentPlaylist.tracksIds.joinToString(",")}"
+            if (currentSignature != signature) return@launch
+
+            val nextTrackId = (response as? RemoteApiResponse.Success)?.data?.firstOrNull()
+                ?: return@launch
+            addTracksToPlaylist(listOf(nextTrackId))
+        }
+    }
 
     /**
      * Attempts to restore a previously saved playback state.
@@ -314,6 +374,21 @@ class PlayerImpl(
         }
     }
 
+    override fun loadTrackIds(trackIds: List<String>) {
+        if (trackIds.isEmpty()) return
+        runOnPlayerThread {
+            loadNexPlaylistJob?.cancel()
+            val baseUrl = configStore.baseUrl.value
+            val urls = trackIds.map { "$baseUrl/v1/content/stream/$it" }
+            platformPlayer.loadPlaylist(urls, playWhenReady = true)
+            mutablePlaybackPlaylist.value = PlaybackPlaylist(
+                context = PlaybackPlaylistContext.UserMix,
+                tracksIds = trackIds,
+            )
+            logger.info("Loaded radio/user mix with ${trackIds.size} tracks")
+        }
+    }
+
     override fun forward10Sec() {
         platformPlayer.forward10Sec( )
     }
@@ -434,6 +509,9 @@ class PlayerImpl(
     override fun clearSession() {
         loadNexPlaylistJob?.cancel()
         loadNexPlaylistJob = null
+        smartContinuationRequestJob?.cancel()
+        smartContinuationRequestJob = null
+        smartContinuationInFlightSignature = null
         mutablePlaybackPlaylist.value = null
         platformPlayer.clearSession()
         // Clear persisted state on logout so we don't restore stale session

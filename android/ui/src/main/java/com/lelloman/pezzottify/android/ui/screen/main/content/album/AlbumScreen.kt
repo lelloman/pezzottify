@@ -181,6 +181,9 @@ private fun AlbumScreenContent(
             onPlaySingle = {
                 actions.playTrackDirectly(track.id)
             },
+            onRadio = {
+                actions.playTrackRadio(track.id)
+            },
             onAddToQueue = {
                 actions.addTrackToQueue(track.id)
                 showSnackbar(context.getString(R.string.added_to_queue))
@@ -208,6 +211,9 @@ private fun AlbumScreenContent(
             onDismiss = { showAlbumSheet = false },
             onPlay = {
                 actions.clickOnPlayAlbum(state.album.id)
+            },
+            onRadio = {
+                actions.playAlbumRadio(state.album.id)
             },
             onAddToQueue = {
                 actions.addAlbumToQueue(state.album.id)

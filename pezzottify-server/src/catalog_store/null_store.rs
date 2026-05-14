@@ -210,6 +210,14 @@ impl CatalogStore for NullCatalogStore {
         Ok(Vec::new())
     }
 
+    fn get_available_album_track_ids(&self, _album_id: &str) -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+
+    fn get_artist_top_track_ids(&self, _artist_id: &str, _limit: usize) -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+
     fn get_album_track_durations(&self, _album_id: &str) -> Result<Vec<i64>> {
         Ok(vec![])
     }

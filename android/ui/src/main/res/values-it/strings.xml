@@ -509,6 +509,13 @@
     <string name="no_genres_available">Nessun genere disponibile</string>
     <!-- GENRE SCREENS -->
 
+    <!-- PLAYBACK SETTINGS -->
+    <string name="playback_section">Riproduzione</string>
+    <string name="smart_continuation">Continuazione intelligente</string>
+    <string name="smart_continuation_description">Aggiunge automaticamente un brano correlato quando la coda arriva all\'ultimo brano.</string>
+    <string name="listen_to_radio">Ascolta la radio</string>
+    <!-- PLAYBACK SETTINGS -->
+
     <!-- PLAYLIST -->
     <plurals name="playlist_track_count">
         <item quantity="one">%1$d brano</item>

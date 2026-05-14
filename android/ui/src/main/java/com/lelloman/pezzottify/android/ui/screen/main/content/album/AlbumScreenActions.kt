@@ -11,6 +11,8 @@ interface AlbumScreenActions {
 
     // New actions for bottom sheets
     fun playTrackDirectly(trackId: String)
+    fun playTrackRadio(trackId: String)
+    fun playAlbumRadio(albumId: String)
     fun addTrackToQueue(trackId: String)
     fun addAlbumToQueue(albumId: String)
     fun addTrackToPlaylist(trackId: String, playlistId: String)

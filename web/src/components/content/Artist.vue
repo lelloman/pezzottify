@@ -9,6 +9,11 @@
           :toggled="isArtistLiked"
           :clickCallback="handleClickOnFavoriteIcon"
         />
+        <PlaylistPlusIcon
+          class="radioIcon scaleClickFeedback"
+          title="Listen to radio"
+          @click.stop="handleClickOnArtistRadio"
+        />
       </div>
     </div>
     <div class="relatedArtistsContainer">
@@ -41,6 +46,8 @@ import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
 import ToggableFavoriteIcon from "@/components/common/ToggableFavoriteIcon.vue";
 import LoadArtistListItem from "@/components/common/LoadArtistListItem.vue";
 import ArtistDiscography from "@/components/common/ArtistDiscography.vue";
+import PlaylistPlusIcon from "@/components/icons/PlaylistPlusIcon.vue";
+import { usePlaybackStore } from "@/store/playback";
 
 const props = defineProps({
   artistId: {
@@ -55,6 +62,7 @@ const isArtistLiked = ref(false);
 const userStore = useUserStore();
 const staticsStore = useStaticsStore();
 const remoteStore = useRemoteStore();
+const playback = usePlaybackStore();
 
 let artistDataUnwatcher = null;
 
@@ -89,6 +97,10 @@ watch(
 
 const handleClickOnFavoriteIcon = () => {
   userStore.setArtistIsLiked(props.artistId, !isArtistLiked.value);
+};
+
+const handleClickOnArtistRadio = () => {
+  playback.setRadioFromItem("artist", props.artistId);
 };
 
 watch(
@@ -142,5 +154,16 @@ onMounted(() => {
 
 .verticalFiller {
   flex: 1;
+}
+
+.radioIcon {
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+  color: var(--text-base);
+}
+
+.radioIcon:hover {
+  color: var(--text-bright);
 }
 </style>

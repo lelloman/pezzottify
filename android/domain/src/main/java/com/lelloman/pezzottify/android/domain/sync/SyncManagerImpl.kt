@@ -547,6 +547,9 @@ class SyncManagerImpl internal constructor(
             is UserSetting.NotifyWhatsNew -> {
                 userSettingsStore.setNotifyWhatsNewEnabled(setting.value)
             }
+            is UserSetting.SmartContinuationEnabled -> {
+                userSettingsStore.setSmartContinuationEnabled(setting.value)
+            }
         }
     }
 

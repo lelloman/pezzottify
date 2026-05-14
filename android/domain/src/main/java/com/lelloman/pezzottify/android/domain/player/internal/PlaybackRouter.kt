@@ -271,6 +271,14 @@ class PlaybackRouter @Inject constructor(
         }
     }
 
+    override fun loadTrackIds(trackIds: List<String>) {
+        if (isRemote) {
+            sendRemoteCommand("loadTrackIds", mapOf("trackIds" to trackIds))
+        } else {
+            localPlayer.loadTrackIds(trackIds)
+        }
+    }
+
     override fun goToPreviousPlaylist() {
         if (!isRemote) localPlayer.goToPreviousPlaylist()
     }

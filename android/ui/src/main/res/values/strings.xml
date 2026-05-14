@@ -509,6 +509,13 @@
     <string name="no_genres_available">No genres available</string>
     <!-- GENRE SCREENS -->
 
+    <!-- PLAYBACK SETTINGS -->
+    <string name="playback_section">Playback</string>
+    <string name="smart_continuation">Smart continuation</string>
+    <string name="smart_continuation_description">Automatically add a related track when the current queue reaches its final track.</string>
+    <string name="listen_to_radio">Listen to radio</string>
+    <!-- PLAYBACK SETTINGS -->
+
     <!-- PLAYLIST -->
     <plurals name="playlist_track_count">
         <item quantity="one">%1$d track</item>

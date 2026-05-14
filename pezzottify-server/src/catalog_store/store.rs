@@ -2850,6 +2850,52 @@ impl CatalogStore for SqliteCatalogStore {
         Ok(track_ids)
     }
 
+    fn get_available_album_track_ids(&self, album_id: &str) -> Result<Vec<String>> {
+        let conn = self.get_read_conn();
+        let conn = conn.lock().unwrap();
+
+        let mut stmt = conn.prepare_cached(
+            "SELECT t.id
+             FROM tracks t
+             INNER JOIN albums a ON t.album_rowid = a.rowid
+             WHERE a.id = ?1 AND t.track_available = 1
+             ORDER BY t.disc_number, t.track_number, t.id",
+        )?;
+
+        let track_ids = stmt
+            .query_map(params![album_id], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(track_ids)
+    }
+
+    fn get_artist_top_track_ids(&self, artist_id: &str, limit: usize) -> Result<Vec<String>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let conn = self.get_read_conn();
+        let conn = conn.lock().unwrap();
+
+        let mut stmt = conn.prepare_cached(
+            "SELECT DISTINCT t.id, t.popularity
+             FROM tracks t
+             INNER JOIN track_artists ta ON t.rowid = ta.track_rowid
+             INNER JOIN artists a ON ta.artist_rowid = a.rowid
+             WHERE a.id = ?1 AND t.track_available = 1
+             ORDER BY t.popularity DESC, t.id
+             LIMIT ?2",
+        )?;
+
+        let track_ids = stmt
+            .query_map(params![artist_id, limit as i64], |row| {
+                row.get::<_, String>(0)
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(track_ids)
+    }
+
     fn find_albums_by_fingerprint(
         &self,
         track_count: i32,

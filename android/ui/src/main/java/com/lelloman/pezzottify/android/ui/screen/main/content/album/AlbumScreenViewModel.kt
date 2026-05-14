@@ -144,6 +144,18 @@ class AlbumScreenViewModel @AssistedInject constructor(
         interactor.playTrackDirectly(trackId)
     }
 
+    override fun playTrackRadio(trackId: String) {
+        viewModelScope.launch {
+            interactor.playRadio("track", trackId)
+        }
+    }
+
+    override fun playAlbumRadio(albumId: String) {
+        viewModelScope.launch {
+            interactor.playRadio("album", albumId)
+        }
+    }
+
     override fun addTrackToQueue(trackId: String) {
         interactor.addTrackToQueue(trackId)
     }
@@ -220,6 +232,7 @@ class AlbumScreenViewModel @AssistedInject constructor(
 
         // Methods for bottom sheet actions
         fun playTrackDirectly(trackId: String)
+        suspend fun playRadio(entityType: String, entityId: String)
         fun addTrackToQueue(trackId: String)
         fun addAlbumToQueue(albumId: String)
         suspend fun addTrackToPlaylist(trackId: String, playlistId: String)

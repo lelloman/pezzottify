@@ -9,6 +9,7 @@ interface PlayerScreenActions {
     fun toggleMute()
     fun clickOnShuffle()
     fun clickOnRepeat()
+    fun toggleSmartContinuation()
     fun retry()
     fun exitRemoteMode()
 }

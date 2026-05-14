@@ -82,6 +82,12 @@ class ArtistScreenViewModel @AssistedInject constructor(
         }
     }
 
+    override fun clickOnRadio() {
+        viewModelScope.launch {
+            interactor.playRadio(artistId)
+        }
+    }
+
     override fun loadMoreAlbums() {
         viewModelScope.launch {
             interactor.fetchMoreDiscography(artistId)
@@ -107,6 +113,7 @@ class ArtistScreenViewModel @AssistedInject constructor(
         fun logViewedArtist(artistId: String)
         fun isLiked(contentId: String): Flow<Boolean>
         fun toggleLike(contentId: String, currentlyLiked: Boolean)
+        suspend fun playRadio(artistId: String)
         fun observeDiscographyState(artistId: String): Flow<DiscographyUiState>
         suspend fun fetchFirstDiscographyPage(artistId: String)
         suspend fun fetchMoreDiscography(artistId: String)

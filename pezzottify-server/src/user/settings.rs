@@ -15,6 +15,11 @@ pub enum UserSetting {
     #[serde(rename = "notify_whatsnew")]
     NotifyWhatsNew(bool),
 
+    /// Whether clients should extend the active playback queue automatically
+    /// when the listener reaches the last queued track.
+    #[serde(rename = "smart_continuation_enabled")]
+    SmartContinuationEnabled(bool),
+
     /// Legacy setting that has been removed. Kept for backwards compatibility
     /// with old sync events in the database. Should be filtered out when reading.
     #[serde(rename = "enable_external_search")]
@@ -28,6 +33,7 @@ impl UserSetting {
     pub fn key(&self) -> &'static str {
         match self {
             Self::NotifyWhatsNew(_) => "notify_whatsnew",
+            Self::SmartContinuationEnabled(_) => "smart_continuation_enabled",
             Self::EnableExternalSearch(_) => "enable_external_search",
         }
     }
@@ -37,6 +43,7 @@ impl UserSetting {
     pub fn value_to_string(&self) -> String {
         match self {
             Self::NotifyWhatsNew(enabled) => enabled.to_string(),
+            Self::SmartContinuationEnabled(enabled) => enabled.to_string(),
             Self::EnableExternalSearch(enabled) => enabled.to_string(),
         }
     }
@@ -60,6 +67,12 @@ impl UserSetting {
                     .map_err(|_| format!("Invalid boolean value for {}: {}", key, value))?;
                 Ok(Self::NotifyWhatsNew(enabled))
             }
+            "smart_continuation_enabled" => {
+                let enabled = value
+                    .parse::<bool>()
+                    .map_err(|_| format!("Invalid boolean value for {}: {}", key, value))?;
+                Ok(Self::SmartContinuationEnabled(enabled))
+            }
             // Legacy setting - still parseable for backwards compat but deprecated
             "enable_external_search" => {
                 let enabled = value
@@ -73,7 +86,10 @@ impl UserSetting {
 
     /// Check if a key is a known setting key (including deprecated ones).
     pub fn is_known_key(key: &str) -> bool {
-        matches!(key, "notify_whatsnew" | "enable_external_search")
+        matches!(
+            key,
+            "notify_whatsnew" | "smart_continuation_enabled" | "enable_external_search"
+        )
     }
 
     /// Get the default value for a setting by key.
@@ -81,6 +97,7 @@ impl UserSetting {
     pub fn default_for_key(key: &str) -> Option<Self> {
         match key {
             "notify_whatsnew" => Some(Self::NotifyWhatsNew(false)),
+            "smart_continuation_enabled" => Some(Self::SmartContinuationEnabled(false)),
             // Don't provide defaults for deprecated settings
             "enable_external_search" => None,
             _ => None,

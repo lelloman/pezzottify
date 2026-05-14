@@ -25,6 +25,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchSection
 import com.lelloman.pezzottify.android.domain.settings.BackgroundSyncInterval
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateNotifyWhatsNewSetting
+import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateSmartContinuationSetting
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.statics.usecase.GetGenres
@@ -436,6 +437,7 @@ class InteractorsModule {
         userSettingsStore: UserSettingsStore,
         storageMonitor: com.lelloman.pezzottify.android.domain.storage.StorageMonitor,
         updateNotifyWhatsNewSetting: UpdateNotifyWhatsNewSetting,
+        updateSmartContinuationSetting: UpdateSmartContinuationSetting,
         logFileManager: LogFileManager,
         configStore: ConfigStore,
         permissionsStore: PermissionsStore,
@@ -468,6 +470,9 @@ class InteractorsModule {
         override fun isNotifyWhatsNewEnabled(): Boolean =
             userSettingsStore.isNotifyWhatsNewEnabled.value
 
+        override fun isSmartContinuationEnabled(): Boolean =
+            userSettingsStore.isSmartContinuationEnabled.value
+
         override fun getBackgroundSyncInterval() = userSettingsStore.backgroundSyncInterval.value
 
         override fun isSmartSearchEnabled(): Boolean = userSettingsStore.isSmartSearchEnabled.value
@@ -477,6 +482,9 @@ class InteractorsModule {
 
         override fun observeNotifyWhatsNewEnabled(): Flow<Boolean> =
             userSettingsStore.isNotifyWhatsNewEnabled
+
+        override fun observeSmartContinuationEnabled(): Flow<Boolean> =
+            userSettingsStore.isSmartContinuationEnabled
 
         override fun observeBackgroundSyncInterval() = userSettingsStore.backgroundSyncInterval
 
@@ -488,6 +496,10 @@ class InteractorsModule {
 
         override suspend fun setNotifyWhatsNewEnabled(enabled: Boolean) {
             updateNotifyWhatsNewSetting(enabled)
+        }
+
+        override suspend fun setSmartContinuationEnabled(enabled: Boolean) {
+            updateSmartContinuationSetting(enabled)
         }
 
         override fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) {
@@ -978,6 +990,7 @@ class InteractorsModule {
         staticsStore: StaticsStore,
         playlistSynchronizer: PlaylistSynchronizer,
         permissionsStore: PermissionsStore,
+        remoteApiClient: RemoteApiClient,
         downloadStatusRepository: com.lelloman.pezzottify.android.domain.download.DownloadStatusRepository,
         requestAlbumDownloadUseCase: com.lelloman.pezzottify.android.domain.download.RequestAlbumDownloadUseCase,
         getMyDownloadRequestsUseCase: com.lelloman.pezzottify.android.domain.download.GetMyDownloadRequestsUseCase,
@@ -1028,6 +1041,17 @@ class InteractorsModule {
 
         override fun playTrackDirectly(trackId: String) {
             player.loadSingleTrack(trackId)
+        }
+
+        override suspend fun playRadio(entityType: String, entityId: String) {
+            when (val response = remoteApiClient.getRadioTrackIds(entityType, entityId, 50)) {
+                is RemoteApiResponse.Success -> {
+                    if (response.data.isNotEmpty()) {
+                        player.loadTrackIds(response.data)
+                    }
+                }
+                is RemoteApiResponse.Error -> Unit
+            }
         }
 
         override fun addTrackToQueue(trackId: String) {
@@ -1168,6 +1192,8 @@ class InteractorsModule {
         getLikedStateUseCase: GetLikedStateUseCase,
         toggleLikeUseCase: ToggleLikeUseCase,
         staticsProvider: StaticsProvider,
+        remoteApiClient: RemoteApiClient,
+        player: PezzottifyPlayer,
     ): ArtistScreenViewModel.Interactor = object : ArtistScreenViewModel.Interactor {
         override fun logViewedArtist(artistId: String) {
             logViewedContentUseCase(artistId, ViewedContent.Type.Artist)
@@ -1179,6 +1205,17 @@ class InteractorsModule {
 
         override fun toggleLike(contentId: String, currentlyLiked: Boolean) {
             toggleLikeUseCase(contentId, DomainLikedContent.ContentType.Artist, currentlyLiked)
+        }
+
+        override suspend fun playRadio(artistId: String) {
+            when (val response = remoteApiClient.getRadioTrackIds("artist", artistId, 50)) {
+                is RemoteApiResponse.Success -> {
+                    if (response.data.isNotEmpty()) {
+                        player.loadTrackIds(response.data)
+                    }
+                }
+                is RemoteApiResponse.Error -> Unit
+            }
         }
 
         override fun observeDiscographyState(artistId: String) =
@@ -1417,6 +1454,8 @@ class InteractorsModule {
         playbackMetadataProvider: com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider,
         playbackModeManager: com.lelloman.pezzottify.android.domain.player.PlaybackModeManager,
         playbackSessionHandler: PlaybackSessionHandler,
+        userSettingsStore: UserSettingsStore,
+        updateSmartContinuationSetting: UpdateSmartContinuationSetting,
     ): PlayerScreenViewModel.Interactor =
         object : PlayerScreenViewModel.Interactor {
             override fun getPlaybackState(): Flow<PlayerScreenViewModel.Interactor.PlaybackState?> =
@@ -1578,6 +1617,13 @@ class InteractorsModule {
                         devices.size > 1
                     }
                 }
+
+            override fun getSmartContinuationEnabled(): Flow<Boolean> =
+                userSettingsStore.isSmartContinuationEnabled
+
+            override suspend fun toggleSmartContinuation() {
+                updateSmartContinuationSetting(!userSettingsStore.isSmartContinuationEnabled.value)
+            }
 
             override fun exitRemoteMode() {
                 val currentRemote =

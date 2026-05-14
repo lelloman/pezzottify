@@ -34,6 +34,7 @@ fun AlbumActionsBottomSheet(
     sheetState: SheetState,
     onDismiss: () -> Unit,
     onPlay: () -> Unit,
+    onRadio: (() -> Unit)? = null,
     onAddToQueue: () -> Unit,
     onAddToPlaylist: () -> Unit,
 ) {
@@ -72,6 +73,17 @@ fun AlbumActionsBottomSheet(
                     onDismiss()
                 }
             )
+
+            onRadio?.let { radioAction ->
+                AlbumActionItem(
+                    iconRes = R.drawable.baseline_queue_music_24,
+                    label = stringResource(R.string.listen_to_radio),
+                    onClick = {
+                        radioAction()
+                        onDismiss()
+                    }
+                )
+            }
 
             AlbumActionItem(
                 iconRes = R.drawable.baseline_queue_music_24,

@@ -318,11 +318,13 @@ private fun PlayerScreenContent(
                     hasPrevious = state.hasPreviousTrack,
                     shuffleEnabled = state.shuffleEnabled,
                     repeatMode = state.repeatMode,
+                    smartContinuationEnabled = state.smartContinuationEnabled,
                     onPlayPause = actions::clickOnPlayPause,
                     onSkipNext = actions::clickOnSkipNext,
                     onSkipPrevious = actions::clickOnSkipPrevious,
                     onShuffle = actions::clickOnShuffle,
                     onRepeat = actions::clickOnRepeat,
+                    onSmartContinuation = actions::toggleSmartContinuation,
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -452,11 +454,13 @@ private fun PlaybackControls(
     hasPrevious: Boolean,
     shuffleEnabled: Boolean,
     repeatMode: RepeatModeUi,
+    smartContinuationEnabled: Boolean,
     onPlayPause: () -> Unit,
     onSkipNext: () -> Unit,
     onSkipPrevious: () -> Unit,
     onShuffle: () -> Unit,
     onRepeat: () -> Unit,
+    onSmartContinuation: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -555,6 +559,22 @@ private fun PlaybackControls(
                 tint = when (repeatMode) {
                     RepeatModeUi.OFF -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     RepeatModeUi.ALL, RepeatModeUi.ONE -> MaterialTheme.colorScheme.primary
+                }
+            )
+        }
+
+        IconButton(
+            onClick = onSmartContinuation,
+            modifier = Modifier.size(48.dp),
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.baseline_playlist_add_24),
+                contentDescription = stringResource(R.string.smart_continuation),
+                modifier = Modifier.size(24.dp),
+                tint = if (smartContinuationEnabled) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 }
             )
         }
