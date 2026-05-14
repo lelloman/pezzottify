@@ -31,6 +31,8 @@ use crate::{
 use axum_extra::extract::cookie::{Cookie, SameSite};
 use tower_http::services::{ServeDir, ServeFile};
 
+const AUDIO_EMBEDDING_COVERAGE_TIMEOUT: Duration = Duration::from_secs(20);
+
 use axum::{
     body::Body,
     extract::{DefaultBodyLimit, Path, Query, State},
@@ -3345,14 +3347,43 @@ async fn admin_get_audio_embedding_coverage(
         .map(|spec| spec.target_namespace.clone())
         .collect::<Vec<_>>();
 
-    match (
-        state
-            .catalog_store
-            .get_track_embedding_coverage(&namespaces),
-        state
-            .catalog_store
-            .get_album_embedding_coverage(&album_namespaces, &state.config.media_path),
-    ) {
+    let catalog_store = Arc::clone(&state.catalog_store);
+    let media_path = state.config.media_path.clone();
+    let coverage_result = tokio::time::timeout(
+        AUDIO_EMBEDDING_COVERAGE_TIMEOUT,
+        tokio::task::spawn_blocking(move || {
+            let track_coverage = catalog_store.get_track_embedding_coverage(&namespaces);
+            let album_coverage =
+                catalog_store.get_album_embedding_coverage(&album_namespaces, &media_path);
+            (track_coverage, album_coverage)
+        }),
+    )
+    .await;
+
+    let (coverage_result, album_coverage_result) = match coverage_result {
+        Ok(Ok(result)) => result,
+        Ok(Err(e)) => {
+            error!("Failed to join audio embedding coverage task: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to get audio embedding coverage"})),
+            )
+                .into_response();
+        }
+        Err(_) => {
+            warn!(
+                "Audio embedding coverage timed out after {:?}",
+                AUDIO_EMBEDDING_COVERAGE_TIMEOUT
+            );
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "Audio embedding coverage timed out"})),
+            )
+                .into_response();
+        }
+    };
+
+    match (coverage_result, album_coverage_result) {
         (Ok(coverage), Ok(album_coverage)) => {
             debug!(
                 "User {} retrieved audio embedding coverage: missing_any={}",
