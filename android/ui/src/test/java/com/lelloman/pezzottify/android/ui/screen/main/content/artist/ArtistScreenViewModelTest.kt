@@ -168,6 +168,7 @@ class ArtistScreenViewModelTest {
         var loggedViewedArtistId: String? = null
         var lastToggleLikeContentId: String? = null
         var lastToggleLikeCurrentlyLiked: Boolean? = null
+        var lastRadioArtistId: String? = null
 
         override fun logViewedArtist(artistId: String) {
             loggedViewedArtistId = artistId
@@ -179,6 +180,10 @@ class ArtistScreenViewModelTest {
         override fun toggleLike(contentId: String, currentlyLiked: Boolean) {
             lastToggleLikeContentId = contentId
             lastToggleLikeCurrentlyLiked = currentlyLiked
+        }
+
+        override suspend fun playRadio(artistId: String) {
+            lastRadioArtistId = artistId
         }
 
         override fun observeDiscographyState(artistId: String): Flow<ArtistScreenViewModel.DiscographyUiState> =

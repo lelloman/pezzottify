@@ -370,6 +370,8 @@ class AlbumScreenViewModelTest {
         var lastPlayedAlbumId: String? = null
         var lastPlayedTrackAlbumId: String? = null
         var lastPlayedTrackId: String? = null
+        var lastRadioEntityType: String? = null
+        var lastRadioEntityId: String? = null
         var loggedViewedAlbumId: String? = null
         var lastToggleLikeContentId: String? = null
         var lastToggleLikeCurrentlyLiked: Boolean? = null
@@ -414,6 +416,11 @@ class AlbumScreenViewModelTest {
 
         override fun playTrackDirectly(trackId: String) {
             lastPlayTrackDirectlyId = trackId
+        }
+
+        override suspend fun playRadio(entityType: String, entityId: String) {
+            lastRadioEntityType = entityType
+            lastRadioEntityId = entityId
         }
 
         override fun addTrackToQueue(trackId: String) {

@@ -249,6 +249,7 @@ class PlayerScreenViewModelTest {
 
     private class FakeInteractor : PlayerScreenViewModel.Interactor {
         val playbackStateFlow = MutableStateFlow<PlayerScreenViewModel.Interactor.PlaybackState?>(null)
+        val smartContinuationEnabledFlow = MutableStateFlow(false)
 
         var togglePlayPauseCalled = false
         var skipToNextCalled = false
@@ -262,6 +263,9 @@ class PlayerScreenViewModelTest {
 
         override fun getPlaybackState(): Flow<PlayerScreenViewModel.Interactor.PlaybackState?> =
             playbackStateFlow
+
+        override fun getSmartContinuationEnabled(): Flow<Boolean> =
+            smartContinuationEnabledFlow
 
         override fun togglePlayPause() {
             togglePlayPauseCalled = true
@@ -293,6 +297,10 @@ class PlayerScreenViewModelTest {
 
         override fun cycleRepeatMode() {
             cycleRepeatModeCalled = true
+        }
+
+        override suspend fun toggleSmartContinuation() {
+            smartContinuationEnabledFlow.value = !smartContinuationEnabledFlow.value
         }
 
         override fun retry() {
