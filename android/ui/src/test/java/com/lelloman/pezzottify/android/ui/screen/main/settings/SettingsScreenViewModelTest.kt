@@ -265,6 +265,7 @@ class SettingsScreenViewModelTest {
         private var _hasLogFiles = false
         private var _logFilesSize = ""
         private var _baseUrl = ""
+        private var _smartContinuationEnabled = false
 
         val themeModeFlow = MutableStateFlow(ThemeMode.Default)
         val colorPaletteFlow = MutableStateFlow(ColorPalette.Default)
@@ -272,11 +273,13 @@ class SettingsScreenViewModelTest {
         val cacheEnabledFlow = MutableStateFlow(true)
         val storageInfoFlow = MutableStateFlow(StorageInfo(0L, 0L, 0L, StoragePressureLevel.LOW))
         val fileLoggingEnabledFlow = MutableStateFlow(false)
+        val smartContinuationEnabledFlow = MutableStateFlow(false)
 
         var lastSetThemeMode: ThemeMode? = null
         var lastSetColorPalette: ColorPalette? = null
         var lastSetFontFamily: AppFontFamily? = null
         var lastSetCacheEnabled: Boolean? = null
+        var lastSetSmartContinuationEnabled: Boolean? = null
         var lastSetFileLoggingEnabled: Boolean? = null
         var clearLogsCalled = false
         var setBaseUrlCallCount = 0
@@ -324,6 +327,7 @@ class SettingsScreenViewModelTest {
         override fun getLogFilesSize(): String = _logFilesSize
         override fun getBaseUrl(): String = _baseUrl
         override fun isNotifyWhatsNewEnabled(): Boolean = false
+        override fun isSmartContinuationEnabled(): Boolean = _smartContinuationEnabled
         override fun getBackgroundSyncInterval() = BackgroundSyncInterval.Default
         override fun isSmartSearchEnabled(): Boolean = false
         override fun isExcludeUnavailableEnabled(): Boolean = true
@@ -335,6 +339,7 @@ class SettingsScreenViewModelTest {
         override fun observeStorageInfo(): Flow<StorageInfo> = storageInfoFlow
         override fun observeFileLoggingEnabled(): Flow<Boolean> = fileLoggingEnabledFlow
         override fun observeNotifyWhatsNewEnabled(): Flow<Boolean> = MutableStateFlow(false)
+        override fun observeSmartContinuationEnabled(): Flow<Boolean> = smartContinuationEnabledFlow
         override fun observeBackgroundSyncInterval() = MutableStateFlow(BackgroundSyncInterval.Default)
         override fun observeSmartSearchEnabled(): Flow<Boolean> = MutableStateFlow(false)
         override fun observeExcludeUnavailableEnabled(): Flow<Boolean> = MutableStateFlow(true)
@@ -357,6 +362,12 @@ class SettingsScreenViewModelTest {
 
         override suspend fun setNotifyWhatsNewEnabled(enabled: Boolean) {
             // no-op for tests
+        }
+
+        override suspend fun setSmartContinuationEnabled(enabled: Boolean) {
+            _smartContinuationEnabled = enabled
+            smartContinuationEnabledFlow.value = enabled
+            lastSetSmartContinuationEnabled = enabled
         }
 
         override fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) {
