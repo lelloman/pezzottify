@@ -1750,24 +1750,17 @@ impl CatalogStore for SqliteCatalogStore {
         namespaces: &[String],
         _media_path: &Path,
     ) -> Result<super::AlbumEmbeddingCoverage> {
-        let albums = self.list_album_tracklists(usize::MAX)?;
-        let complete_album_ids = albums
-            .into_iter()
-            .filter(|album| {
-                !album.tracks.is_empty()
-                    && album.tracks.iter().all(|track| {
-                        track
-                            .audio_uri
-                            .as_deref()
-                            .filter(|uri| !uri.trim().is_empty())
-                            .is_some()
-                    })
-            })
-            .map(|album| album.album_id)
-            .collect::<Vec<_>>();
-        let complete_local_albums = complete_album_ids.len();
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+        let complete_local_albums: usize = conn.query_row(
+            "SELECT COUNT(*)
+             FROM albums
+             WHERE album_availability = 'complete'",
+            [],
+            |r| r.get(0),
+        )?;
 
-        if namespaces.is_empty() || complete_album_ids.is_empty() {
+        if namespaces.is_empty() || complete_local_albums == 0 {
             return Ok(super::AlbumEmbeddingCoverage {
                 complete_local_albums,
                 namespaces: namespaces
@@ -1781,28 +1774,16 @@ impl CatalogStore for SqliteCatalogStore {
             });
         }
 
-        let placeholders = complete_album_ids
-            .iter()
-            .map(|_| "?")
-            .collect::<Vec<_>>()
-            .join(",");
-        let sql = format!(
-            "SELECT COUNT(DISTINCT entity_id)
-             FROM entity_embeddings
-             WHERE entity_type = 'album'
-               AND namespace = ?
-               AND entity_id IN ({placeholders})"
-        );
+        let sql = "SELECT COUNT(DISTINCT entity_id)
+             FROM entity_embeddings e
+             JOIN albums a ON a.id = e.entity_id
+             WHERE e.entity_type = 'album'
+               AND e.namespace = ?1
+               AND a.album_availability = 'complete'";
 
-        let read_conn = self.get_read_conn();
-        let conn = read_conn.lock().unwrap();
         let mut namespace_stats = Vec::with_capacity(namespaces.len());
         for namespace in namespaces {
-            let mut params = Vec::with_capacity(complete_album_ids.len() + 1);
-            params.push(Value::Text(namespace.clone()));
-            params.extend(complete_album_ids.iter().cloned().map(Value::Text));
-            let embedded_albums: usize =
-                conn.query_row(&sql, params_from_iter(params), |r| r.get(0))?;
+            let embedded_albums: usize = conn.query_row(sql, params![namespace], |r| r.get(0))?;
             namespace_stats.push(super::AlbumEmbeddingNamespaceCoverage {
                 namespace: namespace.clone(),
                 embedded_albums,
@@ -3441,11 +3422,15 @@ mod tests {
                 [],
             )
             .unwrap();
-            for album_id in ["complete_album", "uri_only_album", "missing_uri_album"] {
+            for (album_id, availability) in [
+                ("complete_album", "complete"),
+                ("uri_only_album", "complete"),
+                ("missing_uri_album", "partial"),
+            ] {
                 conn.execute(
                     "INSERT INTO albums (id, name, album_type, label, popularity, release_date, release_date_precision, album_availability)
-                     VALUES (?1, ?2, 'album', '', 0, '2024', 'year', 'complete')",
-                    params![album_id, album_id],
+                     VALUES (?1, ?2, 'album', '', 0, '2024', 'year', ?3)",
+                    params![album_id, album_id, availability],
                 )
                 .unwrap();
             }
