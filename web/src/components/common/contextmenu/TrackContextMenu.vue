@@ -1,5 +1,11 @@
 <template>
   <ContextMenu ref="contextMenu" :items="menuItems" />
+  <RadioBuilderModal
+    :isOpen="showRadioBuilder"
+    seedEntityType="track"
+    :seedEntityId="trackId || ''"
+    @close="showRadioBuilder = false"
+  />
 </template>
 
 <script setup>
@@ -12,6 +18,7 @@ import { useUserStore } from "@/store/user";
 import { usePlaybackStore } from "@/store/playback";
 import PlaylistCancelIcon from "@/components/icons/PlaylistCancelIcon.vue";
 import TrashOutlineIcon from "@/components/icons/TrashOutlineIcon.vue";
+import RadioBuilderModal from "@/components/common/RadioBuilderModal.vue";
 
 const props = defineProps({
   canRemoveFromQueue: {
@@ -34,6 +41,7 @@ const playback = usePlaybackStore();
 
 const trackId = ref(null);
 const trackIndex = ref(null);
+const showRadioBuilder = ref(false);
 
 const handleAddToQueueClick = () => {
   console.log("TrackContextMenu handleAddToQueueClick" + trackId.value);
@@ -90,6 +98,16 @@ menuItems.value.push({
   action: () => {
     if (trackId.value) {
       playback.setRadioFromItem("track", trackId.value);
+    }
+  },
+});
+
+menuItems.value.push({
+  icon: markRaw(RadioIcon),
+  name: "Customize radio",
+  action: () => {
+    if (trackId.value) {
+      showRadioBuilder.value = true;
     }
   },
 });

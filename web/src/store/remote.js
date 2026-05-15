@@ -314,6 +314,26 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  const fetchRadioOptions = async () => {
+    try {
+      const response = await axios.get("/v1/content/radio/options");
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching radio options:", error);
+      return null;
+    }
+  };
+
+  const buildRadioTrackIds = async (request) => {
+    try {
+      const response = await axios.post("/v1/content/radio/build", request);
+      return response.data.track_ids || [];
+    } catch (error) {
+      console.error("Error building radio tracks:", error);
+      return [];
+    }
+  };
+
   // Impression tracking (for popularity scoring)
   const recordImpression = async (itemType, itemId) => {
     try {
@@ -1264,6 +1284,8 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchGenreRadio,
     fetchContinuationRecommendations,
     fetchRadioTrackIds,
+    fetchRadioOptions,
+    buildRadioTrackIds,
     recordImpression,
     // Notifications
     markNotificationRead,

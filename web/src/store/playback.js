@@ -643,6 +643,21 @@ export const usePlaybackStore = defineStore("playback", () => {
     return trackIds;
   };
 
+  const setAdvancedRadioFromItem = async (entityType, entityId, radioRequest) => {
+    if (mode.value === "remote") return [];
+    const trackIds = await remoteStore.buildRadioTrackIds({
+      ...radioRequest,
+      seed: {
+        entity_type: entityType,
+        entity_id: entityId,
+      },
+    });
+    if (trackIds.length > 0) {
+      setPlaylistFromTrackIds(trackIds, 0, true);
+    }
+    return trackIds;
+  };
+
   // ============================================
   // Playback controls
   // ============================================
@@ -1034,6 +1049,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     setUserPlaylist,
     setPlaylistFromTrackIds,
     setRadioFromItem,
+    setAdvancedRadioFromItem,
 
     // Playback controls
     play,
