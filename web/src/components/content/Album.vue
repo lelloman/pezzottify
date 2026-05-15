@@ -16,6 +16,9 @@
         title="Listen to radio"
         @click.stop="handleClickOnAlbumRadio"
       />
+      <button class="advancedRadioButton" @click.stop="showRadioBuilder = true">
+        Customize radio
+      </button>
       <ToggableFavoriteIcon
         :toggled="isAlbumLiked"
         :clickCallback="handleClickOnFavoriteIcon"
@@ -93,6 +96,12 @@
       </div>
     </div>
     <TrackContextMenu ref="trackContextMenuRef" />
+    <RadioBuilderModal
+      :isOpen="showRadioBuilder"
+      seedEntityType="album"
+      :seedEntityId="albumId"
+      @close="showRadioBuilder = false"
+    />
   </div>
   <div v-else>
     <p>Loading {{ albumId }}...</p>
@@ -113,6 +122,7 @@ import LoadArtistListItem from "@/components/common/LoadArtistListItem.vue";
 import TrackContextMenu from "@/components/common/contextmenu/TrackContextMenu.vue";
 import LoadTrackListItem from "../common/LoadTrackListItem.vue";
 import { useStaticsStore } from "@/store/statics";
+import RadioBuilderModal from "@/components/common/RadioBuilderModal.vue";
 
 const props = defineProps({
   albumId: {
@@ -132,6 +142,7 @@ const remoteStore = useRemoteStore();
 const currentTrackId = ref(null);
 const currentTrackIndex = ref(null);
 const isAlbumLiked = ref(false);
+const showRadioBuilder = ref(false);
 
 // Download request state
 const isRequesting = ref(false);
@@ -427,6 +438,8 @@ onMounted(() => {
 .commandsSection {
   display: flex;
   flex-direction: row;
+  align-items: center;
+  gap: 16px;
   margin-top: 16px;
   margin-left: 8px;
   margin-right: 8px;
@@ -434,6 +447,20 @@ onMounted(() => {
 
 .commandsSection > div {
   margin-left: 16px;
+}
+
+.advancedRadioButton {
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--accent-color);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-base);
+  cursor: pointer;
+}
+
+.advancedRadioButton:hover {
+  background: var(--highlighted-panel-color);
 }
 
 .artistsContainer {

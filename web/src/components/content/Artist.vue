@@ -14,6 +14,9 @@
           title="Listen to radio"
           @click.stop="handleClickOnArtistRadio"
         />
+        <button class="advancedRadioButton" @click.stop="showRadioBuilder = true">
+          Customize radio
+        </button>
       </div>
     </div>
     <div class="relatedArtistsContainer">
@@ -29,6 +32,12 @@
     <div class="discographyContainer">
       <ArtistDiscography :artistId="artistId" :appearsOn="true" />
     </div>
+    <RadioBuilderModal
+      :isOpen="showRadioBuilder"
+      seedEntityType="artist"
+      :seedEntityId="artistId"
+      @close="showRadioBuilder = false"
+    />
   </div>
 
   <div v-else>
@@ -48,6 +57,7 @@ import LoadArtistListItem from "@/components/common/LoadArtistListItem.vue";
 import ArtistDiscography from "@/components/common/ArtistDiscography.vue";
 import RadioIcon from "@/components/icons/RadioIcon.vue";
 import { usePlaybackStore } from "@/store/playback";
+import RadioBuilderModal from "@/components/common/RadioBuilderModal.vue";
 
 const props = defineProps({
   artistId: {
@@ -59,6 +69,7 @@ const props = defineProps({
 const artist = ref(null);
 const coverUrls = ref(null);
 const isArtistLiked = ref(false);
+const showRadioBuilder = ref(false);
 const userStore = useUserStore();
 const staticsStore = useStaticsStore();
 const remoteStore = useRemoteStore();
@@ -165,5 +176,20 @@ onMounted(() => {
 
 .radioIcon:hover {
   color: var(--text-bright);
+}
+
+.advancedRadioButton {
+  width: fit-content;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--accent-color);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-base);
+  cursor: pointer;
+}
+
+.advancedRadioButton:hover {
+  background: var(--highlighted-panel-color);
 }
 </style>

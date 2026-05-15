@@ -1,6 +1,6 @@
 //! Recommendation routes for smart continuation and radio playback.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use axum::{
@@ -14,7 +14,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
-use crate::catalog_store::{CatalogStore, TrackAvailability};
+use crate::catalog_store::{ArtistRole, CatalogStore, ResolvedTrack, TrackAvailability};
 use crate::config::AudioEmbeddingsSettings;
 
 use super::session::Session;
@@ -24,6 +24,8 @@ const DEFAULT_TRACK_NAMESPACE: &str = "musicfm.mean.v1";
 const DEFAULT_ALBUM_NAMESPACE: &str = "album.musicfm.median.v1";
 const CONTINUATION_CONTEXT_LIMIT: usize = 10;
 const ARTIST_SEED_TRACK_LIMIT: usize = 50;
+const DEFAULT_RADIO_RANDOMNESS: f32 = 0.3;
+const DEFAULT_RADIO_DIVERSITY: f32 = 0.3;
 
 #[derive(Debug, Deserialize)]
 struct ContinuationRequest {
@@ -39,9 +41,132 @@ struct RadioQuery {
     count: Option<usize>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct RadioBuildRequest {
+    seed: RadioSeed,
+    count: Option<usize>,
+    recipe_id: Option<String>,
+    #[serde(default)]
+    criteria: Vec<RadioCriterionRequest>,
+    mode: Option<RadioMode>,
+    #[serde(default)]
+    toward: Vec<RadioReference>,
+    #[serde(default)]
+    away: Vec<RadioReference>,
+    diversity: Option<f32>,
+    randomness: Option<f32>,
+    include_seed_tracks: Option<bool>,
+    filters: Option<RadioFilters>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct RadioSeed {
+    entity_type: String,
+    entity_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct RadioCriterionRequest {
+    namespace: String,
+    weight: f32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct RadioReference {
+    entity_type: String,
+    entity_id: String,
+    weight: Option<f32>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum RadioMode {
+    Similar,
+    Explore,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+struct RadioFilters {
+    #[serde(default)]
+    genres: Vec<String>,
+    release_year_min: Option<i32>,
+    release_year_max: Option<i32>,
+    popularity_min: Option<i32>,
+    popularity_max: Option<i32>,
+    explicit: Option<ExplicitFilter>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum ExplicitFilter {
+    Include,
+    Exclude,
+    Only,
+}
+
 #[derive(Debug, Serialize)]
 struct TrackIdsResponse {
     track_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct RadioOptionsResponse {
+    recipes: Vec<RadioRecipe>,
+    criteria: Vec<RadioCriterionOption>,
+    default_recipe_id: String,
+    modes: Vec<&'static str>,
+    explicit_filters: Vec<&'static str>,
+    count: RadioRangeUsize,
+    diversity: RadioRangeF32,
+    randomness: RadioRangeF32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct RadioRecipe {
+    id: String,
+    name: String,
+    criteria: Vec<RadioCriterionRequestForResponse>,
+    mode: &'static str,
+    diversity: f32,
+    randomness: f32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct RadioCriterionRequestForResponse {
+    namespace: String,
+    weight: f32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct RadioCriterionOption {
+    namespace: String,
+    label: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct RadioRangeUsize {
+    min: usize,
+    max: usize,
+    default: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct RadioRangeF32 {
+    min: f32,
+    max: f32,
+    default: f32,
+}
+
+#[derive(Debug, Clone)]
+struct NormalizedRadioCriterion {
+    namespace: String,
+    weight: f32,
+}
+
+#[derive(Debug)]
+struct CandidateScore {
+    score: f32,
+    best_similarity: f32,
 }
 
 pub fn recommendation_routes() -> Router<ServerState> {
@@ -50,6 +175,8 @@ pub fn recommendation_routes() -> Router<ServerState> {
             "/recommendations/continuation",
             post(post_continuation_recommendations),
         )
+        .route("/radio/options", get(get_radio_options))
+        .route("/radio/build", post(post_radio_build))
         .route("/radio/{entity_type}/{entity_id}", get(get_radio))
 }
 
@@ -141,6 +268,43 @@ async fn get_radio(
     }
 }
 
+async fn get_radio_options(_session: Session, State(state): State<ServerState>) -> Response {
+    no_store_json(radio_options_response(
+        state.config.audio_embeddings.as_ref(),
+    ))
+}
+
+async fn post_radio_build(
+    _session: Session,
+    State(state): State<ServerState>,
+    Json(body): Json<RadioBuildRequest>,
+) -> Response {
+    let catalog_store = Arc::clone(&state.catalog_store);
+    let settings = state.config.audio_embeddings.clone();
+
+    match tokio::task::spawn_blocking(move || {
+        build_radio(catalog_store.as_ref(), settings.as_ref(), body)
+    })
+    .await
+    {
+        Ok(Ok(track_ids)) => no_store_json(TrackIdsResponse { track_ids }),
+        Ok(Err(err)) => {
+            let status = if err.to_string().starts_with("invalid radio request:") {
+                StatusCode::BAD_REQUEST
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            error!("Error building advanced radio: {}", err);
+            (status, err.to_string()).into_response()
+        }
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Internal server error".to_string(),
+        )
+            .into_response(),
+    }
+}
+
 fn no_store_json<T: Serialize>(value: T) -> Response {
     let mut response = Json(value).into_response();
     response.headers_mut().insert(
@@ -170,6 +334,700 @@ fn album_namespace_for_track_namespace(namespace: &str) -> String {
         "ast.instruments.v1" => "album.ast_instruments.median.v1".to_string(),
         _ => format!("album.{namespace}.median"),
     }
+}
+
+fn radio_options_response(settings: Option<&AudioEmbeddingsSettings>) -> RadioOptionsResponse {
+    let namespaces = available_track_namespaces(settings);
+    let criteria = namespaces
+        .iter()
+        .map(|namespace| RadioCriterionOption {
+            namespace: namespace.clone(),
+            label: criterion_label(namespace),
+        })
+        .collect::<Vec<_>>();
+    RadioOptionsResponse {
+        recipes: radio_recipes_for_namespaces(&namespaces),
+        criteria,
+        default_recipe_id: "balanced".to_string(),
+        modes: vec!["similar", "explore"],
+        explicit_filters: vec!["include", "exclude", "only"],
+        count: RadioRangeUsize {
+            min: 1,
+            max: 200,
+            default: 50,
+        },
+        diversity: RadioRangeF32 {
+            min: 0.0,
+            max: 1.0,
+            default: DEFAULT_RADIO_DIVERSITY,
+        },
+        randomness: RadioRangeF32 {
+            min: 0.0,
+            max: 1.0,
+            default: DEFAULT_RADIO_RANDOMNESS,
+        },
+    }
+}
+
+fn available_track_namespaces(settings: Option<&AudioEmbeddingsSettings>) -> Vec<String> {
+    let mut namespaces = settings
+        .map(|settings| {
+            settings
+                .specs
+                .iter()
+                .map(|spec| spec.namespace.clone())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|| vec![DEFAULT_TRACK_NAMESPACE.to_string()]);
+    if namespaces.is_empty() {
+        namespaces.push(DEFAULT_TRACK_NAMESPACE.to_string());
+    }
+    namespaces
+}
+
+fn radio_recipes_for_namespaces(namespaces: &[String]) -> Vec<RadioRecipe> {
+    let has = |namespace: &str| namespaces.iter().any(|item| item == namespace);
+    let mut recipes = Vec::new();
+
+    recipes.push(recipe(
+        "classic",
+        "Classic",
+        vec![(track_namespace_from_available(namespaces), 1.0)],
+        "similar",
+        0.2,
+        0.3,
+    ));
+
+    let mut balanced = Vec::new();
+    if has("musicfm.mean.v1") {
+        balanced.push(("musicfm.mean.v1".to_string(), 0.55));
+    }
+    if has("ast.audioset.v1") {
+        balanced.push(("ast.audioset.v1".to_string(), 0.3));
+    }
+    if has("ast.instruments.v1") {
+        balanced.push(("ast.instruments.v1".to_string(), 0.15));
+    }
+    if balanced.is_empty() {
+        balanced.push((track_namespace_from_available(namespaces), 1.0));
+    }
+    recipes.push(recipe(
+        "balanced", "Balanced", balanced, "similar", 0.3, 0.3,
+    ));
+
+    recipes.push(recipe_for_namespace(
+        "sound_similarity",
+        "Sound similarity",
+        "musicfm.mean.v1",
+        namespaces,
+        "similar",
+        0.25,
+        0.2,
+    ));
+    recipes.push(recipe_for_namespace(
+        "audio_scene",
+        "Audio scene",
+        "ast.audioset.v1",
+        namespaces,
+        "similar",
+        0.35,
+        0.25,
+    ));
+    recipes.push(recipe_for_namespace(
+        "instrumentation",
+        "Instrumentation",
+        "ast.instruments.v1",
+        namespaces,
+        "similar",
+        0.35,
+        0.25,
+    ));
+    recipes.push(recipe(
+        "deep_discovery",
+        "Deep discovery",
+        namespaces
+            .iter()
+            .map(|namespace| (namespace.clone(), 1.0 / namespaces.len() as f32))
+            .collect(),
+        "explore",
+        0.65,
+        0.55,
+    ));
+
+    recipes
+}
+
+fn recipe_for_namespace(
+    id: &str,
+    name: &str,
+    preferred_namespace: &str,
+    namespaces: &[String],
+    mode: &'static str,
+    diversity: f32,
+    randomness: f32,
+) -> RadioRecipe {
+    let namespace = if namespaces.iter().any(|item| item == preferred_namespace) {
+        preferred_namespace.to_string()
+    } else {
+        track_namespace_from_available(namespaces)
+    };
+    recipe(
+        id,
+        name,
+        vec![(namespace, 1.0)],
+        mode,
+        diversity,
+        randomness,
+    )
+}
+
+fn recipe(
+    id: &str,
+    name: &str,
+    criteria: Vec<(String, f32)>,
+    mode: &'static str,
+    diversity: f32,
+    randomness: f32,
+) -> RadioRecipe {
+    RadioRecipe {
+        id: id.to_string(),
+        name: name.to_string(),
+        criteria: criteria
+            .into_iter()
+            .map(|(namespace, weight)| RadioCriterionRequestForResponse { namespace, weight })
+            .collect(),
+        mode,
+        diversity,
+        randomness,
+    }
+}
+
+fn track_namespace_from_available(namespaces: &[String]) -> String {
+    namespaces
+        .iter()
+        .find(|namespace| namespace.as_str() == DEFAULT_TRACK_NAMESPACE)
+        .or_else(|| namespaces.first())
+        .cloned()
+        .unwrap_or_else(|| DEFAULT_TRACK_NAMESPACE.to_string())
+}
+
+fn criterion_label(namespace: &str) -> String {
+    match namespace {
+        "musicfm.mean.v1" => "Sound profile".to_string(),
+        "ast.audioset.v1" => "Audio scene".to_string(),
+        "ast.instruments.v1" => "Instrumentation".to_string(),
+        other => other.to_string(),
+    }
+}
+
+fn build_radio(
+    catalog_store: &dyn CatalogStore,
+    settings: Option<&AudioEmbeddingsSettings>,
+    request: RadioBuildRequest,
+) -> anyhow::Result<Vec<String>> {
+    validate_entity_type(&request.seed.entity_type)?;
+    if let Some(recipe_id) = request.recipe_id.as_deref() {
+        if !recipes_contain_recipe(settings, recipe_id) {
+            return Err(anyhow::anyhow!(
+                "invalid radio request: unknown recipe_id '{recipe_id}'"
+            ));
+        }
+    }
+    for reference in request.toward.iter().chain(request.away.iter()) {
+        validate_entity_type(&reference.entity_type)?;
+        if reference
+            .weight
+            .is_some_and(|weight| !weight.is_finite() || weight <= 0.0)
+        {
+            return Err(anyhow::anyhow!(
+                "invalid radio request: reference weights must be positive"
+            ));
+        }
+    }
+
+    let count = request.count.unwrap_or(50).clamp(1, 200);
+    let recipes = radio_recipes_for_namespaces(&available_track_namespaces(settings));
+    let criteria = normalize_radio_criteria(settings, &recipes, &request)?;
+    let recipe = selected_recipe(&recipes, request.recipe_id.as_deref());
+    let mode = request.mode.unwrap_or_else(|| recipe_mode(recipe));
+    let diversity = request
+        .diversity
+        .unwrap_or_else(|| {
+            recipe
+                .map(|recipe| recipe.diversity)
+                .unwrap_or(DEFAULT_RADIO_DIVERSITY)
+        })
+        .clamp(0.0, 1.0);
+    let randomness = request
+        .randomness
+        .unwrap_or_else(|| {
+            recipe
+                .map(|recipe| recipe.randomness)
+                .unwrap_or(DEFAULT_RADIO_RANDOMNESS)
+        })
+        .clamp(0.0, 1.0);
+    validate_filters(request.filters.as_ref())?;
+
+    let include_seed_tracks = request
+        .include_seed_tracks
+        .unwrap_or_else(|| request.seed.entity_type != "album");
+    let seed_track_ids = seed_track_ids(catalog_store, &request.seed)?;
+    let mut exclude = HashSet::new();
+    let mut result = Vec::with_capacity(count);
+    if include_seed_tracks {
+        for track_id in &seed_track_ids {
+            if result.len() >= count {
+                break;
+            }
+            if !exclude.insert(track_id.clone()) {
+                continue;
+            }
+            if track_passes_filters(catalog_store, track_id, request.filters.as_ref())? {
+                result.push(track_id.clone());
+            }
+        }
+    } else {
+        exclude.extend(seed_track_ids);
+    }
+
+    if result.len() >= count {
+        return Ok(result);
+    }
+
+    let oversample = (count * criteria.len().max(1) * 24).clamp(150, 2000);
+    let mut candidates: HashMap<String, CandidateScore> = HashMap::new();
+    for criterion in &criteria {
+        let Some(seed) =
+            radio_seed_vector(catalog_store, settings, &request.seed, &criterion.namespace)?
+        else {
+            continue;
+        };
+        let Some(query) = steered_vector(
+            catalog_store,
+            settings,
+            &criterion.namespace,
+            seed,
+            &request.toward,
+            &request.away,
+        )?
+        else {
+            continue;
+        };
+        let results = catalog_store.search_entity_embeddings(
+            &criterion.namespace,
+            &query,
+            Some("track"),
+            oversample,
+        )?;
+        for search_result in results {
+            if exclude.contains(&search_result.entity_id) {
+                continue;
+            }
+            let similarity = search_result.score;
+            let score = match mode {
+                RadioMode::Similar => similarity,
+                RadioMode::Explore => 1.0 - (similarity.clamp(-1.0, 1.0) - 0.55).abs(),
+            } * criterion.weight;
+            let entry = candidates
+                .entry(search_result.entity_id)
+                .or_insert(CandidateScore {
+                    score: 0.0,
+                    best_similarity: similarity,
+                });
+            entry.score += score;
+            entry.best_similarity = entry.best_similarity.max(similarity);
+        }
+    }
+
+    let mut rng = rand::rng();
+    let mut scored = candidates.into_iter().collect::<Vec<_>>();
+    scored.sort_by(|left, right| {
+        let left_score = left.1.score + left.1.best_similarity * 0.05;
+        let right_score = right.1.score + right.1.best_similarity * 0.05;
+        right_score
+            .partial_cmp(&left_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut selected_album_counts: HashMap<String, usize> = HashMap::new();
+    let mut selected_artist_counts: HashMap<String, usize> = HashMap::new();
+    for track_id in &result {
+        if let Some(resolved) = catalog_store.get_resolved_track(track_id)? {
+            *selected_album_counts
+                .entry(resolved.album.id.clone())
+                .or_insert(0) += 1;
+            if let Some(artist_id) = primary_artist_id(&resolved) {
+                *selected_artist_counts.entry(artist_id).or_insert(0) += 1;
+            }
+        }
+    }
+
+    let mut ranked = Vec::with_capacity(scored.len());
+    for (track_id, candidate) in scored {
+        let Some(resolved) = catalog_store.get_resolved_track(&track_id)? else {
+            continue;
+        };
+        if !resolved_track_passes_filters(&resolved, request.filters.as_ref()) {
+            continue;
+        }
+        let album_penalty = selected_album_counts
+            .get(&resolved.album.id)
+            .copied()
+            .unwrap_or(0) as f32
+            * diversity
+            * 0.08;
+        let artist_penalty = primary_artist_id(&resolved)
+            .and_then(|artist_id| selected_artist_counts.get(&artist_id).copied())
+            .unwrap_or(0) as f32
+            * diversity
+            * 0.06;
+        let jitter = rng.random_range(0.0..(0.1 * randomness));
+        ranked.push((
+            track_id,
+            resolved,
+            candidate.score + candidate.best_similarity * 0.05 + jitter
+                - album_penalty
+                - artist_penalty,
+        ));
+    }
+    ranked.sort_by(|left, right| {
+        right
+            .2
+            .partial_cmp(&left.2)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    for (track_id, resolved, _) in ranked {
+        if result.len() >= count {
+            break;
+        }
+        if !exclude.insert(track_id.clone()) {
+            continue;
+        }
+        *selected_album_counts
+            .entry(resolved.album.id.clone())
+            .or_insert(0) += 1;
+        if let Some(artist_id) = primary_artist_id(&resolved) {
+            *selected_artist_counts.entry(artist_id).or_insert(0) += 1;
+        }
+        result.push(track_id);
+    }
+
+    Ok(result)
+}
+
+fn recipes_contain_recipe(settings: Option<&AudioEmbeddingsSettings>, recipe_id: &str) -> bool {
+    radio_recipes_for_namespaces(&available_track_namespaces(settings))
+        .iter()
+        .any(|recipe| recipe.id == recipe_id)
+}
+
+fn validate_entity_type(entity_type: &str) -> anyhow::Result<()> {
+    match entity_type {
+        "track" | "album" | "artist" => Ok(()),
+        other => Err(anyhow::anyhow!(
+            "invalid radio request: unsupported entity_type '{other}'"
+        )),
+    }
+}
+
+fn validate_filters(filters: Option<&RadioFilters>) -> anyhow::Result<()> {
+    let Some(filters) = filters else {
+        return Ok(());
+    };
+    if let (Some(min), Some(max)) = (filters.release_year_min, filters.release_year_max) {
+        if min > max {
+            return Err(anyhow::anyhow!(
+                "invalid radio request: release_year_min must be <= release_year_max"
+            ));
+        }
+    }
+    if let (Some(min), Some(max)) = (filters.popularity_min, filters.popularity_max) {
+        if min > max {
+            return Err(anyhow::anyhow!(
+                "invalid radio request: popularity_min must be <= popularity_max"
+            ));
+        }
+    }
+    if filters
+        .popularity_min
+        .is_some_and(|value| !(0..=100).contains(&value))
+        || filters
+            .popularity_max
+            .is_some_and(|value| !(0..=100).contains(&value))
+    {
+        return Err(anyhow::anyhow!(
+            "invalid radio request: popularity filters must be between 0 and 100"
+        ));
+    }
+    Ok(())
+}
+
+fn normalize_radio_criteria(
+    settings: Option<&AudioEmbeddingsSettings>,
+    recipes: &[RadioRecipe],
+    request: &RadioBuildRequest,
+) -> anyhow::Result<Vec<NormalizedRadioCriterion>> {
+    let allowed = available_track_namespaces(settings)
+        .into_iter()
+        .collect::<HashSet<_>>();
+    let raw = if request.criteria.is_empty() {
+        let recipe = selected_recipe(recipes, request.recipe_id.as_deref())
+            .ok_or_else(|| anyhow::anyhow!("invalid radio request: unknown recipe_id"))?;
+        recipe
+            .criteria
+            .iter()
+            .map(|criterion| RadioCriterionRequest {
+                namespace: criterion.namespace.clone(),
+                weight: criterion.weight,
+            })
+            .collect::<Vec<_>>()
+    } else {
+        request.criteria.clone()
+    };
+
+    let mut criteria = Vec::new();
+    for criterion in raw {
+        if !allowed.contains(&criterion.namespace) {
+            return Err(anyhow::anyhow!(
+                "invalid radio request: unsupported namespace '{}'",
+                criterion.namespace
+            ));
+        }
+        if !criterion.weight.is_finite() || criterion.weight <= 0.0 {
+            return Err(anyhow::anyhow!(
+                "invalid radio request: criterion weights must be positive"
+            ));
+        }
+        criteria.push(NormalizedRadioCriterion {
+            namespace: criterion.namespace,
+            weight: criterion.weight,
+        });
+    }
+    if criteria.is_empty() {
+        return Err(anyhow::anyhow!(
+            "invalid radio request: at least one criterion is required"
+        ));
+    }
+    let total_weight = criteria
+        .iter()
+        .map(|criterion| criterion.weight)
+        .sum::<f32>();
+    for criterion in &mut criteria {
+        criterion.weight /= total_weight;
+    }
+    Ok(criteria)
+}
+
+fn selected_recipe<'a>(
+    recipes: &'a [RadioRecipe],
+    recipe_id: Option<&str>,
+) -> Option<&'a RadioRecipe> {
+    let requested = recipe_id.unwrap_or("balanced");
+    recipes
+        .iter()
+        .find(|recipe| recipe.id == requested)
+        .or_else(|| recipes.iter().find(|recipe| recipe.id == "balanced"))
+}
+
+fn recipe_mode(recipe: Option<&RadioRecipe>) -> RadioMode {
+    match recipe.map(|recipe| recipe.mode) {
+        Some("explore") => RadioMode::Explore,
+        _ => RadioMode::Similar,
+    }
+}
+
+fn seed_track_ids(
+    catalog_store: &dyn CatalogStore,
+    seed: &RadioSeed,
+) -> anyhow::Result<Vec<String>> {
+    match seed.entity_type.as_str() {
+        "track" => Ok(vec![seed.entity_id.clone()]),
+        "album" => catalog_store.get_available_album_track_ids(&seed.entity_id),
+        "artist" => {
+            catalog_store.get_artist_top_track_ids(&seed.entity_id, ARTIST_SEED_TRACK_LIMIT)
+        }
+        _ => Ok(Vec::new()),
+    }
+}
+
+fn radio_seed_vector(
+    catalog_store: &dyn CatalogStore,
+    settings: Option<&AudioEmbeddingsSettings>,
+    seed: &RadioSeed,
+    track_namespace: &str,
+) -> anyhow::Result<Option<Vec<f32>>> {
+    match seed.entity_type.as_str() {
+        "track" => get_vector(catalog_store, "track", &seed.entity_id, track_namespace),
+        "album" => {
+            let album_namespace =
+                album_namespace_for_track_namespace_with_settings(settings, track_namespace);
+            match get_vector(catalog_store, "album", &seed.entity_id, &album_namespace)? {
+                Some(vector) => Ok(Some(vector)),
+                None => {
+                    let track_ids = catalog_store.get_available_album_track_ids(&seed.entity_id)?;
+                    mean_track_vector(catalog_store, track_namespace, &track_ids)
+                }
+            }
+        }
+        "artist" => {
+            let track_ids =
+                catalog_store.get_artist_top_track_ids(&seed.entity_id, ARTIST_SEED_TRACK_LIMIT)?;
+            mean_track_vector(catalog_store, track_namespace, &track_ids)
+        }
+        _ => Ok(None),
+    }
+}
+
+fn album_namespace_for_track_namespace_with_settings(
+    settings: Option<&AudioEmbeddingsSettings>,
+    track_namespace: &str,
+) -> String {
+    settings
+        .and_then(|settings| {
+            settings
+                .album_derivations
+                .specs
+                .iter()
+                .find(|spec| spec.source_namespace == track_namespace)
+        })
+        .map(|spec| spec.target_namespace.clone())
+        .unwrap_or_else(|| album_namespace_for_track_namespace(track_namespace))
+}
+
+fn steered_vector(
+    catalog_store: &dyn CatalogStore,
+    settings: Option<&AudioEmbeddingsSettings>,
+    namespace: &str,
+    mut seed: Vec<f32>,
+    toward: &[RadioReference],
+    away: &[RadioReference],
+) -> anyhow::Result<Option<Vec<f32>>> {
+    let dim = seed.len();
+    for reference in toward {
+        if let Some(vector) = reference_vector(catalog_store, settings, reference, namespace)? {
+            add_scaled_vector(&mut seed, &vector, reference.weight.unwrap_or(1.0), dim);
+        }
+    }
+    for reference in away {
+        if let Some(vector) = reference_vector(catalog_store, settings, reference, namespace)? {
+            add_scaled_vector(&mut seed, &vector, -reference.weight.unwrap_or(1.0), dim);
+        }
+    }
+    if seed.iter().all(|value| value.abs() <= f32::EPSILON) {
+        return Ok(None);
+    }
+    Ok(Some(seed))
+}
+
+fn reference_vector(
+    catalog_store: &dyn CatalogStore,
+    settings: Option<&AudioEmbeddingsSettings>,
+    reference: &RadioReference,
+    namespace: &str,
+) -> anyhow::Result<Option<Vec<f32>>> {
+    radio_seed_vector(
+        catalog_store,
+        settings,
+        &RadioSeed {
+            entity_type: reference.entity_type.clone(),
+            entity_id: reference.entity_id.clone(),
+        },
+        namespace,
+    )
+}
+
+fn add_scaled_vector(seed: &mut [f32], vector: &[f32], weight: f32, dim: usize) {
+    if !weight.is_finite() || vector.len() != dim {
+        return;
+    }
+    for (idx, value) in vector.iter().enumerate() {
+        seed[idx] += *value * weight;
+    }
+}
+
+fn track_passes_filters(
+    catalog_store: &dyn CatalogStore,
+    track_id: &str,
+    filters: Option<&RadioFilters>,
+) -> anyhow::Result<bool> {
+    let Some(resolved) = catalog_store.get_resolved_track(track_id)? else {
+        return Ok(false);
+    };
+    Ok(resolved_track_passes_filters(&resolved, filters))
+}
+
+fn resolved_track_passes_filters(resolved: &ResolvedTrack, filters: Option<&RadioFilters>) -> bool {
+    if resolved.track.availability != TrackAvailability::Available {
+        return false;
+    }
+    let Some(filters) = filters else {
+        return true;
+    };
+    if let Some(min) = filters.popularity_min {
+        if resolved.track.popularity < min {
+            return false;
+        }
+    }
+    if let Some(max) = filters.popularity_max {
+        if resolved.track.popularity > max {
+            return false;
+        }
+    }
+    match filters.explicit.unwrap_or(ExplicitFilter::Include) {
+        ExplicitFilter::Include => {}
+        ExplicitFilter::Exclude if resolved.track.explicit => return false,
+        ExplicitFilter::Only if !resolved.track.explicit => return false,
+        _ => {}
+    }
+    if let Some(year) = release_year(&resolved.album.release_date) {
+        if let Some(min) = filters.release_year_min {
+            if year < min {
+                return false;
+            }
+        }
+        if let Some(max) = filters.release_year_max {
+            if year > max {
+                return false;
+            }
+        }
+    } else if filters.release_year_min.is_some() || filters.release_year_max.is_some() {
+        return false;
+    }
+    if !filters.genres.is_empty() {
+        let requested = filters
+            .genres
+            .iter()
+            .map(|genre| genre.to_lowercase())
+            .collect::<HashSet<_>>();
+        let has_genre = resolved.artists.iter().any(|track_artist| {
+            track_artist
+                .artist
+                .genres
+                .iter()
+                .any(|genre| requested.contains(&genre.to_lowercase()))
+        });
+        if !has_genre {
+            return false;
+        }
+    }
+    true
+}
+
+fn release_year(release_date: &Option<String>) -> Option<i32> {
+    release_date
+        .as_deref()
+        .and_then(|date| date.get(0..4))
+        .and_then(|year| year.parse::<i32>().ok())
+}
+
+fn primary_artist_id(resolved: &ResolvedTrack) -> Option<String> {
+    resolved
+        .artists
+        .iter()
+        .find(|track_artist| track_artist.role == ArtistRole::MainArtist)
+        .or_else(|| resolved.artists.first())
+        .map(|track_artist| track_artist.artist.id.clone())
 }
 
 fn track_radio(
