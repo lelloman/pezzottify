@@ -352,6 +352,8 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 16px;
+  color: var(--text-bright);
+  color-scheme: dark;
 }
 
 .builderHeader,
@@ -408,6 +410,53 @@ button {
   min-height: 34px;
 }
 
+input:not([type="range"]):not([type="checkbox"]),
+select {
+  width: 100%;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-highlight);
+  color: var(--text-bright);
+  padding: 6px 10px;
+  outline: none;
+}
+
+input:not([type="range"]):not([type="checkbox"])::placeholder {
+  color: var(--text-subtle);
+}
+
+input:not([type="range"]):not([type="checkbox"]):focus,
+select:focus {
+  border-color: var(--spotify-green);
+  box-shadow: 0 0 0 2px var(--bg-tinted);
+}
+
+input[type="range"],
+input[type="checkbox"] {
+  accent-color: var(--spotify-green);
+}
+
+label span,
+.criterionRow span {
+  color: var(--text-subdued);
+}
+
+button {
+  border-radius: var(--radius-md);
+  background: var(--bg-highlight);
+  color: var(--text-bright);
+  padding: 0 12px;
+}
+
+button:hover:not(:disabled) {
+  background: var(--bg-press);
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .criteriaSection,
 .referenceSection {
   display: flex;
@@ -441,6 +490,7 @@ button {
 
 .iconButton {
   width: 34px;
+  padding: 0;
 }
 
 .builderActions {
@@ -450,6 +500,11 @@ button {
 .primaryButton {
   background: var(--accent-color);
   color: var(--text-bright);
+  font-weight: var(--font-semibold);
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: var(--spotify-green-hover);
 }
 
 .loadingState {
