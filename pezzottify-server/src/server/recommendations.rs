@@ -14,7 +14,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
-use crate::catalog_store::{ArtistRole, CatalogStore, ResolvedTrack, TrackAvailability};
+use crate::catalog_store::{CatalogStore, ResolvedTrack, TrackAvailability};
 use crate::config::AudioEmbeddingsSettings;
 
 use super::session::Session;
@@ -26,6 +26,10 @@ const CONTINUATION_CONTEXT_LIMIT: usize = 10;
 const ARTIST_SEED_TRACK_LIMIT: usize = 50;
 const DEFAULT_RADIO_RANDOMNESS: f32 = 0.3;
 const DEFAULT_RADIO_DIVERSITY: f32 = 0.3;
+const RADIO_COOLDOWN_DECAY: f32 = 0.65;
+const RADIO_ALBUM_PENALTY_WEIGHT: f32 = 0.12;
+const RADIO_ARTIST_PENALTY_WEIGHT: f32 = 0.10;
+const RADIO_COOLDOWN_MIN: f32 = 0.01;
 
 #[derive(Debug, Deserialize)]
 struct ContinuationRequest {
@@ -167,6 +171,13 @@ struct NormalizedRadioCriterion {
 struct CandidateScore {
     score: f32,
     best_similarity: f32,
+}
+
+#[derive(Debug, Clone)]
+struct RankedRadioCandidate {
+    track_id: String,
+    resolved: ResolvedTrack,
+    score: f32,
 }
 
 pub fn recommendation_routes() -> Router<ServerState> {
@@ -587,7 +598,7 @@ fn build_radio(
             }
         }
     } else {
-        exclude.extend(seed_track_ids);
+        exclude.extend(seed_track_ids.iter().cloned());
     }
 
     if result.len() >= count {
@@ -649,15 +660,16 @@ fn build_radio(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    let mut selected_album_counts: HashMap<String, usize> = HashMap::new();
-    let mut selected_artist_counts: HashMap<String, usize> = HashMap::new();
-    for track_id in &result {
+    let mut album_cooldowns: HashMap<String, f32> = HashMap::new();
+    let mut artist_cooldowns: HashMap<String, f32> = HashMap::new();
+    let mut initialized_seed_context = HashSet::new();
+    for track_id in &seed_track_ids {
+        if !initialized_seed_context.insert(track_id) {
+            continue;
+        }
         if let Some(resolved) = catalog_store.get_resolved_track(track_id)? {
-            *selected_album_counts
-                .entry(resolved.album.id.clone())
-                .or_insert(0) += 1;
-            if let Some(artist_id) = primary_artist_id(&resolved) {
-                *selected_artist_counts.entry(artist_id).or_insert(0) += 1;
+            if resolved_track_passes_filters(&resolved, request.filters.as_ref()) {
+                apply_track_cooldown(&resolved, &mut album_cooldowns, &mut artist_cooldowns);
             }
         }
     }
@@ -670,50 +682,124 @@ fn build_radio(
         if !resolved_track_passes_filters(&resolved, request.filters.as_ref()) {
             continue;
         }
-        let album_penalty = selected_album_counts
-            .get(&resolved.album.id)
-            .copied()
-            .unwrap_or(0) as f32
-            * diversity
-            * 0.08;
-        let artist_penalty = primary_artist_id(&resolved)
-            .and_then(|artist_id| selected_artist_counts.get(&artist_id).copied())
-            .unwrap_or(0) as f32
-            * diversity
-            * 0.06;
         let jitter = rng.random_range(0.0..(0.1 * randomness));
-        ranked.push((
+        ranked.push(RankedRadioCandidate {
             track_id,
             resolved,
-            candidate.score + candidate.best_similarity * 0.05 + jitter
-                - album_penalty
-                - artist_penalty,
-        ));
+            score: candidate.score + candidate.best_similarity * 0.05 + jitter,
+        });
     }
-    ranked.sort_by(|left, right| {
-        right
-            .2
-            .partial_cmp(&left.2)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
 
-    for (track_id, resolved, _) in ranked {
-        if result.len() >= count {
-            break;
-        }
-        if !exclude.insert(track_id.clone()) {
-            continue;
-        }
-        *selected_album_counts
-            .entry(resolved.album.id.clone())
-            .or_insert(0) += 1;
-        if let Some(artist_id) = primary_artist_id(&resolved) {
-            *selected_artist_counts.entry(artist_id).or_insert(0) += 1;
-        }
-        result.push(track_id);
-    }
+    select_radio_candidates(
+        ranked,
+        &mut result,
+        &mut exclude,
+        count,
+        diversity,
+        &mut album_cooldowns,
+        &mut artist_cooldowns,
+    );
 
     Ok(result)
+}
+
+fn select_radio_candidates(
+    mut ranked: Vec<RankedRadioCandidate>,
+    result: &mut Vec<String>,
+    exclude: &mut HashSet<String>,
+    count: usize,
+    diversity: f32,
+    album_cooldowns: &mut HashMap<String, f32>,
+    artist_cooldowns: &mut HashMap<String, f32>,
+) {
+    while result.len() < count && !ranked.is_empty() {
+        let Some((selected_index, _)) = ranked
+            .iter()
+            .enumerate()
+            .map(|(index, candidate)| {
+                (
+                    index,
+                    adjusted_radio_score(
+                        candidate.score,
+                        &candidate.resolved,
+                        diversity,
+                        album_cooldowns,
+                        artist_cooldowns,
+                    ),
+                )
+            })
+            .max_by(|left, right| {
+                left.1
+                    .partial_cmp(&right.1)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+        else {
+            break;
+        };
+        let candidate = ranked.swap_remove(selected_index);
+        if !exclude.insert(candidate.track_id.clone()) {
+            continue;
+        }
+        result.push(candidate.track_id);
+        apply_track_cooldown(&candidate.resolved, album_cooldowns, artist_cooldowns);
+    }
+}
+
+fn adjusted_radio_score(
+    score: f32,
+    resolved: &ResolvedTrack,
+    diversity: f32,
+    album_cooldowns: &HashMap<String, f32>,
+    artist_cooldowns: &HashMap<String, f32>,
+) -> f32 {
+    let album_penalty = album_cooldowns
+        .get(&resolved.album.id)
+        .copied()
+        .unwrap_or(0.0)
+        * diversity
+        * RADIO_ALBUM_PENALTY_WEIGHT;
+    let artist_penalty = artist_ids_for_track(resolved)
+        .into_iter()
+        .filter_map(|artist_id| artist_cooldowns.get(&artist_id).copied())
+        .fold(0.0, f32::max)
+        * diversity
+        * RADIO_ARTIST_PENALTY_WEIGHT;
+    score - album_penalty - artist_penalty
+}
+
+fn apply_track_cooldown(
+    resolved: &ResolvedTrack,
+    album_cooldowns: &mut HashMap<String, f32>,
+    artist_cooldowns: &mut HashMap<String, f32>,
+) {
+    decay_cooldowns(album_cooldowns);
+    decay_cooldowns(artist_cooldowns);
+    album_cooldowns.insert(resolved.album.id.clone(), 1.0);
+    for artist_id in artist_ids_for_track(resolved) {
+        artist_cooldowns.insert(artist_id, 1.0);
+    }
+}
+
+fn decay_cooldowns(cooldowns: &mut HashMap<String, f32>) {
+    for value in cooldowns.values_mut() {
+        *value *= RADIO_COOLDOWN_DECAY;
+    }
+    cooldowns.retain(|_, value| *value >= RADIO_COOLDOWN_MIN);
+}
+
+fn artist_ids_for_track(resolved: &ResolvedTrack) -> Vec<String> {
+    let mut seen = HashSet::new();
+    resolved
+        .artists
+        .iter()
+        .filter_map(|track_artist| {
+            if seen.insert(track_artist.artist.id.as_str()) {
+                Some(track_artist.artist.id.clone())
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 fn recipes_contain_recipe(settings: Option<&AudioEmbeddingsSettings>, recipe_id: &str) -> bool {
@@ -1021,15 +1107,6 @@ fn release_year(release_date: &Option<String>) -> Option<i32> {
         .and_then(|year| year.parse::<i32>().ok())
 }
 
-fn primary_artist_id(resolved: &ResolvedTrack) -> Option<String> {
-    resolved
-        .artists
-        .iter()
-        .find(|track_artist| track_artist.role == ArtistRole::MainArtist)
-        .or_else(|| resolved.artists.first())
-        .map(|track_artist| track_artist.artist.id.clone())
-}
-
 fn track_radio(
     catalog_store: &dyn CatalogStore,
     namespace: &str,
@@ -1237,4 +1314,144 @@ fn track_is_available(catalog_store: &dyn CatalogStore, track_id: &str) -> anyho
         .get_track(track_id)?
         .map(|track| track.availability == TrackAvailability::Available)
         .unwrap_or(false))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::catalog_store::{
+        Album, AlbumAvailability, AlbumType, Artist, ArtistRole, Track, TrackArtist,
+    };
+
+    fn resolved_track(track_id: &str, album_id: &str, artist_ids: &[&str]) -> ResolvedTrack {
+        ResolvedTrack {
+            track: Track {
+                id: track_id.to_string(),
+                name: track_id.to_string(),
+                album_id: album_id.to_string(),
+                disc_number: 1,
+                track_number: 1,
+                duration_ms: 180_000,
+                explicit: false,
+                popularity: 50,
+                language: None,
+                external_id_isrc: None,
+                audio_uri: Some(format!("{track_id}.ogg")),
+                availability: TrackAvailability::Available,
+            },
+            album: Album {
+                id: album_id.to_string(),
+                name: album_id.to_string(),
+                album_type: AlbumType::Album,
+                label: None,
+                release_date: Some("2024".to_string()),
+                release_date_precision: Some("year".to_string()),
+                external_id_upc: None,
+                popularity: 50,
+                album_availability: AlbumAvailability::Complete,
+            },
+            artists: artist_ids
+                .iter()
+                .map(|artist_id| TrackArtist {
+                    artist: Artist {
+                        id: (*artist_id).to_string(),
+                        name: (*artist_id).to_string(),
+                        genres: Vec::new(),
+                        followers_total: 0,
+                        popularity: 50,
+                        available: true,
+                    },
+                    role: ArtistRole::MainArtist,
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn radio_selection_keeps_track_ids_unique() {
+        let track = resolved_track("track-a", "album-a", &["artist-a"]);
+        let ranked = vec![
+            RankedRadioCandidate {
+                track_id: "track-a".to_string(),
+                resolved: track.clone(),
+                score: 1.0,
+            },
+            RankedRadioCandidate {
+                track_id: "track-a".to_string(),
+                resolved: track,
+                score: 0.9,
+            },
+        ];
+        let mut result = Vec::new();
+        let mut exclude = HashSet::new();
+        let mut album_cooldowns = HashMap::new();
+        let mut artist_cooldowns = HashMap::new();
+
+        select_radio_candidates(
+            ranked,
+            &mut result,
+            &mut exclude,
+            2,
+            1.0,
+            &mut album_cooldowns,
+            &mut artist_cooldowns,
+        );
+
+        assert_eq!(result, vec!["track-a"]);
+    }
+
+    #[test]
+    fn radio_selection_penalizes_immediate_same_artist_and_album() {
+        let seed = resolved_track("seed", "album-a", &["artist-a"]);
+        let same_artist_album = resolved_track("same", "album-a", &["artist-a"]);
+        let different_artist_album = resolved_track("different", "album-b", &["artist-b"]);
+        let mut album_cooldowns = HashMap::new();
+        let mut artist_cooldowns = HashMap::new();
+        apply_track_cooldown(&seed, &mut album_cooldowns, &mut artist_cooldowns);
+
+        let ranked = vec![
+            RankedRadioCandidate {
+                track_id: "same".to_string(),
+                resolved: same_artist_album,
+                score: 0.95,
+            },
+            RankedRadioCandidate {
+                track_id: "different".to_string(),
+                resolved: different_artist_album,
+                score: 0.84,
+            },
+        ];
+        let mut result = Vec::new();
+        let mut exclude = HashSet::new();
+
+        select_radio_candidates(
+            ranked,
+            &mut result,
+            &mut exclude,
+            1,
+            1.0,
+            &mut album_cooldowns,
+            &mut artist_cooldowns,
+        );
+
+        assert_eq!(result, vec!["different"]);
+    }
+
+    #[test]
+    fn radio_cooldown_decays_after_later_tracks() {
+        let first = resolved_track("first", "album-a", &["artist-a"]);
+        let second = resolved_track("second", "album-b", &["artist-b"]);
+        let third = resolved_track("third", "album-c", &["artist-c"]);
+        let mut album_cooldowns = HashMap::new();
+        let mut artist_cooldowns = HashMap::new();
+
+        apply_track_cooldown(&first, &mut album_cooldowns, &mut artist_cooldowns);
+        apply_track_cooldown(&second, &mut album_cooldowns, &mut artist_cooldowns);
+        apply_track_cooldown(&third, &mut album_cooldowns, &mut artist_cooldowns);
+
+        assert!((album_cooldowns["album-a"] - 0.4225).abs() < f32::EPSILON);
+        assert!((artist_cooldowns["artist-a"] - 0.4225).abs() < f32::EPSILON);
+        assert!((album_cooldowns["album-b"] - 0.65).abs() < f32::EPSILON);
+        assert!((artist_cooldowns["artist-c"] - 1.0).abs() < f32::EPSILON);
+    }
 }
