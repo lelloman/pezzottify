@@ -499,8 +499,10 @@ export const usePlaybackStore = defineStore("playback", () => {
     if (smartContinuationInFlightSignature.value !== signature) return;
     smartContinuationInFlightSignature.value = null;
     if (currentQueueSignature() !== signature) return;
-    if (nextTrackIds.length > 0) {
-      addTracksToPlaylist(nextTrackIds.slice(0, 1));
+    const existingTrackIds = new Set(currentPlaylist.value?.tracksIds || []);
+    const nextTrackId = nextTrackIds.find((trackId) => !existingTrackIds.has(trackId));
+    if (nextTrackId) {
+      addTracksToPlaylist([nextTrackId]);
     }
   };
 
