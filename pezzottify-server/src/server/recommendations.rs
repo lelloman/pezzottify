@@ -30,6 +30,7 @@ const RADIO_COOLDOWN_DECAY: f32 = 0.65;
 const RADIO_ALBUM_PENALTY_WEIGHT: f32 = 0.12;
 const RADIO_ARTIST_PENALTY_WEIGHT: f32 = 0.10;
 const RADIO_COOLDOWN_MIN: f32 = 0.01;
+const RADIO_ARTIST_REPEAT_MIN_DISTANCE: usize = 4;
 
 #[derive(Debug, Deserialize)]
 struct ContinuationRequest {
@@ -585,24 +586,8 @@ fn build_radio(
     let seed_track_ids = seed_track_ids(catalog_store, &request.seed)?;
     let mut exclude = HashSet::new();
     let mut result = Vec::with_capacity(count);
-    if include_seed_tracks {
-        for track_id in &seed_track_ids {
-            if result.len() >= count {
-                break;
-            }
-            if !exclude.insert(track_id.clone()) {
-                continue;
-            }
-            if track_passes_filters(catalog_store, track_id, request.filters.as_ref())? {
-                result.push(track_id.clone());
-            }
-        }
-    } else {
+    if !include_seed_tracks {
         exclude.extend(seed_track_ids.iter().cloned());
-    }
-
-    if result.len() >= count {
-        return Ok(result);
     }
 
     let oversample = (count * criteria.len().max(1) * 24).clamp(150, 2000);
@@ -662,14 +647,45 @@ fn build_radio(
 
     let mut album_cooldowns: HashMap<String, f32> = HashMap::new();
     let mut artist_cooldowns: HashMap<String, f32> = HashMap::new();
-    let mut initialized_seed_context = HashSet::new();
-    for track_id in &seed_track_ids {
-        if !initialized_seed_context.insert(track_id) {
-            continue;
+    let mut artist_last_positions: HashMap<String, usize> = HashMap::new();
+    if include_seed_tracks {
+        result.clear();
+        exclude.clear();
+        for track_id in &seed_track_ids {
+            if result.len() >= count {
+                break;
+            }
+            if exclude.contains(track_id) {
+                continue;
+            }
+            let Some(resolved) = catalog_store.get_resolved_track(track_id)? else {
+                continue;
+            };
+            if !resolved_track_passes_filters(&resolved, request.filters.as_ref())
+                || artist_recently_used(&resolved, result.len(), &artist_last_positions)
+            {
+                continue;
+            }
+            exclude.insert(track_id.clone());
+            push_radio_result(
+                track_id.clone(),
+                &resolved,
+                &mut result,
+                &mut album_cooldowns,
+                &mut artist_cooldowns,
+                &mut artist_last_positions,
+            );
         }
-        if let Some(resolved) = catalog_store.get_resolved_track(track_id)? {
-            if resolved_track_passes_filters(&resolved, request.filters.as_ref()) {
-                apply_track_cooldown(&resolved, &mut album_cooldowns, &mut artist_cooldowns);
+    } else {
+        let mut initialized_seed_context = HashSet::new();
+        for track_id in &seed_track_ids {
+            if !initialized_seed_context.insert(track_id) {
+                continue;
+            }
+            if let Some(resolved) = catalog_store.get_resolved_track(track_id)? {
+                if resolved_track_passes_filters(&resolved, request.filters.as_ref()) {
+                    apply_track_cooldown(&resolved, &mut album_cooldowns, &mut artist_cooldowns);
+                }
             }
         }
     }
@@ -698,6 +714,7 @@ fn build_radio(
         diversity,
         &mut album_cooldowns,
         &mut artist_cooldowns,
+        &mut artist_last_positions,
     );
 
     Ok(result)
@@ -711,11 +728,15 @@ fn select_radio_candidates(
     diversity: f32,
     album_cooldowns: &mut HashMap<String, f32>,
     artist_cooldowns: &mut HashMap<String, f32>,
+    artist_last_positions: &mut HashMap<String, usize>,
 ) {
     while result.len() < count && !ranked.is_empty() {
         let Some((selected_index, _)) = ranked
             .iter()
             .enumerate()
+            .filter(|(_, candidate)| {
+                !artist_recently_used(&candidate.resolved, result.len(), artist_last_positions)
+            })
             .map(|(index, candidate)| {
                 (
                     index,
@@ -740,8 +761,52 @@ fn select_radio_candidates(
         if !exclude.insert(candidate.track_id.clone()) {
             continue;
         }
-        result.push(candidate.track_id);
-        apply_track_cooldown(&candidate.resolved, album_cooldowns, artist_cooldowns);
+        push_radio_result(
+            candidate.track_id,
+            &candidate.resolved,
+            result,
+            album_cooldowns,
+            artist_cooldowns,
+            artist_last_positions,
+        );
+    }
+}
+
+fn push_radio_result(
+    track_id: String,
+    resolved: &ResolvedTrack,
+    result: &mut Vec<String>,
+    album_cooldowns: &mut HashMap<String, f32>,
+    artist_cooldowns: &mut HashMap<String, f32>,
+    artist_last_positions: &mut HashMap<String, usize>,
+) {
+    let position = result.len();
+    result.push(track_id);
+    apply_track_cooldown(resolved, album_cooldowns, artist_cooldowns);
+    record_artist_positions(resolved, position, artist_last_positions);
+}
+
+fn artist_recently_used(
+    resolved: &ResolvedTrack,
+    next_position: usize,
+    artist_last_positions: &HashMap<String, usize>,
+) -> bool {
+    artist_ids_for_track(resolved).into_iter().any(|artist_id| {
+        artist_last_positions
+            .get(&artist_id)
+            .is_some_and(|last_position| {
+                next_position.saturating_sub(*last_position) < RADIO_ARTIST_REPEAT_MIN_DISTANCE
+            })
+    })
+}
+
+fn record_artist_positions(
+    resolved: &ResolvedTrack,
+    position: usize,
+    artist_last_positions: &mut HashMap<String, usize>,
+) {
+    for artist_id in artist_ids_for_track(resolved) {
+        artist_last_positions.insert(artist_id, position);
     }
 }
 
@@ -1032,17 +1097,6 @@ fn add_scaled_vector(seed: &mut [f32], vector: &[f32], weight: f32, dim: usize) 
     }
 }
 
-fn track_passes_filters(
-    catalog_store: &dyn CatalogStore,
-    track_id: &str,
-    filters: Option<&RadioFilters>,
-) -> anyhow::Result<bool> {
-    let Some(resolved) = catalog_store.get_resolved_track(track_id)? else {
-        return Ok(false);
-    };
-    Ok(resolved_track_passes_filters(&resolved, filters))
-}
-
 fn resolved_track_passes_filters(resolved: &ResolvedTrack, filters: Option<&RadioFilters>) -> bool {
     if resolved.track.availability != TrackAvailability::Available {
         return false;
@@ -1107,6 +1161,70 @@ fn release_year(release_date: &Option<String>) -> Option<i32> {
         .and_then(|year| year.parse::<i32>().ok())
 }
 
+fn append_radio_recommendations(
+    catalog_store: &dyn CatalogStore,
+    namespace: &str,
+    seed: &[f32],
+    count: usize,
+    diversity: f32,
+    result: &mut Vec<String>,
+    exclude: &mut HashSet<String>,
+    album_cooldowns: &mut HashMap<String, f32>,
+    artist_cooldowns: &mut HashMap<String, f32>,
+    artist_last_positions: &mut HashMap<String, usize>,
+) -> anyhow::Result<()> {
+    if result.len() >= count {
+        return Ok(());
+    }
+
+    let oversample = (count.saturating_sub(result.len()) * 16).clamp(100, 1000);
+    let results =
+        catalog_store.search_entity_embeddings(namespace, seed, Some("track"), oversample)?;
+
+    let mut rng = rand::rng();
+    let mut scored = results
+        .into_iter()
+        .map(|result| (result.entity_id, result.score + rng.random_range(0.0..0.03)))
+        .collect::<Vec<_>>();
+    scored.sort_by(|left, right| {
+        right
+            .1
+            .partial_cmp(&left.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut ranked = Vec::with_capacity(scored.len());
+    for (track_id, score) in scored {
+        if exclude.contains(&track_id) {
+            continue;
+        }
+        let Some(resolved) = catalog_store.get_resolved_track(&track_id)? else {
+            continue;
+        };
+        if !resolved_track_passes_filters(&resolved, None) {
+            continue;
+        }
+        ranked.push(RankedRadioCandidate {
+            track_id,
+            resolved,
+            score,
+        });
+    }
+
+    select_radio_candidates(
+        ranked,
+        result,
+        exclude,
+        count,
+        diversity,
+        album_cooldowns,
+        artist_cooldowns,
+        artist_last_positions,
+    );
+
+    Ok(())
+}
+
 fn track_radio(
     catalog_store: &dyn CatalogStore,
     namespace: &str,
@@ -1115,27 +1233,39 @@ fn track_radio(
 ) -> anyhow::Result<Vec<String>> {
     let mut result = Vec::new();
     let mut exclude = HashSet::new();
+    let mut album_cooldowns = HashMap::new();
+    let mut artist_cooldowns = HashMap::new();
+    let mut artist_last_positions = HashMap::new();
 
-    if track_is_available(catalog_store, track_id)? {
-        result.push(track_id.to_string());
-        exclude.insert(track_id.to_string());
-    }
-
-    if result.len() >= count {
-        return Ok(result);
+    if let Some(resolved) = catalog_store.get_resolved_track(track_id)? {
+        if resolved_track_passes_filters(&resolved, None) {
+            exclude.insert(track_id.to_string());
+            push_radio_result(
+                track_id.to_string(),
+                &resolved,
+                &mut result,
+                &mut album_cooldowns,
+                &mut artist_cooldowns,
+                &mut artist_last_positions,
+            );
+        }
     }
 
     let Some(seed) = get_vector(catalog_store, "track", track_id, namespace)? else {
         return Ok(result);
     };
-    let mut recommendations = recommend_tracks(
+    append_radio_recommendations(
         catalog_store,
         namespace,
         &seed,
-        count.saturating_sub(result.len()),
-        &exclude,
+        count,
+        DEFAULT_RADIO_DIVERSITY,
+        &mut result,
+        &mut exclude,
+        &mut album_cooldowns,
+        &mut artist_cooldowns,
+        &mut artist_last_positions,
     )?;
-    result.append(&mut recommendations);
     Ok(result)
 }
 
@@ -1157,7 +1287,24 @@ fn album_radio(
         return Ok(Vec::new());
     };
 
-    recommend_tracks(catalog_store, track_namespace, &seed, count, &exclude)
+    let mut result = Vec::with_capacity(count);
+    let mut exclude = exclude;
+    let mut album_cooldowns = HashMap::new();
+    let mut artist_cooldowns = HashMap::new();
+    let mut artist_last_positions = HashMap::new();
+    append_radio_recommendations(
+        catalog_store,
+        track_namespace,
+        &seed,
+        count,
+        DEFAULT_RADIO_DIVERSITY,
+        &mut result,
+        &mut exclude,
+        &mut album_cooldowns,
+        &mut artist_cooldowns,
+        &mut artist_last_positions,
+    )?;
+    Ok(result)
 }
 
 fn artist_radio(
@@ -1169,26 +1316,41 @@ fn artist_radio(
     let top_tracks = catalog_store.get_artist_top_track_ids(artist_id, ARTIST_SEED_TRACK_LIMIT)?;
     let mut result = Vec::new();
     let mut exclude = HashSet::new();
+    let mut album_cooldowns = HashMap::new();
+    let mut artist_cooldowns = HashMap::new();
+    let mut artist_last_positions = HashMap::new();
 
     if let Some(first) = top_tracks.first() {
-        result.push(first.clone());
-        exclude.insert(first.clone());
-    }
-    if result.len() >= count {
-        return Ok(result);
+        if let Some(resolved) = catalog_store.get_resolved_track(first)? {
+            if resolved_track_passes_filters(&resolved, None) {
+                exclude.insert(first.clone());
+                push_radio_result(
+                    first.clone(),
+                    &resolved,
+                    &mut result,
+                    &mut album_cooldowns,
+                    &mut artist_cooldowns,
+                    &mut artist_last_positions,
+                );
+            }
+        }
     }
 
     let Some(seed) = mean_track_vector(catalog_store, namespace, &top_tracks)? else {
         return Ok(result);
     };
-    let mut recommendations = recommend_tracks(
+    append_radio_recommendations(
         catalog_store,
         namespace,
         &seed,
-        count.saturating_sub(result.len()),
-        &exclude,
+        count,
+        DEFAULT_RADIO_DIVERSITY,
+        &mut result,
+        &mut exclude,
+        &mut album_cooldowns,
+        &mut artist_cooldowns,
+        &mut artist_last_positions,
     )?;
-    result.append(&mut recommendations);
     Ok(result)
 }
 
@@ -1386,6 +1548,7 @@ mod tests {
         let mut exclude = HashSet::new();
         let mut album_cooldowns = HashMap::new();
         let mut artist_cooldowns = HashMap::new();
+        let mut artist_last_positions = HashMap::new();
 
         select_radio_candidates(
             ranked,
@@ -1395,6 +1558,7 @@ mod tests {
             1.0,
             &mut album_cooldowns,
             &mut artist_cooldowns,
+            &mut artist_last_positions,
         );
 
         assert_eq!(result, vec!["track-a"]);
@@ -1423,6 +1587,7 @@ mod tests {
         ];
         let mut result = Vec::new();
         let mut exclude = HashSet::new();
+        let mut artist_last_positions = HashMap::new();
 
         select_radio_candidates(
             ranked,
@@ -1432,9 +1597,71 @@ mod tests {
             1.0,
             &mut album_cooldowns,
             &mut artist_cooldowns,
+            &mut artist_last_positions,
         );
 
         assert_eq!(result, vec!["different"]);
+    }
+
+    #[test]
+    fn radio_selection_forbids_same_artist_until_fifth_track() {
+        let seed = resolved_track("seed", "album-a", &["artist-a"]);
+        let same_artist = resolved_track("same", "album-b", &["artist-a"]);
+        let other_one = resolved_track("other-1", "album-c", &["artist-b"]);
+        let other_two = resolved_track("other-2", "album-d", &["artist-c"]);
+        let other_three = resolved_track("other-3", "album-e", &["artist-d"]);
+        let ranked = vec![
+            RankedRadioCandidate {
+                track_id: "same".to_string(),
+                resolved: same_artist,
+                score: 10.0,
+            },
+            RankedRadioCandidate {
+                track_id: "other-1".to_string(),
+                resolved: other_one,
+                score: 0.9,
+            },
+            RankedRadioCandidate {
+                track_id: "other-2".to_string(),
+                resolved: other_two,
+                score: 0.8,
+            },
+            RankedRadioCandidate {
+                track_id: "other-3".to_string(),
+                resolved: other_three,
+                score: 0.7,
+            },
+        ];
+        let mut result = Vec::new();
+        let mut exclude = HashSet::new();
+        let mut album_cooldowns = HashMap::new();
+        let mut artist_cooldowns = HashMap::new();
+        let mut artist_last_positions = HashMap::new();
+
+        exclude.insert("seed".to_string());
+        push_radio_result(
+            "seed".to_string(),
+            &seed,
+            &mut result,
+            &mut album_cooldowns,
+            &mut artist_cooldowns,
+            &mut artist_last_positions,
+        );
+        select_radio_candidates(
+            ranked,
+            &mut result,
+            &mut exclude,
+            5,
+            1.0,
+            &mut album_cooldowns,
+            &mut artist_cooldowns,
+            &mut artist_last_positions,
+        );
+
+        assert_eq!(
+            result,
+            vec!["seed", "other-1", "other-2", "other-3", "same"]
+        );
     }
 
     #[test]

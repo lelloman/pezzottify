@@ -4,6 +4,7 @@ import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider
 import com.lelloman.pezzottify.android.domain.player.PlaybackMode
 import com.lelloman.pezzottify.android.domain.player.PlaybackModeManager
+import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext
 import com.lelloman.pezzottify.android.domain.player.PlaybackQueueState
 import com.lelloman.pezzottify.android.domain.player.QueueLoadingState
 import com.lelloman.pezzottify.android.domain.player.TrackMetadata
@@ -68,6 +69,7 @@ class RemotePlaybackMetadataProvider internal constructor(
     override val queueState: StateFlow<PlaybackQueueState?> = _queueState.asStateFlow()
 
     private var currentQueueTrackIds: List<String>? = null
+    private var currentQueueContext: PlaybackPlaylistContext? = null
     private var currentRemoteDeviceId: Int? = null
     private var metadataLoadJob: Job? = null
 
@@ -78,17 +80,19 @@ class RemotePlaybackMetadataProvider internal constructor(
                     is PlaybackMode.Remote -> combine(
                         playbackSessionHandler.otherDeviceStates,
                         playbackSessionHandler.otherDeviceQueues,
-                    ) { states, queues ->
+                        playbackSessionHandler.otherDeviceQueueContexts,
+                    ) { states, queues, contexts ->
                         val state = states[mode.deviceId]
                         val queue = queues[mode.deviceId]
-                        Triple(mode.deviceId, state, queue)
+                        RemoteQueueSnapshot(mode.deviceId, state, queue, contexts[mode.deviceId])
                     }
-                    is PlaybackMode.Local -> flowOf(Triple(null, null, null))
+                    is PlaybackMode.Local -> flowOf(RemoteQueueSnapshot(null, null, null, null))
                 }
-            }.collect { (deviceId, remoteState, queueTrackIds) ->
+            }.collect { (deviceId, remoteState, queueTrackIds, queueContext) ->
                 if (deviceId != currentRemoteDeviceId) {
                     currentRemoteDeviceId = deviceId
                     currentQueueTrackIds = null
+                    currentQueueContext = null
                     metadataLoadJob?.cancel()
                     metadataLoadJob = null
                 }
@@ -96,18 +100,21 @@ class RemotePlaybackMetadataProvider internal constructor(
                 if (remoteState == null && queueTrackIds == null) {
                     _queueState.value = null
                     currentQueueTrackIds = null
+                    currentQueueContext = null
                     metadataLoadJob?.cancel()
                     return@collect
                 }
 
-                if (queueTrackIds != null && queueTrackIds != currentQueueTrackIds) {
+                if (queueTrackIds != null && (queueTrackIds != currentQueueTrackIds || queueContext != currentQueueContext)) {
                     // Queue changed - resolve full metadata
                     currentQueueTrackIds = queueTrackIds
+                    currentQueueContext = queueContext
                     metadataLoadJob?.cancel()
 
                     // Emit loading state with current track immediately
                     _queueState.value = remoteState?.let {
-                        buildQueueFromCurrentTrackOnly(it)?.copy(loadingState = QueueLoadingState.LOADING)
+                        buildQueueFromCurrentTrackOnly(it, queueContext)
+                            ?.copy(loadingState = QueueLoadingState.LOADING)
                     }
 
                     metadataLoadJob = scope.launch {
@@ -124,28 +131,36 @@ class RemotePlaybackMetadataProvider internal constructor(
                                 timestamp = 0L,
                                 queuePosition = 0,
                             ),
+                            queueContext,
                         )
                     }
                 } else if (queueTrackIds != null && queueTrackIds == currentQueueTrackIds && remoteState != null) {
                     // Same queue, just update currentIndex from state
                     val current = _queueState.value
                     if (current != null && current.loadingState == QueueLoadingState.LOADED) {
-                        _queueState.value = current.copy(currentIndex = remoteState.queuePosition)
+                        _queueState.value = current.copy(
+                            currentIndex = remoteState.queuePosition,
+                            context = queueContext,
+                        )
                     }
                 } else if (remoteState != null) {
                     // No queue data - fall back to current track only
-                    _queueState.value = buildQueueFromCurrentTrackOnly(remoteState)
+                    _queueState.value = buildQueueFromCurrentTrackOnly(remoteState, queueContext)
                 }
             }
         }
     }
 
-    private fun buildQueueFromCurrentTrackOnly(state: RemotePlaybackState): PlaybackQueueState? {
+    private fun buildQueueFromCurrentTrackOnly(
+        state: RemotePlaybackState,
+        context: PlaybackPlaylistContext?,
+    ): PlaybackQueueState? {
         val track = state.currentTrack ?: return null
         return PlaybackQueueState(
             tracks = listOf(trackInfoToMetadata(track)),
             currentIndex = 0,
             loadingState = QueueLoadingState.LOADED,
+            context = context,
         )
     }
 
@@ -163,7 +178,11 @@ class RemotePlaybackMetadataProvider internal constructor(
         )
     }
 
-    private suspend fun resolveQueueMetadata(trackIds: List<String>, state: RemotePlaybackState) {
+    private suspend fun resolveQueueMetadata(
+        trackIds: List<String>,
+        state: RemotePlaybackState,
+        context: PlaybackPlaylistContext?,
+    ) {
         logger.debug("Resolving metadata for ${trackIds.size} queue tracks")
 
         val baseUrl = configStore.baseUrl.value.trimEnd('/')
@@ -239,6 +258,7 @@ class RemotePlaybackMetadataProvider internal constructor(
             tracks = tracksMetadata,
             currentIndex = state.queuePosition,
             loadingState = QueueLoadingState.LOADED,
+            context = context,
         )
 
         logger.info("Resolved metadata for ${tracksMetadata.size} queue tracks, currentIndex=${state.queuePosition}")
@@ -270,4 +290,11 @@ class RemotePlaybackMetadataProvider internal constructor(
                 .data
         }
     }
+
+    private data class RemoteQueueSnapshot(
+        val deviceId: Int?,
+        val state: RemotePlaybackState?,
+        val queue: List<String>?,
+        val context: PlaybackPlaylistContext?,
+    )
 }

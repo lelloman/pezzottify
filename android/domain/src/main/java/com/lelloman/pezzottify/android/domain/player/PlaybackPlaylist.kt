@@ -1,5 +1,7 @@
 package com.lelloman.pezzottify.android.domain.player
 
+import kotlinx.serialization.json.JsonObject
+
 
 sealed interface PlaybackPlaylistContext {
 
@@ -9,6 +11,16 @@ sealed interface PlaybackPlaylistContext {
         PlaybackPlaylistContext
 
     data object UserMix : PlaybackPlaylistContext
+
+    data class Radio(
+        val source: String,
+        val seedEntityType: String,
+        val seedEntityId: String,
+        val seedLabel: String,
+        val count: Int,
+        val settings: JsonObject? = null,
+        val isEdited: Boolean = false,
+    ) : PlaybackPlaylistContext
 }
 
 data class PlaybackPlaylist(

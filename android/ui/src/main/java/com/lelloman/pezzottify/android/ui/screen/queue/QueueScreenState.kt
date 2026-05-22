@@ -39,5 +39,6 @@ enum class QueueContextType {
     Album,
     UserPlaylist,
     UserMix,
+    Radio,
     Unknown,
 }

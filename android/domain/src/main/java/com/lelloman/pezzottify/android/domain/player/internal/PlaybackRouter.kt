@@ -5,6 +5,7 @@ import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.player.PlaybackModeManager
 import com.lelloman.pezzottify.android.domain.player.PlaybackMode
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist
+import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext
 import com.lelloman.pezzottify.android.domain.player.RepeatMode
 import com.lelloman.pezzottify.android.domain.player.VolumeState
 import com.lelloman.pezzottify.android.domain.playbacksession.PlaybackSessionHandler
@@ -279,6 +280,20 @@ class PlaybackRouter @Inject constructor(
         }
     }
 
+    override fun loadRadio(trackIds: List<String>, context: PlaybackPlaylistContext.Radio) {
+        if (isRemote) {
+            sendRemoteCommand(
+                "loadTrackIds",
+                mapOf(
+                    "trackIds" to trackIds,
+                    "context" to context.toRemoteCommandPayload(),
+                )
+            )
+        } else {
+            localPlayer.loadRadio(trackIds, context)
+        }
+    }
+
     override fun goToPreviousPlaylist() {
         if (!isRemote) localPlayer.goToPreviousPlaylist()
     }
@@ -352,4 +367,18 @@ class PlaybackRouter @Inject constructor(
         playbackSessionHandler.sendCommand(command, payload, deviceId)
         logger.debug("Sent remote command '$command' to device $deviceId")
     }
+
+    private fun PlaybackPlaylistContext.Radio.toRemoteCommandPayload(): Map<String, Any?> =
+        mapOf(
+            "type" to "radio",
+            "source" to source,
+            "seed" to mapOf(
+                "entity_type" to seedEntityType,
+                "entity_id" to seedEntityId,
+                "label" to seedLabel,
+            ),
+            "count" to count,
+            "settings" to settings,
+            "edited" to isEdited,
+        )
 }

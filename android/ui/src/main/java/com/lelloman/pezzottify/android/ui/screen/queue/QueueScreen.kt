@@ -158,6 +158,10 @@ private fun QueueScreenContent(
                                     QueueContextType.Album -> stringResource(R.string.playing_from_album)
                                     QueueContextType.UserPlaylist -> stringResource(R.string.playing_from_playlist)
                                     QueueContextType.UserMix -> stringResource(R.string.your_mix)
+                                    QueueContextType.Radio -> stringResource(
+                                        R.string.playing_from_radio,
+                                        state.contextName,
+                                    )
                                     QueueContextType.Unknown -> ""
                                 },
                                 style = MaterialTheme.typography.bodySmall,

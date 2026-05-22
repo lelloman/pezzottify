@@ -149,15 +149,7 @@ class GenreScreenViewModel @AssistedInject constructor(
         if (trackIds.isNotEmpty()) {
             // Shuffle the track IDs and take up to SHUFFLE_PLAY_TRACK_COUNT tracks
             val shuffledTrackIds = trackIds.shuffled().take(SHUFFLE_PLAY_TRACK_COUNT)
-            // Load the first track, then add the rest after a small delay to avoid race condition
-            interactor.loadSingleTrack(shuffledTrackIds.first())
-            if (shuffledTrackIds.size > 1) {
-                viewModelScope.launch {
-                    // Wait for loadSingleTrack to complete its playlist creation
-                    kotlinx.coroutines.delay(100)
-                    interactor.addTracksToPlaylist(shuffledTrackIds.drop(1))
-                }
-            }
+            interactor.loadRadio(genreName, shuffledTrackIds)
         }
     }
 
@@ -174,9 +166,7 @@ class GenreScreenViewModel @AssistedInject constructor(
     interface Interactor {
         suspend fun getGenreTracks(genreName: String): Result<GenreTracksData>
 
-        fun loadSingleTrack(trackId: String)
-
-        fun addTracksToPlaylist(tracksIds: List<String>)
+        fun loadRadio(genreName: String, trackIds: List<String>)
     }
 
     data class GenreTracksData(

@@ -4,6 +4,7 @@
 //! between multiple connected devices for the same user.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 /// Track information for playback state.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -113,6 +114,8 @@ pub struct RequestQueuePayload {
 pub struct QueueUpdatePayload {
     pub queue: Vec<QueueItem>,
     pub queue_version: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<Value>,
 }
 
 // ============================================================================
@@ -141,6 +144,8 @@ pub struct DevicePlaybackInfo {
     pub state: PlaybackState,
     pub queue: Vec<QueueItem>,
     pub queue_version: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context: Option<Value>,
 }
 
 /// Payload for playback.device_list_changed message.
@@ -165,6 +170,8 @@ pub struct QueueSyncPayload {
     pub device_id: usize,
     pub queue: Vec<QueueItem>,
     pub queue_version: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context: Option<Value>,
 }
 
 /// Relay payload: a device's playback state update.
@@ -181,6 +188,8 @@ pub struct DeviceQueuePayload {
     pub device_id: usize,
     pub queue: Vec<QueueItem>,
     pub queue_version: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context: Option<Value>,
 }
 
 /// Relay payload: a device stopped playback.

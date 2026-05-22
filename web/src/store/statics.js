@@ -255,6 +255,10 @@ export const useStaticsStore = defineStore("statics", () => {
     return waitItemData("albums", albumId);
   };
 
+  const waitArtistData = (artistId) => {
+    return waitItemData("artists", artistId);
+  };
+
   const waitTrackData = (trackId) => {
     return waitItemData("tracks", trackId);
   };
@@ -299,6 +303,7 @@ export const useStaticsStore = defineStore("statics", () => {
     getAlbumData,
     getTrackData,
     waitAlbumData,
+    waitArtistData,
     waitTrackData,
     invalidateItem,
   };

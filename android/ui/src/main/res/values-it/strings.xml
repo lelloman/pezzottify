@@ -268,6 +268,7 @@
     <string name="queue_title">Coda</string>
     <string name="playing_from_album">In riproduzione dall\'album</string>
     <string name="playing_from_playlist">In riproduzione dalla playlist</string>
+    <string name="playing_from_radio">Radio: %1$s</string>
     <string name="your_mix">Il tuo mix</string>
     <string name="no_playback_queue">Nessuna coda di riproduzione</string>
     <string name="remove_from_queue">Rimuovi dalla coda</string>

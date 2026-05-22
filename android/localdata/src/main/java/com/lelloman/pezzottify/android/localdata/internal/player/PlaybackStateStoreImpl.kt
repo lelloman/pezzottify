@@ -45,6 +45,15 @@ internal class PlaybackStateStoreImpl(
                     ctx.isEdited
                 )
                 is PlaybackPlaylistContext.UserMix -> PersistableContext.UserMix
+                is PlaybackPlaylistContext.Radio -> PersistableContext.Radio(
+                    source = ctx.source,
+                    seedEntityType = ctx.seedEntityType,
+                    seedEntityId = ctx.seedEntityId,
+                    seedLabel = ctx.seedLabel,
+                    count = ctx.count,
+                    settings = ctx.settings,
+                    isEdited = ctx.isEdited,
+                )
             },
             tracksIds = playlist.tracksIds,
             currentTrackIndex = currentTrackIndex,
@@ -78,6 +87,15 @@ internal class PlaybackStateStoreImpl(
                     ctx.isEdited
                 )
                 is PersistableContext.UserMix -> PlaybackPlaylistContext.UserMix
+                is PersistableContext.Radio -> PlaybackPlaylistContext.Radio(
+                    source = ctx.source,
+                    seedEntityType = ctx.seedEntityType,
+                    seedEntityId = ctx.seedEntityId,
+                    seedLabel = ctx.seedLabel,
+                    count = ctx.count,
+                    settings = ctx.settings,
+                    isEdited = ctx.isEdited,
+                )
             }
 
             SavedPlaybackState(
@@ -132,4 +150,15 @@ private sealed interface PersistableContext {
 
     @Serializable
     data object UserMix : PersistableContext
+
+    @Serializable
+    data class Radio(
+        val source: String,
+        val seedEntityType: String,
+        val seedEntityId: String,
+        val seedLabel: String,
+        val count: Int,
+        val settings: kotlinx.serialization.json.JsonObject? = null,
+        val isEdited: Boolean = false,
+    ) : PersistableContext
 }
