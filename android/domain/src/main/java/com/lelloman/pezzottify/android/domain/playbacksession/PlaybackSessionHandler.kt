@@ -5,6 +5,8 @@ import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.device.DeviceInfoProvider
 import com.lelloman.pezzottify.android.domain.player.PlaybackMode
 import com.lelloman.pezzottify.android.domain.player.PlaybackModeManager
+import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist
+import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext
 import com.lelloman.pezzottify.android.domain.player.RepeatMode
 import com.lelloman.pezzottify.android.domain.player.VolumeState
 import com.lelloman.pezzottify.android.domain.player.internal.PlaybackMetadataProviderImpl
@@ -89,6 +91,11 @@ class PlaybackSessionHandler internal constructor(
     private val _otherDeviceQueues = MutableStateFlow<Map<Int, List<String>>>(emptyMap())
     val otherDeviceQueues: StateFlow<Map<Int, List<String>>> = _otherDeviceQueues.asStateFlow()
 
+    private val _otherDeviceQueueContexts =
+        MutableStateFlow<Map<Int, PlaybackPlaylistContext?>>(emptyMap())
+    val otherDeviceQueueContexts: StateFlow<Map<Int, PlaybackPlaylistContext?>> =
+        _otherDeviceQueueContexts.asStateFlow()
+
     private val handler = MessageHandler { type, payload ->
         handleMessage(type, payload)
     }
@@ -111,6 +118,7 @@ class PlaybackSessionHandler internal constructor(
                         _connectedDevices.value = emptyList()
                         _otherDeviceStates.value = emptyMap()
                         _otherDeviceQueues.value = emptyMap()
+                        _otherDeviceQueueContexts.value = emptyMap()
                     }
                     is ConnectionState.Connecting -> {}
                 }
@@ -152,7 +160,7 @@ class PlaybackSessionHandler internal constructor(
         scope.launch {
             player.playbackPlaylist.collect { playlist ->
                 if (playlist != null && isBroadcasting) {
-                    broadcastQueue(playlist.tracksIds)
+                    broadcastQueue(playlist)
                 }
             }
         }
@@ -252,22 +260,23 @@ class PlaybackSessionHandler internal constructor(
         webSocketManager.send("$PREFIX.state", stateMap)
     }
 
-    private fun broadcastQueue(tracksIds: List<String>) {
+    private fun broadcastQueue(playlist: PlaybackPlaylist) {
         if (webSocketManager.connectionState.value !is ConnectionState.Connected) return
         if (playbackModeManager.mode.value is PlaybackMode.Remote) return
 
         val queueMap = mapOf<String, Any?>(
-            "queue" to tracksIds.map { trackId ->
+            "queue" to playlist.tracksIds.map { trackId ->
                 mapOf<String, Any?>(
                     "id" to trackId,
                     "added_at" to timeProvider.nowUtcMs(),
                 )
             },
             "queue_version" to queueVersion.incrementAndGet().toLong(),
+            "context" to playlist.context.toQueueContextPayload(),
         )
 
         webSocketManager.send("$PREFIX.queue_update", queueMap)
-        logger.debug("Sent queue update with ${tracksIds.size} tracks")
+        logger.debug("Sent queue update with ${playlist.tracksIds.size} tracks")
     }
 
     private fun sendStoppedState() {
@@ -363,6 +372,7 @@ class PlaybackSessionHandler internal constructor(
             if (activeDevices != null) {
                 val states = mutableMapOf<Int, RemotePlaybackState>()
                 val queues = mutableMapOf<Int, List<String>>()
+                val contexts = mutableMapOf<Int, PlaybackPlaylistContext?>()
                 for (device in activeDevices) {
                     val deviceObj = device.jsonObject
                     val deviceId = deviceObj["device_id"]?.jsonPrimitive?.int ?: continue
@@ -378,9 +388,11 @@ class PlaybackSessionHandler internal constructor(
                             item.jsonObject["id"]?.jsonPrimitive?.content
                         }
                     }
+                    contexts[deviceId] = deviceObj["context"]?.jsonObject?.toPlaybackPlaylistContext()
                 }
                 _otherDeviceStates.value = states
                 _otherDeviceQueues.value = queues
+                _otherDeviceQueueContexts.value = contexts
             }
         } catch (e: Exception) {
             logger.error("Failed to parse welcome payload", e)
@@ -408,6 +420,7 @@ class PlaybackSessionHandler internal constructor(
             val deviceId = payloadJson["device_id"]?.jsonPrimitive?.int ?: return
             _otherDeviceStates.value = _otherDeviceStates.value - deviceId
             _otherDeviceQueues.value = _otherDeviceQueues.value - deviceId
+            _otherDeviceQueueContexts.value = _otherDeviceQueueContexts.value - deviceId
         } catch (e: Exception) {
             logger.error("Failed to parse device stopped", e)
         }
@@ -424,6 +437,8 @@ class PlaybackSessionHandler internal constructor(
                 item.jsonObject["id"]?.jsonPrimitive?.content
             }
             _otherDeviceQueues.value = _otherDeviceQueues.value + (deviceId to trackIds)
+            _otherDeviceQueueContexts.value = _otherDeviceQueueContexts.value +
+                (deviceId to payloadJson["context"]?.jsonObject?.toPlaybackPlaylistContext())
             logger.debug("Received device queue update for device $deviceId with ${trackIds.size} tracks")
         } catch (e: Exception) {
             logger.error("Failed to parse device queue", e)
@@ -443,9 +458,64 @@ class PlaybackSessionHandler internal constructor(
                 item.jsonObject["id"]?.jsonPrimitive?.content
             }
             _otherDeviceQueues.value = _otherDeviceQueues.value + (deviceId to trackIds)
+            _otherDeviceQueueContexts.value = _otherDeviceQueueContexts.value +
+                (deviceId to payloadJson["context"]?.jsonObject?.toPlaybackPlaylistContext())
             logger.debug("Received queue sync for device $deviceId with ${trackIds.size} tracks")
         } catch (e: Exception) {
             logger.error("Failed to parse queue sync", e)
+        }
+    }
+
+    private fun PlaybackPlaylistContext.toQueueContextPayload(): Map<String, Any?> = when (this) {
+        is PlaybackPlaylistContext.Album -> mapOf(
+            "type" to "album",
+            "id" to albumId,
+            "edited" to false,
+        )
+        is PlaybackPlaylistContext.UserPlaylist -> mapOf(
+            "type" to "playlist",
+            "id" to userPlaylistId,
+            "edited" to isEdited,
+        )
+        is PlaybackPlaylistContext.UserMix -> mapOf(
+            "type" to "user_mix",
+            "edited" to false,
+        )
+        is PlaybackPlaylistContext.Radio -> mapOf(
+            "type" to "radio",
+            "source" to source,
+            "seed" to mapOf(
+                "entity_type" to seedEntityType,
+                "entity_id" to seedEntityId,
+                "label" to seedLabel,
+            ),
+            "count" to count,
+            "settings" to settings,
+            "edited" to isEdited,
+        )
+    }
+
+    private fun Map<String, JsonElement>.toPlaybackPlaylistContext(): PlaybackPlaylistContext? {
+        val type = this["type"]?.jsonPrimitive?.content ?: return null
+        return when (type) {
+            "radio" -> {
+                val seed = this["seed"]?.jsonObject
+                val settings = this["settings"]?.jsonObject
+                PlaybackPlaylistContext.Radio(
+                    source = this["source"]?.jsonPrimitive?.content ?: "radio",
+                    seedEntityType = seed?.get("entity_type")?.jsonPrimitive?.content ?: "",
+                    seedEntityId = seed?.get("entity_id")?.jsonPrimitive?.content ?: "",
+                    seedLabel = seed?.get("label")?.jsonPrimitive?.content
+                        ?: seed?.get("entity_id")?.jsonPrimitive?.content
+                        ?: "",
+                    count = this["count"]?.jsonPrimitive?.int
+                        ?: settings?.get("count")?.jsonPrimitive?.int
+                        ?: 0,
+                    settings = settings,
+                    isEdited = this["edited"]?.jsonPrimitive?.boolean ?: false,
+                )
+            }
+            else -> null
         }
     }
 
@@ -611,7 +681,12 @@ class PlaybackSessionHandler internal constructor(
             logger.warn("loadTrackIds command missing trackIds")
             return
         }
-        player.loadTrackIds(trackIds)
+        val context = payload.jsonObject["context"]?.jsonObject?.toPlaybackPlaylistContext()
+        if (context is PlaybackPlaylistContext.Radio) {
+            player.loadRadio(trackIds, context)
+        } else {
+            player.loadTrackIds(trackIds)
+        }
     }
 
     private fun handleAddAlbumToQueueCommand(payload: JsonElement?) {

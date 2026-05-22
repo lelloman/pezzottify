@@ -26,6 +26,7 @@ data class PlaybackQueueState(
     val tracks: List<TrackMetadata>,
     val currentIndex: Int,
     val loadingState: QueueLoadingState = QueueLoadingState.LOADED,
+    val context: PlaybackPlaylistContext? = null,
 ) {
     val currentTrack: TrackMetadata?
         get() = tracks.getOrNull(currentIndex)

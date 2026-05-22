@@ -34,4 +34,5 @@ fun PlaybackPlaylistContext.toApiString(): String = when (this) {
     is PlaybackPlaylistContext.Album -> "album"
     is PlaybackPlaylistContext.UserPlaylist -> if (isEdited) "queue" else "playlist"
     is PlaybackPlaylistContext.UserMix -> "queue"
+    is PlaybackPlaylistContext.Radio -> "radio"
 }

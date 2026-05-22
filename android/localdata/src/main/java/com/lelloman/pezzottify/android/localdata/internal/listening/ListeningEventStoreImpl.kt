@@ -6,11 +6,17 @@ import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext
 import com.lelloman.pezzottify.android.domain.usercontent.SyncStatus
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 
 @Singleton
 internal class ListeningEventStoreImpl @Inject constructor(
     private val dao: ListeningEventDao,
 ) : ListeningEventStore {
+
+    private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun saveEvent(event: ListeningEvent): Long {
         return dao.insert(event.toEntity())
@@ -78,6 +84,7 @@ internal class ListeningEventStoreImpl @Inject constructor(
         is PlaybackPlaylistContext.Album -> "Album:$albumId"
         is PlaybackPlaylistContext.UserPlaylist -> "UserPlaylist:$userPlaylistId:$isEdited"
         is PlaybackPlaylistContext.UserMix -> "UserMix"
+        is PlaybackPlaylistContext.Radio -> "Radio:${json.encodeToString(toPersistable())}"
     }
 
     private fun String.toPlaybackContext(): PlaybackPlaylistContext = when {
@@ -89,6 +96,42 @@ internal class ListeningEventStoreImpl @Inject constructor(
                 isEdited = parts.getOrNull(1)?.toBooleanStrictOrNull() ?: false,
             )
         }
+        startsWith("Radio:") -> runCatching {
+            json.decodeFromString<PersistableRadioContext>(removePrefix("Radio:")).toDomain()
+        }.getOrElse {
+            PlaybackPlaylistContext.UserMix
+        }
         else -> PlaybackPlaylistContext.UserMix
     }
+
+    private fun PlaybackPlaylistContext.Radio.toPersistable() = PersistableRadioContext(
+        source = source,
+        seedEntityType = seedEntityType,
+        seedEntityId = seedEntityId,
+        seedLabel = seedLabel,
+        count = count,
+        settings = settings,
+        isEdited = isEdited,
+    )
+
+    private fun PersistableRadioContext.toDomain() = PlaybackPlaylistContext.Radio(
+        source = source,
+        seedEntityType = seedEntityType,
+        seedEntityId = seedEntityId,
+        seedLabel = seedLabel,
+        count = count,
+        settings = settings,
+        isEdited = isEdited,
+    )
 }
+
+@Serializable
+private data class PersistableRadioContext(
+    val source: String,
+    val seedEntityType: String,
+    val seedEntityId: String,
+    val seedLabel: String,
+    val count: Int,
+    val settings: JsonObject? = null,
+    val isEdited: Boolean = false,
+)

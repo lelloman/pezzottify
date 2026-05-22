@@ -48,6 +48,7 @@ struct DevicePlaybackState {
     state: PlaybackState,
     queue: Vec<QueueItem>,
     queue_version: u64,
+    queue_context: Option<serde_json::Value>,
     last_update: Instant,
 }
 
@@ -445,6 +446,7 @@ impl PlaybackSessionManager {
                     state: ds.state.clone(),
                     queue: ds.queue.clone(),
                     queue_version: ds.queue_version,
+                    context: ds.queue_context.clone(),
                 });
             }
         }
@@ -492,6 +494,7 @@ impl PlaybackSessionManager {
                             state: state.clone(),
                             queue: Vec::new(),
                             queue_version: 0,
+                            queue_context: None,
                             last_update: Instant::now(),
                         });
                 entry.state = state.clone();
@@ -543,6 +546,7 @@ impl PlaybackSessionManager {
         device_id: usize,
         queue: Vec<QueueItem>,
         queue_version: u64,
+        context: Option<serde_json::Value>,
     ) -> Result<(), PlaybackError> {
         if queue.len() > MAX_QUEUE_SIZE {
             return Err(PlaybackError::QueueLimitExceeded);
@@ -572,10 +576,12 @@ impl PlaybackSessionManager {
                         },
                         queue: Vec::new(),
                         queue_version: 0,
+                        queue_context: None,
                         last_update: Instant::now(),
                     });
             entry.queue = queue.clone();
             entry.queue_version = queue_version;
+            entry.queue_context = context.clone();
             entry.last_update = Instant::now();
         }
 
@@ -586,6 +592,7 @@ impl PlaybackSessionManager {
                 device_id,
                 queue,
                 queue_version,
+                context,
             },
         );
         self.broadcast_to_authorized_users(user_id, device_id, device_id, relay_msg)
@@ -672,6 +679,7 @@ impl PlaybackSessionManager {
                     device_id: target_id,
                     queue: ds.queue.clone(),
                     queue_version: ds.queue_version,
+                    context: ds.queue_context.clone(),
                 });
             }
 
@@ -682,6 +690,7 @@ impl PlaybackSessionManager {
                         device_id,
                         queue: ds.queue.clone(),
                         queue_version: ds.queue_version,
+                        context: ds.queue_context.clone(),
                     });
                 }
                 // Return first available device's queue
@@ -690,6 +699,7 @@ impl PlaybackSessionManager {
                         device_id: *found_id,
                         queue: ds.queue.clone(),
                         queue_version: ds.queue_version,
+                        context: ds.queue_context.clone(),
                     });
                 }
             }
@@ -699,6 +709,7 @@ impl PlaybackSessionManager {
             device_id,
             queue: Vec::new(),
             queue_version: 0,
+            context: None,
         })
     }
 
@@ -1281,7 +1292,7 @@ mod tests {
             })
             .collect();
 
-        let result = manager.handle_queue_update(1, 100, queue, 1).await;
+        let result = manager.handle_queue_update(1, 100, queue, 1, None).await;
         assert!(matches!(result, Err(PlaybackError::QueueLimitExceeded)));
     }
 

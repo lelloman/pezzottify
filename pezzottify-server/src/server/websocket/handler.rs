@@ -323,7 +323,13 @@ async fn handle_playback_message(
             match serde_json::from_value::<QueueUpdatePayload>(payload) {
                 Ok(p) => {
                     manager
-                        .handle_queue_update(user_id, device_id, p.queue, p.queue_version)
+                        .handle_queue_update(
+                            user_id,
+                            device_id,
+                            p.queue,
+                            p.queue_version,
+                            p.context,
+                        )
                         .await
                 }
                 Err(e) => Err(PlaybackError::InvalidMessage(format!(

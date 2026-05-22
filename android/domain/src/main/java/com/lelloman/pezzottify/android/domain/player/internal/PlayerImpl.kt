@@ -389,6 +389,21 @@ class PlayerImpl(
         }
     }
 
+    override fun loadRadio(trackIds: List<String>, context: PlaybackPlaylistContext.Radio) {
+        if (trackIds.isEmpty()) return
+        runOnPlayerThread {
+            loadNexPlaylistJob?.cancel()
+            val baseUrl = configStore.baseUrl.value
+            val urls = trackIds.map { "$baseUrl/v1/content/stream/$it" }
+            platformPlayer.loadPlaylist(urls, playWhenReady = true)
+            mutablePlaybackPlaylist.value = PlaybackPlaylist(
+                context = context,
+                tracksIds = trackIds,
+            )
+            logger.info("Loaded radio ${context.source}:${context.seedEntityType}:${context.seedEntityId} with ${trackIds.size} tracks")
+        }
+    }
+
     override fun forward10Sec() {
         platformPlayer.forward10Sec( )
     }
@@ -435,6 +450,7 @@ class PlayerImpl(
                     is PlaybackPlaylistContext.Album -> PlaybackPlaylistContext.UserMix
                     is PlaybackPlaylistContext.UserPlaylist -> ctx.copy(isEdited = true)
                     is PlaybackPlaylistContext.UserMix -> ctx
+                    is PlaybackPlaylistContext.Radio -> ctx.copy(isEdited = true)
                 }
                 mutablePlaybackPlaylist.value = PlaybackPlaylist(
                     context = newContext,
@@ -494,6 +510,7 @@ class PlayerImpl(
             is PlaybackPlaylistContext.Album -> PlaybackPlaylistContext.UserMix
             is PlaybackPlaylistContext.UserPlaylist -> ctx.copy(isEdited = true)
             is PlaybackPlaylistContext.UserMix -> ctx
+            is PlaybackPlaylistContext.Radio -> ctx.copy(isEdited = true)
         }
 
         mutablePlaybackPlaylist.value = PlaybackPlaylist(

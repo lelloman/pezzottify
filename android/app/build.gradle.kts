@@ -182,6 +182,7 @@ dependencies {
     implementation(libs.room.runtime)
     implementation(libs.exoplayer)
     implementation(libs.androidx.media3.session)
+    implementation(libs.kotlinx.serialization.json)
 
     implementation(project(":ui"))
     implementation(project(":domain"))

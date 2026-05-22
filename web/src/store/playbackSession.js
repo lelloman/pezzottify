@@ -60,7 +60,7 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
   const queueVersion = ref(0);
 
   // Per-device playback states from other devices
-  // { [deviceId]: { deviceName, state, queue, queueVersion } }
+  // { [deviceId]: { deviceName, state, queue, queueContext, queueVersion } }
   const otherDeviceStates = ref({});
 
   // ============================================
@@ -142,6 +142,7 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
       return;
     queueVersion.value++;
     const queue = _playbackStore.snapshotQueue();
+    const context = _playbackStore.snapshotQueueContext();
     console.debug("[PlaybackSession] broadcastQueue", {
       queueSize: queue.length,
       queueVersion: queueVersion.value,
@@ -150,6 +151,7 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
     ws.send("playback.queue_update", {
       queue,
       queue_version: queueVersion.value,
+      context,
     });
   }
 
@@ -229,6 +231,7 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
           deviceName: d.device_name,
           state: d.state,
           queue: d.queue,
+          queueContext: d.context,
           queueVersion: d.queue_version,
         };
       }
@@ -289,6 +292,7 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
       [payload.device_id]: {
         ...existing,
         queue: payload.queue,
+        queueContext: payload.context,
         queueVersion: payload.queue_version,
       },
     };
@@ -318,6 +322,7 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
       [targetDeviceId]: {
         ...existing,
         queue: payload.queue,
+        queueContext: payload.context,
         queueVersion: payload.queue_version,
       },
     };

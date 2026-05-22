@@ -129,6 +129,8 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import java.util.UUID
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist as DomainPlaybackPlaylist
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext as DomainPlaybackPlaylistContext
@@ -152,6 +154,33 @@ private fun formatBatchDate(timestampSeconds: Long): String {
     val format = java.text.SimpleDateFormat("MMMM d, yyyy", java.util.Locale.getDefault())
     return format.format(date)
 }
+
+private suspend fun resolveRadioSeedLabel(
+    staticsStore: StaticsStore,
+    entityType: String,
+    entityId: String,
+): String = when (entityType) {
+    "track" -> staticsStore.getTrack(entityId).first()?.name
+    "album" -> staticsStore.getAlbum(entityId).first()?.name
+    "artist" -> staticsStore.getArtist(entityId).first()?.name
+    else -> null
+} ?: entityId
+
+private fun buildBasicRadioContext(
+    entityType: String,
+    entityId: String,
+    label: String,
+    count: Int,
+) = DomainPlaybackPlaylistContext.Radio(
+    source = "basic",
+    seedEntityType = entityType,
+    seedEntityId = entityId,
+    seedLabel = label,
+    count = count,
+    settings = buildJsonObject {
+        put("count", JsonPrimitive(count))
+    },
+)
 
 @InstallIn(ViewModelComponent::class)
 @Module
@@ -1044,10 +1073,15 @@ class InteractorsModule {
         }
 
         override suspend fun playRadio(entityType: String, entityId: String) {
-            when (val response = remoteApiClient.getRadioTrackIds(entityType, entityId, 50)) {
+            val count = 50
+            when (val response = remoteApiClient.getRadioTrackIds(entityType, entityId, count)) {
                 is RemoteApiResponse.Success -> {
                     if (response.data.isNotEmpty()) {
-                        player.loadTrackIds(response.data)
+                        val label = resolveRadioSeedLabel(staticsStore, entityType, entityId)
+                        player.loadRadio(
+                            response.data,
+                            buildBasicRadioContext(entityType, entityId, label, count),
+                        )
                     }
                 }
                 is RemoteApiResponse.Error -> Unit
@@ -1192,6 +1226,7 @@ class InteractorsModule {
         getLikedStateUseCase: GetLikedStateUseCase,
         toggleLikeUseCase: ToggleLikeUseCase,
         staticsProvider: StaticsProvider,
+        staticsStore: StaticsStore,
         remoteApiClient: RemoteApiClient,
         player: PezzottifyPlayer,
     ): ArtistScreenViewModel.Interactor = object : ArtistScreenViewModel.Interactor {
@@ -1208,10 +1243,15 @@ class InteractorsModule {
         }
 
         override suspend fun playRadio(artistId: String) {
-            when (val response = remoteApiClient.getRadioTrackIds("artist", artistId, 50)) {
+            val count = 50
+            when (val response = remoteApiClient.getRadioTrackIds("artist", artistId, count)) {
                 is RemoteApiResponse.Success -> {
                     if (response.data.isNotEmpty()) {
-                        player.loadTrackIds(response.data)
+                        val label = resolveRadioSeedLabel(staticsStore, "artist", artistId)
+                        player.loadRadio(
+                            response.data,
+                            buildBasicRadioContext("artist", artistId, label, count),
+                        )
                     }
                 }
                 is RemoteApiResponse.Error -> Unit
@@ -1658,8 +1698,8 @@ class InteractorsModule {
                     }
                     .combine(playbackModeManager.mode) { (queueState, playlist), mode ->
                         if (queueState != null && (playlist != null || mode is com.lelloman.pezzottify.android.domain.player.PlaybackMode.Remote)) {
-                            val (contextType, contextName, canSave) = if (playlist != null) {
-                                val playlistContext = playlist.context
+                            val (contextType, contextName, canSave) =
+                                (playlist?.context ?: queueState.context)?.let { playlistContext ->
                                 when (playlistContext) {
                                     is com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext.Album -> Triple(
                                         com.lelloman.pezzottify.android.ui.screen.queue.QueueContextType.Album,
@@ -1678,8 +1718,14 @@ class InteractorsModule {
                                         "user_mix",
                                         true
                                     )
+
+                                    is com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext.Radio -> Triple(
+                                        com.lelloman.pezzottify.android.ui.screen.queue.QueueContextType.Radio,
+                                        playlistContext.seedLabel,
+                                        true
+                                    )
                                 }
-                            } else {
+                            } ?: run {
                                 Triple(
                                     com.lelloman.pezzottify.android.ui.screen.queue.QueueContextType.Unknown,
                                     "",
@@ -2141,12 +2187,21 @@ class InteractorsModule {
             }
         }
 
-        override fun loadSingleTrack(trackId: String) {
-            player.loadSingleTrack(trackId)
-        }
-
-        override fun addTracksToPlaylist(tracksIds: List<String>) {
-            player.addTracksToPlaylist(tracksIds)
+        override fun loadRadio(genreName: String, trackIds: List<String>) {
+            player.loadRadio(
+                trackIds,
+                DomainPlaybackPlaylistContext.Radio(
+                    source = "genre",
+                    seedEntityType = "genre",
+                    seedEntityId = genreName,
+                    seedLabel = genreName,
+                    count = trackIds.size,
+                    settings = buildJsonObject {
+                        put("genre", JsonPrimitive(genreName))
+                        put("count", JsonPrimitive(trackIds.size))
+                    },
+                )
+            )
         }
     }
 

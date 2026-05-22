@@ -134,11 +134,7 @@ const handleShufflePlay = async () => {
   isLoadingRadio.value = false;
 
   if (radioTracks && radioTracks.length > 0) {
-    const playlist = {
-      name: `${decodedGenreName.value} Radio`,
-      tracks: radioTracks,
-    };
-    playback.setUserPlaylist(playlist);
+    playback.setGenreRadio(decodedGenreName.value, radioTracks, 50);
   }
 };
 

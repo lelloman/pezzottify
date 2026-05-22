@@ -129,6 +129,15 @@ watch(
         playingContextText = "Playlist: " + playlist.context.name;
       } else if (playlist.type == playback.PLAYBACK_CONTEXTS.userMix) {
         playingContextText = "Your mix";
+      } else if (playlist.type == playback.PLAYBACK_CONTEXTS.radio) {
+        const seedLabel = playlist.context?.seed?.label || "Radio";
+        if (playlist.context?.source === "custom") {
+          playingContextText = "Custom radio: " + seedLabel;
+        } else if (playlist.context?.source === "genre") {
+          playingContextText = "Genre radio: " + seedLabel;
+        } else {
+          playingContextText = "Radio: " + seedLabel;
+        }
       }
       playingContext.value.text = playingContextText;
 
