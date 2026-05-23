@@ -737,7 +737,7 @@ onMounted(() => {
   color: white;
   border: none;
   border-radius: var(--radius-md);
-  font-size: var(--text-base);
+  font-size: var(--font-size-base);
   font-weight: var(--font-medium);
   cursor: pointer;
   transition:

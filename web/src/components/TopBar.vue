@@ -216,10 +216,17 @@ function openIngestionMonitor() {
 </script>
 
 <style scoped>
+header {
+  height: var(--topbar-height);
+  background: rgba(11, 13, 14, 0.92);
+  border-bottom: 1px solid var(--surface-border);
+  backdrop-filter: blur(18px);
+}
+
 .searchInputContainer {
   width: 100%;
-  max-width: 31.25rem;
-  margin: 1rem auto;
+  max-width: 38rem;
+  margin: 0 auto;
 }
 
 .searchBar {
@@ -231,14 +238,15 @@ function openIngestionMonitor() {
 
 .searchInput {
   width: 100%;
-  height: 2.8rem;
-  background: var(--bg-highlight);
+  height: 2.7rem;
+  background: var(--surface-raised);
   color: var(--text-base);
   outline: none;
-  border: 1px solid var(--border-default);
-  border-radius: 1.625rem;
-  padding: 0 3.5rem 0 1.5rem;
-  font-size: 1rem;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  padding: 0 3.5rem 0 1rem;
+  font-size: 0.94rem;
+  font-weight: 650;
   transition:
     border-color var(--transition-fast),
     background-color var(--transition-fast);
@@ -249,8 +257,9 @@ function openIngestionMonitor() {
 }
 
 .searchInput:focus {
-  border-color: var(--spotify-green);
-  background: var(--bg-elevated);
+  border-color: rgba(29, 185, 84, 0.52);
+  background: #151a1d;
+  box-shadow: 0 0 0 3px rgba(29, 185, 84, 0.12);
 }
 
 #clearQueryButton {
@@ -278,8 +287,8 @@ function openIngestionMonitor() {
   justify-content: space-between;
   width: 100%;
   height: 100%;
-  padding: 0 var(--spacing-4);
-  gap: var(--spacing-3);
+  padding: 0 14px;
+  gap: 12px;
 }
 
 .logoLink {
@@ -288,7 +297,7 @@ function openIngestionMonitor() {
   justify-content: center;
   width: 40px;
   height: 40px;
-  border-radius: var(--radius-full);
+  border-radius: 8px;
   color: var(--spotify-green);
   flex-shrink: 0;
   transition:
@@ -297,7 +306,7 @@ function openIngestionMonitor() {
 }
 
 .logoLink:hover {
-  background-color: var(--bg-elevated);
+  background-color: var(--surface-hover);
 }
 
 .logoIcon {
@@ -308,7 +317,7 @@ function openIngestionMonitor() {
 .userActions {
   display: flex;
   align-items: center;
-  gap: var(--spacing-3);
+  gap: 6px;
   flex-shrink: 0;
 }
 
@@ -322,7 +331,7 @@ function openIngestionMonitor() {
   justify-content: center;
   width: 40px;
   height: 40px;
-  border-radius: var(--radius-full);
+  border-radius: 8px;
   color: var(--text-subdued);
   transition:
     color var(--transition-fast),
@@ -335,7 +344,7 @@ function openIngestionMonitor() {
 .devicesLink:hover,
 .logoutLink:hover {
   color: var(--text-base);
-  background-color: var(--bg-elevated);
+  background-color: var(--surface-hover);
 }
 
 .adminIcon,
@@ -395,7 +404,7 @@ function openIngestionMonitor() {
   justify-content: center;
   width: 40px;
   height: 40px;
-  border-radius: var(--radius-full);
+  border-radius: 8px;
   border: none;
   background: transparent;
   color: var(--text-subdued);
@@ -407,7 +416,7 @@ function openIngestionMonitor() {
 
 .ingestionBadge:hover {
   color: var(--text-base);
-  background-color: var(--bg-elevated);
+  background-color: var(--surface-hover);
 }
 
 .ingestionBadge.badge-active {

@@ -173,25 +173,34 @@ onMounted(() => {
 <style scoped>
 .tabSelectorsContainer {
   display: flex;
-  justify-content: space-around;
-  margin: 16px 0;
+  gap: 6px;
+  padding: 8px;
+  margin: 0;
+  border-bottom: 1px solid var(--surface-border);
 }
 
 .tabSelector {
   cursor: pointer;
-  padding: 8px 16px;
-  border-radius: 8px;
-  transition: scale 0.3s ease;
-  opacity: 0.4;
+  flex: 1;
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 7px;
+  transition:
+    background-color var(--transition-fast),
+    opacity var(--transition-fast);
+  opacity: 0.62;
+  text-align: center;
 }
 
 .tabSelector > h3 {
-  color: white;
-  font-weight: bold;
+  color: var(--text-base);
+  font-size: 0.78rem;
+  font-weight: 850;
+  white-space: nowrap;
 }
 
 .tabSelector:hover {
-  background-color: var(--highlighted-panel-color);
+  background-color: var(--surface-hover);
   transition:
     scale 0.3s ease,
     background-color 0.3s ease,
@@ -207,9 +216,14 @@ onMounted(() => {
 }
 
 .selectedTab {
-  background-color: var(--accent-color) !important;
+  background-color: var(--surface-active) !important;
+  color: var(--spotify-green);
   transition: transform;
   opacity: 1 !important;
+}
+
+.selectedTab > h3 {
+  color: var(--spotify-green);
 }
 
 .contentContainer {
@@ -217,6 +231,8 @@ onMounted(() => {
   flex-direction: column;
   flex: 1;
   overflow-y: auto;
+  padding: 8px;
+  gap: 4px;
 }
 
 .playlistsContainer {
@@ -226,17 +242,17 @@ onMounted(() => {
 }
 
 .createPlaylistButton {
-  margin: 0 16px;
-  padding: 8px;
-  border-radius: 8px;
-  padding: 8px 16px;
+  margin: 8px;
+  border: 1px solid var(--surface-border);
+  border-radius: 7px;
+  padding: 9px 14px;
   width: fit-content;
   cursor: pointer;
   transition: background-color 0.3s ease;
 }
 
 .createPlaylistButton:hover {
-  background-color: var(--highlighted-panel-color);
+  background-color: var(--surface-hover);
   transition: background-color 0.3s ease;
 }
 </style>

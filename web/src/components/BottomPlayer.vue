@@ -9,8 +9,15 @@
         @click.stop="handleClickOnAlbumCover"
       />
       <div class="trackNamesColumn">
-        <TrackName v-if="displayTrack" :track="displayTrack" :infiniteAnimation="true" />
-        <LoadClickableArtistsNames v-if="artists.length > 0" :artistsIds="artists" />
+        <TrackName
+          v-if="displayTrack"
+          :track="displayTrack"
+          :infiniteAnimation="true"
+        />
+        <LoadClickableArtistsNames
+          v-if="artists.length > 0"
+          :artistsIds="artists"
+        />
         <span v-else-if="artistName" class="artistName">{{ artistName }}</span>
       </div>
     </div>
@@ -73,7 +80,11 @@
         <PlaylistPlusIcon />
       </div>
       <DeviceSelector />
-      <ControlIconButton v-if="playback.mode === 'local'" :action="handleStop" :icon="StopIcon" />
+      <ControlIconButton
+        v-if="playback.mode === 'local'"
+        :action="handleStop"
+        :icon="StopIcon"
+      />
     </div>
   </footer>
 </template>
@@ -318,16 +329,16 @@ watch(
                     imageUrls.value = chooseAlbumCoverImageUrl(albumRef.item);
                   }
                 },
-                { immediate: true }
+                { immediate: true },
               );
             }
           }
         },
-        { immediate: true }
+        { immediate: true },
       );
     }
   },
-  { immediate: true, deep: true }
+  { immediate: true, deep: true },
 );
 </script>
 
@@ -341,12 +352,17 @@ watch(
 .footerPlayer {
   height: var(--player-height-desktop);
   display: grid;
-  grid-template-columns: 3fr 4fr 3fr;
-  gap: var(--spacing-4);
-  padding: 0 var(--spacing-4);
+  grid-template-columns: minmax(240px, 3fr) minmax(320px, 4fr) minmax(
+      220px,
+      3fr
+    );
+  gap: 18px;
+  padding: 10px 14px;
   align-items: center;
-  background-color: var(--bg-base);
-  border-top: 1px solid var(--border-default);
+  background: rgba(11, 13, 14, 0.96);
+  border-top: 1px solid var(--surface-border);
+  box-shadow: 0 -16px 36px rgba(0, 0, 0, 0.26);
+  backdrop-filter: blur(18px);
 }
 
 /* ============================================
@@ -357,16 +373,16 @@ watch(
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: var(--spacing-3);
+  gap: 12px;
   min-width: 0;
   text-align: left;
 }
 
 .trackImage {
-  width: 56px;
-  height: 56px;
-  min-width: 56px;
-  border-radius: var(--radius-md);
+  width: 60px;
+  height: 60px;
+  min-width: 60px;
+  border-radius: 8px;
   cursor: pointer;
   transition:
     transform var(--transition-base),
@@ -387,12 +403,12 @@ watch(
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-1);
+  gap: 3px;
 }
 
 .trackName {
   margin: 0;
-  font-size: var(--text-base);
+  font-size: var(--font-size-base);
   font-weight: var(--font-semibold);
   color: var(--text-base);
   white-space: nowrap;
@@ -425,7 +441,7 @@ watch(
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: var(--spacing-2);
+  gap: 8px;
   min-width: 0;
 }
 
@@ -434,7 +450,7 @@ watch(
   flex-direction: row;
   justify-content: center;
   align-items: center;
-  gap: var(--spacing-1);
+  gap: 3px;
 }
 
 .scalingIcon {
@@ -456,7 +472,7 @@ watch(
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: var(--spacing-3);
+  gap: 12px;
   min-width: 0;
 }
 
@@ -483,7 +499,7 @@ watch(
   flex-direction: row;
   justify-content: flex-end;
   align-items: center;
-  gap: var(--spacing-2);
+  gap: 8px;
   min-width: 0;
 }
 
@@ -501,13 +517,14 @@ watch(
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: var(--text-base);
-  border-radius: var(--radius-full);
+  color: var(--text-subdued);
+  border-radius: 8px;
   transition: all var(--transition-fast);
 }
 
 .lightControlFill:hover {
-  color: var(--text-bright);
+  color: var(--text-base);
+  background: var(--surface-hover);
 }
 
 .lightControlFill:focus-visible {
@@ -530,13 +547,14 @@ watch(
   height: 48px;
   padding: var(--spacing-2);
   background-color: var(--spotify-green);
-  color: var(--bg-base);
+  color: #071108;
+  border-radius: 50%;
 }
 
 .bigIcon:hover {
   background-color: var(--spotify-green-hover);
   transform: scale(1.06);
-  color: var(--bg-base);
+  color: #071108;
 }
 
 .bigIcon:active {
@@ -553,14 +571,14 @@ watch(
     height: var(--player-height-mobile);
     grid-template-columns: 1fr auto auto;
     grid-template-rows: 4px 1fr;
-    gap: var(--spacing-2);
-    padding: 0 var(--spacing-3);
+    gap: 8px;
+    padding: 8px 10px;
   }
 
   .trackInfoRow {
     grid-column: 1;
     grid-row: 2;
-    gap: var(--spacing-2);
+    gap: 8px;
   }
 
   .trackImage {
@@ -588,7 +606,7 @@ watch(
   }
 
   .playerControlsButtonsRow {
-    gap: var(--spacing-1);
+    gap: 3px;
   }
 
   /* Hide skip and seek buttons on mobile */
@@ -615,7 +633,7 @@ watch(
   .extraControlsRow {
     grid-column: 3;
     grid-row: 2;
-    gap: var(--spacing-1);
+    gap: 3px;
   }
 
   .volumeProgressBar {

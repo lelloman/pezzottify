@@ -434,7 +434,7 @@ onUnmounted(() => {
 }
 
 .onlineLabel {
-  font-size: var(--text-base);
+  font-size: var(--font-size-base);
   color: var(--text-subdued);
 }
 
@@ -480,7 +480,7 @@ onUnmounted(() => {
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   color: var(--text-base);
-  font-size: var(--text-base);
+  font-size: var(--font-size-base);
 }
 
 .refreshButton {
@@ -489,7 +489,7 @@ onUnmounted(() => {
   color: white;
   border: none;
   border-radius: var(--radius-md);
-  font-size: var(--text-base);
+  font-size: var(--font-size-base);
   font-weight: var(--font-medium);
   cursor: pointer;
   transition: background-color var(--transition-fast);
@@ -549,7 +549,7 @@ onUnmounted(() => {
 }
 
 .tableTitle {
-  font-size: var(--text-base);
+  font-size: var(--font-size-base);
   font-weight: var(--font-medium);
   color: var(--text-subdued);
   margin: 0 0 var(--spacing-2) 0;

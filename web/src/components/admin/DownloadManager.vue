@@ -1713,7 +1713,7 @@ onUnmounted(() => {
   justify-content: center;
   height: 200px;
   color: var(--text-subdued);
-  font-size: var(--text-base);
+  font-size: var(--font-size-base);
 }
 
 /* Queue List */
@@ -2382,7 +2382,7 @@ onUnmounted(() => {
 }
 
 .chartTitle {
-  font-size: var(--text-base);
+  font-size: var(--font-size-base);
   font-weight: var(--font-semibold);
   color: var(--text-base);
   margin: 0 0 var(--spacing-3) 0;
@@ -2506,7 +2506,7 @@ onUnmounted(() => {
 }
 
 .dropzoneText {
-  font-size: var(--text-base);
+  font-size: var(--font-size-base);
   color: var(--text-base);
 }
 

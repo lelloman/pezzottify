@@ -559,7 +559,7 @@ const sharedDevices = computed(() =>
 
 .emptyState {
   color: var(--text-subdued);
-  font-size: var(--text-base);
+  font-size: var(--font-size-base);
 }
 
 .sectionHeader {
@@ -587,7 +587,7 @@ const sharedDevices = computed(() =>
 }
 
 .sectionTitle {
-  font-size: var(--text-base);
+  font-size: var(--font-size-base);
   font-weight: var(--font-semibold);
   color: var(--text-base);
 }
@@ -700,7 +700,7 @@ const sharedDevices = computed(() =>
 }
 
 .deviceName {
-  font-size: var(--text-base);
+  font-size: var(--font-size-base);
   font-weight: var(--font-semibold);
   color: var(--text-base);
 }

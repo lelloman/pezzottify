@@ -13,25 +13,6 @@
   overflow: hidden;
 }
 
-/* Force white text everywhere */
-#app * {
-  color: inherit;
-}
-
-#app h1,
-#app h2,
-#app h3,
-#app h4,
-#app h5,
-#app h6,
-#app p,
-#app span,
-#app div,
-#app li,
-#app label {
-  color: #ffffff;
-}
-
 /* ============================================
    Focus Styles for Accessibility
    ============================================ */
@@ -87,13 +68,16 @@ a:active {
 
 /* Panel Backgrounds */
 .panel {
-  background-color: var(--bg-elevated);
+  background: var(--surface-panel);
+  border: 1px solid var(--surface-border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
   color: var(--text-base);
 }
 
 .panel-highlight {
-  background-color: var(--bg-highlight);
+  background: var(--surface-raised);
+  border: 1px solid var(--surface-border-strong);
   border-radius: var(--radius-lg);
   color: var(--text-base);
 }

@@ -61,17 +61,22 @@ const handleClick = () => {
 
 <style scoped>
 .playlistWrapper {
-  min-width: 200px;
-  margin: 10px;
+  min-width: 0;
+  margin: 0;
   color: #ffffff !important;
 }
 
 .playlistItem {
-  padding: 16px;
-  color: #ffffff !important;
+  padding: 12px;
+  min-height: 56px;
+  border-radius: 8px;
+  color: var(--text-base) !important;
 }
 
 .playlistItem h2 {
-  color: #ffffff !important;
+  color: var(--text-base) !important;
+  font-size: 0.9rem;
+  font-weight: 850;
+  margin: 0;
 }
 </style>

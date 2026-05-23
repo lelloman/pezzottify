@@ -51,7 +51,7 @@ defineProps({
   border: none;
   border-radius: var(--radius-md);
   color: var(--text-subdued);
-  font-size: var(--text-base);
+  font-size: var(--font-size-base);
   cursor: pointer;
   transition:
     color var(--transition-fast),

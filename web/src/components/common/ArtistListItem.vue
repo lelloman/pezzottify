@@ -39,16 +39,16 @@ const handleClick = (artist) => {
 }
 
 .searchResultRoundImage {
-  width: 80px;
-  height: 80px;
-  border-radius: 40px;
-  margin-right: 10px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  margin-right: 12px;
 }
 
 .title {
   margin: 0;
-  font-size: 16px;
-  font-weight: bold;
+  font-size: 0.9rem;
+  font-weight: 850;
   color: #ffffff !important;
 }
 </style>
