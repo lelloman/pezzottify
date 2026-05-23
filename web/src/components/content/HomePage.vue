@@ -8,10 +8,10 @@
     <template v-else-if="!isEmpty">
       <section v-if="heroAlbum" class="heroSection">
         <router-link :to="`/album/${heroAlbum.id}`" class="heroArtwork">
-          <img
-            :src="getImageUrl(heroAlbum.id)"
+          <MultiSourceImage
+            :urls="getImageUrls(heroAlbum.id)"
             :alt="heroAlbum.name"
-            loading="eager"
+            :lazy="false"
           />
         </router-link>
         <div class="heroCopy">
@@ -34,20 +34,6 @@
             >
           </div>
         </div>
-        <div class="heroStats">
-          <div v-if="popular.albums?.length" class="statBlock">
-            <strong>{{ popular.albums.length }}</strong>
-            <span>popular albums</span>
-          </div>
-          <div v-if="popular.artists?.length" class="statBlock">
-            <strong>{{ popular.artists.length }}</strong>
-            <span>artists trending</span>
-          </div>
-          <div v-if="genres.length" class="statBlock">
-            <strong>{{ genres.length }}</strong>
-            <span>top genres</span>
-          </div>
-        </div>
       </section>
 
       <section
@@ -56,7 +42,6 @@
       >
         <div class="sectionHeader">
           <div>
-            <span class="sectionKicker">Pick up where you left off</span>
             <h2 class="sectionTitle">Recently Played</h2>
           </div>
         </div>
@@ -68,10 +53,9 @@
             class="recentCard"
           >
             <div class="recentCover">
-              <img
-                :src="getImageUrl(item.album_id)"
+              <MultiSourceImage
+                :urls="getImageUrls(item.album_id)"
                 :alt="item.album_name"
-                loading="lazy"
               />
             </div>
             <div class="recentInfo">
@@ -85,7 +69,6 @@
       <section v-if="popular.albums?.length > 0" class="homeSection">
         <div class="sectionHeader">
           <div>
-            <span class="sectionKicker">Heavy rotation</span>
             <h2 class="sectionTitle">Popular Albums</h2>
           </div>
         </div>
@@ -97,10 +80,9 @@
             class="albumCard"
           >
             <div class="albumCover">
-              <img
-                :src="getImageUrl(album.id)"
+              <MultiSourceImage
+                :urls="getImageUrls(album.id)"
                 :alt="album.name"
-                loading="lazy"
               />
             </div>
             <div class="albumInfo">
@@ -119,7 +101,6 @@
       >
         <div class="sectionHeader">
           <div>
-            <span class="sectionKicker">Most played voices</span>
             <h2 class="sectionTitle">Popular Artists</h2>
           </div>
         </div>
@@ -134,10 +115,9 @@
               String(index + 1).padStart(2, "0")
             }}</span>
             <div class="artistImage">
-              <img
-                :src="getImageUrl(artist.id)"
+              <MultiSourceImage
+                :urls="getImageUrls(artist.id)"
                 :alt="artist.name"
-                loading="lazy"
               />
             </div>
             <span class="artistCardName">{{ artist.name }}</span>
@@ -148,7 +128,6 @@
       <section v-if="genres.length > 0" class="homeSection genreSection">
         <div class="sectionHeader">
           <div>
-            <span class="sectionKicker">Explore by mood and catalog depth</span>
             <h2 class="sectionTitle">Browse Genres</h2>
           </div>
           <router-link to="/genres" class="seeAllLink">See all</router-link>
@@ -167,35 +146,6 @@
           </router-link>
         </div>
       </section>
-
-      <section v-if="favorites.length > 0" class="homeSection">
-        <div class="sectionHeader">
-          <div>
-            <span class="sectionKicker">Saved for later</span>
-            <h2 class="sectionTitle">Your Favorites</h2>
-          </div>
-        </div>
-        <div class="albumShelf compactShelf">
-          <router-link
-            v-for="album in favorites"
-            :key="album.id"
-            :to="`/album/${album.id}`"
-            class="albumCard"
-          >
-            <div class="albumCover">
-              <img
-                :src="getImageUrl(album.id)"
-                :alt="album.name"
-                loading="lazy"
-              />
-            </div>
-            <div class="albumInfo">
-              <span class="albumName">{{ album.name }}</span>
-              <span class="artistName">{{ album.artist_name }}</span>
-            </div>
-          </router-link>
-        </div>
-      </section>
     </template>
 
     <div v-else class="emptyState">
@@ -209,13 +159,13 @@
 <script setup>
 import { ref, onMounted, computed } from "vue";
 import MusicNoteIcon from "@/components/icons/MusicNoteIcon.vue";
+import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
 import { formatImageUrl } from "@/utils";
 
-const getImageUrl = formatImageUrl;
+const getImageUrls = (id) => (id ? [formatImageUrl(id)] : []);
 
 const recentlyPlayed = ref([]);
 const popular = ref({ albums: [], artists: [] });
-const favorites = ref([]);
 const genres = ref([]);
 const isLoading = ref(true);
 
@@ -232,17 +182,6 @@ const heroAlbum = computed(() => {
     };
   }
 
-  const favoriteAlbum = favorites.value[0];
-  if (favoriteAlbum) {
-    return {
-      id: favoriteAlbum.id,
-      name: favoriteAlbum.name,
-      artist_names:
-        favoriteAlbum.artist_names ||
-        (favoriteAlbum.artist_name ? [favoriteAlbum.artist_name] : []),
-    };
-  }
-
   return null;
 });
 
@@ -251,7 +190,6 @@ const isEmpty = computed(() => {
     recentlyPlayed.value.length === 0 &&
     popular.value.albums?.length === 0 &&
     popular.value.artists?.length === 0 &&
-    favorites.value.length === 0 &&
     genres.value.length === 0
   );
 });
@@ -302,34 +240,6 @@ const fetchPopular = async () => {
   }
 };
 
-const fetchFavorites = async () => {
-  try {
-    // First get the list of liked album IDs
-    const response = await fetch("/v1/user/liked/album");
-    if (response.ok) {
-      const albumIds = await response.json();
-      // Then fetch details for each album (limit to 8)
-      const albumPromises = albumIds.slice(0, 8).map(async (albumId) => {
-        try {
-          const albumResponse = await fetch(
-            `/v1/content/album/${albumId}/resolved`,
-          );
-          if (albumResponse.ok) {
-            return await albumResponse.json();
-          }
-        } catch (e) {
-          console.error(`Error fetching album ${albumId}:`, e);
-        }
-        return null;
-      });
-      const albums = await Promise.all(albumPromises);
-      favorites.value = albums.filter((a) => a !== null);
-    }
-  } catch (error) {
-    console.error("Error fetching favorites:", error);
-  }
-};
-
 const fetchGenres = async () => {
   try {
     const response = await fetch("/v1/content/genres");
@@ -344,12 +254,7 @@ const fetchGenres = async () => {
 };
 
 onMounted(async () => {
-  await Promise.all([
-    fetchRecentlyPlayed(),
-    fetchPopular(),
-    fetchFavorites(),
-    fetchGenres(),
-  ]);
+  await Promise.all([fetchRecentlyPlayed(), fetchPopular(), fetchGenres()]);
   isLoading.value = false;
 });
 </script>
@@ -358,7 +263,7 @@ onMounted(async () => {
 .homePage {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: clamp(36px, 4vw, 52px);
   min-height: 100%;
   padding: clamp(18px, 2vw, 30px);
   color: var(--text-base);
@@ -366,10 +271,7 @@ onMounted(async () => {
 
 .heroSection {
   display: grid;
-  grid-template-columns: minmax(150px, 220px) minmax(0, 1fr) minmax(
-      150px,
-      210px
-    );
+  grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
   gap: clamp(18px, 2.4vw, 32px);
   align-items: end;
   min-height: 300px;
@@ -400,10 +302,10 @@ onMounted(async () => {
   box-shadow: 0 22px 48px rgba(0, 0, 0, 0.45);
 }
 
-.heroArtwork img,
-.albumCover img,
-.recentCover img,
-.artistImage img {
+.heroArtwork :deep(img),
+.albumCover :deep(img),
+.recentCover :deep(img),
+.artistImage :deep(img) {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -417,8 +319,7 @@ onMounted(async () => {
   gap: 10px;
 }
 
-.eyebrow,
-.sectionKicker {
+.eyebrow {
   color: #9eddb7;
   font-size: 0.72rem;
   font-weight: 800;
@@ -494,42 +395,11 @@ onMounted(async () => {
   background: rgba(255, 255, 255, 0.1);
 }
 
-.heroStats {
-  display: grid;
-  gap: 10px;
-  align-self: stretch;
-  align-content: end;
-}
-
-.statBlock {
-  padding: 14px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.26);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.statBlock strong,
-.statBlock span {
-  display: block;
-}
-
-.statBlock strong {
-  font-size: 1.45rem;
-  font-weight: 900;
-  line-height: 1;
-}
-
-.statBlock span {
-  margin-top: 4px;
-  color: rgba(255, 255, 255, 0.64);
-  font-size: 0.76rem;
-  font-weight: 650;
-}
-
 .homeSection {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
+  padding-block: 2px 8px;
 }
 
 .sectionHeader {
@@ -541,10 +411,11 @@ onMounted(async () => {
 
 .sectionTitle {
   margin: 2px 0 0;
-  color: #fff;
-  font-size: clamp(1.15rem, 1.7vw, 1.65rem);
+  color: #9eddb7;
+  font-size: clamp(1rem, 1.35vw, 1.32rem);
   font-weight: 900;
   line-height: 1.15;
+  text-transform: uppercase;
 }
 
 .seeAllLink {
@@ -560,18 +431,39 @@ onMounted(async () => {
 }
 
 .albumShelf {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  display: flex;
   gap: 18px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 14px;
+  scroll-snap-type: x proximity;
+}
+
+.albumShelf::-webkit-scrollbar,
+.artistList::-webkit-scrollbar {
+  height: 8px;
+}
+
+.albumShelf::-webkit-scrollbar-thumb,
+.artistList::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.albumShelf::-webkit-scrollbar-track,
+.artistList::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .albumCard {
   display: flex;
+  flex: 0 0 clamp(150px, 14vw, 190px);
   flex-direction: column;
   min-width: 0;
   gap: 11px;
   color: #fff;
   text-decoration: none;
+  scroll-snap-align: start;
 }
 
 .albumCover {
@@ -663,15 +555,19 @@ onMounted(async () => {
 }
 
 .artistList {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  display: flex;
   gap: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 14px;
+  scroll-snap-type: x proximity;
 }
 
 .artistRow {
   display: grid;
   grid-template-columns: 32px 52px minmax(0, 1fr);
   align-items: center;
+  flex: 0 0 clamp(230px, 24vw, 300px);
   gap: 12px;
   min-height: 68px;
   padding: 8px 12px 8px 8px;
@@ -680,6 +576,7 @@ onMounted(async () => {
   border: 1px solid rgba(255, 255, 255, 0.055);
   color: #fff;
   text-decoration: none;
+  scroll-snap-align: start;
 }
 
 .artistRow:hover {
@@ -708,13 +605,30 @@ onMounted(async () => {
 }
 
 .genreGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  display: flex;
   gap: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 14px;
+  scroll-snap-type: x proximity;
+}
+
+.genreGrid::-webkit-scrollbar {
+  height: 8px;
+}
+
+.genreGrid::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.genreGrid::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .genreCard {
   display: flex;
+  flex: 0 0 clamp(160px, 16vw, 220px);
   flex-direction: column;
   justify-content: space-between;
   min-height: 92px;
@@ -722,6 +636,7 @@ onMounted(async () => {
   border-radius: 8px;
   color: #fff;
   text-decoration: none;
+  scroll-snap-align: start;
   background: linear-gradient(
       135deg,
       rgba(255, 255, 255, 0.075),
@@ -823,17 +738,12 @@ onMounted(async () => {
   .heroSection {
     grid-template-columns: minmax(130px, 180px) minmax(0, 1fr);
   }
-
-  .heroStats {
-    grid-column: 1 / -1;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 720px) {
   .homePage {
     padding: 14px;
-    gap: 26px;
+    gap: 34px;
   }
 
   .heroSection {
@@ -844,23 +754,24 @@ onMounted(async () => {
   .heroArtwork {
     width: min(68vw, 240px);
   }
-
-  .heroStats {
-    grid-template-columns: 1fr;
-  }
-
-  .recentGrid,
-  .artistList {
+  .recentGrid {
     grid-template-columns: 1fr;
   }
 
   .albumShelf {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 14px;
   }
 
-  .genreGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .albumCard {
+    flex-basis: 150px;
+  }
+
+  .artistRow {
+    flex-basis: 240px;
+  }
+
+  .genreCard {
+    flex-basis: 160px;
   }
 }
 </style>
