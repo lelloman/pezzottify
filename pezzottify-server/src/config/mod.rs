@@ -241,6 +241,34 @@ impl AppConfig {
                 .unwrap_or(bg_jobs_defaults.whatsnew_batch.interval_hours),
         };
 
+        let fa_file = bg_jobs_file.featured_albums.unwrap_or_default();
+        let featured_albums = FeaturedAlbumsJobSettings {
+            interval_hours: fa_file
+                .interval_hours
+                .unwrap_or(bg_jobs_defaults.featured_albums.interval_hours)
+                .max(1),
+            count: fa_file
+                .count
+                .unwrap_or(bg_jobs_defaults.featured_albums.count)
+                .max(1),
+            popular_seed_album_count: fa_file
+                .popular_seed_album_count
+                .unwrap_or(bg_jobs_defaults.featured_albums.popular_seed_album_count)
+                .max(1),
+            candidate_limit_per_seed: fa_file
+                .candidate_limit_per_seed
+                .unwrap_or(bg_jobs_defaults.featured_albums.candidate_limit_per_seed)
+                .max(1),
+            low_play_percentile: fa_file
+                .low_play_percentile
+                .unwrap_or(bg_jobs_defaults.featured_albums.low_play_percentile)
+                .min(100),
+            artist_album_cap: fa_file
+                .artist_album_cap
+                .unwrap_or(bg_jobs_defaults.featured_albums.artist_album_cap)
+                .max(1),
+        };
+
         // Ingestion cleanup job settings (optional - only if configured)
         let ingestion_cleanup = bg_jobs_file.ingestion_cleanup.map(|ic_file| {
             let ic_defaults = IngestionCleanupJobSettings::default();
@@ -275,6 +303,7 @@ impl AppConfig {
             popular_content,
             catalog_availability_stats,
             whatsnew_batch,
+            featured_albums,
             ingestion_cleanup,
             audit_log_cleanup,
             device_pruning,
@@ -580,6 +609,7 @@ pub struct BackgroundJobsSettings {
     pub ingestion_cleanup: Option<IngestionCleanupJobSettings>,
     pub audit_log_cleanup: Option<AuditLogCleanupJobSettings>,
     pub device_pruning: DevicePruningJobSettings,
+    pub featured_albums: FeaturedAlbumsJobSettings,
 }
 
 /// Settings for popular content job
@@ -602,6 +632,30 @@ impl Default for PopularContentJobSettings {
             lookback_days: 30,
             impression_lookback_days: 365,
             impression_retention_days: 365,
+        }
+    }
+}
+
+/// Settings for weekly featured album discovery.
+#[derive(Debug, Clone)]
+pub struct FeaturedAlbumsJobSettings {
+    pub interval_hours: u64,
+    pub count: usize,
+    pub popular_seed_album_count: usize,
+    pub candidate_limit_per_seed: usize,
+    pub low_play_percentile: u32,
+    pub artist_album_cap: usize,
+}
+
+impl Default for FeaturedAlbumsJobSettings {
+    fn default() -> Self {
+        Self {
+            interval_hours: 24,
+            count: 20,
+            popular_seed_album_count: 20,
+            candidate_limit_per_seed: 100,
+            low_play_percentile: 25,
+            artist_album_cap: 2,
         }
     }
 }

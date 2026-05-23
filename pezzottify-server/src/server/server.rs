@@ -14,7 +14,10 @@ use std::{
 
 use tracing::{debug, error, info, warn};
 
-use crate::background_jobs::jobs::{CatalogAvailabilityStatsJob, CatalogAvailabilityStatsSnapshot};
+use crate::background_jobs::jobs::{
+    CatalogAvailabilityStatsJob, CatalogAvailabilityStatsSnapshot, FeaturedAlbumsJob,
+    FeaturedAlbumsSnapshot,
+};
 use crate::background_jobs::{JobError, JobInfo, SchedulerHandle};
 use crate::catalog_store::{CatalogStore, DiscographySort};
 use crate::config::{AlbumEmbeddingDerivationSpec, AudioEmbeddingSpec};
@@ -1966,6 +1969,52 @@ async fn get_popular_content(
     }
 }
 
+/// Get the current weekly featured album discovery snapshot.
+async fn get_featured_albums(
+    _session: Session,
+    State(server_store): State<GuardedServerStore>,
+    Query(query): Query<FeaturedAlbumsQuery>,
+) -> Response {
+    let limit = query.limit.unwrap_or(20).clamp(1, 50);
+    let snapshot = match server_store.get_state(FeaturedAlbumsJob::state_key()) {
+        Ok(Some(raw)) => match serde_json::from_str::<FeaturedAlbumsSnapshot>(&raw) {
+            Ok(mut snapshot) => {
+                snapshot.albums.truncate(limit);
+                if !snapshot.albums.is_empty() {
+                    snapshot.hero_index %= snapshot.albums.len();
+                }
+                snapshot
+            }
+            Err(err) => {
+                warn!("Invalid featured albums snapshot: {}", err);
+                FeaturedAlbumsSnapshot {
+                    week_key: FeaturedAlbumsJob::current_week_key(),
+                    generated_at: 0,
+                    hero_index: 0,
+                    albums: Vec::new(),
+                }
+            }
+        },
+        Ok(None) => FeaturedAlbumsSnapshot {
+            week_key: FeaturedAlbumsJob::current_week_key(),
+            generated_at: 0,
+            hero_index: 0,
+            albums: Vec::new(),
+        },
+        Err(err) => {
+            error!("Failed to read featured albums snapshot: {}", err);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let mut response = Json(snapshot).into_response();
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("no-store, max-age=0"),
+    );
+    response
+}
+
 /// Get latest persisted catalog availability statistics snapshot.
 async fn get_catalog_stats_snapshot(
     _session: Session,
@@ -3831,6 +3880,11 @@ struct PopularContentQuery {
 }
 
 #[derive(Deserialize, Debug)]
+struct FeaturedAlbumsQuery {
+    pub limit: Option<usize>,
+}
+
+#[derive(Deserialize, Debug)]
 struct DiscographyQuery {
     pub limit: Option<usize>,
     pub offset: Option<usize>,
@@ -5087,6 +5141,7 @@ pub async fn make_app(
         .route("/image/{id}", get(get_image))
         .route("/whatsnew", get(get_whats_new))
         .route("/popular", get(get_popular_content))
+        .route("/featured/albums", get(get_featured_albums))
         .route("/catalog/stats", get(get_catalog_stats_snapshot))
         .route("/batch", post(post_batch_content))
         .route("/genres", get(get_genres))

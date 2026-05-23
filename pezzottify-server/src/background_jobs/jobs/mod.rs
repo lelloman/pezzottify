@@ -11,6 +11,7 @@ pub mod album_embedding_sync;
 pub mod audio_analysis;
 pub mod catalog_availability_stats;
 pub mod device_pruning;
+pub mod featured_albums;
 pub mod ingestion_cleanup;
 pub mod popular_content;
 pub mod related_artists_enrichment;
@@ -26,6 +27,7 @@ pub use catalog_availability_stats::{
     CatalogAvailabilityStatsJob, CatalogAvailabilityStatsSnapshot,
 };
 pub use device_pruning::DevicePruningJob;
+pub use featured_albums::{FeaturedAlbum, FeaturedAlbumsJob, FeaturedAlbumsSnapshot};
 pub use ingestion_cleanup::IngestionCleanupJob;
 pub use popular_content::PopularContentJob;
 pub use related_artists_enrichment::RelatedArtistsEnrichmentJob;

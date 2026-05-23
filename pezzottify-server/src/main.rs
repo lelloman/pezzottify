@@ -11,8 +11,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 // Import modules from the library crate
 use pezzottify_server::background_jobs::jobs::{
     AlbumEmbeddingSyncJob, AudioAnalysisJob, CatalogAvailabilityStatsJob, DevicePruningJob,
-    IngestionCleanupJob, PopularContentJob, RelatedArtistsEnrichmentJob, TrackEmbeddingSyncJob,
-    WhatsNewBatchJob,
+    FeaturedAlbumsJob, IngestionCleanupJob, PopularContentJob, RelatedArtistsEnrichmentJob,
+    TrackEmbeddingSyncJob, WhatsNewBatchJob,
 };
 use pezzottify_server::background_jobs::{create_scheduler, GuardedSearchVault, JobContext};
 use pezzottify_server::backup::DbRegistry;
@@ -304,6 +304,11 @@ async fn main() -> Result<()> {
     scheduler
         .register_job(Arc::new(WhatsNewBatchJob::from_settings(
             &app_config.background_jobs.whatsnew_batch,
+        )))
+        .await;
+    scheduler
+        .register_job(Arc::new(FeaturedAlbumsJob::from_settings(
+            &app_config.background_jobs.featured_albums,
         )))
         .await;
     scheduler

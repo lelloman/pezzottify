@@ -6,33 +6,92 @@
     </div>
 
     <template v-else-if="!isEmpty">
-      <section v-if="heroAlbum" class="heroSection">
-        <router-link :to="`/album/${heroAlbum.id}`" class="heroArtwork">
+      <section
+        v-if="selectedFeaturedAlbum"
+        class="heroSection"
+        @touchstart="handleHeroTouchStart"
+        @touchend="handleHeroTouchEnd"
+      >
+        <router-link
+          :to="`/album/${selectedFeaturedAlbum.id}`"
+          class="heroArtwork"
+        >
           <MultiSourceImage
-            :urls="getImageUrls(heroAlbum.id)"
-            :alt="heroAlbum.name"
+            :urls="getImageUrls(selectedFeaturedAlbum.id)"
+            :alt="selectedFeaturedAlbum.name"
             :lazy="false"
           />
         </router-link>
         <div class="heroCopy">
-          <span class="eyebrow">Featured from your library</span>
-          <router-link :to="`/album/${heroAlbum.id}`" class="heroTitle">
-            {{ heroAlbum.name }}
+          <span class="eyebrow">Featured this week</span>
+          <router-link
+            :to="`/album/${selectedFeaturedAlbum.id}`"
+            class="heroTitle"
+          >
+            {{ selectedFeaturedAlbum.name }}
           </router-link>
           <p class="heroMeta">
-            {{ formatArtistNames(heroAlbum.artist_names) }}
+            {{ formatArtistNames(selectedFeaturedAlbum.artist_names) }}
           </p>
           <div class="heroActions">
-            <router-link :to="`/album/${heroAlbum.id}`" class="primaryAction"
+            <router-link
+              :to="`/album/${selectedFeaturedAlbum.id}`"
+              class="primaryAction"
               >Open album</router-link
             >
-            <router-link
-              v-if="genres.length"
-              to="/genres"
-              class="secondaryAction"
-              >Browse genres</router-link
-            >
+            <div v-if="featuredAlbums.length > 1" class="heroControls">
+              <button
+                type="button"
+                class="heroControlButton"
+                aria-label="Previous featured album"
+                @click="selectPreviousFeaturedAlbum"
+              >
+                <ChevronLeft />
+              </button>
+              <span class="heroPosition">
+                {{ selectedFeaturedIndex + 1 }} / {{ featuredAlbums.length }}
+              </span>
+              <button
+                type="button"
+                class="heroControlButton"
+                aria-label="Next featured album"
+                @click="selectNextFeaturedAlbum"
+              >
+                <ChevronRight />
+              </button>
+            </div>
           </div>
+        </div>
+      </section>
+
+      <section v-if="featuredAlbums.length > 1" class="homeSection">
+        <div class="sectionHeader">
+          <div>
+            <h2 class="sectionTitle">Featured Albums</h2>
+          </div>
+        </div>
+        <div class="albumShelf featuredShelf">
+          <button
+            v-for="(album, index) in featuredAlbums"
+            :key="album.id"
+            type="button"
+            class="albumCard featuredAlbumCard"
+            :class="{ isSelected: index === selectedFeaturedIndex }"
+            @click="selectFeaturedAlbum(index)"
+          >
+            <div class="albumCover">
+              <MultiSourceImage
+                :urls="getImageUrls(album.id)"
+                :alt="album.name"
+              />
+            </div>
+            <div class="albumInfo">
+              <span class="albumName">{{ album.name }}</span>
+              <span class="artistName">{{
+                formatArtistNames(album.artist_names)
+              }}</span>
+            </div>
+          </button>
         </div>
       </section>
 
@@ -159,34 +218,28 @@
 <script setup>
 import { ref, onMounted, computed } from "vue";
 import MusicNoteIcon from "@/components/icons/MusicNoteIcon.vue";
+import ChevronLeft from "@/components/icons/ChevronLeft.vue";
+import ChevronRight from "@/components/icons/ChevronRight.vue";
 import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
 import { formatImageUrl } from "@/utils";
 
 const getImageUrls = (id) => (id ? [formatImageUrl(id)] : []);
 
+const featuredAlbums = ref([]);
+const selectedFeaturedIndex = ref(0);
+const touchStartX = ref(null);
 const recentlyPlayed = ref([]);
 const popular = ref({ albums: [], artists: [] });
 const genres = ref([]);
 const isLoading = ref(true);
 
-const heroAlbum = computed(() => {
-  const popularAlbum = popular.value.albums?.[0];
-  if (popularAlbum) return popularAlbum;
-
-  const recentAlbum = recentlyPlayed.value[0];
-  if (recentAlbum) {
-    return {
-      id: recentAlbum.album_id,
-      name: recentAlbum.album_name,
-      artist_names: recentAlbum.artist_name ? [recentAlbum.artist_name] : [],
-    };
-  }
-
-  return null;
+const selectedFeaturedAlbum = computed(() => {
+  return featuredAlbums.value[selectedFeaturedIndex.value] || null;
 });
 
 const isEmpty = computed(() => {
   return (
+    featuredAlbums.value.length === 0 &&
     recentlyPlayed.value.length === 0 &&
     popular.value.albums?.length === 0 &&
     popular.value.artists?.length === 0 &&
@@ -204,6 +257,57 @@ const formatArtistNames = (names) => {
 const formatTrackCount = (count) => {
   if (count === 1) return "1 track";
   return `${count.toLocaleString()} tracks`;
+};
+
+const selectFeaturedAlbum = (index) => {
+  if (featuredAlbums.value.length === 0) return;
+  selectedFeaturedIndex.value =
+    ((index % featuredAlbums.value.length) + featuredAlbums.value.length) %
+    featuredAlbums.value.length;
+};
+
+const selectPreviousFeaturedAlbum = () => {
+  selectFeaturedAlbum(selectedFeaturedIndex.value - 1);
+};
+
+const selectNextFeaturedAlbum = () => {
+  selectFeaturedAlbum(selectedFeaturedIndex.value + 1);
+};
+
+const handleHeroTouchStart = (event) => {
+  touchStartX.value = event.changedTouches?.[0]?.clientX ?? null;
+};
+
+const handleHeroTouchEnd = (event) => {
+  if (touchStartX.value === null) return;
+  const endX = event.changedTouches?.[0]?.clientX;
+  if (typeof endX !== "number") {
+    touchStartX.value = null;
+    return;
+  }
+  const delta = endX - touchStartX.value;
+  touchStartX.value = null;
+  if (Math.abs(delta) < 48) return;
+  if (delta < 0) {
+    selectNextFeaturedAlbum();
+  } else {
+    selectPreviousFeaturedAlbum();
+  }
+};
+
+const fetchFeaturedAlbums = async () => {
+  try {
+    const response = await fetch("/v1/content/featured/albums?limit=20");
+    if (!response.ok) return;
+    const data = await response.json();
+    const albums = Array.isArray(data.albums) ? data.albums : [];
+    featuredAlbums.value = albums;
+    selectedFeaturedIndex.value = albums.length
+      ? Math.min(data.hero_index || 0, albums.length - 1)
+      : 0;
+  } catch (error) {
+    console.error("Error fetching featured albums:", error);
+  }
 };
 
 const fetchRecentlyPlayed = async () => {
@@ -254,7 +358,12 @@ const fetchGenres = async () => {
 };
 
 onMounted(async () => {
-  await Promise.all([fetchRecentlyPlayed(), fetchPopular(), fetchGenres()]);
+  await Promise.all([
+    fetchFeaturedAlbums(),
+    fetchRecentlyPlayed(),
+    fetchPopular(),
+    fetchGenres(),
+  ]);
   isLoading.value = false;
 });
 </script>
@@ -357,8 +466,44 @@ onMounted(async () => {
 .heroActions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
   margin-top: 8px;
+}
+
+.heroControls {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.heroControlButton {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+.heroControlButton:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.heroControlButton svg {
+  width: 18px;
+  height: 18px;
+}
+
+.heroPosition {
+  min-width: 42px;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-align: center;
 }
 
 .primaryAction,
@@ -462,8 +607,25 @@ onMounted(async () => {
   min-width: 0;
   gap: 11px;
   color: #fff;
+  text-align: left;
   text-decoration: none;
   scroll-snap-align: start;
+}
+
+.featuredAlbumCard {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.featuredAlbumCard.isSelected .albumCover {
+  outline: 2px solid #1ed760;
+  outline-offset: 4px;
+}
+
+.featuredAlbumCard.isSelected .albumName {
+  color: #9eddb7;
 }
 
 .albumCover {
