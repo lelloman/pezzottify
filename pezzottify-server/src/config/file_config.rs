@@ -64,6 +64,7 @@ pub struct BackgroundJobsConfig {
     pub ingestion_cleanup: Option<IngestionCleanupJobConfig>,
     pub audit_log_cleanup: Option<AuditLogCleanupJobConfig>,
     pub device_pruning: Option<DevicePruningJobConfig>,
+    pub featured_albums: Option<FeaturedAlbumsJobConfig>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]
@@ -109,6 +110,17 @@ pub struct AuditLogCleanupJobConfig {
 pub struct DevicePruningJobConfig {
     pub interval_hours: Option<u64>,
     pub retention_days: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct FeaturedAlbumsJobConfig {
+    pub interval_hours: Option<u64>,
+    pub count: Option<usize>,
+    pub popular_seed_album_count: Option<usize>,
+    pub candidate_limit_per_seed: Option<usize>,
+    pub low_play_percentile: Option<u32>,
+    pub artist_album_cap: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]
