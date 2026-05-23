@@ -261,10 +261,10 @@ watch(
 }
 
 .trackItem.isPlaying {
-  background-color: var(--surface-active);
+  background-color: transparent;
 }
 
 .trackItem.isPlaying:hover {
-  background-color: var(--surface-hover);
+  background-color: transparent;
 }
 </style>
