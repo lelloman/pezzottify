@@ -119,7 +119,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   cursor: pointer;
   color: var(--text-base);
-  border-radius: var(--radius-full);
+  border-radius: 8px;
   transition: all var(--transition-fast);
 }
 
@@ -133,9 +133,9 @@ onBeforeUnmount(() => {
   right: 0;
   margin-bottom: var(--spacing-2);
   min-width: 280px;
-  background-color: var(--bg-elevated-base);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
   box-shadow: var(--shadow-lg);
   overflow: hidden;
   z-index: 100;
@@ -143,7 +143,7 @@ onBeforeUnmount(() => {
 
 .dropdownHeader {
   padding: var(--spacing-3) var(--spacing-4);
-  border-bottom: 1px solid var(--bg-elevated-highlight);
+  border-bottom: 1px solid var(--surface-border);
 }
 
 .dropdownTitle {
@@ -164,7 +164,7 @@ onBeforeUnmount(() => {
 }
 
 .deviceItem.activeDevice {
-  background-color: var(--bg-elevated-highlight);
+  background-color: var(--surface-active);
 }
 
 .deviceIcon {
@@ -210,5 +210,4 @@ onBeforeUnmount(() => {
 .deviceBadge.shared {
   color: var(--text-subdued);
 }
-
 </style>

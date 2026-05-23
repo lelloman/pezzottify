@@ -718,7 +718,7 @@ onMounted(() => {
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   color: var(--text-base);
-  font-size: var(--text-base);
+  font-size: var(--font-size-base);
 }
 
 .createUserInput::placeholder {
@@ -731,7 +731,7 @@ onMounted(() => {
   color: white;
   border: none;
   border-radius: var(--radius-md);
-  font-size: var(--text-base);
+  font-size: var(--font-size-base);
   font-weight: var(--font-medium);
   cursor: pointer;
   transition: background-color var(--transition-fast);
@@ -806,7 +806,7 @@ onMounted(() => {
 }
 
 .dialogMessage {
-  font-size: var(--text-base);
+  font-size: var(--font-size-base);
   color: var(--text-subdued);
   margin: 0 0 var(--spacing-3) 0;
   line-height: 1.5;
@@ -823,7 +823,7 @@ onMounted(() => {
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   color: var(--text-base);
-  font-size: var(--text-base);
+  font-size: var(--font-size-base);
   margin-bottom: var(--spacing-4);
 }
 

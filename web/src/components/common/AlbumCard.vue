@@ -10,7 +10,9 @@
       <MultiSourceImage
         :urls="chooseAlbumCoverImageUrl(album)"
         class="searchResultImage scaleClickFeedback"
-        :class="{ 'image-unavailable': albumData?.album_availability === 'missing' }"
+        :class="{
+          'image-unavailable': albumData?.album_availability === 'missing',
+        }"
       />
       <div class="column">
         <h3 class="title">{{ album.name }}</h3>
@@ -20,7 +22,10 @@
           :artistsIds="album.artists_ids"
         />
       </div>
-      <div v-if="albumData?.album_availability === 'partial'" class="availability-badge partial">
+      <div
+        v-if="albumData?.album_availability === 'partial'"
+        class="availability-badge partial"
+      >
         Partial
       </div>
       <PlayIcon
@@ -119,8 +124,9 @@ const handleClick = (albumId) => {
 
 .title {
   margin: 0;
-  font-size: 16px;
-  font-weight: bold;
+  font-size: 0.9rem;
+  font-weight: 850;
+  line-height: 1.2;
   color: #ffffff !important;
 }
 

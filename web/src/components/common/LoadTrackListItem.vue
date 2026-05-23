@@ -47,7 +47,13 @@
             :artistsIds="track.artists_ids"
           />
         </div>
-        <div v-if="isTrackFetchError" class="track-fetch-error-icon" title="Download failed">⚠</div>
+        <div
+          v-if="isTrackFetchError"
+          class="track-fetch-error-icon"
+          title="Download failed"
+        >
+          ⚠
+        </div>
         <div class="track-duration">{{ formatDuration(track.duration) }}</div>
       </div>
     </div>
@@ -180,17 +186,20 @@ defineExpose({
 .trackRow {
   display: flex;
   flex-direction: row;
-  padding: 8px 0;
+  padding: 7px 8px;
   align-items: center;
+  border-radius: 7px;
+  transition: background-color var(--transition-fast);
 }
 
 .nonPlayingTrack:hover {
-  background-color: var(--highlighted-panel-color);
+  background-color: var(--surface-hover);
   cursor: pointer;
 }
 
 .playingTrack {
-  color: var(--accent-color);
+  color: var(--spotify-green);
+  background-color: var(--surface-active);
 }
 
 .trackIndexSpan {
@@ -238,9 +247,11 @@ defineExpose({
 }
 
 .trackImage {
-  width: 40px;
-  height: 40px;
-  margin-right: 8px;
+  width: 42px;
+  height: 42px;
+  margin-right: 10px;
+  border-radius: 7px;
+  overflow: hidden;
 }
 
 /* Track availability states */
@@ -259,7 +270,8 @@ defineExpose({
 }
 
 @keyframes trackFetchingPulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
@@ -279,7 +291,7 @@ defineExpose({
   flex-direction: row;
   align-items: center;
   width: 100%;
-  padding: 4px 0;
+  padding: 6px 0;
   gap: 8px;
 }
 

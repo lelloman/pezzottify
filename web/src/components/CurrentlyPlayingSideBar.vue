@@ -167,17 +167,19 @@ watch(
   display: flex;
   flex-direction: column;
   height: 100%;
-  background-color: var(--bg-elevated);
-  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
 }
 
 /* Header */
 .header {
   display: flex;
   align-items: center;
-  gap: var(--spacing-2);
-  padding: var(--spacing-4);
-  border-bottom: 1px solid var(--border-subtle);
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid var(--surface-border);
 }
 
 .headerTitle {
@@ -187,8 +189,8 @@ watch(
 }
 
 .playlistName {
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
+  font-size: 0.88rem;
+  font-weight: 850;
   color: var(--text-base);
   white-space: nowrap;
 }
@@ -202,7 +204,7 @@ watch(
   height: 32px;
   padding: 0;
   border: none;
-  border-radius: var(--radius-full);
+  border-radius: 7px;
   background: transparent;
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -218,7 +220,7 @@ watch(
 }
 
 .navButtonEnabled:hover {
-  background: var(--bg-press);
+  background: var(--surface-hover);
   transform: scale(1.1);
 }
 
@@ -241,28 +243,28 @@ watch(
 .trackList {
   flex: 1;
   overflow-y: auto;
-  padding: var(--spacing-1) 0;
+  padding: 8px 0;
 }
 
 .trackItem {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
+  padding: 4px 8px;
   cursor: pointer;
-  border-radius: var(--radius-sm);
+  border-radius: 7px;
   margin: 0 8px;
   transition: background-color var(--transition-fast);
 }
 
 .trackItem:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--surface-hover);
 }
 
 .trackItem.isPlaying {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--surface-active);
 }
 
 .trackItem.isPlaying:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--surface-hover);
 }
 </style>

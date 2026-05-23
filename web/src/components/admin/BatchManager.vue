@@ -636,7 +636,7 @@ onMounted(() => {
   justify-content: center;
   height: 200px;
   color: var(--text-subdued);
-  font-size: var(--text-base);
+  font-size: var(--font-size-base);
 }
 
 /* Batch List */

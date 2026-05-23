@@ -27,34 +27,69 @@
 
     <!-- Download Request Section -->
     <div v-if="showDownloadSection" class="downloadRequestSection">
-      <div v-if="downloadRequestState === 'can_request'" class="downloadRequestContent">
-        <button class="downloadRequestButton" @click="handleRequestDownload" :disabled="isRequesting">
+      <div
+        v-if="downloadRequestState === 'can_request'"
+        class="downloadRequestContent"
+      >
+        <button
+          class="downloadRequestButton"
+          @click="handleRequestDownload"
+          :disabled="isRequesting"
+        >
           <span v-if="isRequesting">Requesting...</span>
           <span v-else>Request Download</span>
         </button>
       </div>
-      <div v-else-if="downloadRequestState === 'pending'" class="downloadRequestContent statusPending">
+      <div
+        v-else-if="downloadRequestState === 'pending'"
+        class="downloadRequestContent statusPending"
+      >
         <span class="statusIcon">⏳</span>
-        <span>Download queued{{ effectiveQueuePosition ? ` (#${effectiveQueuePosition})` : '' }}</span>
+        <span
+          >Download queued{{
+            effectiveQueuePosition ? ` (#${effectiveQueuePosition})` : ""
+          }}</span
+        >
       </div>
-      <div v-else-if="downloadRequestState === 'in_progress'" class="downloadRequestContent statusInProgress">
+      <div
+        v-else-if="downloadRequestState === 'in_progress'"
+        class="downloadRequestContent statusInProgress"
+      >
         <span class="statusIcon">⬇️</span>
-        <span v-if="downloadProgress">Downloading {{ downloadProgress.completed }}/{{ downloadProgress.total_children }} tracks</span>
+        <span v-if="downloadProgress"
+          >Downloading {{ downloadProgress.completed }}/{{
+            downloadProgress.total_children
+          }}
+          tracks</span
+        >
         <span v-else>Downloading...</span>
       </div>
-      <div v-else-if="downloadRequestState === 'completed'" class="downloadRequestContent statusCompleted">
+      <div
+        v-else-if="downloadRequestState === 'completed'"
+        class="downloadRequestContent statusCompleted"
+      >
         <span class="statusIcon">✅</span>
         <span>Download completed</span>
       </div>
-      <div v-else-if="downloadRequestState === 'failed'" class="downloadRequestContent statusFailed">
+      <div
+        v-else-if="downloadRequestState === 'failed'"
+        class="downloadRequestContent statusFailed"
+      >
         <span class="statusIcon">❌</span>
         <span>Download failed</span>
-        <button class="retryButton" @click="handleRequestDownload">Retry</button>
+        <button class="retryButton" @click="handleRequestDownload">
+          Retry
+        </button>
       </div>
-      <div v-else-if="downloadRequestState === 'error'" class="downloadRequestContent statusFailed">
+      <div
+        v-else-if="downloadRequestState === 'error'"
+        class="downloadRequestContent statusFailed"
+      >
         <span class="statusIcon">❌</span>
-        <span>{{ downloadError || 'Failed to request' }}</span>
-        <button class="retryButton" @click="handleRequestDownload">Retry</button>
+        <span>{{ downloadError || "Failed to request" }}</span>
+        <button class="retryButton" @click="handleRequestDownload">
+          Retry
+        </button>
       </div>
     </div>
 
@@ -280,19 +315,32 @@ watch(
 
 // Download request computed properties
 const albumAvailability = computed(() => {
-  const avail = album.value?.album_availability || 'complete';
-  console.log('[Album] albumAvailability:', avail, 'for album:', album.value?.name);
+  const avail = album.value?.album_availability || "complete";
+  console.log(
+    "[Album] albumAvailability:",
+    avail,
+    "for album:",
+    album.value?.name,
+  );
   return avail;
 });
 
 const isAlbumUnavailable = computed(() => {
-  return albumAvailability.value === 'missing' || albumAvailability.value === 'partial';
+  return (
+    albumAvailability.value === "missing" ||
+    albumAvailability.value === "partial"
+  );
 });
 
 const showDownloadSection = computed(() => {
   const canRequest = userStore.canRequestContent;
   const unavailable = isAlbumUnavailable.value;
-  console.log('[Album] showDownloadSection check - canRequestContent:', canRequest, 'isAlbumUnavailable:', unavailable);
+  console.log(
+    "[Album] showDownloadSection check - canRequestContent:",
+    canRequest,
+    "isAlbumUnavailable:",
+    unavailable,
+  );
   return canRequest && unavailable;
 });
 
@@ -309,26 +357,26 @@ const effectiveQueuePosition = computed(() => {
 });
 
 const downloadRequestState = computed(() => {
-  if (downloadError.value) return 'error';
+  if (downloadError.value) return "error";
 
   // Prefer synced state (real-time) over API-fetched state
   const synced = syncedDownloadRequest.value;
   if (synced) {
     const status = synced.status?.toLowerCase();
-    if (status === 'pending') return 'pending';
-    if (status === 'in_progress') return 'in_progress';
-    if (status === 'completed') return 'completed';
-    if (status === 'failed') return 'failed';
+    if (status === "pending") return "pending";
+    if (status === "in_progress") return "in_progress";
+    if (status === "completed") return "completed";
+    if (status === "failed") return "failed";
   }
 
-  if (!existingRequest.value) return 'can_request';
+  if (!existingRequest.value) return "can_request";
 
   const status = existingRequest.value.status?.toLowerCase();
-  if (status === 'pending') return 'pending';
-  if (status === 'in_progress') return 'in_progress';
-  if (status === 'completed') return 'completed';
-  if (status === 'failed') return 'failed';
-  return 'can_request';
+  if (status === "pending") return "pending";
+  if (status === "in_progress") return "in_progress";
+  if (status === "completed") return "completed";
+  if (status === "failed") return "failed";
+  return "can_request";
 });
 
 // Fetch existing download request for this album
@@ -339,7 +387,7 @@ const fetchDownloadRequest = async () => {
     const data = await remoteStore.fetchMyDownloadRequests();
     if (data) {
       const requests = data.requests || [];
-      const request = requests.find(r => r.content_id === props.albumId);
+      const request = requests.find((r) => r.content_id === props.albumId);
       if (request) {
         existingRequest.value = request;
         queuePosition.value = request.queue_position || null;
@@ -349,7 +397,7 @@ const fetchDownloadRequest = async () => {
       }
     }
   } catch (error) {
-    console.error('Failed to fetch download requests:', error);
+    console.error("Failed to fetch download requests:", error);
   }
 };
 
@@ -362,7 +410,7 @@ const handleRequestDownload = async () => {
 
   try {
     // Get artist name from first artist
-    let artistName = 'Unknown Artist';
+    let artistName = "Unknown Artist";
     if (album.value.artists_ids && album.value.artists_ids.length > 0) {
       const artistRef = staticsStore.getArtist(album.value.artists_ids[0]);
       if (artistRef.value?.item?.name) {
@@ -373,18 +421,18 @@ const handleRequestDownload = async () => {
     const result = await remoteStore.requestAlbumDownload(
       props.albumId,
       album.value.name,
-      artistName
+      artistName,
     );
 
     if (result.success) {
       // Refetch to get the new request status
       await fetchDownloadRequest();
     } else {
-      downloadError.value = result.error || 'Failed to request download';
+      downloadError.value = result.error || "Failed to request download";
     }
   } catch (error) {
-    console.error('Failed to request download:', error);
-    downloadError.value = 'Failed to request download';
+    console.error("Failed to request download:", error);
+    downloadError.value = "Failed to request download";
   } finally {
     isRequesting.value = false;
   }
@@ -397,7 +445,7 @@ watch(
     existingRequest.value = null;
     downloadError.value = null;
     fetchDownloadRequest();
-  }
+  },
 );
 
 onMounted(() => {
@@ -409,106 +457,126 @@ onMounted(() => {
 
 <style scoped>
 .topSection {
-  display: flex;
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: minmax(180px, 300px) minmax(0, 1fr);
+  gap: clamp(20px, 3vw, 36px);
+  align-items: end;
+  padding: clamp(18px, 3vw, 32px);
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: linear-gradient(
+      135deg,
+      rgba(29, 185, 84, 0.18),
+      rgba(17, 20, 22, 0.58) 45%
+    ),
+    var(--surface-raised);
 }
 
 .coverImage {
-  width: 400px;
-  height: 400;
-  object-fit: contain;
+  width: 100%;
+  aspect-ratio: 1;
+  height: auto;
+  object-fit: cover;
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
 }
 
 .albumInfoColum {
-  margin: 0 16px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  gap: 10px;
 }
 
 .albumName {
-  flex: 1;
+  margin: 0;
+  color: var(--text-base);
+  font-size: clamp(2rem, 4.6vw, 4.6rem);
+  font-weight: 900;
+  line-height: 0.96;
+  letter-spacing: 0;
 }
 
 .playAlbumIcon {
-  width: 64px;
-  height: 64px;
-  fill: var(--accent-color);
+  width: 54px;
+  height: 54px;
+  fill: var(--spotify-green);
 }
 
 .commandsSection {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 16px;
-  margin-top: 16px;
-  margin-left: 8px;
-  margin-right: 8px;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 18px 0;
 }
 
 .commandsSection > div {
-  margin-left: 16px;
+  margin-left: 0;
 }
 
-.advancedRadioButton {
-  height: 36px;
-  padding: 0 14px;
-  border: 1px solid var(--accent-color);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-base);
+.advancedRadioButton,
+.downloadRequestButton,
+.retryButton {
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font-size: 0.86rem;
+  font-weight: 800;
   cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    opacity var(--transition-fast);
 }
 
-.advancedRadioButton:hover {
-  background: var(--highlighted-panel-color);
+.advancedRadioButton,
+.retryButton {
+  border: 1px solid var(--surface-border-strong);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-base);
+}
+
+.advancedRadioButton:hover,
+.retryButton:hover {
+  background: var(--surface-hover);
+  color: var(--text-base);
 }
 
 .artistsContainer {
   width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.tracksContainer {
   display: flex;
-  flex-direction: row;
-  overflow-x: auto;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.trackRow {
-  display: flex;
-  flex-direction: row;
-  padding: 8px 0;
-  align-items: center;
+.discContainer {
+  border-top: 1px solid var(--surface-border);
+  padding-top: 12px;
 }
 
-.nonPlayingTrack:hover {
-  background-color: var(--highlighted-panel-color);
-  cursor: pointer;
+.discContainer h1 {
+  margin: 0 0 8px;
+  color: var(--text-subdued);
+  font-size: 0.82rem;
+  font-weight: 850;
+  text-transform: uppercase;
 }
 
-.playingTrack {
-  color: var(--accent-color);
-}
-
-.trackIndexSpan {
-  width: 36px;
-  padding-right: 12px;
-  text-align: right;
-}
-
-.trackNameSpan {
-  flex: 1;
-  size: 14px !important;
-}
-
-.trackArtistsSpan {
-  flex: 1;
-}
-
-.trackDurationSpan {
-}
-
-/* Download Request Section */
 .downloadRequestSection {
-  margin: 16px 8px;
-  padding: 16px;
-  background-color: var(--highlighted-panel-color);
+  margin: 16px 0;
+  padding: 14px;
+  background: var(--surface-raised);
+  border: 1px solid var(--surface-border);
   border-radius: 8px;
 }
 
@@ -520,15 +588,9 @@ onMounted(() => {
 }
 
 .downloadRequestButton {
-  padding: 10px 24px;
-  background-color: var(--accent-color);
-  color: white;
+  background-color: var(--spotify-green);
+  color: #071108;
   border: none;
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s, opacity 0.2s;
 }
 
 .downloadRequestButton:hover:not(:disabled) {
@@ -545,11 +607,11 @@ onMounted(() => {
 }
 
 .statusPending {
-  color: var(--text-secondary-color);
+  color: var(--text-subdued);
 }
 
 .statusInProgress {
-  color: var(--accent-color);
+  color: var(--spotify-green);
 }
 
 .statusCompleted {
@@ -560,19 +622,13 @@ onMounted(() => {
   color: #f44336;
 }
 
-.retryButton {
-  padding: 6px 16px;
-  background-color: transparent;
-  color: var(--accent-color);
-  border: 1px solid var(--accent-color);
-  border-radius: 16px;
-  font-size: 12px;
-  cursor: pointer;
-  margin-left: 8px;
-}
+@media (max-width: 720px) {
+  .topSection {
+    grid-template-columns: 1fr;
+  }
 
-.retryButton:hover {
-  background-color: var(--accent-color);
-  color: white;
+  .coverImage {
+    max-width: 280px;
+  }
 }
 </style>

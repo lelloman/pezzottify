@@ -11,12 +11,24 @@
       />
       <Track v-else-if="trackId" :key="'track-' + trackId" :trackId="trackId" />
       <Album v-else-if="albumId" :key="'album-' + albumId" :albumId="albumId" />
-      <Artist v-else-if="artistId" :key="'artist-' + artistId" :artistId="artistId" />
-      <UserPlaylist v-else-if="playlistId" :key="'playlist-' + playlistId" :playlistId="playlistId" />
+      <Artist
+        v-else-if="artistId"
+        :key="'artist-' + artistId"
+        :artistId="artistId"
+      />
+      <UserPlaylist
+        v-else-if="playlistId"
+        :key="'playlist-' + playlistId"
+        :playlistId="playlistId"
+      />
       <UserSettings v-else-if="isSettingsRoute" />
       <UserRequests v-else-if="isRequestsRoute" />
       <GenreList v-else-if="isGenresRoute" />
-      <GenreDetail v-else-if="genreName" :key="'genre-' + genreName" :genreName="genreName" />
+      <GenreDetail
+        v-else-if="genreName"
+        :key="'genre-' + genreName"
+        :genreName="genreName"
+      />
       <DevicesView v-else-if="isDevicesRoute" />
       <HomePage v-else />
     </keep-alive>
@@ -223,11 +235,16 @@ watch(
 .mainContent {
   flex: 1;
   overflow: auto;
-  background-color: var(--panel-on-bg);
-  border-radius: var(--panel-border-radius);
-  padding: 16px;
-  margin-left: 8px;
-  margin-right: 16px;
+  background: var(--surface-panel);
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  padding: 0;
+  margin: 0;
   color: var(--text-base);
+  box-shadow: var(--shadow-sm);
+}
+
+.mainContent > :not(.homePage) {
+  padding: clamp(18px, 2vw, 30px);
 }
 </style>

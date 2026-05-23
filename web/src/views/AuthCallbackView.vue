@@ -40,9 +40,7 @@ function goToLogin() {
       <div v-else-if="error" class="error">
         <p class="error-title">Authentication Error</p>
         <p class="error-message">{{ error }}</p>
-        <button class="retry-button" @click="goToLogin">
-          Back to Login
-        </button>
+        <button class="retry-button" @click="goToLogin">Back to Login</button>
       </div>
     </div>
   </div>

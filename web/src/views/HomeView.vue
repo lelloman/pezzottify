@@ -73,6 +73,12 @@ function handleSelect(item) {
   grid-template-rows: var(--topbar-height) 1fr auto;
   grid-template-columns: 1fr;
   overflow: hidden;
+  background: linear-gradient(
+      180deg,
+      rgba(29, 185, 84, 0.035),
+      transparent 28%
+    ),
+    var(--bg-base);
 }
 
 .centralPanel {
@@ -80,8 +86,8 @@ function handleSelect(item) {
   grid-template-columns: 1fr;
   height: 100%;
   overflow: hidden;
-  gap: var(--spacing-2);
-  padding: var(--spacing-2);
+  gap: 10px;
+  padding: 10px;
 }
 
 /* Mobile: Hide sidebars, full-width content */
@@ -106,8 +112,8 @@ function handleSelect(item) {
 @media (min-width: 768px) {
   .centralPanel {
     grid-template-columns: var(--sidebar-width-tablet) 1fr;
-    gap: var(--spacing-3);
-    padding: var(--spacing-3);
+    gap: 12px;
+    padding: 12px;
   }
 
   .userContentSideBar {
@@ -125,8 +131,8 @@ function handleSelect(item) {
     grid-template-columns: var(--sidebar-width-desktop) 1fr var(
         --sidebar-width-desktop
       );
-    gap: var(--spacing-4);
-    padding: var(--spacing-4);
+    gap: 12px;
+    padding: 12px;
   }
 
   .userContentSideBar {

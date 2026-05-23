@@ -392,7 +392,7 @@ onMounted(() => {
 }
 
 .reportTitle {
-  font-size: var(--text-base);
+  font-size: var(--font-size-base);
   font-weight: var(--font-semibold);
   color: var(--text-base);
   margin-bottom: var(--spacing-1);

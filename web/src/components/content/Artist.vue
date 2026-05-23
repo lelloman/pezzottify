@@ -14,7 +14,10 @@
           title="Listen to radio"
           @click.stop="handleClickOnArtistRadio"
         />
-        <button class="advancedRadioButton" @click.stop="showRadioBuilder = true">
+        <button
+          class="advancedRadioButton"
+          @click.stop="showRadioBuilder = true"
+        >
           Customize radio
         </button>
       </div>
@@ -132,64 +135,101 @@ onMounted(() => {
 
 <style scoped>
 .topSection {
-  display: flex;
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: minmax(180px, 300px) minmax(0, 1fr);
+  gap: clamp(20px, 3vw, 36px);
+  align-items: end;
+  padding: clamp(18px, 3vw, 32px);
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: linear-gradient(
+      135deg,
+      rgba(58, 134, 255, 0.16),
+      rgba(17, 20, 22, 0.58) 45%
+    ),
+    var(--surface-raised);
 }
 
 .coverImage {
-  width: 400px;
-  height: 400;
-  object-fit: contain;
+  width: 100%;
+  aspect-ratio: 1;
+  height: auto;
+  object-fit: cover;
+  border-radius: 50%;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
 }
 
 .artistInfoColum {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  margin: 0 16px;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0;
 }
 
 .artistName {
+  margin: 0;
+  color: var(--text-base);
+  font-size: clamp(2rem, 4.6vw, 4.6rem);
+  font-weight: 900;
+  line-height: 0.96;
+  letter-spacing: 0;
 }
 
 .relatedArtistsContainer {
   width: 100%;
-  display: flex;
-  flex-direction: row;
-  overflow-x: auto;
-  margin: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  overflow: visible;
+  margin: 16px 0;
 }
 
 .discographyContainer {
-  margin: 16px;
+  margin: 18px 0 0;
 }
 
 .verticalFiller {
-  flex: 1;
+  display: none;
 }
 
 .radioIcon {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   cursor: pointer;
-  color: var(--text-base);
+  color: var(--spotify-green);
 }
 
 .radioIcon:hover {
-  color: var(--text-bright);
+  color: var(--spotify-green-hover);
 }
 
 .advancedRadioButton {
   width: fit-content;
-  height: 36px;
-  padding: 0 14px;
-  border: 1px solid var(--accent-color);
-  border-radius: 6px;
-  background: transparent;
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--surface-border-strong);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text-base);
+  font-size: 0.86rem;
+  font-weight: 800;
   cursor: pointer;
 }
 
 .advancedRadioButton:hover {
-  background: var(--highlighted-panel-color);
+  background: var(--surface-hover);
+}
+
+@media (max-width: 720px) {
+  .topSection {
+    grid-template-columns: 1fr;
+  }
+
+  .coverImage {
+    max-width: 280px;
+  }
 }
 </style>
