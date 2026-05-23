@@ -39,6 +39,7 @@ import DownloadManager from "@/components/admin/DownloadManager.vue";
 import BatchManager from "@/components/admin/BatchManager.vue";
 import BugReports from "@/components/admin/BugReports.vue";
 import IngestionManager from "@/components/admin/IngestionManager.vue";
+import ShowsManager from "@/components/admin/ShowsManager.vue";
 import { wsConnectionStatus, wsServerVersion } from "@/services/websocket";
 
 const route = useRoute();
@@ -119,6 +120,13 @@ const allSections = [
     permission: "EditCatalog",
     component: IngestionManager,
     route: "/admin/ingestion",
+  },
+  {
+    id: "shows",
+    label: "Shows",
+    permission: "EditCatalog",
+    component: ShowsManager,
+    route: "/admin/shows",
   },
 ];
 

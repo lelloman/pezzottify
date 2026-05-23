@@ -48,6 +48,7 @@
     <string name="home_empty_state">Start exploring to see your recently viewed content here!</string>
     <string name="whats_new_header">What\'s new</string>
     <string name="whats_new_see_all">See all</string>
+    <string name="shows_title">Shows</string>
     <string name="genres_header">Browse genres</string>
     <string name="genres_see_all">See all</string>
     <string name="search_genres_placeholder">Search genres…</string>

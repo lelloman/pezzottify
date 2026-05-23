@@ -17,6 +17,7 @@ pub mod related_artists;
 pub mod search;
 pub mod server;
 pub mod server_store;
+pub mod shows;
 // Skeleton sync module removed - Android now uses on-demand discography API
 // pub mod skeleton;
 pub mod sqlite_persistence;

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::config::{
     AgentSettings, AudioEmbeddingsSettings, DownloadManagerSettings, IngestionSettings,
-    StreamingSearchSettings,
+    ShowsSettings, StreamingSearchSettings,
 };
 
 use super::RequestsLoggingLevel;
@@ -28,6 +28,8 @@ pub struct ServerConfig {
     pub agent: AgentSettings,
     /// Ingestion configuration.
     pub ingestion: IngestionSettings,
+    /// Shows/TTS configuration.
+    pub shows: ShowsSettings,
     /// Optional audio embedding synchronization configuration.
     pub audio_embeddings: Option<AudioEmbeddingsSettings>,
 }
@@ -46,6 +48,7 @@ impl Default for ServerConfig {
             media_path: PathBuf::from("."),
             agent: AgentSettings::default(),
             ingestion: IngestionSettings::default(),
+            shows: ShowsSettings::default(),
             audio_embeddings: None,
         }
     }
@@ -58,6 +61,14 @@ impl ServerConfig {
     }
 
     /// Path to the ingestion temp directory.
+    pub fn shows_db_path(&self) -> PathBuf {
+        self.db_dir.join("shows.db")
+    }
+
+    pub fn shows_media_dir(&self) -> PathBuf {
+        self.media_path.join("shows")
+    }
+
     pub fn ingestion_temp_dir(&self) -> PathBuf {
         self.ingestion
             .temp_dir

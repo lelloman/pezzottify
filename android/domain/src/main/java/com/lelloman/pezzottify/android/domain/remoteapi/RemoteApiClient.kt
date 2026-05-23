@@ -22,6 +22,8 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiRespon
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RequestAlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchSection
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ShowResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ShowSummaryResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonDeltaResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonVersionResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
@@ -98,6 +100,10 @@ interface RemoteApiClient {
      * Get all available genres with track counts.
      */
     suspend fun getGenres(): RemoteApiResponse<List<GenreResponse>>
+
+    suspend fun getShows(limit: Int = 50, offset: Int = 0): RemoteApiResponse<List<ShowSummaryResponse>>
+
+    suspend fun getShow(showId: String): RemoteApiResponse<ShowResponse>
 
     /**
      * Get tracks for a specific genre with pagination.

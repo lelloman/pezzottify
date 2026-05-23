@@ -82,6 +82,7 @@ import com.lelloman.pezzottify.android.ui.screen.queue.QueueScreen
 import com.lelloman.pezzottify.android.ui.toAlbum
 import com.lelloman.pezzottify.android.ui.toPlayer
 import com.lelloman.pezzottify.android.ui.toProfile
+import com.lelloman.pezzottify.android.ui.toShows
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreen
 import com.lelloman.pezzottify.android.ui.screen.main.library.LibraryScreen
 import com.lelloman.pezzottify.android.ui.screen.main.profile.ProfileDrawerContent
@@ -91,6 +92,7 @@ import com.lelloman.pezzottify.android.ui.screen.main.assistant.AssistantScreen
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreen
 import com.lelloman.pezzottify.android.ui.screen.main.settings.SettingsScreen
 import com.lelloman.pezzottify.android.ui.screen.main.settings.bugreport.BugReportScreen
+import com.lelloman.pezzottify.android.ui.screen.main.shows.ShowsScreen
 import com.lelloman.pezzottify.android.ui.screen.main.settings.logviewer.LogViewerScreen
 
 enum class BottomNavigationRoute(
@@ -191,6 +193,10 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                 onNavigateToWhatsNew = {
                     shouldRestoreDrawer = true
                     navController.navigate(Screen.Main.WhatsNew)
+                },
+                onNavigateToShows = {
+                    shouldRestoreDrawer = true
+                    navController.toShows()
                 },
                 onNavigateToAbout = {
                     // Navigate to About screen (root nav) - don't restore drawer
@@ -333,6 +339,9 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                     com.lelloman.pezzottify.android.ui.screen.main.genre.GenreListScreen(
                         navController = navController
                     )
+                }
+                composable<Screen.Main.Shows> {
+                    ShowsScreen(navController = navController)
                 }
 
                 // Overlay screens (no bottom nav/player)

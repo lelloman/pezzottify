@@ -9,6 +9,7 @@ use crate::mcp::handler::McpState;
 use crate::oidc::{AuthStateStore, OidcClient};
 use crate::search::{OrganicIndexer, SearchVault};
 use crate::server_store::ServerStore;
+use crate::shows::ShowStore;
 use crate::user::UserManager;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -24,6 +25,7 @@ pub type GuardedUserManager = Arc<Mutex<UserManager>>;
 pub type GuardedConnectionManager = Arc<ConnectionManager>;
 pub type OptionalSchedulerHandle = Option<SchedulerHandle>;
 pub type GuardedServerStore = Arc<dyn ServerStore>;
+pub type GuardedShowStore = Arc<dyn ShowStore>;
 pub type OptionalOidcClient = Option<Arc<OidcClient>>;
 pub type GuardedAuthStateStore = Arc<AuthStateStore>;
 pub type GuardedMcpState = Arc<McpState>;
@@ -44,6 +46,7 @@ pub struct ServerState {
     pub ws_connection_manager: GuardedConnectionManager,
     pub scheduler_handle: OptionalSchedulerHandle,
     pub server_store: GuardedServerStore,
+    pub show_store: GuardedShowStore,
     pub hash: String,
     pub oidc_client: OptionalOidcClient,
     pub auth_state_store: GuardedAuthStateStore,
@@ -64,6 +67,12 @@ unsafe impl Sync for ServerState {}
 impl FromRef<ServerState> for GuardedCatalogStore {
     fn from_ref(input: &ServerState) -> Self {
         input.catalog_store.clone()
+    }
+}
+
+impl FromRef<ServerState> for GuardedShowStore {
+    fn from_ref(input: &ServerState) -> Self {
+        input.show_store.clone()
     }
 }
 
