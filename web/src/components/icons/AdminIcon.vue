@@ -1,10 +1,10 @@
 <template>
   <!-- Sliders/adjustments icon - common for admin panels -->
   <svg
-    viewBox="0 0 24 24"
+    viewBox="-6 -6 36 36"
     fill="none"
     stroke="currentColor"
-    stroke-width="2"
+    stroke-width="1.8"
     stroke-linecap="round"
     stroke-linejoin="round"
   >
