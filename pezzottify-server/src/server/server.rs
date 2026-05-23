@@ -3,7 +3,7 @@
 
 #![allow(dead_code)] // Route handlers registered dynamically
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::{
     fs::File,
     io::Read,
@@ -21,6 +21,9 @@ use crate::background_jobs::jobs::{
 use crate::background_jobs::{JobError, JobInfo, SchedulerHandle};
 use crate::catalog_store::{CatalogStore, DiscographySort};
 use crate::config::{AlbumEmbeddingDerivationSpec, AudioEmbeddingSpec};
+use crate::shows::{
+    admin_routes as show_admin_routes, public_routes as show_public_routes, SqliteShowStore,
+};
 use crate::{
     server::stream_track::stream_track,
     user::{
@@ -4830,6 +4833,7 @@ impl ServerState {
         _user_store: Arc<dyn FullUserStore>,
         scheduler_handle: Option<SchedulerHandle>,
         server_store: Arc<dyn crate::server_store::ServerStore>,
+        show_store: Arc<dyn crate::shows::ShowStore>,
         db_registry: Arc<crate::backup::DbRegistry>,
     ) -> ServerState {
         // Create connection manager
@@ -4866,6 +4870,7 @@ impl ServerState {
             ws_connection_manager,
             scheduler_handle,
             server_store,
+            show_store,
             hash: "123456".to_owned(),
             oidc_client: None, // Will be set by make_app if OIDC is configured
             auth_state_store,
@@ -4919,6 +4924,11 @@ pub async fn make_app(
         }
     };
 
+    let show_store: Arc<dyn crate::shows::ShowStore> = Arc::new(
+        SqliteShowStore::open(config.shows_db_path(), &db_registry)
+            .context("Failed to open shows database")?,
+    );
+
     let mut state = ServerState::new_with_guarded_search_vault(
         config.clone(),
         catalog_store.clone(),
@@ -4927,6 +4937,7 @@ pub async fn make_app(
         user_store.clone(),
         scheduler_handle,
         server_store,
+        show_store,
         db_registry,
     );
     state.oidc_client = oidc_client;
@@ -5147,6 +5158,7 @@ pub async fn make_app(
         .route("/genres", get(get_genres))
         .route("/genre/{name}/tracks", get(get_genre_tracks))
         .route("/genre/{name}/radio", get(get_genre_radio))
+        .merge(show_public_routes())
         .merge(embeddings::read_routes())
         .merge(recommendation_routes())
         .layer(GovernorLayer::new(content_read_rate_limit.clone()))
@@ -5367,6 +5379,7 @@ pub async fn make_app(
         .route("/image/{id}", put(update_image))
         .route("/image/{id}", delete(delete_image))
         .merge(embeddings::write_routes())
+        .merge(show_admin_routes())
         .layer(GovernorLayer::new(write_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
@@ -5622,6 +5635,7 @@ pub async fn run_server(
     agent: crate::config::AgentSettings,
     ingestion: crate::config::IngestionSettings,
     audio_embeddings: Option<crate::config::AudioEmbeddingsSettings>,
+    shows: crate::config::ShowsSettings,
     db_registry: Arc<crate::backup::DbRegistry>,
 ) -> Result<()> {
     let disable_password_auth = oidc_config
@@ -5641,6 +5655,7 @@ pub async fn run_server(
         media_path,
         agent,
         ingestion,
+        shows,
         audio_embeddings,
     };
 

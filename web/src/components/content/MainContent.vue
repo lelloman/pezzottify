@@ -24,6 +24,7 @@
       <UserSettings v-else-if="isSettingsRoute" />
       <UserRequests v-else-if="isRequestsRoute" />
       <GenreList v-else-if="isGenresRoute" />
+      <Shows v-else-if="isShowsRoute || showId" />
       <GenreDetail
         v-else-if="genreName"
         :key="'genre-' + genreName"
@@ -47,6 +48,7 @@ import HomePage from "@/components/content/HomePage.vue";
 import GenreList from "@/components/content/GenreList.vue";
 import GenreDetail from "@/components/content/GenreDetail.vue";
 import DevicesView from "@/components/content/DevicesView.vue";
+import Shows from "@/components/content/Shows.vue";
 import { useRoute } from "vue-router";
 import { useDebugStore } from "@/store/debug";
 import { storeToRefs } from "pinia";
@@ -67,9 +69,11 @@ const trackId = ref(route.params.trackId || "");
 const artistId = ref(route.params.artistId || "");
 const albumId = ref(route.params.albumId || "");
 const playlistId = ref(route.params.playlistId || "");
+const showId = ref(route.params.showId || "");
 const isSettingsRoute = computed(() => route.name === "settings");
 const isRequestsRoute = computed(() => route.name === "requests");
 const isGenresRoute = computed(() => route.name === "genres");
+const isShowsRoute = computed(() => route.name === "shows");
 const isDevicesRoute = computed(() => route.name === "devices");
 const genreName = ref(route.params.genreName || "");
 
@@ -84,9 +88,11 @@ function currentRouteKey() {
   if (artistId.value) return "artist-" + artistId.value;
   if (playlistId.value) return "playlist-" + playlistId.value;
   if (genreName.value) return "genre-" + genreName.value;
+  if (showId.value) return "show-" + showId.value;
   if (isSettingsRoute.value) return "settings";
   if (isRequestsRoute.value) return "requests";
   if (isGenresRoute.value) return "genres";
+  if (isShowsRoute.value) return "shows";
   if (isDevicesRoute.value) return "devices";
   return "home";
 }
@@ -226,6 +232,13 @@ watch(
   () => route.params.genreName,
   (newGenreName) => {
     genreName.value = newGenreName || "";
+  },
+  { immediate: true },
+);
+watch(
+  () => route.params.showId,
+  (newShowId) => {
+    showId.value = newShowId || "";
   },
   { immediate: true },
 );

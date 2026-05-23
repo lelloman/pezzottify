@@ -33,6 +33,8 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.LoginSuccessResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.PopularContentResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ShowResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ShowSummaryResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonDeltaResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonVersionResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.FullSkeletonResponse
@@ -123,6 +125,19 @@ internal interface RetrofitApiClient {
     suspend fun getGenres(
         @Header("Authorization") authToken: String,
     ): Response<List<GenreResponse>>
+
+    @GET("/v1/content/shows")
+    suspend fun getShows(
+        @Header("Authorization") authToken: String,
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0,
+    ): Response<List<ShowSummaryResponse>>
+
+    @GET("/v1/content/show/{showId}")
+    suspend fun getShow(
+        @Header("Authorization") authToken: String,
+        @Path("showId") showId: String,
+    ): Response<ShowResponse>
 
     @GET("/v1/content/genre/{genreName}/tracks")
     suspend fun getGenreTracks(

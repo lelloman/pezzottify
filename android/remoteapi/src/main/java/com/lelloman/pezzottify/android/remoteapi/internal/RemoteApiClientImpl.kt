@@ -27,6 +27,8 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiRespon
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RequestAlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchSection
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ShowResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ShowSummaryResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonDeltaResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonVersionResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
@@ -311,6 +313,20 @@ internal class RemoteApiClientImpl(
         catchingNetworkError {
             getRetrofit()
                 .getGenres(authToken = authToken)
+                .returnFromRetrofitResponse()
+        }
+
+    override suspend fun getShows(limit: Int, offset: Int): RemoteApiResponse<List<ShowSummaryResponse>> =
+        catchingNetworkError {
+            getRetrofit()
+                .getShows(authToken = authToken, limit = limit, offset = offset)
+                .returnFromRetrofitResponse()
+        }
+
+    override suspend fun getShow(showId: String): RemoteApiResponse<ShowResponse> =
+        catchingNetworkError {
+            getRetrofit()
+                .getShow(authToken = authToken, showId = showId)
                 .returnFromRetrofitResponse()
         }
 

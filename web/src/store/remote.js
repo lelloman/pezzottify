@@ -1258,6 +1258,110 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+
+  // Shows API
+  const fetchShows = async (limit = 50, offset = 0) => {
+    try {
+      const response = await axios.get("/v1/content/shows", { params: { limit, offset } });
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch shows:", error);
+      return [];
+    }
+  };
+
+  const fetchShow = async (showId) => {
+    try {
+      const response = await axios.get(`/v1/content/show/${showId}`);
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch show:", error);
+      return null;
+    }
+  };
+
+  const fetchAdminShows = async (limit = 50, offset = 0) => {
+    try {
+      const response = await axios.get("/v1/content/admin/shows", { params: { limit, offset } });
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch admin shows:", error);
+      return [];
+    }
+  };
+
+  const fetchAdminShow = async (showId) => {
+    try {
+      const response = await axios.get(`/v1/content/admin/shows/${showId}`);
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch admin show:", error);
+      return null;
+    }
+  };
+
+  const createShowDraft = async ({ brief, targetDurationMinutes = 75, language = "en" }) => {
+    try {
+      const response = await axios.post("/v1/content/admin/shows/drafts", {
+        brief,
+        target_duration_minutes: targetDurationMinutes,
+        language,
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Failed to create show draft:", error);
+      throw error;
+    }
+  };
+
+  const updateShowScript = async (show) => {
+    try {
+      const response = await axios.put(`/v1/content/admin/shows/${show.id}/script`, {
+        title: show.title,
+        summary: show.summary,
+        language: show.language,
+        target_duration_minutes: show.target_duration_minutes,
+        speakers: show.speakers || [],
+        segments: show.segments || [],
+        sources: show.sources || [],
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Failed to update show script:", error);
+      throw error;
+    }
+  };
+
+  const synthesizeShow = async (showId) => {
+    try {
+      const response = await axios.post(`/v1/content/admin/shows/${showId}/synthesize`);
+      return response.data;
+    } catch (error) {
+      console.error("Failed to synthesize show:", error);
+      throw error;
+    }
+  };
+
+  const publishShow = async (showId) => {
+    try {
+      const response = await axios.post(`/v1/content/admin/shows/${showId}/publish`);
+      return response.data;
+    } catch (error) {
+      console.error("Failed to publish show:", error);
+      throw error;
+    }
+  };
+
+  const deleteShow = async (showId) => {
+    try {
+      await axios.delete(`/v1/content/admin/shows/${showId}`);
+      return true;
+    } catch (error) {
+      console.error("Failed to delete show:", error);
+      return false;
+    }
+  };
+
   return {
     setBlockHttpCache,
     fetchLikedAlbums,
@@ -1362,5 +1466,15 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchIngestionReviews,
     resolveIngestionReview,
     fetchIngestionAdminJobs,
+    // Shows
+    fetchShows,
+    fetchShow,
+    fetchAdminShows,
+    fetchAdminShow,
+    createShowDraft,
+    updateShowScript,
+    synthesizeShow,
+    publishShow,
+    deleteShow,
   };
 });
