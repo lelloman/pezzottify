@@ -191,13 +191,15 @@
             <ProgressBar
               class="deviceProgressBar"
               :progress="interpolatedRemoteProgress(device.id, device.state)"
-              @update:progress="
-                (p) => onRemoteSeek(p, device.id, device.state)
-              "
+              @update:progress="(p) => onRemoteSeek(p, device.id, device.state)"
             />
             <span class="progressTime"
-              >{{ formatSec(interpolatedRemotePositionSec(device.id, device.state)) }} /
-              {{ formatMs(device.state.current_track.duration) }}</span
+              >{{
+                formatSec(
+                  interpolatedRemotePositionSec(device.id, device.state),
+                )
+              }}
+              / {{ formatMs(device.state.current_track.duration) }}</span
             >
           </div>
           <div v-if="!device.state?.current_track" class="notPlaying">
@@ -289,13 +291,13 @@
           <ProgressBar
             class="deviceProgressBar"
             :progress="interpolatedRemoteProgress(device.id, device.state)"
-            @update:progress="
-              (p) => onRemoteSeek(p, device.id, device.state)
-            "
+            @update:progress="(p) => onRemoteSeek(p, device.id, device.state)"
           />
           <span class="progressTime"
-            >{{ formatSec(interpolatedRemotePositionSec(device.id, device.state)) }} /
-            {{ formatMs(device.state.current_track.duration) }}</span
+            >{{
+              formatSec(interpolatedRemotePositionSec(device.id, device.state))
+            }}
+            / {{ formatMs(device.state.current_track.duration) }}</span
           >
         </div>
         <div v-if="!device.state?.current_track" class="notPlaying">
@@ -307,7 +309,14 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onActivated, onDeactivated, watch } from "vue";
+import {
+  computed,
+  ref,
+  onMounted,
+  onActivated,
+  onDeactivated,
+  watch,
+} from "vue";
 import axios from "axios";
 import { usePlaybackSessionStore } from "@/store/playbackSession";
 import { usePlaybackStore } from "@/store/playback";
@@ -546,101 +555,140 @@ const sharedDevices = computed(() =>
 
 <style scoped>
 .devicesPage {
-  max-width: 640px;
-  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  min-height: 100%;
+  padding: clamp(18px, 2vw, 30px);
+  color: var(--text-base);
 }
 
 .pageTitle {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
-  color: var(--text-base);
-  margin: 0 0 var(--spacing-6);
+  margin: 0;
+  color: #9eddb7;
+  font-size: clamp(1.25rem, 1.8vw, 1.65rem);
+  font-weight: 900;
+  line-height: 1.1;
+  text-transform: uppercase;
 }
 
 .emptyState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 140px;
+  border: 1px dashed var(--surface-border);
+  border-radius: 8px;
   color: var(--text-subdued);
-  font-size: var(--font-size-base);
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
 .sectionHeader {
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  color: var(--text-subdued);
-  margin-bottom: var(--spacing-2);
+  margin: 8px 0 -10px;
+  color: #9eddb7;
+  font-size: clamp(1rem, 1.35vw, 1.32rem);
+  font-weight: 900;
+  line-height: 1.15;
+  text-transform: uppercase;
 }
 
 .sharePolicyCard {
-  background-color: var(--bg-elevated-base);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-4);
-  margin-bottom: var(--spacing-6);
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-3);
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: var(--surface-panel);
 }
 
 .sharePolicyHeader {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--spacing-3);
+  gap: 10px;
 }
 
 .sectionTitle {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-semibold);
-  color: var(--text-base);
+  color: #9eddb7;
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
 }
 
 .policyStatus {
-  font-size: var(--text-xs);
   color: var(--text-subdued);
+  font-size: 0.76rem;
+  font-weight: 700;
 }
 
 .policyError {
-  font-size: var(--text-xs);
-  color: #dc2626;
+  color: #ffb4a8;
+  font-size: 0.76rem;
+  font-weight: 750;
 }
 
-.policyModeRow {
+.policyModeRow,
+.policyRoleRow {
   display: flex;
-  gap: var(--spacing-3);
   flex-wrap: wrap;
+  gap: 10px;
 }
 
 .policyOption {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-2);
-  font-size: var(--text-sm);
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--surface-border);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.035);
   color: var(--text-base);
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.policyOption input {
+  accent-color: var(--spotify-green);
 }
 
 .policyRules {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-3);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding-top: 2px;
 }
 
 .policyField {
   display: flex;
+  min-width: 0;
   flex-direction: column;
-  gap: var(--spacing-2);
-  font-size: var(--text-sm);
-  color: var(--text-subdued);
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.policyField:last-child {
+  grid-column: 1 / -1;
 }
 
 .policyField input {
-  background: var(--bg-base);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-2);
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--surface-border);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.045);
   color: var(--text-base);
 }
 
-.policyRoleRow {
-  display: flex;
-  gap: var(--spacing-3);
+.policyField input:focus {
+  outline: 2px solid var(--spotify-green);
+  outline-offset: 1px;
 }
 
 .policyActions {
@@ -649,50 +697,58 @@ const sharedDevices = computed(() =>
 }
 
 .primaryBtn {
-  background-color: var(--spotify-green);
-  color: var(--bg-base);
+  min-height: 38px;
+  padding: 0 16px;
   border: none;
-  border-radius: var(--radius-full);
-  padding: var(--spacing-2) var(--spacing-4);
+  border-radius: 999px;
+  background-color: var(--spotify-green);
+  color: #071108;
   cursor: pointer;
-  font-weight: var(--font-semibold);
+  font-size: 0.86rem;
+  font-weight: 850;
+}
+
+.primaryBtn:hover:not(:disabled) {
+  background-color: var(--spotify-green-hover);
 }
 
 .primaryBtn:disabled {
-  opacity: 0.6;
   cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .deviceCards {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-4);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
 }
 
 .deviceCard {
-  background-color: var(--bg-elevated-base);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-4);
   display: flex;
+  min-width: 0;
   flex-direction: column;
-  gap: var(--spacing-3);
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: var(--surface-panel);
 }
 
 .deviceCard.thisDevice {
-  border-color: var(--spotify-green);
-  border-width: 2px;
+  border-color: rgba(29, 185, 84, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(29, 185, 84, 0.16);
 }
 
 .deviceHeader {
   display: flex;
   align-items: center;
-  gap: var(--spacing-2);
+  gap: 8px;
+  min-width: 0;
 }
 
 .deviceTypeIcon {
+  flex: 0 0 auto;
   color: var(--text-subdued);
-  flex-shrink: 0;
 }
 
 .thisDevice .deviceTypeIcon {
@@ -700,70 +756,84 @@ const sharedDevices = computed(() =>
 }
 
 .deviceName {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-semibold);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-base);
+  font-size: 0.96rem;
+  font-weight: 850;
+}
+
+.thisDeviceBadge,
+.sharedBadge {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 850;
 }
 
 .thisDeviceBadge {
-  font-size: var(--text-xs);
+  background-color: rgba(29, 185, 84, 0.16);
   color: var(--spotify-green);
-  background-color: rgba(30, 215, 96, 0.1);
-  padding: 2px var(--spacing-2);
-  border-radius: var(--radius-full);
 }
 
 .sharedBadge {
-  font-size: var(--text-xs);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background-color: rgba(255, 255, 255, 0.07);
   color: var(--text-subdued);
-  background-color: var(--bg-elevated-highlight);
-  padding: 2px var(--spacing-2);
-  border-radius: var(--radius-full);
 }
 
 .playbackInfo {
-  display: flex;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
   align-items: center;
-  gap: var(--spacing-3);
+  gap: 12px;
 }
 
 .albumArt {
-  width: 48px;
-  height: 48px;
-  min-width: 48px;
-  border-radius: var(--radius-md);
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: #242424;
 }
 
 .trackDetails {
-  flex: 1;
-  min-width: 0;
   display: flex;
+  min-width: 0;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .trackTitle {
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  color: var(--text-base);
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-base);
+  font-size: 0.9rem;
+  font-weight: 850;
 }
 
 .trackArtist {
-  font-size: var(--text-xs);
-  color: var(--text-subdued);
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 0.76rem;
+  font-weight: 620;
 }
 
 .controlsRow {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--spacing-2);
+  gap: 8px;
 }
 
 .controlBtn {
@@ -772,17 +842,17 @@ const sharedDevices = computed(() =>
   justify-content: center;
   width: 32px;
   height: 32px;
+  border-radius: 8px;
+  color: var(--text-subdued);
   cursor: pointer;
-  color: var(--text-base);
-  border-radius: var(--radius-full);
   transition:
     color var(--transition-fast),
     background-color var(--transition-fast);
 }
 
 .controlBtn:hover {
-  color: var(--text-bright);
-  background-color: var(--bg-elevated-highlight);
+  background-color: var(--surface-hover);
+  color: var(--text-base);
 }
 
 .controlBtn svg {
@@ -792,15 +862,16 @@ const sharedDevices = computed(() =>
 }
 
 .playPauseBtn {
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
   background-color: var(--spotify-green);
-  color: var(--bg-base);
+  color: #071108;
 }
 
 .playPauseBtn:hover {
   background-color: var(--spotify-green-hover);
-  color: var(--bg-base);
+  color: #071108;
 }
 
 .playPauseBtn svg {
@@ -809,28 +880,58 @@ const sharedDevices = computed(() =>
 }
 
 .progressRow {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--spacing-3);
+  gap: 12px;
 }
 
 .deviceProgressBar {
-  flex: 1;
   min-width: 0;
 }
 
 .progressTime {
-  font-size: var(--text-xs);
+  min-width: 94px;
   color: var(--text-subdued);
-  white-space: nowrap;
+  font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
-  min-width: 100px;
+  font-weight: 700;
   text-align: right;
+  white-space: nowrap;
 }
 
 .notPlaying {
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  padding: 0 12px;
+  border: 1px dashed var(--surface-border);
+  border-radius: 8px;
   color: var(--text-subdued);
-  font-size: var(--text-sm);
-  font-style: italic;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .devicesPage {
+    padding: 14px;
+    gap: 18px;
+  }
+
+  .policyRules {
+    grid-template-columns: 1fr;
+  }
+
+  .deviceCards {
+    grid-template-columns: 1fr;
+  }
+
+  .progressRow {
+    grid-template-columns: 1fr;
+  }
+
+  .progressTime {
+    text-align: left;
+  }
 }
 </style>
