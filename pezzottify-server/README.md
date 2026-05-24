@@ -311,9 +311,9 @@ max_albums_per_day = 60
 
 ### Metadata Enrichment
 
-Metadata enrichment stores queryable, generated facts in `enrichment.db`. Page impressions and completed listening events enqueue artist, album, and track entities when their v1 enrichment row is missing or stale. The background job `metadata_enrichment_v1` claims queued rows and uses the shared agent LLM configuration to produce strict JSON for the typed tables.
+Metadata enrichment stores queryable, generated facts in `enrichment.db`. The background job `metadata_enrichment_v1` claims manual/admin queue rows first; if none are claimable, it seeds missing or stale artist, album, and track work from all-time listening counts. Page impressions and listening events keep recording analytics and plays, but they do not enqueue enrichment work directly. The job reuses the existing `[agent]` / `[agent.llm]` configuration to produce strict JSON for the typed tables.
 
-Enable the LLM before expecting queued work to complete:
+There is no metadata-specific model/provider configuration. Enable the existing agent LLM before expecting queued work to complete:
 
 ```toml
 [agent]
@@ -329,11 +329,11 @@ timeout_secs = 120
 
 [background_jobs.metadata_enrichment]
 interval_hours = 6
-batch_size = 25
+batch_size = 2000
 retry_after_secs = 21600
 ```
 
-Manual admin triggers accept optional parameters: `batch_size` and `entity_types` (`artist`, `album`, `track`). If `agent.enabled` is false, the job leaves claimed items queued with a retry delay and the last error `agent LLM is disabled`.
+`[background_jobs.metadata_enrichment]` only controls scheduling, batch size, and retry delay. Manual admin triggers accept optional run parameters: `batch_size` and `entity_types` (`artist`, `album`, `track`); `entity_types` limits both listening backfill seeding and processing for that run. If `agent.enabled` is false, the job leaves claimed items queued with a retry delay and the last error `agent LLM is disabled`.
 
 See [docs/metadata-enrichment-v1.md](../docs/metadata-enrichment-v1.md) for the table model, queue behavior, and operational notes.
 

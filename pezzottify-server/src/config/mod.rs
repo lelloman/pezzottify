@@ -658,7 +658,7 @@ impl Default for MetadataEnrichmentJobSettings {
     fn default() -> Self {
         Self {
             interval_hours: 6,
-            batch_size: 25,
+            batch_size: 2000,
             retry_after_secs: 6 * 60 * 60,
         }
     }
