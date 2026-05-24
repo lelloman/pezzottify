@@ -241,7 +241,7 @@ let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
 #### Admin (requires admin user)
 - `client.get_jobs()` - GET /v1/admin/jobs
 - `client.get_job(job_id)` - GET /v1/admin/jobs/{job_id}
-- `client.trigger_job(job_id)` - POST /v1/admin/jobs/{job_id}/trigger
+- `client.admin_trigger_job(job_id)` - POST /v1/admin/jobs/{job_id}/trigger without params
 - `client.get_job_history(job_id, limit)` - GET /v1/admin/jobs/{job_id}/history
 - `client.create_changelog_batch(...)` - POST /v1/admin/changelog/batch
 - `client.list_changelog_batches(...)` - GET /v1/admin/changelog/batches
