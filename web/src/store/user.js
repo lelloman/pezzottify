@@ -3,11 +3,7 @@ import { ref, computed } from "vue";
 import { useRemoteStore } from "./remote";
 
 // Admin permissions that grant access to admin panel
-const ADMIN_PERMISSIONS = [
-  "ManagePermissions",
-  "ViewAnalytics",
-  "ServerAdmin",
-];
+const ADMIN_PERMISSIONS = ["ManagePermissions", "ViewAnalytics", "ServerAdmin"];
 
 export const useUserStore = defineStore("user", () => {
   const remoteStore = useRemoteStore();
@@ -234,8 +230,27 @@ export const useUserStore = defineStore("user", () => {
     return settings.value[key];
   };
 
+  const isTruthySetting = (value) => {
+    return value === true || value === "true" || value === "1" || value === 1;
+  };
+
+  const normalizeSettingValue = (value) => {
+    if (value === "true") return true;
+    if (value === "false") return false;
+    return value;
+  };
+
+  const normalizeSettings = (rawSettings) => {
+    return Object.fromEntries(
+      Object.entries(rawSettings || {}).map(([key, value]) => [
+        key,
+        normalizeSettingValue(value),
+      ]),
+    );
+  };
+
   const isSmartContinuationEnabled = computed(() => {
-    return settings.value.smart_continuation_enabled === true;
+    return isTruthySetting(settings.value.smart_continuation_enabled);
   });
 
   const setSmartContinuationEnabled = (enabled) => {
@@ -365,16 +380,13 @@ export const useUserStore = defineStore("user", () => {
     if (typeof setting === "object") {
       // Handle tagged format from sync events: { key: "...", value: ... }
       if ("key" in setting && "value" in setting) {
-        const value =
-          typeof setting.value === "boolean"
-            ? setting.value
-              ? "true"
-              : "false"
-            : setting.value;
-        settings.value = { ...settings.value, [setting.key]: value };
+        settings.value = {
+          ...settings.value,
+          [setting.key]: normalizeSettingValue(setting.value),
+        };
       } else {
         // Handle direct key-value pairs
-        settings.value = { ...settings.value, ...setting };
+        settings.value = { ...settings.value, ...normalizeSettings(setting) };
       }
     }
   };
@@ -469,7 +481,9 @@ export const useUserStore = defineStore("user", () => {
 
   const applyDownloadStatusChanged = (payload) => {
     const newMap = new Map(downloadRequests.value);
-    const existing = newMap.get(payload.content_id) || { content_id: payload.content_id };
+    const existing = newMap.get(payload.content_id) || {
+      content_id: payload.content_id,
+    };
     newMap.set(payload.content_id, {
       ...existing,
       request_id: payload.request_id,
@@ -482,7 +496,9 @@ export const useUserStore = defineStore("user", () => {
 
   const applyDownloadProgressUpdated = (payload) => {
     const newMap = new Map(downloadRequests.value);
-    const existing = newMap.get(payload.content_id) || { content_id: payload.content_id };
+    const existing = newMap.get(payload.content_id) || {
+      content_id: payload.content_id,
+    };
     newMap.set(payload.content_id, {
       ...existing,
       request_id: payload.request_id,
@@ -493,7 +509,9 @@ export const useUserStore = defineStore("user", () => {
 
   const applyDownloadCompleted = (payload) => {
     const newMap = new Map(downloadRequests.value);
-    const existing = newMap.get(payload.content_id) || { content_id: payload.content_id };
+    const existing = newMap.get(payload.content_id) || {
+      content_id: payload.content_id,
+    };
     newMap.set(payload.content_id, {
       ...existing,
       request_id: payload.request_id,
@@ -552,7 +570,7 @@ export const useUserStore = defineStore("user", () => {
   };
 
   const setAllSettings = (newSettings) => {
-    settings.value = newSettings;
+    settings.value = normalizeSettings(newSettings);
   };
 
   const setPlaylists = (playlists) => {

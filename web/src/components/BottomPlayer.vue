@@ -71,14 +71,25 @@
         @update:stratDrag="startDraggingVolumeProgress"
         @update:stopDrag="handleSetVolume"
       />
-      <div
+      <button
+        type="button"
         class="lightControlFill scaleClickFeedback scalingIcon mediumIcon smartContinuationButton"
         :class="{ active: smartContinuationEnabled }"
-        title="Smart continuation"
+        :title="
+          smartContinuationEnabled
+            ? 'Smart continuation on'
+            : 'Smart continuation off'
+        "
+        :aria-label="
+          smartContinuationEnabled
+            ? 'Turn smart continuation off'
+            : 'Turn smart continuation on'
+        "
+        :aria-pressed="smartContinuationEnabled"
         @click="toggleSmartContinuation"
       >
-        <PlaylistPlusIcon />
-      </div>
+        <AiContinuationIcon />
+      </button>
       <DeviceSelector />
       <ControlIconButton
         v-if="playback.mode === 'local'"
@@ -109,7 +120,7 @@ import { useRouter } from "vue-router";
 import TrackName from "./common/TrackName.vue";
 import { useStaticsStore } from "@/store/statics";
 import DeviceSelector from "./DeviceSelector.vue";
-import PlaylistPlusIcon from "./icons/PlaylistPlusIcon.vue";
+import AiContinuationIcon from "./icons/AiContinuationIcon.vue";
 import { useUserStore } from "@/store/user";
 
 const ControlIconButton = {
@@ -536,6 +547,19 @@ watch(
   width: 32px;
   height: 32px;
   padding: var(--spacing-1);
+}
+
+.smartContinuationButton {
+  position: relative;
+  appearance: none;
+  border: 0;
+  background: transparent;
+}
+
+.smartContinuationButton svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
 }
 
 .smartContinuationButton.active {
