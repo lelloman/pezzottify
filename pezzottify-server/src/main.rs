@@ -318,6 +318,7 @@ async fn main() -> Result<()> {
         scheduler
             .register_job(Arc::new(MetadataEnrichmentJob::from_settings(
                 &app_config.background_jobs.metadata_enrichment,
+                app_config.agent.clone(),
             )))
             .await;
         info!("Registered metadata enrichment job");

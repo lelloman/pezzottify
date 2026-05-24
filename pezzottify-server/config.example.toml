@@ -68,6 +68,22 @@ engine = "pezzothash"
 # Each connection uses additional memory, so don't over-provision
 read_pool_size = 4
 
+# Agent LLM settings
+# Metadata Enrichment v1 uses this LLM configuration to process queued
+# artist/album/track facts. Simple-AI can be used here if it exposes an
+# OpenAI-compatible chat endpoint.
+# [agent]
+# enabled = true
+# max_iterations = 20
+#
+# [agent.llm]
+# provider = "openai" # "openai" for OpenAI-compatible APIs, otherwise Ollama
+# base_url = "http://simple-ai:8000/v1"
+# model = "your-chat-model"
+# api_key = "your-api-key"
+# temperature = 0.2
+# timeout_secs = 120
+
 # Related Artists Enrichment
 # Populates related artists via MusicBrainz and Last.fm APIs.
 # Requires both lastfm_api_key and musicbrainz_user_agent to be set.
