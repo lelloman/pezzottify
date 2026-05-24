@@ -247,6 +247,31 @@
           <span class="modeLabel">Force regenerate</span>
         </label>
       </div>
+      <div v-if="job.id === 'metadata_enrichment_v1'" class="jobOptions metadataOptions">
+        <label class="numberOption">
+          <span>Max items</span>
+          <input
+            v-model.number="metadataBatchSize"
+            type="number"
+            min="1"
+            step="25"
+          />
+        </label>
+        <div class="typeOptions" aria-label="Entity types">
+          <label class="modeToggle">
+            <input v-model="metadataTypes.artist" type="checkbox" />
+            <span class="modeLabel">Artists</span>
+          </label>
+          <label class="modeToggle">
+            <input v-model="metadataTypes.album" type="checkbox" />
+            <span class="modeLabel">Albums</span>
+          </label>
+          <label class="modeToggle">
+            <input v-model="metadataTypes.track" type="checkbox" />
+            <span class="modeLabel">Tracks</span>
+          </label>
+        </div>
+      </div>
       <button
         class="triggerButton"
         :disabled="job.is_running || triggeringJobs[job.id]"
@@ -365,6 +390,12 @@ const expandArtistsMode = ref("dry_run"); // "dry_run" or "actual"
 const missingFilesMode = ref("dry_run"); // "dry_run" or "actual"
 const embeddingMaxTracks = ref(1000);
 const embeddingForce = ref(false);
+const metadataBatchSize = ref(25);
+const metadataTypes = reactive({
+  artist: true,
+  album: true,
+  track: true,
+});
 
 // Audit log state
 const auditEntries = ref([]);
@@ -488,6 +519,14 @@ const triggerJob = async (jobId) => {
     params = {
       max_tracks: Math.max(1, Number(embeddingMaxTracks.value) || 1000),
       force: embeddingForce.value,
+    };
+  } else if (jobId === "metadata_enrichment_v1") {
+    const entityTypes = Object.entries(metadataTypes)
+      .filter(([, enabled]) => enabled)
+      .map(([entityType]) => entityType);
+    params = {
+      batch_size: Math.max(1, Number(metadataBatchSize.value) || 25),
+      entity_types: entityTypes.length > 0 ? entityTypes : ["artist", "album", "track"],
     };
   }
 
@@ -642,6 +681,17 @@ const formatDetails = (details) => {
   // RelatedArtistsEnrichment - started
   if (details.batch_size !== undefined && details.similar_artists_limit !== undefined && parts.length === 0) {
     parts.push(`Batch: ${details.batch_size}, limit: ${details.similar_artists_limit} similar`);
+  }
+
+
+  // MetadataEnrichment - started/completed
+  if (details.batch_size !== undefined && details.entity_types !== undefined && parts.length === 0) {
+    const types = Array.isArray(details.entity_types) ? details.entity_types.join(", ") : String(details.entity_types);
+    parts.push(`Batch: ${details.batch_size}`);
+    parts.push(`Types: ${types}`);
+    if (details.processed !== undefined) parts.push(`Processed: ${details.processed}`);
+    if (details.retryable_failures !== undefined) parts.push(`Retryable: ${details.retryable_failures}`);
+    if (details.reason === "provider_not_configured") parts.push("Provider not configured");
   }
 
   // RelatedArtistsEnrichment - completed
@@ -975,6 +1025,14 @@ onMounted(() => {
 
 .jobOptions {
   flex-shrink: 0;
+}
+
+.metadataOptions,
+.typeOptions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-3);
 }
 
 .embeddingOptions {
