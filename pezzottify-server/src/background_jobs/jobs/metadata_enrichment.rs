@@ -9,17 +9,25 @@ use crate::background_jobs::{
     job::{BackgroundJob, JobError, JobSchedule, ShutdownBehavior},
     JobAuditLogger,
 };
+use crate::catalog_store::ResolvedTrack;
 use crate::config::{AgentSettings, MetadataEnrichmentJobSettings};
 use crate::enrichment_store::{
     AlbumEnrichmentV1, ArtistEnrichmentV1, EnrichmentQueueItemV1, EnrichmentStore, EntityAliasV1,
     EntityContributorV1, EntityEvidenceV1, EntityExternalIdV1, EntityRelationV1, EntitySourceV1,
     EntityTagV1, TrackEnrichmentV1,
 };
+use crate::user::user_models::TrackPlayCount;
 use serde::Deserialize;
 use serde_json::Value;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{info, warn};
+
+const ENRICHMENT_STALE_AFTER_SECS: i64 = 90 * 24 * 60 * 60;
+const ALL_TIME_LISTENING_START_DATE: u32 = 0;
+const ALL_TIME_LISTENING_END_DATE: u32 = 99_991_231;
+const LISTENING_BACKFILL_REASON: &str = "listening_backfill";
 
 #[derive(Debug, Deserialize, Default)]
 struct MetadataEnrichmentRunParams {
@@ -36,6 +44,130 @@ fn normalize_entity_types(entity_types: Option<Vec<String>>) -> Vec<String> {
         .collect()
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ListeningBackfillCandidate {
+    entity_type: String,
+    entity_id: String,
+    priority: i64,
+}
+
+#[derive(Debug, Clone)]
+struct ListenedTrackContext {
+    track_id: String,
+    play_count: u64,
+    album_id: Option<String>,
+    artist_ids: Vec<String>,
+}
+
+fn listening_priority(play_count: u64) -> i64 {
+    play_count.min(i64::MAX as u64) as i64
+}
+
+fn wants_entity_type(selected: &HashSet<String>, entity_type: &str) -> bool {
+    selected.is_empty() || selected.contains(entity_type)
+}
+
+fn listening_backfill_candidates(
+    tracks: &[ListenedTrackContext],
+    selected_entity_types: &[String],
+) -> Vec<ListeningBackfillCandidate> {
+    let selected = selected_entity_types
+        .iter()
+        .cloned()
+        .collect::<HashSet<String>>();
+    let mut candidates = Vec::new();
+
+    if wants_entity_type(&selected, "track") {
+        candidates.extend(
+            tracks
+                .iter()
+                .filter(|track| !track.track_id.trim().is_empty() && track.play_count > 0)
+                .map(|track| ListeningBackfillCandidate {
+                    entity_type: "track".to_string(),
+                    entity_id: track.track_id.clone(),
+                    priority: listening_priority(track.play_count),
+                }),
+        );
+    }
+
+    if wants_entity_type(&selected, "album") {
+        let mut album_plays: HashMap<String, u64> = HashMap::new();
+        for track in tracks {
+            let Some(album_id) = track.album_id.as_ref() else {
+                continue;
+            };
+            if album_id.trim().is_empty() || track.play_count == 0 {
+                continue;
+            }
+            let entry = album_plays.entry(album_id.clone()).or_insert(0);
+            *entry = entry.saturating_add(track.play_count);
+        }
+        candidates.extend(album_plays.into_iter().map(|(album_id, play_count)| {
+            ListeningBackfillCandidate {
+                entity_type: "album".to_string(),
+                entity_id: album_id,
+                priority: listening_priority(play_count),
+            }
+        }));
+    }
+
+    if wants_entity_type(&selected, "artist") {
+        let mut artist_plays: HashMap<String, u64> = HashMap::new();
+        for track in tracks {
+            if track.play_count == 0 {
+                continue;
+            }
+            let mut seen_for_track = HashSet::new();
+            for artist_id in &track.artist_ids {
+                if artist_id.trim().is_empty() || !seen_for_track.insert(artist_id) {
+                    continue;
+                }
+                let entry = artist_plays.entry(artist_id.clone()).or_insert(0);
+                *entry = entry.saturating_add(track.play_count);
+            }
+        }
+        candidates.extend(artist_plays.into_iter().map(|(artist_id, play_count)| {
+            ListeningBackfillCandidate {
+                entity_type: "artist".to_string(),
+                entity_id: artist_id,
+                priority: listening_priority(play_count),
+            }
+        }));
+    }
+
+    candidates.sort_by(|a, b| {
+        b.priority
+            .cmp(&a.priority)
+            .then_with(|| a.entity_type.cmp(&b.entity_type))
+            .then_with(|| a.entity_id.cmp(&b.entity_id))
+    });
+    candidates
+}
+
+fn track_context_from_resolved(
+    track_count: &TrackPlayCount,
+    resolved: Option<ResolvedTrack>,
+) -> ListenedTrackContext {
+    match resolved {
+        Some(resolved) => ListenedTrackContext {
+            track_id: track_count.track_id.clone(),
+            play_count: track_count.play_count,
+            album_id: Some(resolved.album.id),
+            artist_ids: resolved
+                .artists
+                .into_iter()
+                .map(|artist| artist.artist.id)
+                .collect(),
+        },
+        None => ListenedTrackContext {
+            track_id: track_count.track_id.clone(),
+            play_count: track_count.play_count,
+            album_id: None,
+            artist_ids: Vec::new(),
+        },
+    }
+}
+
 pub struct MetadataEnrichmentJob {
     settings: MetadataEnrichmentJobSettings,
     agent: AgentSettings,
@@ -47,6 +179,79 @@ impl MetadataEnrichmentJob {
             settings: settings.clone(),
             agent,
         }
+    }
+
+    fn build_listening_backfill_candidates(
+        &self,
+        ctx: &JobContext,
+        selected_entity_types: &[String],
+    ) -> Result<Vec<ListeningBackfillCandidate>, JobError> {
+        let track_counts = ctx
+            .user_store
+            .get_all_track_play_counts(ALL_TIME_LISTENING_START_DATE, ALL_TIME_LISTENING_END_DATE)
+            .map_err(|e| {
+                JobError::ExecutionFailed(format!("Failed to get listening counts: {e}"))
+            })?;
+
+        if track_counts.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let needs_resolved_tracks = selected_entity_types.is_empty()
+            || selected_entity_types
+                .iter()
+                .any(|entity_type| matches!(entity_type.as_str(), "artist" | "album"));
+        let tracks = track_counts
+            .iter()
+            .map(|track_count| {
+                let resolved = if needs_resolved_tracks {
+                    ctx.catalog_store
+                        .get_resolved_track(&track_count.track_id)
+                        .map_err(|e| {
+                            JobError::ExecutionFailed(format!(
+                                "Failed to resolve listened track {}: {e}",
+                                track_count.track_id
+                            ))
+                        })?
+                } else {
+                    None
+                };
+                Ok(track_context_from_resolved(track_count, resolved))
+            })
+            .collect::<Result<Vec<_>, JobError>>()?;
+
+        Ok(listening_backfill_candidates(
+            &tracks,
+            selected_entity_types,
+        ))
+    }
+
+    fn seed_listening_backfill(
+        &self,
+        ctx: &JobContext,
+        store: &dyn EnrichmentStore,
+        selected_entity_types: &[String],
+    ) -> Result<usize, JobError> {
+        let candidates = self.build_listening_backfill_candidates(ctx, selected_entity_types)?;
+        let mut seeded = 0usize;
+        for candidate in candidates {
+            if ctx.is_cancelled() {
+                return Err(JobError::Cancelled);
+            }
+            let queued = store
+                .enqueue_enrichment_if_missing_or_stale(
+                    &candidate.entity_type,
+                    &candidate.entity_id,
+                    LISTENING_BACKFILL_REASON,
+                    candidate.priority,
+                    ENRICHMENT_STALE_AFTER_SECS,
+                )
+                .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+            if queued {
+                seeded += 1;
+            }
+        }
+        Ok(seeded)
     }
 
     fn execute_disabled(
@@ -415,16 +620,28 @@ impl BackgroundJob for MetadataEnrichmentJob {
             "entity_types": selected_entity_types.clone(),
         })));
 
-        let batch = if entity_types.is_empty() {
-            store.claim_enrichment_queue_batch(batch_size)
-        } else {
-            store.claim_enrichment_queue_batch_for_types(batch_size, &entity_types)
+        let claim_batch = || {
+            if entity_types.is_empty() {
+                store.claim_enrichment_queue_batch(batch_size)
+            } else {
+                store.claim_enrichment_queue_batch_for_types(batch_size, &entity_types)
+            }
+            .map_err(|e| JobError::ExecutionFailed(e.to_string()))
+        };
+
+        let mut seeded = 0usize;
+        let mut batch = claim_batch()?;
+        if batch.is_empty() {
+            seeded = self.seed_listening_backfill(ctx, store.as_ref(), &entity_types)?;
+            if seeded > 0 {
+                batch = claim_batch()?;
+            }
         }
-        .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
 
         if batch.is_empty() {
             audit.log_completed(Some(serde_json::json!({
                 "processed": 0,
+                "seeded": seeded,
                 "batch_size": batch_size,
                 "entity_types": selected_entity_types.clone(),
             })));
@@ -439,6 +656,7 @@ impl BackgroundJob for MetadataEnrichmentJob {
                 "batch_size": batch_size,
                 "entity_types": selected_entity_types.clone(),
                 "reason": "agent_llm_disabled",
+                "seeded": seeded,
             })));
             return Ok(());
         }
@@ -503,6 +721,7 @@ impl BackgroundJob for MetadataEnrichmentJob {
             "processed": processed,
             "retryable_failures": retryable_failures,
             "permanent_failures": permanent_failures,
+            "seeded": seeded,
             "batch_size": batch_size,
             "entity_types": selected_entity_types.clone(),
             "provider": provider.name(),
@@ -1120,6 +1339,254 @@ fn now_secs() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn track_context(
+        track_id: &str,
+        play_count: u64,
+        album_id: Option<&str>,
+        artist_ids: &[&str],
+    ) -> ListenedTrackContext {
+        ListenedTrackContext {
+            track_id: track_id.to_string(),
+            play_count,
+            album_id: album_id.map(str::to_string),
+            artist_ids: artist_ids.iter().map(|id| id.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn listening_backfill_candidates_aggregate_and_sort_all_types() {
+        let tracks = vec![
+            track_context("t1", 3, Some("album1"), &["artist1", "artist2"]),
+            track_context("t2", 7, Some("album1"), &["artist1"]),
+            track_context("t3", 5, Some("album2"), &["artist2", "artist2"]),
+        ];
+
+        let candidates = listening_backfill_candidates(&tracks, &[]);
+
+        assert_eq!(
+            candidates,
+            vec![
+                ListeningBackfillCandidate {
+                    entity_type: "album".to_string(),
+                    entity_id: "album1".to_string(),
+                    priority: 10,
+                },
+                ListeningBackfillCandidate {
+                    entity_type: "artist".to_string(),
+                    entity_id: "artist1".to_string(),
+                    priority: 10,
+                },
+                ListeningBackfillCandidate {
+                    entity_type: "artist".to_string(),
+                    entity_id: "artist2".to_string(),
+                    priority: 8,
+                },
+                ListeningBackfillCandidate {
+                    entity_type: "track".to_string(),
+                    entity_id: "t2".to_string(),
+                    priority: 7,
+                },
+                ListeningBackfillCandidate {
+                    entity_type: "album".to_string(),
+                    entity_id: "album2".to_string(),
+                    priority: 5,
+                },
+                ListeningBackfillCandidate {
+                    entity_type: "track".to_string(),
+                    entity_id: "t3".to_string(),
+                    priority: 5,
+                },
+                ListeningBackfillCandidate {
+                    entity_type: "track".to_string(),
+                    entity_id: "t1".to_string(),
+                    priority: 3,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn listening_backfill_candidates_respect_entity_type_filter_and_clamp_priority() {
+        let tracks = vec![track_context("t1", u64::MAX, Some("album1"), &["artist1"])];
+
+        let candidates = listening_backfill_candidates(&tracks, &["artist".to_string()]);
+
+        assert_eq!(
+            candidates,
+            vec![ListeningBackfillCandidate {
+                entity_type: "artist".to_string(),
+                entity_id: "artist1".to_string(),
+                priority: i64::MAX,
+            }]
+        );
+    }
+
+    fn listening_event(
+        user_id: usize,
+        track_id: &str,
+        started_at: u64,
+    ) -> crate::user::ListeningEvent {
+        crate::user::ListeningEvent {
+            id: None,
+            user_id,
+            track_id: track_id.to_string(),
+            session_id: Some(format!("session-{track_id}-{started_at}")),
+            started_at,
+            ended_at: Some(started_at + 180),
+            duration_seconds: 180,
+            track_duration_seconds: 180,
+            completed: true,
+            seek_count: 0,
+            pause_count: 0,
+            playback_context: None,
+            client_type: None,
+            date: 20260524,
+        }
+    }
+
+    fn test_job_context(
+        temp_dir: &tempfile::TempDir,
+    ) -> (
+        JobContext,
+        Arc<crate::user::SqliteUserStore>,
+        Arc<crate::enrichment_store::SqliteEnrichmentStore>,
+    ) {
+        let registry = crate::backup::DbRegistry::new();
+        let catalog_store: Arc<dyn crate::catalog_store::CatalogStore> =
+            Arc::new(crate::catalog_store::NullCatalogStore);
+        let user_store_impl = Arc::new(
+            crate::user::SqliteUserStore::new(temp_dir.path().join("user.db"), &registry).unwrap(),
+        );
+        let user_store: Arc<dyn crate::user::FullUserStore> = user_store_impl.clone();
+        let server_store: Arc<dyn crate::server_store::ServerStore> = Arc::new(
+            crate::server_store::SqliteServerStore::new(
+                temp_dir.path().join("server.db"),
+                &registry,
+            )
+            .unwrap(),
+        );
+        let user_manager = Arc::new(std::sync::Mutex::new(crate::user::UserManager::new(
+            catalog_store.clone(),
+            user_store.clone(),
+        )));
+        let enrichment_store_impl = Arc::new(
+            crate::enrichment_store::SqliteEnrichmentStore::new(
+                temp_dir.path().join("enrichment.db"),
+                &registry,
+            )
+            .unwrap(),
+        );
+        let enrichment_store: Arc<dyn EnrichmentStore> = enrichment_store_impl.clone();
+        let ctx = JobContext::new(
+            tokio_util::sync::CancellationToken::new(),
+            catalog_store,
+            user_store,
+            server_store,
+            user_manager,
+        )
+        .with_enrichment_store(enrichment_store);
+
+        (ctx, user_store_impl, enrichment_store_impl)
+    }
+
+    #[test]
+    fn empty_queue_seeds_listened_tracks_and_claims_batch() {
+        use crate::user::{UserListeningStore, UserStore};
+
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let (ctx, user_store, enrichment_store) = test_job_context(&temp_dir);
+        let user_id = user_store.create_user("listener").unwrap();
+        user_store
+            .record_listening_event(listening_event(user_id, "track1", 1_000))
+            .unwrap();
+        user_store
+            .record_listening_event(listening_event(user_id, "track1", 2_000))
+            .unwrap();
+        user_store
+            .record_listening_event(listening_event(user_id, "track2", 3_000))
+            .unwrap();
+        user_store
+            .record_listening_event(listening_event(user_id, "track3", 4_000))
+            .unwrap();
+
+        let job = MetadataEnrichmentJob::from_settings(
+            &MetadataEnrichmentJobSettings {
+                interval_hours: 6,
+                batch_size: 2,
+                retry_after_secs: 60,
+            },
+            AgentSettings {
+                enabled: false,
+                ..AgentSettings::default()
+            },
+        );
+
+        job.execute_with_params(
+            &ctx,
+            Some(serde_json::json!({
+                "entity_types": ["track"]
+            })),
+        )
+        .unwrap();
+
+        let items = ["track1", "track2", "track3"]
+            .into_iter()
+            .map(|track_id| {
+                enrichment_store
+                    .get_enrichment_queue_item("track", track_id)
+                    .unwrap()
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(items.iter().filter(|item| item.attempts == 1).count(), 2);
+        assert_eq!(items.iter().filter(|item| item.attempts == 0).count(), 1);
+        assert_eq!(
+            items
+                .iter()
+                .filter(|item| item.reason.as_deref() == Some(LISTENING_BACKFILL_REASON))
+                .count(),
+            3
+        );
+        assert_eq!(
+            enrichment_store
+                .get_enrichment_queue_item("track", "track1")
+                .unwrap()
+                .unwrap()
+                .priority,
+            2
+        );
+    }
+
+    #[test]
+    fn empty_queue_with_no_listening_data_seeds_nothing() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let (ctx, _user_store, enrichment_store) = test_job_context(&temp_dir);
+        let job = MetadataEnrichmentJob::from_settings(
+            &MetadataEnrichmentJobSettings {
+                interval_hours: 6,
+                batch_size: 2,
+                retry_after_secs: 60,
+            },
+            AgentSettings {
+                enabled: false,
+                ..AgentSettings::default()
+            },
+        );
+
+        job.execute_with_params(
+            &ctx,
+            Some(serde_json::json!({
+                "entity_types": ["track"]
+            })),
+        )
+        .unwrap();
+
+        assert!(enrichment_store
+            .claim_enrichment_queue_batch(10)
+            .unwrap()
+            .is_empty());
+    }
 
     #[test]
     fn extract_json_object_handles_fences_and_nested_strings() {

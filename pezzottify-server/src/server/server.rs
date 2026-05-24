@@ -2498,36 +2498,6 @@ async fn get_user_playlists(
     }
 }
 
-const ENRICHMENT_STALE_AFTER_SECS: i64 = 90 * 24 * 60 * 60;
-
-fn enqueue_enrichment_nonblocking(
-    enrichment_store: &OptionalEnrichmentStore,
-    entity_type: &'static str,
-    entity_id: String,
-    reason: &'static str,
-    priority: i64,
-) {
-    if entity_id.is_empty() {
-        return;
-    }
-    if let Some(store) = enrichment_store.clone() {
-        tokio::task::spawn_blocking(move || {
-            if let Err(err) = store.enqueue_enrichment_if_missing_or_stale(
-                entity_type,
-                &entity_id,
-                reason,
-                priority,
-                ENRICHMENT_STALE_AFTER_SECS,
-            ) {
-                debug!(
-                    "Failed to enqueue {} {} for enrichment: {}",
-                    entity_type, entity_id, err
-                );
-            }
-        });
-    }
-}
-
 fn attach_enrichment_status(
     mut value: serde_json::Value,
     entity_type: &str,
@@ -2559,8 +2529,6 @@ fn attach_enrichment_status(
 async fn post_listening_event(
     session: Session,
     State(user_manager): State<GuardedUserManager>,
-    State(catalog_store): State<GuardedCatalogStore>,
-    State(enrichment_store): State<OptionalEnrichmentStore>,
     Json(body): Json<ListeningEventRequest>,
 ) -> Response {
     use std::time::SystemTime;
@@ -2588,8 +2556,6 @@ async fn post_listening_event(
     let client_type_for_metrics = body.client_type.clone();
     let duration_for_metrics = body.duration_seconds;
 
-    let track_id_for_enrichment = body.track_id.clone();
-
     let event = crate::user::ListeningEvent {
         id: None,
         user_id: session.user_id,
@@ -2616,37 +2582,6 @@ async fn post_listening_event(
                     completed,
                     duration_for_metrics,
                 );
-                enqueue_enrichment_nonblocking(
-                    &enrichment_store,
-                    "track",
-                    track_id_for_enrichment.clone(),
-                    "listening",
-                    20,
-                );
-                if let Some(store) = enrichment_store.clone() {
-                    let catalog_store = Arc::clone(&catalog_store);
-                    let track_id = track_id_for_enrichment.clone();
-                    tokio::task::spawn_blocking(move || {
-                        if let Ok(Some(resolved)) = catalog_store.get_resolved_track(&track_id) {
-                            let _ = store.enqueue_enrichment_if_missing_or_stale(
-                                "album",
-                                &resolved.album.id,
-                                "listening_adjacent",
-                                10,
-                                ENRICHMENT_STALE_AFTER_SECS,
-                            );
-                            for artist in resolved.artists {
-                                let _ = store.enqueue_enrichment_if_missing_or_stale(
-                                    "artist",
-                                    &artist.artist.id,
-                                    "listening_adjacent",
-                                    10,
-                                    ENRICHMENT_STALE_AFTER_SECS,
-                                );
-                            }
-                        }
-                    });
-                }
             }
             Json(ListeningEventResponse { id, created }).into_response()
         }
@@ -2738,14 +2673,13 @@ struct ImpressionBody {
 /// This data is used for popularity scoring.
 async fn post_impression(
     State(search_vault): State<super::state::GuardedSearchVault>,
-    State(enrichment_store): State<OptionalEnrichmentStore>,
     Json(body): Json<ImpressionBody>,
 ) -> StatusCode {
     // Parse item type
-    let (item_type, enrichment_entity_type) = match body.item_type.to_lowercase().as_str() {
-        "artist" => (crate::search::HashedItemType::Artist, "artist"),
-        "album" => (crate::search::HashedItemType::Album, "album"),
-        "track" => (crate::search::HashedItemType::Track, "track"),
+    let item_type = match body.item_type.to_lowercase().as_str() {
+        "artist" => crate::search::HashedItemType::Artist,
+        "album" => crate::search::HashedItemType::Album,
+        "track" => crate::search::HashedItemType::Track,
         _ => return StatusCode::BAD_REQUEST,
     };
 
@@ -2757,13 +2691,6 @@ async fn post_impression(
     // Record the impression in a blocking task to avoid blocking the async runtime
     // while waiting for the write_conn mutex (which may be held by long-running index operations)
     let item_id = body.item_id;
-    enqueue_enrichment_nonblocking(
-        &enrichment_store,
-        enrichment_entity_type,
-        item_id.clone(),
-        "impression",
-        5,
-    );
     tokio::task::spawn_blocking(move || {
         search_vault.record_impression(&item_id, item_type);
     });

@@ -112,13 +112,13 @@ See the [server README](pezzottify-server/README.md#authentication--authorizatio
 
 User-facing state changes are written to an append-only sync event log. Connected clients receive updates over `/v1/ws`; offline clients catch up through `/v1/sync/events`.
 
-Listening events and impressions feed popular content and analytics views. They also drive metadata enrichment: opening an artist, album, or track page queues that entity for enrichment when its v1 data is missing or stale, and completed track plays queue the track plus its album and artists.
+Listening events and impressions feed popular content and analytics views. Metadata enrichment is admin/job driven: when the enrichment queue is empty, `metadata_enrichment_v1` seeds missing or stale artist, album, and track work from all-time listening counts, leaving zero-listen catalog items alone.
 
 ## Metadata Enrichment
 
-Metadata Enrichment v1 is queue-based and non-blocking. The server records queue state when users view or play catalog items, and the `metadata_enrichment_v1` background job later fills typed tables for artists, albums, tracks, tags, contributors, aliases, external IDs, relations, sources, and evidence.
+Metadata Enrichment v1 is queue-based and non-blocking. The `metadata_enrichment_v1` background job claims manual/admin queue rows first; if none are claimable, it seeds a backlog from all-time listening data and later fills typed tables for artists, albums, tracks, tags, contributors, aliases, external IDs, relations, sources, and evidence.
 
-The job uses the shared `[agent.llm]` configuration. It supports Ollama and OpenAI-compatible chat APIs; Simple-AI can be used when it exposes an OpenAI-compatible endpoint.
+The job reuses the existing shared `[agent]` / `[agent.llm]` configuration. It supports Ollama and OpenAI-compatible chat APIs; Simple-AI can be used when it exposes an OpenAI-compatible endpoint.
 
 ```toml
 [agent]

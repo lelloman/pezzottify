@@ -68,10 +68,10 @@ engine = "pezzothash"
 # Each connection uses additional memory, so don't over-provision
 read_pool_size = 4
 
-# Agent LLM settings
-# Metadata Enrichment v1 uses this LLM configuration to process queued
-# artist/album/track facts. Simple-AI can be used here if it exposes an
-# OpenAI-compatible chat endpoint.
+# Shared agent LLM settings
+# Metadata Enrichment v1 reuses this existing agent configuration; it does
+# not define a separate model/provider config. Simple-AI can be used here if
+# it exposes an OpenAI-compatible chat endpoint.
 # [agent]
 # enabled = true
 # max_iterations = 20
@@ -173,12 +173,12 @@ startup_delay_minutes = 60
 interval_hours = 6
 
 # Metadata Enrichment v1 Job
-# Processes queued artist/album/track enrichment requests.
+# Processes queued artist/album/track enrichment requests, seeding from listening data when empty.
 [background_jobs.metadata_enrichment]
 # Interval in hours between job runs (default: 6)
 interval_hours = 6
-# Maximum queued entities to process per run (default: 25)
-batch_size = 25
+# Maximum queued entities to process per run (default: 2000)
+batch_size = 2000
 # Retry delay for retryable enrichment failures, including disabled agent LLM (default: 21600)
 retry_after_secs = 21600
 
