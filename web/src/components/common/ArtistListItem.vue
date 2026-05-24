@@ -34,8 +34,8 @@ const handleClick = (artist) => {
 
 <style scoped>
 .relatedArtistWrapper {
-  min-width: 200px;
-  margin: 10px;
+  min-width: 0;
+  margin: 0;
 }
 
 .searchResultRoundImage {
@@ -46,6 +46,10 @@ const handleClick = (artist) => {
 }
 
 .title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   margin: 0;
   font-size: 0.9rem;
   font-weight: 850;

@@ -1,9 +1,9 @@
 <template>
-  <div class=".albumWrapper">
-    <div v-if="loading">Loading...</div>
+  <div class="albumWrapper">
+    <div v-if="loading" class="albumState">Loading</div>
     <div
       v-else-if="album"
-      class="searchResultRow"
+      class="searchResultRow albumListRow"
       :data-id="album.id"
       @click="handleClick(album.id)"
     >
@@ -34,7 +34,9 @@
         @click.stop="handlePlayClick(album.id)"
       />
     </div>
-    <div v-else-if="error">Error. {{ error }}</div>
+    <div v-else-if="error" class="albumState errorState">
+      Error. {{ error }}
+    </div>
   </div>
 </template>
 
@@ -111,8 +113,31 @@ const handleClick = (albumId) => {
 </script>
 
 <style scoped>
+.albumWrapper {
+  min-width: 0;
+}
+
+.albumState {
+  display: flex;
+  align-items: center;
+  min-height: 64px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--text-subdued);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.errorState {
+  color: #ffb4a8;
+}
+
 .relatedAlbumWrapper {
   max-width: 400px;
+}
+
+.albumListRow {
+  padding-right: 42px;
 }
 
 .searchResultRoundImage {
@@ -123,17 +148,34 @@ const handleClick = (albumId) => {
 }
 
 .title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   margin: 0;
   font-size: 0.9rem;
   font-weight: 850;
-  line-height: 1.2;
+  line-height: 1.18;
   color: #ffffff !important;
 }
 
 .column {
   flex: 1;
   display: flex;
+  min-width: 0;
   flex-direction: column;
+  gap: 3px;
+}
+
+.artistsNames {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-subdued);
+  font-size: 0.76rem;
+  font-weight: 620;
 }
 
 .image-unavailable {
@@ -142,15 +184,24 @@ const handleClick = (albumId) => {
 }
 
 .availability-badge {
-  font-size: 11px;
-  font-weight: 500;
-  padding: 2px 6px;
+  margin-right: 4px;
   border-radius: 4px;
-  margin-right: 8px;
+  padding: 2px 6px;
+  font-size: 0.68rem;
+  font-weight: 800;
 }
 
 .availability-badge.partial {
-  color: #ff9800;
+  color: #ffb45f;
   background: rgba(255, 152, 0, 0.15);
+}
+
+.searchResultPlayIcon {
+  top: 50%;
+  right: 8px;
+  bottom: auto;
+  width: 30px;
+  height: 30px;
+  transform: translateY(-50%);
 }
 </style>
