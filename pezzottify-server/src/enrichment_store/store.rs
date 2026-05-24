@@ -122,6 +122,72 @@ impl SqliteEnrichmentStore {
         })
     }
 
+    fn claim_enrichment_queue_batch_matching(
+        &self,
+        limit: usize,
+        entity_types: &[String],
+    ) -> Result<Vec<EnrichmentQueueItemV1>> {
+        let now = now_unix();
+        let conn = self.write_conn.lock().unwrap();
+        let mut sql = String::from(
+            "SELECT id, entity_type, entity_id, status, priority, reason, stage, attempts,
+                    created_at, updated_at, next_attempt_at, started_at, completed_at, last_error
+             FROM enrichment_queue_v1
+             WHERE status = 'queued' AND (next_attempt_at IS NULL OR next_attempt_at <= ?)",
+        );
+        let valid_types = entity_types
+            .iter()
+            .filter(|entity_type| valid_entity_type(entity_type))
+            .cloned()
+            .collect::<Vec<_>>();
+        if !valid_types.is_empty() {
+            let placeholders = std::iter::repeat("?")
+                .take(valid_types.len())
+                .collect::<Vec<_>>()
+                .join(", ");
+            sql.push_str(" AND entity_type IN (");
+            sql.push_str(&placeholders);
+            sql.push(')');
+        }
+        sql.push_str(" ORDER BY priority DESC, updated_at ASC LIMIT ?");
+
+        let mut values: Vec<rusqlite::types::Value> = Vec::with_capacity(valid_types.len() + 2);
+        values.push(now.into());
+        for entity_type in &valid_types {
+            values.push(entity_type.clone().into());
+        }
+        values.push((limit as i64).into());
+
+        let mut stmt = conn.prepare(&sql)?;
+        let items = stmt
+            .query_map(
+                rusqlite::params_from_iter(values.iter()),
+                queue_item_from_row,
+            )?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        drop(stmt);
+
+        for item in &items {
+            conn.execute(
+                "UPDATE enrichment_queue_v1 SET status = 'running', stage = 'running', attempts = attempts + 1,
+                        started_at = ?1, updated_at = ?1, last_error = NULL WHERE id = ?2",
+                params![now, item.id],
+            )?;
+        }
+        Ok(items
+            .into_iter()
+            .map(|mut item| {
+                item.status = "running".to_string();
+                item.stage = Some("running".to_string());
+                item.attempts += 1;
+                item.started_at = Some(now);
+                item.updated_at = now;
+                item.last_error = None;
+                item
+            })
+            .collect())
+    }
+
     fn count_rows(conn: &Connection) -> Result<EnrichmentStats> {
         let tracks_analyzed: usize =
             conn.query_row("SELECT COUNT(*) FROM audio_features", [], |r| r.get(0))?;
@@ -755,38 +821,15 @@ impl EnrichmentStore for SqliteEnrichmentStore {
     }
 
     fn claim_enrichment_queue_batch(&self, limit: usize) -> Result<Vec<EnrichmentQueueItemV1>> {
-        let now = now_unix();
-        let conn = self.write_conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, entity_type, entity_id, status, priority, reason, stage, attempts,
-                    created_at, updated_at, next_attempt_at, started_at, completed_at, last_error
-             FROM enrichment_queue_v1
-             WHERE status = 'queued' AND (next_attempt_at IS NULL OR next_attempt_at <= ?1)
-             ORDER BY priority DESC, updated_at ASC LIMIT ?2",
-        )?;
-        let items = stmt
-            .query_map(params![now, limit as i64], queue_item_from_row)?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        drop(stmt);
-        for item in &items {
-            conn.execute(
-                "UPDATE enrichment_queue_v1 SET status = 'running', stage = 'running', attempts = attempts + 1,
-                        started_at = ?1, updated_at = ?1, last_error = NULL WHERE id = ?2",
-                params![now, item.id],
-            )?;
-        }
-        Ok(items
-            .into_iter()
-            .map(|mut item| {
-                item.status = "running".to_string();
-                item.stage = Some("running".to_string());
-                item.attempts += 1;
-                item.started_at = Some(now);
-                item.updated_at = now;
-                item.last_error = None;
-                item
-            })
-            .collect())
+        self.claim_enrichment_queue_batch_matching(limit, &[])
+    }
+
+    fn claim_enrichment_queue_batch_for_types(
+        &self,
+        limit: usize,
+        entity_types: &[String],
+    ) -> Result<Vec<EnrichmentQueueItemV1>> {
+        self.claim_enrichment_queue_batch_matching(limit, entity_types)
     }
 
     fn complete_enrichment_queue_item(&self, id: i64) -> Result<()> {
@@ -1466,6 +1509,18 @@ mod tests {
         assert_eq!(item.status, "queued");
         assert_eq!(item.priority, 20);
         assert_eq!(item.reason, Some("listening".to_string()));
+
+        store
+            .enqueue_enrichment_if_missing_or_stale("artist", "artist1", "impression", 5, 3600)
+            .unwrap();
+        let artist_only = store
+            .claim_enrichment_queue_batch_for_types(10, &["artist".to_string()])
+            .unwrap();
+        assert_eq!(artist_only.len(), 1);
+        assert_eq!(artist_only[0].entity_type, "artist");
+        store
+            .complete_enrichment_queue_item(artist_only[0].id)
+            .unwrap();
 
         let claimed = store.claim_enrichment_queue_batch(10).unwrap();
         assert_eq!(claimed.len(), 1);
