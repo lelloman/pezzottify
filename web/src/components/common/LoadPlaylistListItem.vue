@@ -1,14 +1,20 @@
 <template>
   <div class="playlistWrapper">
-    <div v-if="loading">Loading...</div>
+    <div v-if="loading" class="playlistState">Loading</div>
     <div
       v-else-if="playlist"
       class="playlistItem searchResultRow"
       @click.stop="handleClick"
     >
-      <h2>{{ playlist.name }} ({{ playlist.tracks?.length || 0 }})</h2>
+      <div class="playlistIcon">P</div>
+      <div class="playlistMeta">
+        <h2>{{ playlist.name }}</h2>
+        <span>{{ playlist.tracks?.length || 0 }} tracks</span>
+      </div>
     </div>
-    <div v-else-if="error">Error. {{ error }}</div>
+    <div v-else-if="error" class="playlistState errorState">
+      Error. {{ error }}
+    </div>
   </div>
 </template>
 
@@ -67,16 +73,67 @@ const handleClick = () => {
 }
 
 .playlistItem {
-  padding: 12px;
-  min-height: 56px;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 62px;
+  padding: 8px;
   border-radius: 8px;
   color: var(--text-base) !important;
 }
 
+.playlistIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 7px;
+  background: rgba(29, 185, 84, 0.16);
+  color: var(--spotify-green);
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.playlistMeta {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+}
+
 .playlistItem h2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-base) !important;
   font-size: 0.9rem;
   font-weight: 850;
   margin: 0;
+}
+
+.playlistItem span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-subdued);
+  font-size: 0.76rem;
+  font-weight: 620;
+}
+
+.playlistState {
+  display: flex;
+  align-items: center;
+  min-height: 62px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--text-subdued);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.errorState {
+  color: #ffb4a8;
 }
 </style>

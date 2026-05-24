@@ -1,12 +1,14 @@
 <template>
   <div class="relatedArtistWrapper">
-    <div v-if="loading">Loading...</div>
+    <div v-if="loading" class="artistState">Loading</div>
     <ArtistListItem
       v-else-if="artistData"
       :data-id="artistData.id"
       :artist="artistData"
     />
-    <div v-else-if="error">Error. {{ error }}</div>
+    <div v-else-if="error" class="artistState errorState">
+      Error. {{ error }}
+    </div>
   </div>
 </template>
 
@@ -42,8 +44,23 @@ watch(
 
 <style scoped>
 .relatedArtistWrapper {
-  min-width: 200px;
-  margin: 10px;
+  min-width: 0;
+  margin: 0;
   color: #ffffff !important;
+}
+
+.artistState {
+  display: flex;
+  align-items: center;
+  min-height: 64px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--text-subdued);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.errorState {
+  color: #ffb4a8;
 }
 </style>

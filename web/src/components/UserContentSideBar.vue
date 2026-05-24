@@ -1,7 +1,8 @@
 <template>
-  <aside class="panel">
+  <aside class="panel libraryPanel">
     <div class="tabSelectorsContainer">
-      <div
+      <button
+        type="button"
         @click.stop="setAlbumsTab"
         :class="{
           tabSelector: true,
@@ -9,9 +10,10 @@
           selectedTab: selectedTab === 'albums',
         }"
       >
-        <h3>Albums</h3>
-      </div>
-      <div
+        <span>Albums</span>
+      </button>
+      <button
+        type="button"
         @click.stop="setArtistsTab"
         :class="{
           tabSelector: true,
@@ -19,9 +21,10 @@
           selectedTab: selectedTab === 'artists',
         }"
       >
-        <h3>Artists</h3>
-      </div>
-      <div
+        <span>Artists</span>
+      </button>
+      <button
+        type="button"
         @click.stop="setPlaylistsTab"
         :class="{
           tabSelector: true,
@@ -29,34 +32,56 @@
           selectedTab: selectedTab === 'playlists',
         }"
       >
-        <h3>Playlists</h3>
-      </div>
+        <span>Playlists</span>
+      </button>
     </div>
+
     <div v-if="selectedTab == 'albums'" class="contentContainer">
-      <div v-for="albumId in albumIds" :key="albumId">
-        <AlbumCard :albumId="albumId" :showArtists="true" />
-      </div>
+      <div v-if="loading" class="libraryState">Loading library</div>
+      <template v-else-if="albumIds?.length">
+        <AlbumCard
+          v-for="albumId in albumIds"
+          :key="albumId"
+          :albumId="albumId"
+          :showArtists="true"
+        />
+      </template>
+      <div v-else class="libraryState">No saved albums</div>
     </div>
+
     <div v-else-if="selectedTab == 'artists'" class="contentContainer">
-      <div v-for="artistId in artistsIds" :key="artistId">
-        <LoadArtistListItem :artistId="artistId" />
-      </div>
+      <div v-if="loading" class="libraryState">Loading library</div>
+      <template v-else-if="artistsIds?.length">
+        <LoadArtistListItem
+          v-for="artistId in artistsIds"
+          :key="artistId"
+          :artistId="artistId"
+        />
+      </template>
+      <div v-else class="libraryState">No saved artists</div>
     </div>
+
     <div v-else-if="selectedTab == 'playlists'" class="contentContainer">
-      <div class="createPlaylistButtonContainer">
-        <div
-          class="createPlaylistButton scaleClickFeedback"
-          @click.stop="handleCreatePlaylistButtonClick"
-        >
-          <span v-if="!isCreatingPlaylist">Create</span>
-          <span v-else>...</span>
-        </div>
+      <button
+        type="button"
+        class="createPlaylistButton scaleClickFeedback"
+        :disabled="isCreatingPlaylist"
+        @click.stop="handleCreatePlaylistButtonClick"
+      >
+        <PlusIcon class="createPlaylistIcon" />
+        <span v-if="!isCreatingPlaylist">New playlist</span>
+        <span v-else>Creating</span>
+      </button>
+
+      <div v-if="loading" class="libraryState">Loading library</div>
+      <div v-else-if="playlists.length" class="playlistsContainer">
+        <LoadPlaylistListItem
+          v-for="playlist in playlists"
+          :key="playlist.id"
+          :playlistId="playlist.id"
+        />
       </div>
-      <div class="playlistsContainer" v-if="playlistsData">
-        <div v-for="playlist in playlists" :key="playlist.id">
-          <LoadPlaylistListItem :playlistId="playlist.id" />
-        </div>
-      </div>
+      <div v-else class="libraryState">No playlists</div>
     </div>
   </aside>
 </template>
@@ -70,6 +95,7 @@ import { useRouter } from "vue-router";
 import AlbumCard from "@/components/common/AlbumCard.vue";
 import LoadArtistListItem from "@/components/common/LoadArtistListItem.vue";
 import LoadPlaylistListItem from "./common/LoadPlaylistListItem.vue";
+import PlusIcon from "@/components/icons/PlusIcon.vue";
 
 const userStore = useUserStore();
 const router = useRouter();
@@ -171,88 +197,131 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.libraryPanel {
+  min-height: 0;
+  overflow: hidden;
+}
+
 .tabSelectorsContainer {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
-  padding: 8px;
+  padding: 10px;
   margin: 0;
   border-bottom: 1px solid var(--surface-border);
+  background: rgba(255, 255, 255, 0.018);
 }
 
 .tabSelector {
+  appearance: none;
   cursor: pointer;
-  flex: 1;
   min-width: 0;
-  padding: 9px 10px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid transparent;
   border-radius: 7px;
+  background: transparent;
+  color: var(--text-subdued);
   transition:
     background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast),
     opacity var(--transition-fast);
-  opacity: 0.62;
+  opacity: 0.82;
   text-align: center;
 }
 
-.tabSelector > h3 {
-  color: var(--text-base);
+.tabSelector > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 0.78rem;
   font-weight: 850;
-  white-space: nowrap;
 }
 
 .tabSelector:hover {
   background-color: var(--surface-hover);
-  transition:
-    scale 0.3s ease,
-    background-color 0.3s ease,
-    opacity 0.3s ease;
-  opacity: 1;
-}
-
-.tabSelector:active {
-  transition:
-    scale 0.3s ease,
-    opacity 0.3s ease;
+  border-color: var(--surface-border);
+  color: var(--text-base);
   opacity: 1;
 }
 
 .selectedTab {
   background-color: var(--surface-active) !important;
+  border-color: rgba(29, 185, 84, 0.32);
   color: var(--spotify-green);
-  transition: transform;
   opacity: 1 !important;
-}
-
-.selectedTab > h3 {
-  color: var(--spotify-green);
 }
 
 .contentContainer {
   display: flex;
-  flex-direction: column;
   flex: 1;
+  min-height: 0;
+  flex-direction: column;
   overflow-y: auto;
-  padding: 8px;
-  gap: 4px;
+  padding: 10px;
+  gap: 6px;
+  scrollbar-gutter: stable;
 }
 
 .playlistsContainer {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  gap: 6px;
+  min-width: 0;
 }
 
 .createPlaylistButton {
-  margin: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  margin: 0 0 6px;
   border: 1px solid var(--surface-border);
   border-radius: 7px;
-  padding: 9px 14px;
-  width: fit-content;
+  padding: 0 12px;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-base);
   cursor: pointer;
-  transition: background-color 0.3s ease;
+  font-size: 0.84rem;
+  font-weight: 850;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
-.createPlaylistButton:hover {
+.createPlaylistButton:hover:not(:disabled) {
   background-color: var(--surface-hover);
-  transition: background-color 0.3s ease;
+  border-color: rgba(29, 185, 84, 0.28);
+  color: var(--spotify-green);
+}
+
+.createPlaylistButton:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.createPlaylistIcon {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.libraryState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 92px;
+  padding: 14px;
+  border: 1px dashed var(--surface-border);
+  border-radius: 8px;
+  color: var(--text-subdued);
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-align: center;
 }
 </style>
