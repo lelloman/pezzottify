@@ -103,8 +103,9 @@ function handleSelect(item) {
 
 .currentlyPlayingSideBar {
   display: none;
-  overflow-y: auto;
-  overflow-x: hidden;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
   box-sizing: border-box;
 }
 
@@ -140,7 +141,7 @@ function handleSelect(item) {
   }
 
   .currentlyPlayingSideBar {
-    display: block;
+    display: flex;
   }
 }
 
