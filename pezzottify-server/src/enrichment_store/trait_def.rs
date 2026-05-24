@@ -104,6 +104,11 @@ pub trait EnrichmentStore: Send + Sync {
     ) -> Result<Option<EnrichmentQueueItemV1>>;
 
     fn claim_enrichment_queue_batch(&self, limit: usize) -> Result<Vec<EnrichmentQueueItemV1>>;
+    fn claim_enrichment_queue_batch_for_types(
+        &self,
+        limit: usize,
+        entity_types: &[String],
+    ) -> Result<Vec<EnrichmentQueueItemV1>>;
     fn complete_enrichment_queue_item(&self, id: i64) -> Result<()>;
     fn fail_enrichment_queue_item(
         &self,
