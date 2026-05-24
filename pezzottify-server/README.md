@@ -17,6 +17,7 @@ A high-performance Rust backend server for the Pezzottify music streaming platfo
 - [Configuration](#configuration)
   - [Rate Limits](#rate-limits)
   - [HTTP Caching](#http-caching)
+  - [Metadata Enrichment](#metadata-enrichment)
 - [API Endpoints](#api-endpoints)
 - [Download Manager](#download-manager)
 - [Authentication & Authorization](#authentication--authorization)
@@ -37,6 +38,7 @@ The pezzottify server is the backend component of Pezzottify that provides:
 - **User Content**: Playlists and liked content management
 - **Rate Limiting**: Per-endpoint rate limiting to prevent abuse
 - **Download Manager**: Queue-based content acquisition from external music providers
+- **Metadata Enrichment**: Queue-backed LLM enrichment for artist, album, and track facts
 
 ## Architecture
 
@@ -79,8 +81,20 @@ The pezzottify server is the backend component of Pezzottify that provides:
 
   - `JobScheduler`: Manages job scheduling and execution
   - `PopularContentJob`: Computes popular content metrics
+  - `MetadataEnrichmentJob`: Processes queued artist, album, and track metadata enrichment
   - `IntegrityWatchdogJob`: Periodic integrity scans
   - `AuditLogCleanupJob`: Cleans old audit log entries
+
+- **`enrichment_store/`**: SQLite-backed enrichment database
+
+  - `artist_enrichment_v1`, `album_enrichment_v1`, and `track_enrichment_v1`: typed canonical metadata tables
+  - `enrichment_queue_v1`: pending/running/completed enrichment queue state
+  - Child tables for tags, contributors, relations, aliases, sources, external IDs, and evidence
+
+- **`agent/`**: LLM provider abstraction used by AI-assisted features
+
+  - Ollama and OpenAI-compatible chat providers
+  - Shared `[agent.llm]` configuration for generated show scripts and metadata enrichment
 
 - **`sqlite_persistence/`**: Database schema management
   - `versioned_schema.rs`: Schema migrations with version tracking
@@ -295,6 +309,34 @@ max_albums_per_day = 60
 
 - `LOG_LEVEL`: Set log level (default: `INFO`). Options: `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`
 
+### Metadata Enrichment
+
+Metadata enrichment stores queryable, generated facts in `enrichment.db`. Page impressions and completed listening events enqueue artist, album, and track entities when their v1 enrichment row is missing or stale. The background job `metadata_enrichment_v1` claims queued rows and uses the shared agent LLM configuration to produce strict JSON for the typed tables.
+
+Enable the LLM before expecting queued work to complete:
+
+```toml
+[agent]
+enabled = true
+
+[agent.llm]
+# Use "openai" for OpenAI-compatible APIs, including Simple-AI deployments that expose /v1/chat/completions.
+provider = "openai"
+base_url = "http://simple-ai:8000/v1"
+model = "your-chat-model"
+temperature = 0.2
+timeout_secs = 120
+
+[background_jobs.metadata_enrichment]
+interval_hours = 6
+batch_size = 25
+retry_after_secs = 21600
+```
+
+Manual admin triggers accept optional parameters: `batch_size` and `entity_types` (`artist`, `album`, `track`). If `agent.enabled` is false, the job leaves claimed items queued with a retry delay and the last error `agent LLM is disabled`.
+
+See [docs/metadata-enrichment-v1.md](../docs/metadata-enrichment-v1.md) for the table model, queue behavior, and operational notes.
+
 ## Build Features
 
 Configure build-time behavior with Cargo features:
@@ -377,12 +419,12 @@ All content endpoints require `AccessCatalog` permission.
 
 | Method | Endpoint                   | Description                                         |
 | ------ | -------------------------- | --------------------------------------------------- |
-| GET    | `/artist/{id}`             | Get artist by ID                                    |
+| GET    | `/artist/{id}`             | Get artist by ID, with `enrichment_status` when available |
 | GET    | `/artist/{id}/discography` | Get artist's album IDs                              |
-| GET    | `/album/{id}`              | Get album by ID                                     |
-| GET    | `/album/{id}/resolved`     | Get album with resolved artist references           |
-| GET    | `/track/{id}`              | Get track by ID                                     |
-| GET    | `/track/{id}/resolved`     | Get track with resolved album and artist references |
+| GET    | `/album/{id}`              | Get album by ID, with `enrichment_status` when available |
+| GET    | `/album/{id}/resolved`     | Get album with resolved artist references and `enrichment_status` |
+| GET    | `/track/{id}`              | Get track by ID, with `enrichment_status` when available |
+| GET    | `/track/{id}/resolved`     | Get track with resolved album/artist references and `enrichment_status` |
 | GET    | `/image/{id}`              | Get image file                                      |
 | GET    | `/stream/{id}`             | Stream audio file (supports range requests)         |
 | GET    | `/whatsnew`                | Get recently added content                          |
@@ -421,7 +463,8 @@ Requires `AccessCatalog` permission.
 
 | Method | Endpoint             | Description                  |
 | ------ | -------------------- | ---------------------------- |
-| POST   | `/listening`         | Record a listening event     |
+| POST   | `/listening`         | Record a listening event; completed plays enqueue track plus adjacent album/artists for metadata enrichment |
+| POST   | `/impression`        | Record an artist/album/track page view and enqueue that entity for metadata enrichment |
 | GET    | `/listening/summary` | Get user's listening summary |
 | GET    | `/listening/history` | Get user's listening history |
 | GET    | `/listening/events`  | Get user's listening events  |
@@ -509,6 +552,19 @@ Requires `ViewAnalytics` permission.
 | GET    | `/listening/track/{track_id}`            | Get track listening stats      |
 | GET    | `/listening/users/{user_handle}/summary` | Get user's listening summary   |
 | GET    | `/online-users`                          | Get currently connected users  |
+
+#### Background Jobs
+
+Requires `ServerAdmin` permission.
+
+| Method | Endpoint                         | Description                                   |
+| ------ | -------------------------------- | --------------------------------------------- |
+| GET    | `/jobs`                          | List registered background jobs               |
+| GET    | `/jobs/{job_id}`                 | Get job status and schedule details           |
+| POST   | `/jobs/{job_id}/trigger`         | Trigger a job manually, optionally with JSON params |
+| GET    | `/jobs/{job_id}/history`         | Get recent job audit history                  |
+
+`metadata_enrichment_v1` supports trigger params such as `{"batch_size": 10, "entity_types": ["artist", "track"]}`.
 
 #### Changelog Management
 
@@ -860,328 +916,49 @@ sqlite3 /path/to/user.db
 
 ### Project Structure
 
-```
+```text
 pezzottify-server/
 ├── src/
-│   ├── main.rs              # Main server entry point
-│   ├── cli_auth.rs          # CLI auth tool entry point
-│   ├── cli_style.rs         # CLI styling utilities
-│   ├── lib.rs               # Library entry point
-│   ├── catalog_store/       # SQLite catalog storage
-│   │   ├── mod.rs
-│   │   ├── store.rs         # SqliteCatalogStore implementation
-│   │   ├── trait_def.rs     # CatalogStore trait
-│   │   ├── models.rs        # Artist, Album, Track models
-│   │   ├── schema.rs        # SQLite schema definitions
-│   │   ├── validation.rs    # Write operation validation
-│   │   ├── changelog.rs     # Catalog changelog support
-│   │   └── null_store.rs    # NullCatalogStore for CLI tools
-│   ├── downloader/          # Downloader service client
-│   │   ├── mod.rs
-│   │   ├── client.rs        # HTTP client for downloader
-│   │   └── models.rs        # Request/response models
-│   ├── server/              # HTTP server
-│   │   ├── mod.rs
-│   │   ├── server.rs        # Route handlers
-│   │   ├── config.rs
-│   │   ├── state.rs
-│   │   ├── session.rs       # Session middleware
-│   │   ├── stream_track.rs  # Audio streaming
-│   │   ├── search.rs        # Search routes
-│   │   ├── metrics.rs       # Prometheus metrics
-│   │   ├── proxy.rs         # Catalog proxy for downloader
-│   │   ├── http_layers/     # Middleware
-│   │   │   ├── mod.rs
-│   │   │   ├── http_cache.rs
-│   │   │   ├── rate_limit.rs
-│   │   │   ├── requests_logging.rs
-│   │   │   └── random_slowdown.rs
-│   │   └── websocket/       # WebSocket support
-│   │       ├── mod.rs
-│   │       ├── handler.rs
-│   │       ├── connection.rs
-│   │       └── messages.rs
-│   ├── user/                # Authentication & authorization
-│   │   ├── mod.rs
-│   │   ├── user_manager.rs
-│   │   ├── user_store.rs
-│   │   ├── sqlite_user_store.rs
-│   │   ├── auth.rs
-│   │   ├── permissions.rs
-│   │   ├── device.rs        # Device tracking
-│   │   ├── settings.rs      # User settings
-│   │   ├── sync_events.rs   # Sync event tracking
-│   │   └── user_models.rs
-│   ├── search/              # Search functionality
-│   │   ├── mod.rs
-│   │   ├── search_vault.rs
-│   │   ├── fts5_levenshtein_search.rs
-│   │   └── streaming/       # Streaming search pipeline
-│   └── sqlite_persistence/  # Database schema
-│       ├── mod.rs
-│       └── versioned_schema.rs
+│   ├── main.rs              # Server startup, store wiring, background job registration
+│   ├── lib.rs               # Library exports for tests and companion binaries
+│   ├── cli_auth.rs          # User/auth management CLI
+│   ├── agent/               # LLM providers and workflow helpers
+│   ├── background_jobs/     # Scheduler, job audit log, scheduled/manual jobs
+│   ├── catalog_store/       # Catalog models, schema, validation, SQLite store
+│   ├── config/              # CLI/TOML config parsing and defaults
+│   ├── download_manager/    # User request queue, audit log, downloader integration
+│   ├── enrichment_store/    # Audio features, metadata enrichment v1 tables, queue state
+│   ├── related_artists/     # MusicBrainz/Last.fm related artist lookup
+│   ├── search/              # Search vaults, streaming search, organic index helpers
+│   ├── server/              # Axum routes, state, middleware, metrics, WebSocket support
+│   ├── server_store/        # Operational state such as job history and server metadata
+│   ├── shows/               # AI show scripts and generated show media
+│   ├── sqlite_persistence/  # Versioned schema migration helpers
+│   └── user/                # Users, permissions, auth tokens, settings, sync events
+├── tests/                   # E2E HTTP tests and shared fixtures
 ├── Cargo.toml
+├── config.example.toml
 └── README.md
 ```
 
 ## Monitoring & Alerting
 
-The pezzottify server includes a full monitoring stack with Prometheus metrics, Grafana dashboards, and Alertmanager for notifications.
-
-### Quick Start (Fresh Clone)
-
-1. **Create the environment file:**
-
-   ```bash
-   cp monitoring/.env.example monitoring/.env
-   ```
-
-2. **Configure your credentials** in `monitoring/.env`:
-
-   ```bash
-   # Telegram Bot (get token from @BotFather, chat ID from @userinfobot)
-   TELEGRAM_BOT_TOKEN=your_bot_token_here
-   TELEGRAM_CHAT_ID=your_chat_id_here
-
-   # Optional: Generic webhook for custom integrations
-   GENERIC_WEBHOOK_URL=https://your-webhook-endpoint.com/alerts
-
-   # Grafana admin password
-   GF_SECURITY_ADMIN_PASSWORD=your_secure_password
-   ```
-
-3. **Start the stack:**
-   ```bash
-   ./build-docker.sh -d   # Builds with correct version info
-   # Or for monitoring services only (no rebuild):
-   docker-compose up -d
-   ```
-
-This starts:
-
-- **pezzottify-server** on port 3001
-- **Prometheus** on port 9090
-- **Grafana** on port 3000
-- **Alertmanager** on port 9093
-- **telegram-bot** (internal, for Telegram notifications)
-
-### Environment Variables
-
-All sensitive configuration is stored in `monitoring/.env` (git-ignored). Available variables:
-
-| Variable                     | Required | Description                                       |
-| ---------------------------- | -------- | ------------------------------------------------- |
-| `TELEGRAM_BOT_TOKEN`         | Yes\*    | Telegram bot token from @BotFather                |
-| `TELEGRAM_CHAT_ID`           | Yes\*    | Chat ID to receive alerts (get from @userinfobot) |
-| `GENERIC_WEBHOOK_URL`        | No       | External webhook URL for custom integrations      |
-| `GF_SECURITY_ADMIN_PASSWORD` | No       | Grafana admin password (default: `admin`)         |
-
-\*Required for Telegram alerts. If not set, the telegram-bot container will fail to start (other services work fine).
-
-### Setting Up Telegram Alerts
-
-1. **Create a Telegram bot:**
-
-   - Message [@BotFather](https://t.me/BotFather) on Telegram
-   - Send `/newbot` and follow the prompts
-   - Copy the bot token (looks like `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
-
-2. **Get your chat ID:**
-
-   - Message [@userinfobot](https://t.me/userinfobot) on Telegram
-   - It will reply with your user ID (numeric)
-
-3. **Start a conversation with your bot:**
-
-   - Find your bot by username and send `/start`
-   - This is required before the bot can send you messages
-
-4. **Add credentials to `.env`:**
-
-   ```bash
-   TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
-   TELEGRAM_CHAT_ID=987654321
-   ```
-
-5. **Restart the stack:**
-   ```bash
-   docker-compose up -d
-   ```
-
-### Generic Webhook
-
-For custom integrations (Slack, Discord, PagerDuty, etc.), set `GENERIC_WEBHOOK_URL` in your `.env` file. Alertmanager will POST alert JSON to this URL.
-
-Example payload:
-
-```json
-{
-  "status": "firing",
-  "alerts": [
-    {
-      "labels": { "alertname": "ServiceDown", "severity": "critical" },
-      "annotations": { "summary": "Pezzottify server is down" },
-      "startsAt": "2024-01-15T10:00:00Z"
-    }
-  ]
-}
-```
-
-### Accessing Grafana
-
-1. Open http://localhost:3000
-2. Login with username `admin` and password from `GF_SECURITY_ADMIN_PASSWORD` (default: `admin`)
-3. Navigate to Dashboards → Pezzottify to view metrics
-
-### Prometheus Metrics
-
-The server exposes metrics on a separate port (default: 9091) for security. This port is only exposed internally within the Docker network, not to the host. All custom metrics use the `pezzottify_` prefix for easy filtering in Grafana.
-
-| Metric                                           | Type      | Description                                                  |
-| ------------------------------------------------ | --------- | ------------------------------------------------------------ |
-| `pezzottify_http_requests_total`                 | Counter   | Total HTTP requests by method, path, status                  |
-| `pezzottify_http_request_duration_seconds`       | Histogram | Request duration by method and path                          |
-| `pezzottify_auth_login_attempts_total`           | Counter   | Login attempts by status (success/failure)                   |
-| `pezzottify_auth_login_duration_seconds`         | Histogram | Login request duration                                       |
-| `pezzottify_auth_active_sessions`                | Gauge     | Number of active sessions                                    |
-| `pezzottify_rate_limit_hits_total`               | Counter   | Rate limit violations by endpoint                            |
-| `pezzottify_db_query_duration_seconds`           | Histogram | Database query duration by operation                         |
-| `pezzottify_db_connection_errors_total`          | Counter   | Database connection errors                                   |
-| `pezzottify_catalog_items_total`                 | Gauge     | Catalog items by type (artist/album/track)                   |
-| `pezzottify_catalog_size_bytes`                  | Gauge     | Catalog size in bytes                                        |
-| `pezzottify_errors_total`                        | Counter   | Total errors by type and endpoint                            |
-| `pezzottify_process_memory_bytes`                | Gauge     | Process memory usage                                         |
-| `pezzottify_bandwidth_bytes_total`               | Counter   | Total bytes transferred by user and endpoint category        |
-| `pezzottify_bandwidth_requests_total`            | Counter   | Total requests by user and endpoint category                 |
-| `pezzottify_listening_events_total`              | Counter   | Total listening events by client type and completion         |
-| `pezzottify_listening_duration_seconds_total`    | Counter   | Total listening duration by client type                      |
-| `pezzottify_changelog_stale_batches`             | Gauge     | Number of stale changelog batches                            |
-| `pezzottify_changelog_stale_batch_checks_total`  | Counter   | Total stale batch checks performed                           |
-| `pezzottify_downloader_requests_total`           | Counter   | Total requests to downloader service by operation and status |
-| `pezzottify_downloader_request_duration_seconds` | Histogram | Downloader request duration by operation                     |
-| `pezzottify_downloader_errors_total`             | Counter   | Total downloader errors by operation and type                |
-| `pezzottify_downloader_bytes_total`              | Counter   | Total bytes downloaded by content type                       |
-
-### Alert Rules
-
-The following alerts are configured in `monitoring/alerts.yml`:
-
-**Critical:**
-
-- `ServiceDown` - Pezzottify server unreachable
-- `LoginBruteForceAttempt` - Possible brute force attack on login
-- `HighErrorRate` - High HTTP 5xx error rate
-- `DatabaseErrors` - Database connection failures
-
-**Warning:**
-
-- `HighRateLimitViolations` - Excessive rate limiting
-- `HighLoginFailureRate` - Many failed login attempts
-- `SlowLoginPerformance` - Login latency above threshold
-- `SlowDatabaseQueries` - Database queries taking too long
-- `HighMemoryUsage` - Memory usage above 1GB
-
-### Running Individual Services
-
-```bash
-# Build and start only the pezzottify server (no monitoring)
-./build-docker.sh -d pezzottify-server
-
-# Build server and start with monitoring (no alerting)
-./build-docker.sh -d pezzottify-server && docker-compose up -d prometheus grafana
-
-# Build and start the full stack including alerts
-./build-docker.sh -d
-```
-
-### Viewing Metrics Directly
-
-```bash
-# Prometheus query interface
-open http://localhost:9090
-
-# Example PromQL queries
-# Request rate: rate(pezzottify_http_requests_total[5m])
-# Login failures: pezzottify_auth_login_attempts_total{status="failure"}
-# P95 latency: histogram_quantile(0.95, rate(pezzottify_http_request_duration_seconds_bucket[5m]))
-```
-
-**Note:** In Docker, the metrics port (9091) is only accessible within the Docker network. Prometheus scrapes it internally. For local development without Docker, metrics are available at `localhost:9091`.
-
-### Troubleshooting
-
-**telegram-bot keeps restarting:**
-
-- Ensure `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set in `monitoring/.env`
-- Verify you've started a conversation with your bot on Telegram
-
-**No alerts in Telegram:**
-
-- Check Alertmanager status: http://localhost:9093
-- Verify Prometheus targets: http://localhost:9090/targets
-- Check telegram-bot logs: `docker logs telegram-bot`
-
-**Grafana shows "No data":**
-
-- Wait 1-2 minutes for metrics to be scraped
-- Verify Prometheus datasource at http://localhost:3000/connections/datasources
-
-### Testing Alerts
-
-After deploying to production, you should verify alerts are working correctly.
-
-**Test Telegram connectivity:**
-
-```bash
-# Load your credentials and send a test message
-source monitoring/.env
-curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_CHAT_ID}&text=Test%20alert%20from%20Pezzottify"
-```
-
-**Trigger a real alert (ServiceDown):**
-
-```bash
-# Stop the pezzottify server to trigger the ServiceDown alert
-docker-compose stop pezzottify-server
-
-# Wait ~1 minute for the alert to fire (has a 1-minute threshold)
-# You should receive a Telegram notification
-
-# Check alert status in Prometheus
-open http://localhost:9090/alerts
-
-# Restart the server (you'll get a "resolved" notification)
-docker-compose start pezzottify-server
-```
-
-**Send a test alert directly to Alertmanager:**
-
-```bash
-# This bypasses Prometheus and sends directly to Alertmanager
-curl -X POST http://localhost:9093/api/v2/alerts \
-  -H "Content-Type: application/json" \
-  -d '[{
-    "labels": {
-      "alertname": "TestAlert",
-      "severity": "warning"
-    },
-    "annotations": {
-      "summary": "This is a test alert",
-      "description": "Testing the alerting pipeline"
-    }
-  }]'
-```
-
-**Verify alert routing:**
-
-- Prometheus targets: http://localhost:9090/targets (should show pezzottify-server as UP)
-- Active alerts: http://localhost:9090/alerts
-- Alertmanager status: http://localhost:9093/#/alerts
-
-## License
-
-See the root project LICENSE file.
-
-## Contributing
-
-See the root project CONTRIBUTING file.
+The server exposes Prometheus metrics on a separate metrics port, default `9091`. In the local Docker setup this is intended for internal scraping rather than direct browser use.
+
+All custom metrics use the `pezzottify_` prefix for easy filtering. Important metric families include:
+
+| Metric | Type | Description |
+| ------ | ---- | ----------- |
+| `pezzottify_http_requests_total` | Counter | Total HTTP requests by method, path, and status |
+| `pezzottify_http_request_duration_seconds` | Histogram | Request duration by method and path |
+| `pezzottify_auth_login_attempts_total` | Counter | Login attempts by status |
+| `pezzottify_rate_limit_hits_total` | Counter | Rate limit violations by endpoint |
+| `pezzottify_db_query_duration_seconds` | Histogram | Database query duration by operation |
+| `pezzottify_catalog_items_total` | Gauge | Catalog items by entity type |
+| `pezzottify_errors_total` | Counter | Server errors by type and endpoint |
+| `pezzottify_bandwidth_bytes_total` | Counter | Bytes transferred by user and endpoint category |
+| `pezzottify_listening_events_total` | Counter | Listening events by client type and completion |
+| `pezzottify_downloader_requests_total` | Counter | Downloader requests by operation and status |
+| `pezzottify_downloader_errors_total` | Counter | Downloader errors by operation and type |
+
+The production monitoring stack, including Prometheus, Grafana, Alertmanager, and notification wiring, is maintained in the [homelab](https://github.com/lelloman/homelab) deployment repository.

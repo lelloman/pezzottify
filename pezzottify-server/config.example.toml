@@ -179,7 +179,7 @@ interval_hours = 6
 interval_hours = 6
 # Maximum queued entities to process per run (default: 25)
 batch_size = 25
-# Retry delay when no metadata provider is configured (default: 21600)
+# Retry delay for retryable enrichment failures, including disabled agent LLM (default: 21600)
 retry_after_secs = 21600
 
 # Ingestion Cleanup Job (only registered if ingestion is enabled)
