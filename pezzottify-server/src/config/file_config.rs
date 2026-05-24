@@ -76,6 +76,15 @@ pub struct BackgroundJobsConfig {
     pub audit_log_cleanup: Option<AuditLogCleanupJobConfig>,
     pub device_pruning: Option<DevicePruningJobConfig>,
     pub featured_albums: Option<FeaturedAlbumsJobConfig>,
+    pub metadata_enrichment: Option<MetadataEnrichmentJobConfig>,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct MetadataEnrichmentJobConfig {
+    pub interval_hours: Option<u64>,
+    pub batch_size: Option<usize>,
+    pub retry_after_secs: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]

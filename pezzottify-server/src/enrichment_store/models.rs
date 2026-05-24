@@ -63,6 +63,180 @@ pub struct AlbumEnrichment {
     pub source: String,
 }
 
+/// Canonical v1 enrichment data for an artist.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ArtistEnrichmentV1 {
+    pub artist_id: String,
+    pub kind: Option<String>,
+    pub birth_date: Option<String>,
+    pub death_date: Option<String>,
+    pub foundation_date: Option<String>,
+    pub dissolution_date: Option<String>,
+    pub origin_place: Option<String>,
+    pub origin_country: Option<String>,
+    pub primary_language: Option<String>,
+    pub is_person: Option<bool>,
+    pub is_group: Option<bool>,
+    pub is_composer: Option<bool>,
+    pub is_performer: Option<bool>,
+    pub is_conductor: Option<bool>,
+    pub is_producer: Option<bool>,
+    pub confidence: Option<f64>,
+    pub summary: Option<String>,
+    pub bio: Option<String>,
+    pub enriched_at: i64,
+    pub last_verified_at: Option<i64>,
+    pub source_status: Option<String>,
+}
+
+/// Canonical v1 enrichment data for an album.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AlbumEnrichmentV1 {
+    pub album_id: String,
+    pub album_kind: Option<String>,
+    pub original_release_date: Option<String>,
+    pub recording_start_date: Option<String>,
+    pub recording_end_date: Option<String>,
+    pub release_country: Option<String>,
+    pub label: Option<String>,
+    pub catalog_number: Option<String>,
+    pub is_live: Option<bool>,
+    pub is_compilation: Option<bool>,
+    pub is_soundtrack: Option<bool>,
+    pub is_concept_album: Option<bool>,
+    pub is_remix_album: Option<bool>,
+    pub is_archival: Option<bool>,
+    pub confidence: Option<f64>,
+    pub summary: Option<String>,
+    pub notes: Option<String>,
+    pub enriched_at: i64,
+    pub last_verified_at: Option<i64>,
+    pub source_status: Option<String>,
+}
+
+/// Canonical v1 enrichment data for a track.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TrackEnrichmentV1 {
+    pub track_id: String,
+    pub track_kind: Option<String>,
+    pub work_title: Option<String>,
+    pub composition_date: Option<String>,
+    pub recording_date: Option<String>,
+    pub language: Option<String>,
+    pub is_instrumental: Option<bool>,
+    pub is_live: Option<bool>,
+    pub is_cover: Option<bool>,
+    pub is_remix: Option<bool>,
+    pub is_remaster: Option<bool>,
+    pub is_arrangement: Option<bool>,
+    pub movement_number: Option<i64>,
+    pub movement_title: Option<String>,
+    pub key_signature: Option<String>,
+    pub opus_number: Option<String>,
+    pub catalog_number: Option<String>,
+    pub form: Option<String>,
+    pub confidence: Option<f64>,
+    pub summary: Option<String>,
+    pub notes: Option<String>,
+    pub performance_context: Option<String>,
+    pub enriched_at: i64,
+    pub last_verified_at: Option<i64>,
+    pub source_status: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EnrichmentQueueItemV1 {
+    pub id: i64,
+    pub entity_type: String,
+    pub entity_id: String,
+    pub status: String,
+    pub priority: i64,
+    pub reason: Option<String>,
+    pub stage: Option<String>,
+    pub attempts: i64,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub next_attempt_at: Option<i64>,
+    pub started_at: Option<i64>,
+    pub completed_at: Option<i64>,
+    pub last_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EntityTagV1 {
+    pub tag_type: String,
+    pub tag: String,
+    pub confidence: Option<f64>,
+    pub source: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EntityContributorV1 {
+    pub contributor_name: String,
+    pub contributor_id: Option<String>,
+    pub role: String,
+    pub confidence: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EntityRelationV1 {
+    pub source_entity_type: String,
+    pub source_entity_id: String,
+    pub relation_type: String,
+    pub target_entity_type: Option<String>,
+    pub target_entity_id: Option<String>,
+    pub external_target_name: Option<String>,
+    pub external_target_url: Option<String>,
+    pub confidence: Option<f64>,
+    pub visible: bool,
+    pub evidence: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EntitySourceV1 {
+    pub source_name: String,
+    pub source_url: Option<String>,
+    pub retrieved_at: Option<i64>,
+    pub confidence: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EntityAliasV1 {
+    pub alias: String,
+    pub locale: Option<String>,
+    pub source: Option<String>,
+    pub confidence: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EntityExternalIdV1 {
+    pub provider: String,
+    pub external_id: Option<String>,
+    pub url: Option<String>,
+    pub confidence: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EntityEvidenceV1 {
+    pub source_name: Option<String>,
+    pub source_url: Option<String>,
+    pub snippet: Option<String>,
+    pub raw_payload: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EntityEnrichmentStatusV1 {
+    pub entity_type: String,
+    pub entity_id: String,
+    pub status: String,
+    pub stage: Option<String>,
+    pub attempts: i64,
+    pub last_error: Option<String>,
+    pub updated_at: Option<i64>,
+    pub enriched_at: Option<i64>,
+    pub source_status: Option<String>,
+}
+
 /// Summary statistics for the enrichment database.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnrichmentStats {

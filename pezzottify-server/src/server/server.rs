@@ -933,6 +933,7 @@ async fn get_artist(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
+    State(enrichment_store): State<OptionalEnrichmentStore>,
     Path(id): Path<String>,
 ) -> Response {
     debug!("get_artist: id={}", id);
@@ -944,9 +945,16 @@ async fn get_artist(
 
     let catalog_store = Arc::clone(&catalog_store);
     let id = id.clone();
+    let id_for_status = id.clone();
 
     match tokio::task::spawn_blocking(move || catalog_store.get_resolved_artist_json(&id)).await {
-        Ok(Ok(Some(artist))) => Json(artist).into_response(),
+        Ok(Ok(Some(artist))) => Json(attach_enrichment_status(
+            artist,
+            "artist",
+            &id_for_status,
+            &enrichment_store,
+        ))
+        .into_response(),
         Ok(Ok(None)) => StatusCode::NOT_FOUND.into_response(),
         Ok(Err(err)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
         Err(_) => (
@@ -961,6 +969,7 @@ async fn get_album(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
+    State(enrichment_store): State<OptionalEnrichmentStore>,
     Path(id): Path<String>,
 ) -> Response {
     // Queue album for organic search index expansion
@@ -970,9 +979,16 @@ async fn get_album(
 
     let catalog_store = Arc::clone(&catalog_store);
     let id = id.clone();
+    let id_for_status = id.clone();
 
     match tokio::task::spawn_blocking(move || catalog_store.get_album_json(&id)).await {
-        Ok(Ok(Some(album))) => Json(album).into_response(),
+        Ok(Ok(Some(album))) => Json(attach_enrichment_status(
+            album,
+            "album",
+            &id_for_status,
+            &enrichment_store,
+        ))
+        .into_response(),
         Ok(Ok(None)) => StatusCode::NOT_FOUND.into_response(),
         Ok(Err(err)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
         Err(_) => (
@@ -987,6 +1003,7 @@ async fn get_resolved_album(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
+    State(enrichment_store): State<OptionalEnrichmentStore>,
     Path(id): Path<String>,
 ) -> Response {
     // Queue album for organic search index expansion
@@ -996,9 +1013,16 @@ async fn get_resolved_album(
 
     let catalog_store = Arc::clone(&catalog_store);
     let id = id.clone();
+    let id_for_status = id.clone();
 
     match tokio::task::spawn_blocking(move || catalog_store.get_resolved_album_json(&id)).await {
-        Ok(Ok(Some(album))) => Json(album).into_response(),
+        Ok(Ok(Some(album))) => Json(attach_enrichment_status(
+            album,
+            "album",
+            &id_for_status,
+            &enrichment_store,
+        ))
+        .into_response(),
         Ok(Ok(None)) => StatusCode::NOT_FOUND.into_response(),
         Ok(Err(err)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
         Err(_) => (
@@ -1133,6 +1157,7 @@ pub async fn get_track(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
+    State(enrichment_store): State<OptionalEnrichmentStore>,
     Path(id): Path<String>,
 ) -> Response {
     // Queue track for organic search index expansion
@@ -1142,9 +1167,16 @@ pub async fn get_track(
 
     let catalog_store = Arc::clone(&catalog_store);
     let id = id.clone();
+    let id_for_status = id.clone();
 
     match tokio::task::spawn_blocking(move || catalog_store.get_track_json(&id)).await {
-        Ok(Ok(Some(track))) => Json(track).into_response(),
+        Ok(Ok(Some(track))) => Json(attach_enrichment_status(
+            track,
+            "track",
+            &id_for_status,
+            &enrichment_store,
+        ))
+        .into_response(),
         Ok(Ok(None)) => StatusCode::NOT_FOUND.into_response(),
         Ok(Err(err)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
         Err(_) => (
@@ -1159,6 +1191,7 @@ pub async fn get_resolved_track(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
+    State(enrichment_store): State<OptionalEnrichmentStore>,
     Path(id): Path<String>,
 ) -> Response {
     // Queue track for organic search index expansion
@@ -1168,9 +1201,16 @@ pub async fn get_resolved_track(
 
     let catalog_store = Arc::clone(&catalog_store);
     let id = id.clone();
+    let id_for_status = id.clone();
 
     match tokio::task::spawn_blocking(move || catalog_store.get_resolved_track_json(&id)).await {
-        Ok(Ok(Some(track))) => Json(track).into_response(),
+        Ok(Ok(Some(track))) => Json(attach_enrichment_status(
+            track,
+            "track",
+            &id_for_status,
+            &enrichment_store,
+        ))
+        .into_response(),
         Ok(Ok(None)) => StatusCode::NOT_FOUND.into_response(),
         Ok(Err(err)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
         Err(_) => (
@@ -2458,11 +2498,69 @@ async fn get_user_playlists(
     }
 }
 
+const ENRICHMENT_STALE_AFTER_SECS: i64 = 90 * 24 * 60 * 60;
+
+fn enqueue_enrichment_nonblocking(
+    enrichment_store: &OptionalEnrichmentStore,
+    entity_type: &'static str,
+    entity_id: String,
+    reason: &'static str,
+    priority: i64,
+) {
+    if entity_id.is_empty() {
+        return;
+    }
+    if let Some(store) = enrichment_store.clone() {
+        tokio::task::spawn_blocking(move || {
+            if let Err(err) = store.enqueue_enrichment_if_missing_or_stale(
+                entity_type,
+                &entity_id,
+                reason,
+                priority,
+                ENRICHMENT_STALE_AFTER_SECS,
+            ) {
+                debug!(
+                    "Failed to enqueue {} {} for enrichment: {}",
+                    entity_type, entity_id, err
+                );
+            }
+        });
+    }
+}
+
+fn attach_enrichment_status(
+    mut value: serde_json::Value,
+    entity_type: &str,
+    entity_id: &str,
+    enrichment_store: &OptionalEnrichmentStore,
+) -> serde_json::Value {
+    let Some(store) = enrichment_store else {
+        return value;
+    };
+    match store.get_entity_enrichment_status(entity_type, entity_id) {
+        Ok(Some(status)) => {
+            if let Some(obj) = value.as_object_mut() {
+                if let Ok(status_value) = serde_json::to_value(status) {
+                    obj.insert("enrichment_status".to_string(), status_value);
+                }
+            }
+        }
+        Ok(None) => {}
+        Err(err) => debug!(
+            "Failed to load enrichment status for {} {}: {}",
+            entity_type, entity_id, err
+        ),
+    }
+    value
+}
+
 // User listening stats endpoints
 
 async fn post_listening_event(
     session: Session,
     State(user_manager): State<GuardedUserManager>,
+    State(catalog_store): State<GuardedCatalogStore>,
+    State(enrichment_store): State<OptionalEnrichmentStore>,
     Json(body): Json<ListeningEventRequest>,
 ) -> Response {
     use std::time::SystemTime;
@@ -2490,6 +2588,8 @@ async fn post_listening_event(
     let client_type_for_metrics = body.client_type.clone();
     let duration_for_metrics = body.duration_seconds;
 
+    let track_id_for_enrichment = body.track_id.clone();
+
     let event = crate::user::ListeningEvent {
         id: None,
         user_id: session.user_id,
@@ -2516,6 +2616,37 @@ async fn post_listening_event(
                     completed,
                     duration_for_metrics,
                 );
+                enqueue_enrichment_nonblocking(
+                    &enrichment_store,
+                    "track",
+                    track_id_for_enrichment.clone(),
+                    "listening",
+                    20,
+                );
+                if let Some(store) = enrichment_store.clone() {
+                    let catalog_store = Arc::clone(&catalog_store);
+                    let track_id = track_id_for_enrichment.clone();
+                    tokio::task::spawn_blocking(move || {
+                        if let Ok(Some(resolved)) = catalog_store.get_resolved_track(&track_id) {
+                            let _ = store.enqueue_enrichment_if_missing_or_stale(
+                                "album",
+                                &resolved.album.id,
+                                "listening_adjacent",
+                                10,
+                                ENRICHMENT_STALE_AFTER_SECS,
+                            );
+                            for artist in resolved.artists {
+                                let _ = store.enqueue_enrichment_if_missing_or_stale(
+                                    "artist",
+                                    &artist.artist.id,
+                                    "listening_adjacent",
+                                    10,
+                                    ENRICHMENT_STALE_AFTER_SECS,
+                                );
+                            }
+                        }
+                    });
+                }
             }
             Json(ListeningEventResponse { id, created }).into_response()
         }
@@ -2607,13 +2738,14 @@ struct ImpressionBody {
 /// This data is used for popularity scoring.
 async fn post_impression(
     State(search_vault): State<super::state::GuardedSearchVault>,
+    State(enrichment_store): State<OptionalEnrichmentStore>,
     Json(body): Json<ImpressionBody>,
 ) -> StatusCode {
     // Parse item type
-    let item_type = match body.item_type.to_lowercase().as_str() {
-        "artist" => crate::search::HashedItemType::Artist,
-        "album" => crate::search::HashedItemType::Album,
-        "track" => crate::search::HashedItemType::Track,
+    let (item_type, enrichment_entity_type) = match body.item_type.to_lowercase().as_str() {
+        "artist" => (crate::search::HashedItemType::Artist, "artist"),
+        "album" => (crate::search::HashedItemType::Album, "album"),
+        "track" => (crate::search::HashedItemType::Track, "track"),
         _ => return StatusCode::BAD_REQUEST,
     };
 
@@ -2625,6 +2757,13 @@ async fn post_impression(
     // Record the impression in a blocking task to avoid blocking the async runtime
     // while waiting for the write_conn mutex (which may be held by long-running index operations)
     let item_id = body.item_id;
+    enqueue_enrichment_nonblocking(
+        &enrichment_store,
+        enrichment_entity_type,
+        item_id.clone(),
+        "impression",
+        5,
+    );
     tokio::task::spawn_blocking(move || {
         search_vault.record_impression(&item_id, item_type);
     });
@@ -4835,6 +4974,7 @@ impl ServerState {
         server_store: Arc<dyn crate::server_store::ServerStore>,
         show_store: Arc<dyn crate::shows::ShowStore>,
         db_registry: Arc<crate::backup::DbRegistry>,
+        enrichment_store: OptionalEnrichmentStore,
     ) -> ServerState {
         // Create connection manager
         let ws_connection_manager = Arc::new(super::websocket::ConnectionManager::new());
@@ -4879,6 +5019,7 @@ impl ServerState {
             http_client,
             download_manager: None, // Will be set by make_app if download manager is enabled
             ingestion_manager: None, // Will be set by make_app if ingestion is enabled
+            enrichment_store,
             playback_session_manager,
             db_registry,
         }
@@ -4896,6 +5037,7 @@ pub async fn make_app(
     server_store: Arc<dyn crate::server_store::ServerStore>,
     oidc_config: Option<crate::config::OidcConfig>,
     db_registry: Arc<crate::backup::DbRegistry>,
+    enrichment_store: OptionalEnrichmentStore,
 ) -> Result<Router> {
     // Initialize OIDC client if configured
     let oidc_client = match oidc_config {
@@ -4939,6 +5081,7 @@ pub async fn make_app(
         server_store,
         show_store,
         db_registry,
+        enrichment_store,
     );
     state.oidc_client = oidc_client;
 
@@ -5637,6 +5780,7 @@ pub async fn run_server(
     audio_embeddings: Option<crate::config::AudioEmbeddingsSettings>,
     shows: crate::config::ShowsSettings,
     db_registry: Arc<crate::backup::DbRegistry>,
+    enrichment_store: OptionalEnrichmentStore,
 ) -> Result<()> {
     let disable_password_auth = oidc_config
         .as_ref()
@@ -5669,6 +5813,7 @@ pub async fn run_server(
         server_store,
         oidc_config,
         db_registry,
+        enrichment_store,
     )
     .await?;
 
@@ -5974,6 +6119,7 @@ mod tests {
             server_store,
             None, // no oidc_config
             Arc::new(crate::backup::DbRegistry::new()),
+            None,
         )
         .await
         .unwrap();

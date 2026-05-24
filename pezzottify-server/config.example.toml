@@ -156,6 +156,16 @@ startup_delay_minutes = 60
 # Interval in hours between job runs (default: 6)
 interval_hours = 6
 
+# Metadata Enrichment v1 Job
+# Processes queued artist/album/track enrichment requests.
+[background_jobs.metadata_enrichment]
+# Interval in hours between job runs (default: 6)
+interval_hours = 6
+# Maximum queued entities to process per run (default: 25)
+batch_size = 25
+# Retry delay when no metadata provider is configured (default: 21600)
+retry_after_secs = 21600
+
 # Ingestion Cleanup Job (only registered if ingestion is enabled)
 # Cleans up orphaned ingestion temp directories
 [background_jobs.ingestion_cleanup]

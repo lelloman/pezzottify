@@ -40,6 +40,7 @@ export const useStaticsStore = defineStore("statics", () => {
       related: resolvedArtist.related_artists
         ? resolvedArtist.related_artists.map((a) => a.id)
         : [],
+      enrichment_status: resolvedArtist.enrichment_status || null,
     };
 
     return artist;
@@ -70,6 +71,7 @@ export const useStaticsStore = defineStore("statics", () => {
         ? resolvedAlbum.artists.map((a) => a.id)
         : [],
       discs: discs,
+      enrichment_status: resolvedAlbum.enrichment_status || null,
     };
 
     return album;
@@ -92,6 +94,7 @@ export const useStaticsStore = defineStore("statics", () => {
       duration: resolvedTrack.track.duration_ms || null,
       // Include availability state (defaults to available if not present)
       availability: resolvedTrack.track.availability || "available",
+      enrichment_status: resolvedTrack.enrichment_status || null,
     };
 
     return track;

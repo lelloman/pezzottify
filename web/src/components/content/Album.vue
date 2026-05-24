@@ -6,6 +6,7 @@
         <h1 class="albumName">{{ album.name }}</h1>
       </div>
     </div>
+    <div v-if="enrichmentLabel" class="enrichmentStatus">{{ enrichmentLabel }}</div>
     <div class="commandsSection">
       <PlayIcon
         class="playAlbumIcon scaleClickFeedback bigIcon"
@@ -144,7 +145,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, computed } from "vue";
+import { computed, ref, watch, onMounted } from "vue";
 import { chooseAlbumCoverImageUrl } from "@/utils";
 import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
 import PlayIcon from "@/components/icons/PlayIcon.vue";
@@ -173,6 +174,16 @@ const playback = usePlaybackStore();
 const userStore = useUserStore();
 const staticsStore = useStaticsStore();
 const remoteStore = useRemoteStore();
+
+
+const enrichmentLabel = computed(() => {
+  const status = album.value?.enrichment_status?.status;
+  if (status === "queued") return "Enrichment queued";
+  if (status === "running") return "Enrichment running";
+  if (status === "completed") return "Enrichment completed";
+  if (status === "failed") return "Enrichment failed";
+  return null;
+});
 
 const currentTrackId = ref(null);
 const currentTrackIndex = ref(null);
@@ -630,5 +641,13 @@ onMounted(() => {
   .coverImage {
     max-width: 280px;
   }
+}
+</style>
+
+<style scoped>
+.enrichmentStatus {
+  margin: 12px 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
 }
 </style>

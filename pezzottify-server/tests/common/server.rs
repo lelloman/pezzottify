@@ -167,6 +167,7 @@ impl TestServer {
             media_path: media_path.clone(),
             agent: pezzottify_server::config::AgentSettings::default(),
             ingestion: pezzottify_server::config::IngestionSettings::default(),
+            shows: pezzottify_server::config::ShowsSettings::default(),
             audio_embeddings: None,
         };
 
@@ -194,6 +195,7 @@ impl TestServer {
             server_store,
             None, // oidc_config
             db_registry,
+            None,
         )
         .await
         .expect("Failed to build app");
