@@ -17,6 +17,7 @@
         </p>
       </div>
     </div>
+    <div v-if="enrichmentLabel" class="enrichmentStatus">{{ enrichmentLabel }}</div>
     <div class="commandsSection">
       <PlayIcon
         class="playTrackIcon scaleClickFeedback bigIcon"
@@ -37,7 +38,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from "vue";
+import { computed, ref, watch, onMounted } from "vue";
 import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
 import PlayIcon from "../icons/PlayIcon.vue";
 import { usePlaybackStore } from "@/store/playback";
@@ -66,6 +67,16 @@ const router = useRouter();
 const playback = usePlaybackStore();
 const staticsStore = useStaticsStore();
 const remoteStore = useRemoteStore();
+
+
+const enrichmentLabel = computed(() => {
+  const status = track.value?.enrichment_status?.status;
+  if (status === "queued") return "Enrichment queued";
+  if (status === "running") return "Enrichment running";
+  if (status === "completed") return "Enrichment completed";
+  if (status === "failed") return "Enrichment failed";
+  return null;
+});
 
 let trackDataUnwatcher = null;
 let albumDataUnwatcher = null;
@@ -182,5 +193,13 @@ onMounted(() => {
   display: flex;
   flex-direction: row;
   overflow-x: auto;
+}
+</style>
+
+<style scoped>
+.enrichmentStatus {
+  margin: 12px 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
 }
 </style>

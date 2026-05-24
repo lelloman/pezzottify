@@ -11,8 +11,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 // Import modules from the library crate
 use pezzottify_server::background_jobs::jobs::{
     AlbumEmbeddingSyncJob, AudioAnalysisJob, CatalogAvailabilityStatsJob, DevicePruningJob,
-    FeaturedAlbumsJob, IngestionCleanupJob, PopularContentJob, RelatedArtistsEnrichmentJob,
-    TrackEmbeddingSyncJob, WhatsNewBatchJob,
+    FeaturedAlbumsJob, IngestionCleanupJob, MetadataEnrichmentJob, PopularContentJob,
+    RelatedArtistsEnrichmentJob, TrackEmbeddingSyncJob, WhatsNewBatchJob,
 };
 use pezzottify_server::background_jobs::{create_scheduler, GuardedSearchVault, JobContext};
 use pezzottify_server::backup::DbRegistry;
@@ -251,22 +251,19 @@ async fn main() -> Result<()> {
     let shutdown_token = CancellationToken::new();
     let (hook_sender, hook_receiver) = tokio::sync::mpsc::channel(100);
 
-    // Create enrichment store if audio analysis is enabled
-    let enrichment_store = if app_config.audio_analysis.is_some() {
-        info!(
-            "Initializing enrichment store at {:?}",
-            app_config.enrichment_db_path()
-        );
+    // Create enrichment store for metadata enrichment and optional audio analysis.
+    info!(
+        "Initializing enrichment store at {:?}",
+        app_config.enrichment_db_path()
+    );
+    let enrichment_store =
         match SqliteEnrichmentStore::new(app_config.enrichment_db_path(), &db_registry) {
             Ok(store) => Some(Arc::new(store)),
             Err(e) => {
                 error!("Failed to create enrichment store: {:?}", e);
                 None
             }
-        }
-    } else {
-        None
-    };
+        };
 
     let mut job_context = JobContext::with_search_vault(
         shutdown_token.child_token(),
@@ -316,6 +313,15 @@ async fn main() -> Result<()> {
             &app_config.background_jobs.device_pruning,
         )))
         .await;
+
+    if enrichment_store.is_some() {
+        scheduler
+            .register_job(Arc::new(MetadataEnrichmentJob::from_settings(
+                &app_config.background_jobs.metadata_enrichment,
+            )))
+            .await;
+        info!("Registered metadata enrichment job");
+    }
 
     // Register ingestion cleanup job if ingestion is enabled
     if app_config.ingestion.enabled {
@@ -525,6 +531,7 @@ async fn main() -> Result<()> {
             app_config.audio_embeddings.clone(),
             app_config.shows.clone(),
             db_registry.clone(),
+            enrichment_store.clone().map(|store| store as Arc<dyn pezzottify_server::enrichment_store::EnrichmentStore>),
         ) => {
             info!("HTTP server stopped: {:?}", result);
             shutdown_token.cancel();

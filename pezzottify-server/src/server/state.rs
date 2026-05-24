@@ -4,6 +4,7 @@ use crate::background_jobs::SchedulerHandle;
 use crate::backup::DbRegistry;
 use crate::catalog_store::CatalogStore;
 use crate::download_manager::DownloadManager;
+use crate::enrichment_store::EnrichmentStore;
 use crate::ingestion::IngestionManager;
 use crate::mcp::handler::McpState;
 use crate::oidc::{AuthStateStore, OidcClient};
@@ -33,6 +34,7 @@ pub type OptionalOrganicIndexer = Option<Arc<OrganicIndexer>>;
 pub type HttpClient = reqwest::Client;
 pub type OptionalDownloadManager = Option<Arc<DownloadManager>>;
 pub type OptionalIngestionManager = Option<Arc<IngestionManager>>;
+pub type OptionalEnrichmentStore = Option<Arc<dyn EnrichmentStore>>;
 pub type GuardedPlaybackSessionManager = Arc<PlaybackSessionManager>;
 pub type GuardedDbRegistry = Arc<DbRegistry>;
 
@@ -55,6 +57,7 @@ pub struct ServerState {
     pub http_client: HttpClient,
     pub download_manager: OptionalDownloadManager,
     pub ingestion_manager: OptionalIngestionManager,
+    pub enrichment_store: OptionalEnrichmentStore,
     /// Playback session manager for multi-device playback sync
     pub playback_session_manager: GuardedPlaybackSessionManager,
     /// Database registry for backup checkpoint operations
@@ -163,5 +166,11 @@ impl FromRef<ServerState> for GuardedPlaybackSessionManager {
 impl FromRef<ServerState> for GuardedDbRegistry {
     fn from_ref(input: &ServerState) -> Self {
         input.db_registry.clone()
+    }
+}
+
+impl FromRef<ServerState> for OptionalEnrichmentStore {
+    fn from_ref(input: &ServerState) -> Self {
+        input.enrichment_store.clone()
     }
 }

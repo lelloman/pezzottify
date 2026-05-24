@@ -22,6 +22,7 @@
         </button>
       </div>
     </div>
+    <div v-if="enrichmentLabel" class="enrichmentStatus">{{ enrichmentLabel }}</div>
     <div class="relatedArtistsContainer">
       <LoadArtistListItem
         v-for="artistId in artist.related"
@@ -49,7 +50,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from "vue";
+import { computed, ref, watch, onMounted } from "vue";
 import { chooseArtistCoverImageUrl } from "@/utils";
 import { useUserStore } from "@/store/user.js";
 import { useStaticsStore } from "@/store/statics.js";
@@ -77,6 +78,16 @@ const userStore = useUserStore();
 const staticsStore = useStaticsStore();
 const remoteStore = useRemoteStore();
 const playback = usePlaybackStore();
+
+
+const enrichmentLabel = computed(() => {
+  const status = artist.value?.enrichment_status?.status;
+  if (status === "queued") return "Enrichment queued";
+  if (status === "running") return "Enrichment running";
+  if (status === "completed") return "Enrichment completed";
+  if (status === "failed") return "Enrichment failed";
+  return null;
+});
 
 let artistDataUnwatcher = null;
 
@@ -231,5 +242,13 @@ onMounted(() => {
   .coverImage {
     max-width: 280px;
   }
+}
+</style>
+
+<style scoped>
+.enrichmentStatus {
+  margin: 12px 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
 }
 </style>

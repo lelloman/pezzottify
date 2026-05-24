@@ -6,8 +6,8 @@ pub use file_config::{
     AudioEmbeddingsConfig, AuditLogCleanupJobConfig, BackgroundJobsConfig,
     CatalogAvailabilityStatsJobConfig, CatalogStoreConfig, DevicePruningJobConfig,
     DownloadManagerConfig, FileConfig, IngestionCleanupJobConfig, IngestionConfig,
-    IntervalJobConfig, OidcConfig, PopularContentJobConfig, RelatedArtistsConfig, SearchConfig,
-    StreamingSearchConfig as StreamingSearchFileConfig,
+    IntervalJobConfig, MetadataEnrichmentJobConfig, OidcConfig, PopularContentJobConfig,
+    RelatedArtistsConfig, SearchConfig, StreamingSearchConfig as StreamingSearchFileConfig,
 };
 
 use crate::server::RequestsLoggingLevel;
@@ -305,6 +305,21 @@ impl AppConfig {
             catalog_availability_stats,
             whatsnew_batch,
             featured_albums,
+            metadata_enrichment: {
+                let me_file = bg_jobs_file.metadata_enrichment.unwrap_or_default();
+                let me_defaults = MetadataEnrichmentJobSettings::default();
+                MetadataEnrichmentJobSettings {
+                    interval_hours: me_file
+                        .interval_hours
+                        .unwrap_or(me_defaults.interval_hours)
+                        .max(1),
+                    batch_size: me_file.batch_size.unwrap_or(me_defaults.batch_size).max(1),
+                    retry_after_secs: me_file
+                        .retry_after_secs
+                        .unwrap_or(me_defaults.retry_after_secs)
+                        .max(60),
+                }
+            },
             ingestion_cleanup,
             audit_log_cleanup,
             device_pruning,
@@ -628,6 +643,25 @@ pub struct BackgroundJobsSettings {
     pub audit_log_cleanup: Option<AuditLogCleanupJobSettings>,
     pub device_pruning: DevicePruningJobSettings,
     pub featured_albums: FeaturedAlbumsJobSettings,
+    pub metadata_enrichment: MetadataEnrichmentJobSettings,
+}
+
+/// Settings for v1 metadata enrichment queue processing.
+#[derive(Debug, Clone)]
+pub struct MetadataEnrichmentJobSettings {
+    pub interval_hours: u64,
+    pub batch_size: usize,
+    pub retry_after_secs: u64,
+}
+
+impl Default for MetadataEnrichmentJobSettings {
+    fn default() -> Self {
+        Self {
+            interval_hours: 6,
+            batch_size: 25,
+            retry_after_secs: 6 * 60 * 60,
+        }
+    }
 }
 
 /// Settings for popular content job
