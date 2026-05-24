@@ -26,7 +26,10 @@
     <div class="trackList">
       <VirtualList
         v-model="tracksVModel"
+        class="queueVirtualList"
         data-key="listItemId"
+        :keeps="30"
+        :size="62"
         @drop="handleDrop"
       >
         <template v-slot:item="{ record, index }">
@@ -118,47 +121,54 @@ watch(
   { immediate: true },
 );
 
+const buildTrackRows = (trackIds) => {
+  const seenTrackCounter = {};
+  return trackIds.map((trackId) => {
+    const seenCount = seenTrackCounter[trackId] || 0;
+    seenTrackCounter[trackId] = seenCount + 1;
+    return {
+      id: trackId,
+      listItemId: `${trackId}:${seenCount}`,
+    };
+  });
+};
+
 watch(
   () => playback.currentPlaylist,
   (playlist) => {
-    if (playlist && playlist.tracksIds) {
-      let playingContextText = playlist.type;
-      if (playlist.type == playback.PLAYBACK_CONTEXTS.album) {
-        playingContextText = "Album: " + playlist.context.name;
-      } else if (playlist.type == playback.PLAYBACK_CONTEXTS.userPlaylist) {
-        playingContextText = "Playlist: " + playlist.context.name;
-      } else if (playlist.type == playback.PLAYBACK_CONTEXTS.userMix) {
-        playingContextText = "Your mix";
-      } else if (playlist.type == playback.PLAYBACK_CONTEXTS.radio) {
-        const seedLabel = playlist.context?.seed?.label || "Radio";
-        if (playlist.context?.source === "custom") {
-          playingContextText = "Custom radio: " + seedLabel;
-        } else if (playlist.context?.source === "genre") {
-          playingContextText = "Genre radio: " + seedLabel;
-        } else {
-          playingContextText = "Radio: " + seedLabel;
-        }
-      }
-      playingContext.value.text = playingContextText;
-
-      const seenTrackCounter = {};
-      console.log(
-        "CurrentlyPlayingSidebar new playlist with .tracksIds",
-        playlist.tracksIds,
-      );
-      tracksVModel.value = playlist.tracksIds.map((trackId) => {
-        const seenCount = seenTrackCounter[trackId] || 0;
-        seenTrackCounter[trackId] = seenCount + 1;
-        return {
-          id: trackId,
-          listItemId: trackId + seenCount,
-        };
-      });
-    } else {
-      tracksVModel.value = [];
+    if (!playlist) {
+      playingContext.value.text = "Currently Playing";
+      return;
     }
+
+    let playingContextText = playlist.type;
+    if (playlist.type == playback.PLAYBACK_CONTEXTS.album) {
+      playingContextText = "Album: " + playlist.context.name;
+    } else if (playlist.type == playback.PLAYBACK_CONTEXTS.userPlaylist) {
+      playingContextText = "Playlist: " + playlist.context.name;
+    } else if (playlist.type == playback.PLAYBACK_CONTEXTS.userMix) {
+      playingContextText = "Your mix";
+    } else if (playlist.type == playback.PLAYBACK_CONTEXTS.radio) {
+      const seedLabel = playlist.context?.seed?.label || "Radio";
+      if (playlist.context?.source === "custom") {
+        playingContextText = "Custom radio: " + seedLabel;
+      } else if (playlist.context?.source === "genre") {
+        playingContextText = "Genre radio: " + seedLabel;
+      } else {
+        playingContextText = "Radio: " + seedLabel;
+      }
+    }
+    playingContext.value.text = playingContextText;
   },
   { immediate: true },
+);
+
+watch(
+  () => playback.currentPlaylist?.tracksIds || [],
+  (trackIds) => {
+    tracksVModel.value = buildTrackRows(trackIds);
+  },
+  { immediate: true, deep: true },
 );
 </script>
 
@@ -166,7 +176,9 @@ watch(
 .sidebarContainer {
   display: flex;
   flex-direction: column;
+  min-height: 0;
   height: 100%;
+  overflow: hidden;
   background: var(--surface-panel);
   border: 1px solid var(--surface-border);
   border-radius: 8px;
@@ -242,7 +254,12 @@ watch(
 /* Track List */
 .trackList {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.queueVirtualList {
+  height: 100%;
   padding: 8px 0;
 }
 

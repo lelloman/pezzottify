@@ -61,7 +61,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from "vue";
+import { ref, onMounted, onBeforeUnmount, computed, watch } from "vue";
 import { formatDuration } from "@/utils";
 import TrackName from "@/components/common/TrackName.vue";
 import LoadClickableArtistsNames from "@/components/common/LoadClickableArtistsNames.vue";
@@ -101,26 +101,29 @@ const track = ref(null);
 
 let trackDataUnWatcher = null;
 
-const loadTrackData = async () => {
+const loadTrackData = () => {
   if (trackDataUnWatcher) {
     trackDataUnWatcher();
     trackDataUnWatcher = null;
   }
+
   loading.value = true;
   error.value = null;
   track.value = null;
-  trackDataUnWatcher = watch(
-    staticsStore.getTrack(props.trackId),
-    (newTrack) => {
-      if (newTrack && newTrack.item) {
-        loading.value = false;
 
-        if (newTrack.error) {
-          error.value = newTrack.error;
-        }
-        if (typeof newTrack.item === "object") {
-          track.value = newTrack.item;
-        }
+  const trackRef = staticsStore.getTrack(props.trackId);
+  trackDataUnWatcher = watch(
+    () => [trackRef.item, trackRef.error],
+    ([item, fetchError]) => {
+      if (fetchError) {
+        loading.value = false;
+        error.value = fetchError;
+        return;
+      }
+
+      if (item && typeof item === "object") {
+        loading.value = false;
+        track.value = item;
       }
     },
     { immediate: true },
@@ -161,15 +164,22 @@ onMounted(() => {
   loadTrackData();
 });
 
-// Watch for changes to trackId and reload if necessary
+// Virtualized queue rows are reused, so reload whenever a recycled row
+// receives a different track ID.
 watch(
   () => props.trackId,
   (newId, oldId) => {
-    if (newId != oldId) {
-      //loadTrackData();
+    if (newId && newId !== oldId) {
+      loadTrackData();
     }
   },
 );
+
+onBeforeUnmount(() => {
+  if (trackDataUnWatcher) {
+    trackDataUnWatcher();
+  }
+});
 
 // Expose track data for parent components
 defineExpose({
