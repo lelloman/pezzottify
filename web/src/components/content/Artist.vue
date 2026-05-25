@@ -22,7 +22,59 @@
         </button>
       </div>
     </div>
-    <div v-if="enrichmentLabel" class="enrichmentStatus">{{ enrichmentLabel }}</div>
+    <div v-if="enrichmentLabel" class="enrichmentStatus">
+      {{ enrichmentLabel }}
+    </div>
+    <section v-if="hasEnrichmentData" class="enrichmentPanel">
+      <div
+        v-if="artistEnrichment.profile.summary || artistEnrichment.profile.bio"
+        class="enrichmentText"
+      >
+        <h2>About</h2>
+        <p>
+          {{ artistEnrichment.profile.summary || artistEnrichment.profile.bio }}
+        </p>
+      </div>
+      <div v-if="enrichmentFacts.length" class="enrichmentFacts">
+        <div
+          v-for="fact in enrichmentFacts"
+          :key="fact.label"
+          class="enrichmentFact"
+        >
+          <span>{{ fact.label }}</span>
+          <strong>{{ fact.value }}</strong>
+        </div>
+      </div>
+      <div v-if="tagLabels.length" class="enrichmentGroup">
+        <h3>Tags</h3>
+        <div class="enrichmentChips">
+          <span v-for="tag in tagLabels" :key="tag" class="enrichmentChip">{{
+            tag
+          }}</span>
+        </div>
+      </div>
+      <div v-if="contributorLabels.length" class="enrichmentGroup">
+        <h3>Credits</h3>
+        <div class="enrichmentList">
+          <span v-for="credit in contributorLabels" :key="credit">{{
+            credit
+          }}</span>
+        </div>
+      </div>
+      <div v-if="relationItems.length" class="enrichmentGroup">
+        <h3>Relations</h3>
+        <div class="enrichmentList">
+          <a
+            v-for="relation in relationItems"
+            :key="relation.key"
+            :href="relation.url || null"
+            :target="relation.url ? '_blank' : null"
+            :rel="relation.url ? 'noopener noreferrer' : null"
+            >{{ relation.label }}</a
+          >
+        </div>
+      </div>
+    </section>
     <div class="relatedArtistsContainer">
       <LoadArtistListItem
         v-for="artistId in artist.related"
@@ -79,7 +131,6 @@ const staticsStore = useStaticsStore();
 const remoteStore = useRemoteStore();
 const playback = usePlaybackStore();
 
-
 const enrichmentLabel = computed(() => {
   const status = artist.value?.enrichment_status?.status;
   if (status === "queued") return "Enrichment queued";
@@ -87,6 +138,93 @@ const enrichmentLabel = computed(() => {
   if (status === "completed") return "Enrichment completed";
   if (status === "failed") return "Enrichment failed";
   return null;
+});
+
+const artistEnrichment = computed(() => artist.value?.enrichment || null);
+
+const titleCase = (value) => {
+  if (!value) return null;
+  return String(value)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+const formatPercent = (value) => {
+  if (typeof value !== "number") return null;
+  return `${Math.round(value * 100)}%`;
+};
+
+const enrichmentFacts = computed(() => {
+  const profile = artistEnrichment.value?.profile;
+  if (!profile) return [];
+
+  const roles = [
+    profile.is_composer ? "Composer" : null,
+    profile.is_performer ? "Performer" : null,
+    profile.is_conductor ? "Conductor" : null,
+    profile.is_producer ? "Producer" : null,
+  ].filter(Boolean);
+
+  return [
+    { label: "Kind", value: titleCase(profile.kind) },
+    { label: "Origin", value: profile.origin_place || profile.origin_country },
+    { label: "Language", value: titleCase(profile.primary_language) },
+    { label: "Born", value: profile.birth_date },
+    { label: "Died", value: profile.death_date },
+    { label: "Founded", value: profile.foundation_date },
+    { label: "Dissolved", value: profile.dissolution_date },
+    { label: "Roles", value: roles.join(", ") },
+    { label: "Confidence", value: formatPercent(profile.confidence) },
+    { label: "Source", value: titleCase(profile.source_status) },
+  ].filter((fact) => fact.value);
+});
+
+const tagLabels = computed(() => {
+  return (artistEnrichment.value?.tags || []).map((tag) => {
+    const prefix = titleCase(tag.tag_type);
+    return prefix ? `${prefix}: ${tag.tag}` : tag.tag;
+  });
+});
+
+const contributorLabels = computed(() => {
+  return (artistEnrichment.value?.contributors || []).map((contributor) => {
+    const role = titleCase(contributor.role);
+    return role
+      ? `${contributor.contributor_name} - ${role}`
+      : contributor.contributor_name;
+  });
+});
+
+const relationItems = computed(() => {
+  return (artistEnrichment.value?.relations || [])
+    .map((relation, index) => {
+      const target =
+        relation.external_target_name ||
+        relation.target_entity_id ||
+        relation.external_target_url;
+      const relationType = titleCase(relation.relation_type);
+      return {
+        key: `${relation.relation_type}-${target || index}`,
+        label:
+          relationType && target
+            ? `${relationType}: ${target}`
+            : target || relationType,
+        url: relation.external_target_url,
+      };
+    })
+    .filter((relation) => relation.label);
+});
+
+const hasEnrichmentData = computed(() => {
+  const profile = artistEnrichment.value?.profile;
+  return Boolean(
+    profile?.summary ||
+      profile?.bio ||
+      enrichmentFacts.value.length ||
+      tagLabels.value.length ||
+      contributorLabels.value.length ||
+      relationItems.value.length,
+  );
 });
 
 let artistDataUnwatcher = null;
@@ -187,6 +325,89 @@ onMounted(() => {
   font-weight: 900;
   line-height: 0.96;
   letter-spacing: 0;
+}
+
+.enrichmentPanel {
+  margin: 18px 0 8px;
+  padding: 18px 0;
+  border-top: 1px solid var(--surface-border);
+  border-bottom: 1px solid var(--surface-border);
+  color: var(--text-base);
+}
+
+.enrichmentText h2,
+.enrichmentGroup h3 {
+  margin: 0 0 8px;
+  color: var(--text-base);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.enrichmentText p {
+  max-width: 840px;
+  margin: 0 0 16px;
+  color: var(--text-muted);
+  font-size: 0.96rem;
+  line-height: 1.55;
+}
+
+.enrichmentFacts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px 18px;
+  margin: 0 0 16px;
+}
+
+.enrichmentFact {
+  min-width: 0;
+}
+
+.enrichmentFact span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.enrichmentFact strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-base);
+  font-size: 0.92rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.enrichmentGroup {
+  margin-top: 14px;
+}
+
+.enrichmentChips,
+.enrichmentList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.enrichmentChip,
+.enrichmentList span,
+.enrichmentList a {
+  min-height: 28px;
+  padding: 5px 10px;
+  border: 1px solid var(--surface-border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.84rem;
+  line-height: 1.2;
+  text-decoration: none;
+}
+
+.enrichmentList a:hover {
+  color: var(--text-base);
+  border-color: var(--surface-border-strong);
 }
 
 .relatedArtistsContainer {
