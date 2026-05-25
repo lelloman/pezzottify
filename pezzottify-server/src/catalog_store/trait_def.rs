@@ -428,6 +428,9 @@ pub trait CatalogStore: Send + Sync {
     /// Returns (spotify_id, mbid, artist_rowid) tuples.
     fn get_artists_needing_related(&self, limit: usize) -> Result<Vec<(String, String, i64)>>;
 
+    /// Get the MusicBrainz ID for an artist, when one has been resolved.
+    fn get_artist_mbid(&self, artist_id: &str) -> Result<Option<String>>;
+
     /// Set the MusicBrainz ID for an artist and mark status = 1 (found).
     fn set_artist_mbid(&self, artist_id: &str, mbid: &str) -> Result<()>;
 

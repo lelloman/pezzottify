@@ -896,6 +896,20 @@ impl SqliteCatalogStore {
         Ok(results)
     }
 
+    /// Get MusicBrainz ID for an artist.
+    pub fn get_artist_mbid(&self, artist_id: &str) -> Result<Option<String>> {
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+        let mbid = conn
+            .query_row(
+                "SELECT mbid FROM artists WHERE id = ?1",
+                params![artist_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(mbid)
+    }
+
     /// Set MusicBrainz ID for an artist, marking status = 1.
     pub fn set_artist_mbid(&self, artist_id: &str, mbid: &str) -> Result<()> {
         let conn = self.write_conn.lock().unwrap();
@@ -3008,6 +3022,10 @@ impl CatalogStore for SqliteCatalogStore {
 
     fn get_artists_needing_related(&self, limit: usize) -> Result<Vec<(String, String, i64)>> {
         SqliteCatalogStore::get_artists_needing_related(self, limit)
+    }
+
+    fn get_artist_mbid(&self, artist_id: &str) -> Result<Option<String>> {
+        SqliteCatalogStore::get_artist_mbid(self, artist_id)
     }
 
     fn set_artist_mbid(&self, artist_id: &str, mbid: &str) -> Result<()> {
