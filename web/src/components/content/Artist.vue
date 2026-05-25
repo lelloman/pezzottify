@@ -26,14 +26,9 @@
       {{ enrichmentLabel }}
     </div>
     <section v-if="hasEnrichmentData" class="enrichmentPanel">
-      <div
-        v-if="artistEnrichment.profile.summary || artistEnrichment.profile.bio"
-        class="enrichmentText"
-      >
+      <div v-if="shortBio" class="enrichmentText">
         <h2>About</h2>
-        <p>
-          {{ artistEnrichment.profile.summary || artistEnrichment.profile.bio }}
-        </p>
+        <p>{{ shortBio }}</p>
       </div>
       <div v-if="enrichmentFacts.length" class="enrichmentFacts">
         <div
@@ -46,7 +41,7 @@
         </div>
       </div>
       <div v-if="tagLabels.length" class="enrichmentGroup">
-        <h3>Tags</h3>
+        <h3>Styles</h3>
         <div class="enrichmentChips">
           <span v-for="tag in tagLabels" :key="tag" class="enrichmentChip">{{
             tag
@@ -59,19 +54,6 @@
           <span v-for="credit in contributorLabels" :key="credit">{{
             credit
           }}</span>
-        </div>
-      </div>
-      <div v-if="relationItems.length" class="enrichmentGroup">
-        <h3>Relations</h3>
-        <div class="enrichmentList">
-          <a
-            v-for="relation in relationItems"
-            :key="relation.key"
-            :href="relation.url || null"
-            :target="relation.url ? '_blank' : null"
-            :rel="relation.url ? 'noopener noreferrer' : null"
-            >{{ relation.label }}</a
-          >
         </div>
       </div>
     </section>
@@ -135,7 +117,6 @@ const enrichmentLabel = computed(() => {
   const status = artist.value?.enrichment_status?.status;
   if (status === "queued") return "Enrichment queued";
   if (status === "running") return "Enrichment running";
-  if (status === "completed") return "Enrichment completed";
   if (status === "failed") return "Enrichment failed";
   return null;
 });
@@ -149,41 +130,37 @@ const titleCase = (value) => {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 };
 
-const formatPercent = (value) => {
-  if (typeof value !== "number") return null;
-  return `${Math.round(value * 100)}%`;
-};
+const shortBio = computed(() => {
+  const profile = artistEnrichment.value?.profile;
+  return profile?.summary || profile?.bio || null;
+});
 
 const enrichmentFacts = computed(() => {
   const profile = artistEnrichment.value?.profile;
   if (!profile) return [];
 
-  const roles = [
-    profile.is_composer ? "Composer" : null,
-    profile.is_performer ? "Performer" : null,
-    profile.is_conductor ? "Conductor" : null,
-    profile.is_producer ? "Producer" : null,
-  ].filter(Boolean);
+  const placeLabel = profile.is_person ? "Birthplace" : "Origin";
+  const place = profile.origin_place || profile.origin_country;
 
   return [
-    { label: "Kind", value: titleCase(profile.kind) },
-    { label: "Origin", value: profile.origin_place || profile.origin_country },
-    { label: "Language", value: titleCase(profile.primary_language) },
     { label: "Born", value: profile.birth_date },
     { label: "Died", value: profile.death_date },
+    { label: placeLabel, value: place },
     { label: "Founded", value: profile.foundation_date },
     { label: "Dissolved", value: profile.dissolution_date },
-    { label: "Roles", value: roles.join(", ") },
-    { label: "Confidence", value: formatPercent(profile.confidence) },
-    { label: "Source", value: titleCase(profile.source_status) },
+    { label: "Language", value: titleCase(profile.primary_language) },
   ].filter((fact) => fact.value);
 });
 
 const tagLabels = computed(() => {
-  return (artistEnrichment.value?.tags || []).map((tag) => {
-    const prefix = titleCase(tag.tag_type);
-    return prefix ? `${prefix}: ${tag.tag}` : tag.tag;
-  });
+  const seen = new Set();
+  return (artistEnrichment.value?.tags || [])
+    .map((tag) => tag.tag)
+    .filter((tag) => {
+      if (!tag || seen.has(tag.toLowerCase())) return false;
+      seen.add(tag.toLowerCase());
+      return true;
+    });
 });
 
 const contributorLabels = computed(() => {
@@ -195,35 +172,12 @@ const contributorLabels = computed(() => {
   });
 });
 
-const relationItems = computed(() => {
-  return (artistEnrichment.value?.relations || [])
-    .map((relation, index) => {
-      const target =
-        relation.external_target_name ||
-        relation.target_entity_id ||
-        relation.external_target_url;
-      const relationType = titleCase(relation.relation_type);
-      return {
-        key: `${relation.relation_type}-${target || index}`,
-        label:
-          relationType && target
-            ? `${relationType}: ${target}`
-            : target || relationType,
-        url: relation.external_target_url,
-      };
-    })
-    .filter((relation) => relation.label);
-});
-
 const hasEnrichmentData = computed(() => {
-  const profile = artistEnrichment.value?.profile;
   return Boolean(
-    profile?.summary ||
-      profile?.bio ||
+    shortBio.value ||
       enrichmentFacts.value.length ||
       tagLabels.value.length ||
-      contributorLabels.value.length ||
-      relationItems.value.length,
+      contributorLabels.value.length,
   );
 });
 

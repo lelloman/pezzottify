@@ -757,15 +757,16 @@ impl EnrichmentStore for SqliteEnrichmentStore {
         let (table, id_col) = table_for_entity_type(entity_type)?;
         let conn = self.read_conn.lock().unwrap();
         let sql = format!(
-            "SELECT COALESCE(last_verified_at, enriched_at) FROM {} WHERE {} = ?1",
+            "SELECT COALESCE(last_verified_at, enriched_at), source_status FROM {} WHERE {} = ?1",
             table, id_col
         );
-        let verified_at: Option<i64> = conn
-            .query_row(&sql, params![entity_id], |r| r.get(0))
+        let row: Option<(i64, Option<String>)> = conn
+            .query_row(&sql, params![entity_id], |r| Ok((r.get(0)?, r.get(1)?)))
             .optional()?;
-        Ok(match verified_at {
+        Ok(match row {
             None => true,
-            Some(ts) => now.saturating_sub(ts) >= stale_after_secs,
+            Some((_ts, Some(source_status))) if source_status == "llm_inferred" => true,
+            Some((ts, _source_status)) => now.saturating_sub(ts) >= stale_after_secs,
         })
     }
 
@@ -1489,6 +1490,16 @@ mod tests {
             .unwrap());
         assert!(store
             .is_enrichment_missing_or_stale("artist", "artist1", 3600, 5_000)
+            .unwrap());
+
+        let mut legacy_enrichment = store.get_artist_enrichment_v1("artist1").unwrap().unwrap();
+        legacy_enrichment.last_verified_at = Some(2_000);
+        legacy_enrichment.source_status = Some("llm_inferred".to_string());
+        store
+            .upsert_artist_enrichment_v1(&legacy_enrichment)
+            .unwrap();
+        assert!(store
+            .is_enrichment_missing_or_stale("artist", "artist1", 3600, 2_001)
             .unwrap());
     }
 
