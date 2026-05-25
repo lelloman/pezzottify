@@ -257,27 +257,34 @@ impl MetadataEnrichmentJob {
         Ok(seeded)
     }
 
-    fn execute_disabled(
+    async fn enrich_queue_item_without_llm(
         &self,
+        ctx: &JobContext,
         store: &dyn EnrichmentStore,
-        batch: Vec<EnrichmentQueueItemV1>,
-    ) -> Result<usize, JobError> {
-        let mut failed = 0usize;
-        for item in batch {
-            warn!(
-                "Metadata enrichment agent LLM is disabled; leaving {} {} queued for retry",
-                item.entity_type, item.entity_id
-            );
-            store
-                .fail_enrichment_queue_item(
-                    item.id,
-                    "agent LLM is disabled",
-                    Some(self.settings.retry_after_secs as i64),
-                )
-                .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
-            failed += 1;
+        item: &EnrichmentQueueItemV1,
+    ) -> std::result::Result<(), ItemError> {
+        if item.entity_type == "artist" {
+            match self
+                .try_enrich_artist_from_wikidata(ctx, store, &item.entity_id)
+                .await
+            {
+                Ok(true) => {
+                    store.complete_enrichment_queue_item(item.id).map_err(|e| {
+                        ItemError::retryable(format!("queue completion failed: {e}"))
+                    })?;
+                    return Ok(());
+                }
+                Ok(false) => {}
+                Err(err) => warn!(
+                    "Wikidata enrichment failed for artist {} while LLM is disabled: {}",
+                    item.entity_id, err
+                ),
+            }
         }
-        Ok(failed)
+
+        Err(ItemError::retryable(
+            "agent LLM is disabled and no deterministic enrichment was available".to_string(),
+        ))
     }
 
     async fn enrich_queue_item(
@@ -755,20 +762,6 @@ impl BackgroundJob for MetadataEnrichmentJob {
             return Ok(());
         }
 
-        if !self.agent.enabled {
-            let failed = self.execute_disabled(store.as_ref(), batch)?;
-            audit.log_completed(Some(serde_json::json!({
-                "processed": failed,
-                "retryable_failures": failed,
-                "batch_size": batch_size,
-                "entity_types": selected_entity_types.clone(),
-                "reason": "agent_llm_disabled",
-                "seeded": seeded,
-            })));
-            return Ok(());
-        }
-
-        let provider = build_provider(&self.agent);
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -778,6 +771,11 @@ impl BackgroundJob for MetadataEnrichmentJob {
                 ))
             })?;
 
+        let provider = if self.agent.enabled {
+            Some(build_provider(&self.agent))
+        } else {
+            None
+        };
         let mut processed = 0usize;
         let mut retryable_failures = 0usize;
         let mut permanent_failures = 0usize;
@@ -786,12 +784,19 @@ impl BackgroundJob for MetadataEnrichmentJob {
                 return Err(JobError::Cancelled);
             }
 
-            match runtime.block_on(self.enrich_queue_item(
-                ctx,
-                store.as_ref(),
-                provider.as_ref(),
-                &item,
-            )) {
+            let result = match provider.as_ref() {
+                Some(provider) => runtime.block_on(self.enrich_queue_item(
+                    ctx,
+                    store.as_ref(),
+                    provider.as_ref(),
+                    &item,
+                )),
+                None => {
+                    runtime.block_on(self.enrich_queue_item_without_llm(ctx, store.as_ref(), &item))
+                }
+            };
+
+            match result {
                 Ok(()) => processed += 1,
                 Err(ItemError::Retryable(message)) => {
                     warn!(
@@ -831,8 +836,8 @@ impl BackgroundJob for MetadataEnrichmentJob {
             "seeded": seeded,
             "batch_size": batch_size,
             "entity_types": selected_entity_types.clone(),
-            "provider": provider.name(),
-            "model": provider.model(),
+            "provider": provider.as_ref().map(|provider| provider.name()).unwrap_or("deterministic"),
+            "model": provider.as_ref().map(|provider| provider.model()).unwrap_or("wikidata"),
         })));
         Ok(())
     }
