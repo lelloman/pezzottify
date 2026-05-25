@@ -242,6 +242,10 @@ impl CatalogStore for NullCatalogStore {
         Ok(Vec::new())
     }
 
+    fn get_artist_mbid(&self, _artist_id: &str) -> Result<Option<String>> {
+        Ok(None)
+    }
+
     fn set_artist_mbid(&self, _artist_id: &str, _mbid: &str) -> Result<()> {
         anyhow::bail!("NullCatalogStore does not support write operations")
     }

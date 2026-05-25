@@ -1528,6 +1528,10 @@ mod tests {
             ) -> anyhow::Result<Vec<(String, String, i64)>> {
                 Ok(Vec::new())
             }
+            fn get_artist_mbid(&self, _artist_id: &str) -> anyhow::Result<Option<String>> {
+                Ok(None)
+            }
+
             fn set_artist_mbid(&self, _artist_id: &str, _mbid: &str) -> anyhow::Result<()> {
                 Ok(())
             }
