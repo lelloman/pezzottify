@@ -41,6 +41,7 @@ export const useStaticsStore = defineStore("statics", () => {
         ? resolvedArtist.related_artists.map((a) => a.id)
         : [],
       enrichment_status: resolvedArtist.enrichment_status || null,
+      enrichment: resolvedArtist.enrichment || null,
     };
 
     return artist;
@@ -131,7 +132,8 @@ export const useStaticsStore = defineStore("statics", () => {
     // but the array should exist after the transform
     if (itemType === "albums" && !Array.isArray(item.covers)) return false;
     // Artists must have portrait_group array (may be missing from old cache before display_image transform)
-    if (itemType === "artists" && !Array.isArray(item.portrait_group)) return false;
+    if (itemType === "artists" && !Array.isArray(item.portrait_group))
+      return false;
     return true;
   };
 
