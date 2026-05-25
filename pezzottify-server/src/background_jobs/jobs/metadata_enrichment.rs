@@ -28,6 +28,7 @@ const ENRICHMENT_STALE_AFTER_SECS: i64 = 90 * 24 * 60 * 60;
 const ALL_TIME_LISTENING_START_DATE: u32 = 0;
 const ALL_TIME_LISTENING_END_DATE: u32 = 99_991_231;
 const LISTENING_BACKFILL_REASON: &str = "listening_backfill";
+const GENERATED_SOURCE_STATUS: &str = "llm_inferred_v2";
 
 #[derive(Debug, Deserialize, Default)]
 struct MetadataEnrichmentRunParams {
@@ -392,10 +393,10 @@ impl MetadataEnrichmentJob {
             .map_err(|e| ItemError::retryable(format!("context serialization failed: {e}")))?;
         let messages = vec![
             Message::system(
-                "You enrich a music catalog as strict JSON. Return only one valid JSON object, no markdown. Use null when a fact is unknown. Do not invent exact dates, URLs, catalog numbers, or external identifiers. Confidence values must be from 0.0 to 1.0.",
+                "You enrich a music catalog as strict JSON. Return only one valid JSON object, no markdown. Prefer durable, public music reference facts over guesswork. For established artists, use widely known biographical facts even when the local catalog context only contains name and discography. Use null only when the fact is not known to you or is ambiguous. Do not invent URLs, catalog numbers, external identifiers, or obscure exact dates. Confidence values must be from 0.0 to 1.0.",
             ),
             Message::user(format!(
-                "Entity type: {entity_type}\nEntity id: {entity_id}\nCatalog context JSON:\n{context_json}\n\nReturn JSON using this schema. Include only facts you can infer with reasonable confidence from the context or widely-known music metadata. Unknown scalar fields must be null and arrays may be empty.\n\n{schema}",
+                "Entity type: {entity_type}\nEntity id: {entity_id}\nCatalog context JSON:\n{context_json}\n\nReturn JSON using this schema. Include facts you can infer with reasonable confidence from the context or widely-known music metadata. For person artists, populate birth_date, death_date, and origin_place when they are well-known public facts; origin_place means birthplace for people. Unknown scalar fields must be null and arrays may be empty.\n\n{schema}",
                 schema = output_schema(entity_type),
             )),
         ];
@@ -458,7 +459,7 @@ impl MetadataEnrichmentJob {
                     source_status: output
                         .source_status
                         .clone()
-                        .or_else(|| Some("llm_inferred".to_string())),
+                        .or_else(|| Some(GENERATED_SOURCE_STATUS.to_string())),
                 })
                 .map_err(|e| {
                     ItemError::retryable(format!("artist enrichment write failed: {e}"))
@@ -487,7 +488,7 @@ impl MetadataEnrichmentJob {
                     source_status: output
                         .source_status
                         .clone()
-                        .or_else(|| Some("llm_inferred".to_string())),
+                        .or_else(|| Some(GENERATED_SOURCE_STATUS.to_string())),
                 })
                 .map_err(|e| ItemError::retryable(format!("album enrichment write failed: {e}")))?,
             "track" => store
@@ -519,7 +520,7 @@ impl MetadataEnrichmentJob {
                     source_status: output
                         .source_status
                         .clone()
-                        .or_else(|| Some("llm_inferred".to_string())),
+                        .or_else(|| Some(GENERATED_SOURCE_STATUS.to_string())),
                 })
                 .map_err(|e| ItemError::retryable(format!("track enrichment write failed: {e}")))?,
             other => {
@@ -1160,8 +1161,8 @@ const ARTIST_OUTPUT_SCHEMA: &str = r#"{
   "death_date": "YYYY-MM-DD|YYYY-MM|YYYY|null",
   "foundation_date": "YYYY-MM-DD|YYYY-MM|YYYY|null",
   "dissolution_date": "YYYY-MM-DD|YYYY-MM|YYYY|null",
-  "origin_place": "string|null",
-  "origin_country": "string|null",
+  "origin_place": "birthplace for people, formation/origin city for groups|null",
+  "origin_country": "birth country for people, formation/origin country for groups|null",
   "primary_language": "ISO 639-1 or language name|null",
   "is_person": true,
   "is_group": false,
@@ -1170,9 +1171,9 @@ const ARTIST_OUTPUT_SCHEMA: &str = r#"{
   "is_conductor": false,
   "is_producer": false,
   "confidence": 0.0,
-  "summary": "one sentence|null",
-  "bio": "short paragraph|null",
-  "source_status": "llm_inferred",
+  "summary": "one listener-facing sentence with the artist's significance|null",
+  "bio": "short listener-facing paragraph including major roles such as singer, composer, songwriter, author, or producer when well-known|null",
+  "source_status": "llm_inferred_v2",
   "tags": [{"tag_type": "genre|style|mood|scene|theme", "tag": "string", "confidence": 0.0, "source": "llm"}],
   "contributors": [],
   "relations": [{"relation_type": "influenced_by|member_of|collaborated_with|similar_to", "target_entity_type": null, "target_entity_id": null, "external_target_name": "string|null", "external_target_url": null, "confidence": 0.0, "evidence": null}],
@@ -1199,7 +1200,7 @@ const ALBUM_OUTPUT_SCHEMA: &str = r#"{
   "confidence": 0.0,
   "summary": "one sentence|null",
   "notes": "short notes|null",
-  "source_status": "llm_inferred",
+  "source_status": "llm_inferred_v2",
   "tags": [{"tag_type": "genre|style|mood|scene|theme", "tag": "string", "confidence": 0.0, "source": "llm"}],
   "contributors": [{"contributor_name": "string", "contributor_id": "local artist id|null", "role": "artist|producer|composer|conductor|engineer", "confidence": 0.0}],
   "relations": [{"relation_type": "part_of_series|influenced_by|alternate_version_of|related_to", "target_entity_type": null, "target_entity_id": null, "external_target_name": "string|null", "external_target_url": null, "confidence": 0.0, "evidence": null}],
@@ -1231,7 +1232,7 @@ const TRACK_OUTPUT_SCHEMA: &str = r#"{
   "summary": "one sentence|null",
   "notes": "short notes|null",
   "performance_context": "string|null",
-  "source_status": "llm_inferred",
+  "source_status": "llm_inferred_v2",
   "tags": [{"tag_type": "genre|style|mood|scene|theme", "tag": "string", "confidence": 0.0, "source": "llm"}],
   "contributors": [{"contributor_name": "string", "contributor_id": "local artist id|null", "role": "artist|composer|producer|remixer|conductor", "confidence": 0.0}],
   "relations": [{"relation_type": "cover_of|remix_of|movement_of|samples|influenced_by|related_to", "target_entity_type": null, "target_entity_id": null, "external_target_name": "string|null", "external_target_url": null, "confidence": 0.0, "evidence": null}],
