@@ -141,8 +141,7 @@ impl SqliteEnrichmentStore {
             .cloned()
             .collect::<Vec<_>>();
         if !valid_types.is_empty() {
-            let placeholders = std::iter::repeat("?")
-                .take(valid_types.len())
+            let placeholders = std::iter::repeat_n("?", valid_types.len())
                 .collect::<Vec<_>>()
                 .join(", ");
             sql.push_str(" AND entity_type IN (");
