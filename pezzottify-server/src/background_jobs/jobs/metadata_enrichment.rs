@@ -28,6 +28,7 @@ const ENRICHMENT_STALE_AFTER_SECS: i64 = 90 * 24 * 60 * 60;
 const ALL_TIME_LISTENING_START_DATE: u32 = 0;
 const ALL_TIME_LISTENING_END_DATE: u32 = 99_991_231;
 const LISTENING_BACKFILL_REASON: &str = "listening_backfill";
+const WIKIDATA_LLM_COMPLETION_REASON: &str = "wikidata_llm_completion";
 const GENERATED_SOURCE_STATUS: &str = "llm_inferred_v2";
 const WIKIDATA_SOURCE_STATUS: &str = "wikidata";
 const WIKIDATA_SPARQL_URL: &str = "https://query.wikidata.org/sparql";
@@ -241,13 +242,25 @@ impl MetadataEnrichmentJob {
             if ctx.is_cancelled() {
                 return Err(JobError::Cancelled);
             }
+            let needs_llm_completion = candidate.entity_type == "artist"
+                && self.wikidata_only_artist_needs_llm_completion(store, &candidate.entity_id)?;
+            let reason = if needs_llm_completion {
+                WIKIDATA_LLM_COMPLETION_REASON
+            } else {
+                LISTENING_BACKFILL_REASON
+            };
+            let stale_after_secs = if needs_llm_completion {
+                0
+            } else {
+                ENRICHMENT_STALE_AFTER_SECS
+            };
             let queued = store
                 .enqueue_enrichment_if_missing_or_stale(
                     &candidate.entity_type,
                     &candidate.entity_id,
-                    LISTENING_BACKFILL_REASON,
+                    reason,
                     candidate.priority,
-                    ENRICHMENT_STALE_AFTER_SECS,
+                    stale_after_secs,
                 )
                 .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
             if queued {
@@ -255,6 +268,24 @@ impl MetadataEnrichmentJob {
             }
         }
         Ok(seeded)
+    }
+
+    fn wikidata_only_artist_needs_llm_completion(
+        &self,
+        store: &dyn EnrichmentStore,
+        artist_id: &str,
+    ) -> Result<bool, JobError> {
+        if !self.agent.enabled {
+            return Ok(false);
+        }
+        let profile = store
+            .get_artist_enrichment_v1(artist_id)
+            .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+        Ok(profile
+            .as_ref()
+            .and_then(|profile| profile.source_status.as_deref())
+            .map(source_status_needs_llm_completion)
+            .unwrap_or(false))
     }
 
     async fn enrich_queue_item_without_llm(
@@ -268,13 +299,13 @@ impl MetadataEnrichmentJob {
                 .try_enrich_artist_from_wikidata(ctx, store, &item.entity_id)
                 .await
             {
-                Ok(true) => {
+                Ok(Some(_)) => {
                     store.complete_enrichment_queue_item(item.id).map_err(|e| {
                         ItemError::retryable(format!("queue completion failed: {e}"))
                     })?;
                     return Ok(());
                 }
-                Ok(false) => {}
+                Ok(None) => {}
                 Err(err) => warn!(
                     "Wikidata enrichment failed for artist {} while LLM is disabled: {}",
                     item.entity_id, err
@@ -294,18 +325,16 @@ impl MetadataEnrichmentJob {
         provider: &dyn LlmProvider,
         item: &EnrichmentQueueItemV1,
     ) -> std::result::Result<(), ItemError> {
+        let mut wikidata_enrichment = None;
         if item.entity_type == "artist" {
             match self
                 .try_enrich_artist_from_wikidata(ctx, store, &item.entity_id)
                 .await
             {
-                Ok(true) => {
-                    store.complete_enrichment_queue_item(item.id).map_err(|e| {
-                        ItemError::retryable(format!("queue completion failed: {e}"))
-                    })?;
-                    return Ok(());
+                Ok(Some(enrichment)) => {
+                    wikidata_enrichment = Some(enrichment);
                 }
-                Ok(false) => {}
+                Ok(None) => {}
                 Err(err) => warn!(
                     "Wikidata enrichment failed for artist {}; falling back to LLM: {}",
                     item.entity_id, err
@@ -324,12 +353,20 @@ impl MetadataEnrichmentJob {
                     .ok_or_else(|| {
                         ItemError::permanent(format!("catalog artist {} not found", item.entity_id))
                     })?;
-                (
-                    serde_json::to_value(artist).map_err(|e| {
-                        ItemError::retryable(format!("artist context serialization failed: {e}"))
-                    })?,
-                    Vec::new(),
-                )
+                let mut context = serde_json::to_value(artist).map_err(|e| {
+                    ItemError::retryable(format!("artist context serialization failed: {e}"))
+                })?;
+                if let Some(enrichment) = wikidata_enrichment.as_ref() {
+                    context = serde_json::json!({
+                        "catalog": context,
+                        "source_backed_wikidata": enrichment.prompt_context(),
+                    });
+                }
+                let external_ids = wikidata_enrichment
+                    .as_ref()
+                    .map(|enrichment| enrichment.external_ids.clone())
+                    .unwrap_or_default();
+                (context, external_ids)
             }
             "album" => {
                 let album = ctx
@@ -392,9 +429,13 @@ impl MetadataEnrichmentJob {
             }
         };
 
-        let (output, raw_payload) = self
+        let (mut output, raw_payload) = self
             .generate_metadata(provider, &item.entity_type, &item.entity_id, &context)
             .await?;
+        if let Some(enrichment) = wikidata_enrichment {
+            output.sources.extend(enrichment.sources);
+            output.evidence.extend(enrichment.evidence);
+        }
         self.store_metadata(
             store,
             provider,
@@ -415,84 +456,28 @@ impl MetadataEnrichmentJob {
         ctx: &JobContext,
         store: &dyn EnrichmentStore,
         artist_id: &str,
-    ) -> anyhow::Result<bool> {
+    ) -> anyhow::Result<Option<WikidataArtistEnrichment>> {
         let Some(mbid) = ctx.catalog_store.get_artist_mbid(artist_id)? else {
-            return Ok(false);
+            return Ok(None);
         };
         let Some(facts) = WikidataClient::new()?.lookup_artist_by_mbid(&mbid).await? else {
-            return Ok(false);
+            return Ok(None);
         };
         if !facts.has_profile_data() {
-            return Ok(false);
+            return Ok(None);
         }
 
         let now = now_secs();
-        store.upsert_artist_enrichment_v1(&ArtistEnrichmentV1 {
-            artist_id: artist_id.to_string(),
-            kind: Some(facts.kind.clone()),
-            birth_date: facts.birth_date.clone(),
-            death_date: facts.death_date.clone(),
-            foundation_date: facts.foundation_date.clone(),
-            dissolution_date: facts.dissolution_date.clone(),
-            origin_place: facts.origin_place.clone(),
-            origin_country: facts.origin_country.clone(),
-            primary_language: None,
-            is_person: Some(facts.kind == "person"),
-            is_group: Some(facts.kind != "person"),
-            is_composer: None,
-            is_performer: None,
-            is_conductor: None,
-            is_producer: None,
-            confidence: Some(1.0),
-            summary: facts.description.clone(),
-            bio: None,
-            enriched_at: now,
-            last_verified_at: Some(now),
-            source_status: Some(WIKIDATA_SOURCE_STATUS.to_string()),
-        })?;
+        let enrichment = WikidataArtistEnrichment::new(artist_id, mbid, facts, now);
+        store.upsert_artist_enrichment_v1(&enrichment.profile)?;
         store.replace_entity_tags("artist", artist_id, &[])?;
         store.replace_entity_contributors("artist", artist_id, &[])?;
         store.replace_entity_relations("artist", artist_id, &[])?;
         store.replace_entity_aliases("artist", artist_id, &[])?;
-        store.replace_entity_external_ids(
-            "artist",
-            artist_id,
-            &dedupe_external_ids(vec![
-                EntityExternalIdV1 {
-                    provider: "musicbrainz".to_string(),
-                    external_id: Some(mbid),
-                    url: None,
-                    confidence: Some(1.0),
-                },
-                EntityExternalIdV1 {
-                    provider: "wikidata".to_string(),
-                    external_id: Some(facts.qid.clone()),
-                    url: Some(facts.wikidata_url()),
-                    confidence: Some(1.0),
-                },
-            ]),
-        )?;
-        store.replace_entity_sources(
-            "artist",
-            artist_id,
-            &[EntitySourceV1 {
-                source_name: "wikidata".to_string(),
-                source_url: Some(facts.wikidata_url()),
-                retrieved_at: Some(now),
-                confidence: Some(1.0),
-            }],
-        )?;
-        store.replace_entity_evidence(
-            "artist",
-            artist_id,
-            &[EntityEvidenceV1 {
-                source_name: Some("wikidata_sparql".to_string()),
-                source_url: Some(facts.wikidata_url()),
-                snippet: facts.description.clone(),
-                raw_payload: facts.raw_payload.clone(),
-            }],
-        )?;
-        Ok(true)
+        store.replace_entity_external_ids("artist", artist_id, &enrichment.external_ids)?;
+        store.replace_entity_sources("artist", artist_id, &enrichment.sources)?;
+        store.replace_entity_evidence("artist", artist_id, &enrichment.evidence)?;
+        Ok(Some(enrichment))
     }
 
     async fn generate_metadata(
@@ -506,7 +491,7 @@ impl MetadataEnrichmentJob {
             .map_err(|e| ItemError::retryable(format!("context serialization failed: {e}")))?;
         let messages = vec![
             Message::system(
-                "You enrich a music catalog as strict JSON. Return only one valid JSON object, no markdown. Prefer durable, public music reference facts over guesswork. For established artists, use widely known biographical facts even when the local catalog context only contains name and discography. Use null only when the fact is not known to you or is ambiguous. Do not invent URLs, catalog numbers, external identifiers, or obscure exact dates. Confidence values must be from 0.0 to 1.0.",
+                "You enrich a music catalog as strict JSON. Return only one valid JSON object, no markdown. Prefer durable, public music reference facts over guesswork. Source-backed facts in the catalog context are authoritative; do not contradict them. For established artists, use widely known biographical facts even when the local catalog context only contains name and discography. Use null only when the fact is not known to you or is ambiguous. Do not invent URLs, catalog numbers, external identifiers, or obscure exact dates. Confidence values must be from 0.0 to 1.0.",
             ),
             Message::user(format!(
                 "Entity type: {entity_type}\nEntity id: {entity_id}\nCatalog context JSON:\n{context_json}\n\nReturn JSON using this schema. Include facts you can infer with reasonable confidence from the context or widely-known music metadata. For person artists, populate birth_date, death_date, and origin_place when they are well-known public facts; origin_place means birthplace for people. Unknown scalar fields must be null and arrays may be empty.\n\n{schema}",
@@ -547,36 +532,26 @@ impl MetadataEnrichmentJob {
     ) -> std::result::Result<(), ItemError> {
         let now = now_secs();
         match entity_type {
-            "artist" => store
-                .upsert_artist_enrichment_v1(&ArtistEnrichmentV1 {
-                    artist_id: entity_id.to_string(),
-                    kind: output.kind,
-                    birth_date: output.birth_date,
-                    death_date: output.death_date,
-                    foundation_date: output.foundation_date,
-                    dissolution_date: output.dissolution_date,
-                    origin_place: output.origin_place,
-                    origin_country: output.origin_country,
-                    primary_language: output.primary_language,
-                    is_person: output.is_person,
-                    is_group: output.is_group,
-                    is_composer: output.is_composer,
-                    is_performer: output.is_performer,
-                    is_conductor: output.is_conductor,
-                    is_producer: output.is_producer,
-                    confidence: output.confidence,
-                    summary: output.summary.clone(),
-                    bio: output.bio,
-                    enriched_at: now,
-                    last_verified_at: Some(now),
-                    source_status: output
-                        .source_status
-                        .clone()
-                        .or_else(|| Some(GENERATED_SOURCE_STATUS.to_string())),
-                })
-                .map_err(|e| {
-                    ItemError::retryable(format!("artist enrichment write failed: {e}"))
-                })?,
+            "artist" => {
+                let wikidata_profile = store
+                    .get_artist_enrichment_v1(entity_id)
+                    .map_err(|e| {
+                        ItemError::retryable(format!(
+                            "artist enrichment pre-merge read failed: {e}"
+                        ))
+                    })?
+                    .filter(is_wikidata_backed_profile);
+                store
+                    .upsert_artist_enrichment_v1(&artist_profile_from_output(
+                        entity_id,
+                        &output,
+                        wikidata_profile.as_ref(),
+                        now,
+                    ))
+                    .map_err(|e| {
+                        ItemError::retryable(format!("artist enrichment write failed: {e}"))
+                    })?
+            }
             "album" => store
                 .upsert_album_enrichment_v1(&AlbumEnrichmentV1 {
                     album_id: entity_id.to_string(),
@@ -1234,6 +1209,196 @@ impl EvidenceOutput {
             snippet,
             raw_payload,
         })
+    }
+}
+
+#[derive(Debug, Clone)]
+struct WikidataArtistEnrichment {
+    profile: ArtistEnrichmentV1,
+    external_ids: Vec<EntityExternalIdV1>,
+    sources: Vec<EntitySourceV1>,
+    evidence: Vec<EntityEvidenceV1>,
+}
+
+impl WikidataArtistEnrichment {
+    fn new(artist_id: &str, mbid: String, facts: WikidataArtistFacts, now: i64) -> Self {
+        let wikidata_url = facts.wikidata_url();
+        let qid = facts.qid.clone();
+        let profile = ArtistEnrichmentV1 {
+            artist_id: artist_id.to_string(),
+            kind: Some(facts.kind.clone()),
+            birth_date: facts.birth_date.clone(),
+            death_date: facts.death_date.clone(),
+            foundation_date: facts.foundation_date.clone(),
+            dissolution_date: facts.dissolution_date.clone(),
+            origin_place: facts.origin_place.clone(),
+            origin_country: facts.origin_country.clone(),
+            primary_language: None,
+            is_person: Some(facts.kind == "person"),
+            is_group: Some(facts.kind != "person"),
+            is_composer: None,
+            is_performer: None,
+            is_conductor: None,
+            is_producer: None,
+            confidence: Some(1.0),
+            summary: facts.description.clone(),
+            bio: None,
+            enriched_at: now,
+            last_verified_at: Some(now),
+            source_status: Some(WIKIDATA_SOURCE_STATUS.to_string()),
+        };
+        Self {
+            profile,
+            external_ids: dedupe_external_ids(vec![
+                EntityExternalIdV1 {
+                    provider: "musicbrainz".to_string(),
+                    external_id: Some(mbid),
+                    url: None,
+                    confidence: Some(1.0),
+                },
+                EntityExternalIdV1 {
+                    provider: "wikidata".to_string(),
+                    external_id: Some(qid),
+                    url: Some(wikidata_url.clone()),
+                    confidence: Some(1.0),
+                },
+            ]),
+            sources: vec![EntitySourceV1 {
+                source_name: "wikidata".to_string(),
+                source_url: Some(wikidata_url.clone()),
+                retrieved_at: Some(now),
+                confidence: Some(1.0),
+            }],
+            evidence: vec![EntityEvidenceV1 {
+                source_name: Some("wikidata_sparql".to_string()),
+                source_url: Some(wikidata_url),
+                snippet: facts.description,
+                raw_payload: facts.raw_payload,
+            }],
+        }
+    }
+
+    fn prompt_context(&self) -> Value {
+        serde_json::json!({
+            "kind": self.profile.kind.clone(),
+            "birth_date": self.profile.birth_date.clone(),
+            "death_date": self.profile.death_date.clone(),
+            "foundation_date": self.profile.foundation_date.clone(),
+            "dissolution_date": self.profile.dissolution_date.clone(),
+            "origin_place": self.profile.origin_place.clone(),
+            "origin_country": self.profile.origin_country.clone(),
+            "summary": self.profile.summary.clone(),
+            "external_ids": self.external_ids.clone(),
+        })
+    }
+}
+
+fn source_status_needs_llm_completion(source_status: &str) -> bool {
+    let mut parts = source_status.split('+');
+    let has_wikidata = parts.clone().any(|part| part == WIKIDATA_SOURCE_STATUS);
+    let has_llm = parts.any(|part| part == GENERATED_SOURCE_STATUS);
+    has_wikidata && !has_llm
+}
+
+fn is_wikidata_backed_profile(profile: &ArtistEnrichmentV1) -> bool {
+    profile
+        .source_status
+        .as_deref()
+        .map(|status| status.split('+').any(|part| part == WIKIDATA_SOURCE_STATUS))
+        .unwrap_or(false)
+}
+
+fn artist_profile_from_output(
+    artist_id: &str,
+    output: &MetadataOutput,
+    wikidata: Option<&ArtistEnrichmentV1>,
+    now: i64,
+) -> ArtistEnrichmentV1 {
+    ArtistEnrichmentV1 {
+        artist_id: artist_id.to_string(),
+        kind: wikidata
+            .and_then(|profile| profile.kind.clone())
+            .or_else(|| output.kind.clone()),
+        birth_date: wikidata
+            .and_then(|profile| profile.birth_date.clone())
+            .or_else(|| output.birth_date.clone()),
+        death_date: wikidata
+            .and_then(|profile| profile.death_date.clone())
+            .or_else(|| output.death_date.clone()),
+        foundation_date: wikidata
+            .and_then(|profile| profile.foundation_date.clone())
+            .or_else(|| output.foundation_date.clone()),
+        dissolution_date: wikidata
+            .and_then(|profile| profile.dissolution_date.clone())
+            .or_else(|| output.dissolution_date.clone()),
+        origin_place: wikidata
+            .and_then(|profile| profile.origin_place.clone())
+            .or_else(|| output.origin_place.clone()),
+        origin_country: wikidata
+            .and_then(|profile| profile.origin_country.clone())
+            .or_else(|| output.origin_country.clone()),
+        primary_language: output
+            .primary_language
+            .clone()
+            .or_else(|| wikidata.and_then(|profile| profile.primary_language.clone())),
+        is_person: wikidata
+            .and_then(|profile| profile.is_person)
+            .or(output.is_person),
+        is_group: wikidata
+            .and_then(|profile| profile.is_group)
+            .or(output.is_group),
+        is_composer: output
+            .is_composer
+            .or_else(|| wikidata.and_then(|profile| profile.is_composer)),
+        is_performer: output
+            .is_performer
+            .or_else(|| wikidata.and_then(|profile| profile.is_performer)),
+        is_conductor: output
+            .is_conductor
+            .or_else(|| wikidata.and_then(|profile| profile.is_conductor)),
+        is_producer: output
+            .is_producer
+            .or_else(|| wikidata.and_then(|profile| profile.is_producer)),
+        confidence: match (
+            wikidata.and_then(|profile| profile.confidence),
+            output.confidence,
+        ) {
+            (Some(wikidata_confidence), Some(output_confidence)) => {
+                Some(wikidata_confidence.max(output_confidence))
+            }
+            (Some(wikidata_confidence), None) => Some(wikidata_confidence),
+            (None, output_confidence) => output_confidence,
+        },
+        summary: output
+            .summary
+            .clone()
+            .or_else(|| wikidata.and_then(|profile| profile.summary.clone())),
+        bio: output
+            .bio
+            .clone()
+            .or_else(|| wikidata.and_then(|profile| profile.bio.clone())),
+        enriched_at: now,
+        last_verified_at: Some(now),
+        source_status: Some(artist_source_status(
+            output.source_status.as_deref(),
+            wikidata,
+        )),
+    }
+}
+
+fn artist_source_status(
+    output_status: Option<&str>,
+    wikidata: Option<&ArtistEnrichmentV1>,
+) -> String {
+    let output_status = output_status.unwrap_or(GENERATED_SOURCE_STATUS);
+    if wikidata.is_some()
+        && !output_status
+            .split('+')
+            .any(|part| part == WIKIDATA_SOURCE_STATUS)
+    {
+        format!("{WIKIDATA_SOURCE_STATUS}+{output_status}")
+    } else {
+        output_status.to_string()
     }
 }
 
@@ -1964,6 +2129,75 @@ mod tests {
         assert_eq!(facts.origin_place.as_deref(), Some("Ionia"));
         assert_eq!(facts.origin_country.as_deref(), Some("Italy"));
         assert!(facts.has_profile_data());
+    }
+
+    #[test]
+    fn source_status_completion_detects_wikidata_without_llm() {
+        assert!(source_status_needs_llm_completion("wikidata"));
+        assert!(source_status_needs_llm_completion("wikidata+verified"));
+        assert!(!source_status_needs_llm_completion(
+            "wikidata+llm_inferred_v2"
+        ));
+        assert!(!source_status_needs_llm_completion("llm_inferred_v2"));
+    }
+
+    #[test]
+    fn artist_profile_merge_preserves_wikidata_facts_and_uses_llm_fillers() {
+        let wikidata = ArtistEnrichmentV1 {
+            artist_id: "artist1".to_string(),
+            kind: Some("person".to_string()),
+            birth_date: Some("1945-03-23".to_string()),
+            death_date: None,
+            foundation_date: None,
+            dissolution_date: None,
+            origin_place: Some("Ionia".to_string()),
+            origin_country: Some("Italy".to_string()),
+            primary_language: None,
+            is_person: Some(true),
+            is_group: Some(false),
+            is_composer: None,
+            is_performer: None,
+            is_conductor: None,
+            is_producer: None,
+            confidence: Some(1.0),
+            summary: Some("Wikidata description".to_string()),
+            bio: None,
+            enriched_at: 10,
+            last_verified_at: Some(10),
+            source_status: Some(WIKIDATA_SOURCE_STATUS.to_string()),
+        };
+        let output = MetadataOutput {
+            kind: Some("group".to_string()),
+            birth_date: Some("1900".to_string()),
+            origin_place: Some("Wrong place".to_string()),
+            primary_language: Some("it".to_string()),
+            is_person: Some(false),
+            is_group: Some(true),
+            is_composer: Some(true),
+            is_performer: Some(true),
+            confidence: Some(0.6),
+            summary: Some("LLM summary".to_string()),
+            bio: Some("LLM bio".to_string()),
+            ..MetadataOutput::default()
+        };
+
+        let merged = artist_profile_from_output("artist1", &output, Some(&wikidata), 20);
+
+        assert_eq!(merged.kind.as_deref(), Some("person"));
+        assert_eq!(merged.birth_date.as_deref(), Some("1945-03-23"));
+        assert_eq!(merged.origin_place.as_deref(), Some("Ionia"));
+        assert_eq!(merged.origin_country.as_deref(), Some("Italy"));
+        assert_eq!(merged.primary_language.as_deref(), Some("it"));
+        assert_eq!(merged.is_person, Some(true));
+        assert_eq!(merged.is_group, Some(false));
+        assert_eq!(merged.is_composer, Some(true));
+        assert_eq!(merged.summary.as_deref(), Some("LLM summary"));
+        assert_eq!(merged.bio.as_deref(), Some("LLM bio"));
+        assert_eq!(merged.confidence, Some(1.0));
+        assert_eq!(
+            merged.source_status.as_deref(),
+            Some("wikidata+llm_inferred_v2")
+        );
     }
 
     #[test]
