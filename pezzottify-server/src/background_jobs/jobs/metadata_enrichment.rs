@@ -439,11 +439,13 @@ impl MetadataEnrichmentJob {
         self.store_metadata(
             store,
             provider,
-            &item.entity_type,
-            &item.entity_id,
-            output,
-            raw_payload,
-            external_ids,
+            MetadataStorageInput {
+                entity_type: item.entity_type.clone(),
+                entity_id: item.entity_id.clone(),
+                output,
+                raw_payload,
+                default_external_ids: external_ids,
+            },
         )?;
         store
             .complete_enrichment_queue_item(item.id)
@@ -524,12 +526,17 @@ impl MetadataEnrichmentJob {
         &self,
         store: &dyn EnrichmentStore,
         provider: &dyn LlmProvider,
-        entity_type: &str,
-        entity_id: &str,
-        output: MetadataOutput,
-        raw_payload: Value,
-        default_external_ids: Vec<EntityExternalIdV1>,
+        input: MetadataStorageInput,
     ) -> std::result::Result<(), ItemError> {
+        let MetadataStorageInput {
+            entity_type,
+            entity_id,
+            output,
+            raw_payload,
+            default_external_ids,
+        } = input;
+        let entity_type = entity_type.as_str();
+        let entity_id = entity_id.as_str();
         let now = now_secs();
         match entity_type {
             "artist" => {
@@ -832,6 +839,14 @@ impl ItemError {
     fn permanent(message: String) -> Self {
         Self::Permanent(message)
     }
+}
+
+struct MetadataStorageInput {
+    entity_type: String,
+    entity_id: String,
+    output: MetadataOutput,
+    raw_payload: Value,
+    default_external_ids: Vec<EntityExternalIdV1>,
 }
 
 #[derive(Debug, Default)]
