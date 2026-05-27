@@ -34,15 +34,15 @@ const props = defineProps({
 @import "@/assets/icons.css";
 
 .container {
-  fill: var(--accent-color);
+  color: var(--accent-color);
 }
 
 .favIcon {
-  fill: white;
+  color: white;
   cursor: pointer;
 }
 
 .filled {
-  fill: var(--accent-color) !important;
+  color: var(--accent-color);
 }
 </style>

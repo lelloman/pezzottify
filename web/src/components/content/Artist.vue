@@ -5,21 +5,23 @@
       <div class="artistInfoColum">
         <h1 class="artistName">{{ artist.name }}</h1>
         <div class="verticalFiller"></div>
-        <ToggableFavoriteIcon
-          :toggled="isArtistLiked"
-          :clickCallback="handleClickOnFavoriteIcon"
-        />
-        <RadioIcon
-          class="radioIcon scaleClickFeedback"
-          title="Listen to radio"
-          @click.stop="handleClickOnArtistRadio"
-        />
-        <button
-          class="advancedRadioButton"
-          @click.stop="showRadioBuilder = true"
-        >
-          Customize radio
-        </button>
+        <div class="artistActions">
+          <ToggableFavoriteIcon
+            :toggled="isArtistLiked"
+            :clickCallback="handleClickOnFavoriteIcon"
+          />
+          <RadioIcon
+            class="radioIcon scaleClickFeedback"
+            title="Listen to radio"
+            @click.stop="handleClickOnArtistRadio"
+          />
+          <button
+            class="advancedRadioButton"
+            @click.stop="showRadioBuilder = true"
+          >
+            Customize radio
+          </button>
+        </div>
       </div>
     </div>
     <div v-if="enrichmentLabel" class="enrichmentStatus">
@@ -379,6 +381,18 @@ onMounted(() => {
 
 .verticalFiller {
   display: none;
+}
+
+.artistActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.artistActions :deep(.bigIcon) {
+  width: 42px;
+  height: 42px;
 }
 
 .radioIcon {
