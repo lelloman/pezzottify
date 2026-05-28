@@ -3,27 +3,57 @@
     <div class="topSection">
       <MultiSourceImage class="coverImage" :urls="coverUrls" />
       <div class="albumInfoColum">
-        <h1 class="albumName">{{ album.name }}</h1>
+        <div class="albumIdentity">
+          <h1 class="albumName">{{ album.name }}</h1>
+          <p v-if="albumMetaSummary" class="albumMetaSummary">
+            {{ albumMetaSummary }}
+          </p>
+          <div v-if="albumBadges.length" class="albumBadges">
+            <span v-for="badge in albumBadges" :key="badge">{{ badge }}</span>
+          </div>
+          <div v-if="albumSummary" class="albumSummaryBlock">
+            <p
+              ref="summaryTextRef"
+              class="albumSummaryText"
+              :class="{ expanded: summaryExpanded }"
+            >
+              {{ albumSummary }}
+            </p>
+            <button
+              v-if="summaryOverflows"
+              type="button"
+              class="albumSummaryToggle"
+              @click="summaryExpanded = !summaryExpanded"
+            >
+              {{ summaryExpanded ? "Show less" : "Read more" }}
+            </button>
+          </div>
+        </div>
+        <div class="commandsSection">
+          <PlayIcon
+            class="playAlbumIcon scaleClickFeedback bigIcon"
+            @click.stop="handleClickOnPlayAlbum"
+          />
+          <RadioIcon
+            class="playAlbumIcon scaleClickFeedback bigIcon radioIcon"
+            title="Listen to radio"
+            @click.stop="handleClickOnAlbumRadio"
+          />
+          <button
+            class="advancedRadioButton"
+            @click.stop="showRadioBuilder = true"
+          >
+            Customize radio
+          </button>
+          <ToggableFavoriteIcon
+            :toggled="isAlbumLiked"
+            :clickCallback="handleClickOnFavoriteIcon"
+          />
+        </div>
       </div>
     </div>
-    <div v-if="enrichmentLabel" class="enrichmentStatus">{{ enrichmentLabel }}</div>
-    <div class="commandsSection">
-      <PlayIcon
-        class="playAlbumIcon scaleClickFeedback bigIcon"
-        @click.stop="handleClickOnPlayAlbum"
-      />
-      <RadioIcon
-        class="playAlbumIcon scaleClickFeedback bigIcon radioIcon"
-        title="Listen to radio"
-        @click.stop="handleClickOnAlbumRadio"
-      />
-      <button class="advancedRadioButton" @click.stop="showRadioBuilder = true">
-        Customize radio
-      </button>
-      <ToggableFavoriteIcon
-        :toggled="isAlbumLiked"
-        :clickCallback="handleClickOnFavoriteIcon"
-      />
+    <div v-if="enrichmentLabel" class="enrichmentStatus">
+      {{ enrichmentLabel }}
     </div>
 
     <!-- Download Request Section -->
@@ -145,7 +175,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { chooseAlbumCoverImageUrl } from "@/utils";
 import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
 import PlayIcon from "@/components/icons/PlayIcon.vue";
@@ -174,16 +204,133 @@ const playback = usePlaybackStore();
 const userStore = useUserStore();
 const staticsStore = useStaticsStore();
 const remoteStore = useRemoteStore();
-
+const summaryTextRef = ref(null);
+const summaryExpanded = ref(false);
+const summaryOverflows = ref(false);
 
 const enrichmentLabel = computed(() => {
   const status = album.value?.enrichment_status?.status;
   if (status === "queued") return "Enrichment queued";
   if (status === "running") return "Enrichment running";
-  if (status === "completed") return "Enrichment completed";
   if (status === "failed") return "Enrichment failed";
   return null;
 });
+
+const albumEnrichment = computed(() => album.value?.enrichment || null);
+const albumProfile = computed(() => albumEnrichment.value?.profile || null);
+
+const albumSummary = computed(() => {
+  const profile = albumProfile.value;
+  return profile?.summary || profile?.notes || null;
+});
+
+const updateSummaryOverflow = async () => {
+  await nextTick();
+
+  const element = summaryTextRef.value;
+  if (!element) {
+    summaryOverflows.value = false;
+    return;
+  }
+
+  const styles = window.getComputedStyle(element);
+  const lineHeight = Number.parseFloat(styles.lineHeight);
+  const maxCollapsedHeight = Number.isFinite(lineHeight) ? lineHeight * 3 : 0;
+  summaryOverflows.value =
+    maxCollapsedHeight > 0 && element.scrollHeight > maxCollapsedHeight + 1;
+};
+
+const extractYear = (value) => {
+  if (!value) return null;
+  const match = String(value).match(/^(\d{4})/);
+  return match ? match[1] : null;
+};
+
+const formatEnrichmentDate = (value) => {
+  if (!value) return null;
+
+  const match = String(value).match(/^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/);
+  if (!match) return String(value);
+
+  const [, year, month, day] = match;
+  if (!month) return year;
+
+  const date = new Date(
+    Date.UTC(Number(year), Number(month) - 1, Number(day || 1)),
+  );
+  if (Number.isNaN(date.getTime())) return String(value);
+
+  const options = day
+    ? { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }
+    : { month: "long", year: "numeric", timeZone: "UTC" };
+
+  return new Intl.DateTimeFormat(undefined, options).format(date);
+};
+
+const titleCase = (value) => {
+  if (!value) return null;
+  return String(value)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+const formatDateRange = (start, end) => {
+  const formattedStart = formatEnrichmentDate(start);
+  const formattedEnd = formatEnrichmentDate(end);
+  if (formattedStart && formattedEnd && formattedStart !== formattedEnd) {
+    return `${formattedStart} - ${formattedEnd}`;
+  }
+  return formattedStart || formattedEnd;
+};
+
+const albumMetaSummary = computed(() => {
+  const profile = albumProfile.value;
+  const releaseYear =
+    extractYear(profile?.original_release_date) ||
+    extractYear(album.value?.release_date);
+  const recordingRange = formatDateRange(
+    profile?.recording_start_date,
+    profile?.recording_end_date,
+  );
+  const label = [profile?.label, profile?.catalog_number]
+    .filter(Boolean)
+    .join(" ");
+
+  return [
+    releaseYear,
+    recordingRange ? `Recorded ${recordingRange}` : null,
+    profile?.release_country,
+    label || null,
+    titleCase(profile?.album_kind),
+  ]
+    .filter(Boolean)
+    .join(" • ");
+});
+
+const albumBadges = computed(() => {
+  const profile = albumProfile.value;
+  if (!profile) return [];
+
+  return [
+    [profile.is_live, "Live"],
+    [profile.is_compilation, "Compilation"],
+    [profile.is_soundtrack, "Soundtrack"],
+    [profile.is_concept_album, "Concept album"],
+    [profile.is_remix_album, "Remix album"],
+    [profile.is_archival, "Archival"],
+  ]
+    .filter(([enabled]) => enabled)
+    .map(([, label]) => label);
+});
+
+watch(
+  albumSummary,
+  () => {
+    summaryExpanded.value = false;
+    updateSummaryOverflow();
+  },
+  { immediate: true },
+);
 
 const currentTrackId = ref(null);
 const currentTrackIndex = ref(null);
@@ -463,6 +610,12 @@ onMounted(() => {
   fetchData(props.albumId);
   remoteStore.recordImpression("album", props.albumId);
   fetchDownloadRequest();
+  updateSummaryOverflow();
+  window.addEventListener("resize", updateSummaryOverflow);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("resize", updateSummaryOverflow);
 });
 </script>
 
@@ -471,7 +624,7 @@ onMounted(() => {
   display: grid;
   grid-template-columns: minmax(180px, 300px) minmax(0, 1fr);
   gap: clamp(20px, 3vw, 36px);
-  align-items: end;
+  align-items: start;
   padding: clamp(18px, 3vw, 32px);
   border: 1px solid var(--surface-border);
   border-radius: 8px;
@@ -495,9 +648,82 @@ onMounted(() => {
 
 .albumInfoColum {
   min-width: 0;
+  align-self: stretch;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.albumIdentity {
+  min-width: 0;
+}
+
+.albumMetaSummary {
+  margin: 12px 0 0;
+  color: var(--text-muted);
+  font-size: clamp(0.95rem, 1.3vw, 1.1rem);
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.albumBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.albumBadges span {
+  min-height: 26px;
+  padding: 4px 9px;
+  border: 1px solid var(--surface-border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.8rem;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.albumSummaryBlock {
+  max-width: 860px;
+  margin-top: 18px;
+}
+
+.albumSummaryText {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.96rem;
+  line-height: 1.5;
+}
+
+.albumSummaryText.expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+.albumSummaryToggle {
+  margin: 6px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-base);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.albumSummaryToggle:hover {
+  color: var(--spotify-green);
 }
 
 .albumName {
@@ -521,7 +747,7 @@ onMounted(() => {
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
-  margin: 18px 0;
+  margin-top: auto;
 }
 
 .commandsSection > div {
