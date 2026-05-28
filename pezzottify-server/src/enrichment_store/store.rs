@@ -832,6 +832,26 @@ impl EnrichmentStore for SqliteEnrichmentStore {
         self.claim_enrichment_queue_batch_matching(limit, entity_types)
     }
 
+    fn requeue_stale_running_enrichment_queue_items(&self, stale_after_secs: i64) -> Result<usize> {
+        let now = now_unix();
+        let cutoff = now.saturating_sub(stale_after_secs.max(0));
+        let conn = self.write_conn.lock().unwrap();
+        let count = conn.execute(
+            "UPDATE enrichment_queue_v1
+             SET status = 'queued',
+                 stage = 'queued',
+                 updated_at = ?1,
+                 next_attempt_at = NULL,
+                 started_at = NULL,
+                 last_error = 'requeued after interrupted enrichment run'
+             WHERE status = 'running'
+               AND started_at IS NOT NULL
+               AND started_at <= ?2",
+            params![now, cutoff],
+        )?;
+        Ok(count)
+    }
+
     fn complete_enrichment_queue_item(&self, id: i64) -> Result<()> {
         let now = now_unix();
         let conn = self.write_conn.lock().unwrap();
@@ -1541,6 +1561,49 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(status.status, "completed");
+    }
+
+    #[test]
+    fn test_v1_requeues_stale_running_items() {
+        let (store, _tmp) = create_test_store();
+        for track_id in ["track1", "track2"] {
+            store
+                .enqueue_enrichment_if_missing_or_stale("track", track_id, "listening", 5, 3600)
+                .unwrap();
+        }
+
+        let claimed = store.claim_enrichment_queue_batch(10).unwrap();
+        assert_eq!(claimed.len(), 2);
+
+        let stale_started_at = now_unix() - 120;
+        {
+            let conn = store.write_conn.lock().unwrap();
+            conn.execute(
+                "UPDATE enrichment_queue_v1 SET started_at = ?1, updated_at = ?1 WHERE id = ?2",
+                params![stale_started_at, claimed[0].id],
+            )
+            .unwrap();
+        }
+
+        assert_eq!(
+            store
+                .requeue_stale_running_enrichment_queue_items(60)
+                .unwrap(),
+            1
+        );
+
+        let stale_item = store
+            .get_enrichment_queue_item("track", &claimed[0].entity_id)
+            .unwrap()
+            .unwrap();
+        let fresh_item = store
+            .get_enrichment_queue_item("track", &claimed[1].entity_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(stale_item.status, "queued");
+        assert_eq!(stale_item.stage, Some("queued".to_string()));
+        assert_eq!(stale_item.started_at, None);
+        assert_eq!(fresh_item.status, "running");
     }
 
     #[test]

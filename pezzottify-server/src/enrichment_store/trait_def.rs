@@ -109,6 +109,7 @@ pub trait EnrichmentStore: Send + Sync {
         limit: usize,
         entity_types: &[String],
     ) -> Result<Vec<EnrichmentQueueItemV1>>;
+    fn requeue_stale_running_enrichment_queue_items(&self, stale_after_secs: i64) -> Result<usize>;
     fn complete_enrichment_queue_item(&self, id: i64) -> Result<()>;
     fn fail_enrichment_queue_item(
         &self,
