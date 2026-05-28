@@ -710,10 +710,20 @@ impl BackgroundJob for MetadataEnrichmentJob {
         let store = ctx.enrichment_store.as_ref().ok_or_else(|| {
             JobError::ExecutionFailed("Enrichment store not available in job context".to_string())
         })?;
+        let requeued_stale_running = store
+            .requeue_stale_running_enrichment_queue_items(self.settings.retry_after_secs as i64)
+            .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+        if requeued_stale_running > 0 {
+            info!(
+                "Requeued {} stale running metadata enrichment items",
+                requeued_stale_running
+            );
+        }
         let audit = JobAuditLogger::new(Arc::clone(&ctx.server_store), self.id());
         audit.log_started(Some(serde_json::json!({
             "batch_size": batch_size,
             "entity_types": selected_entity_types.clone(),
+            "requeued_stale_running": requeued_stale_running,
         })));
 
         let claim_batch = || {
@@ -740,6 +750,7 @@ impl BackgroundJob for MetadataEnrichmentJob {
                 "seeded": seeded,
                 "batch_size": batch_size,
                 "entity_types": selected_entity_types.clone(),
+                "requeued_stale_running": requeued_stale_running,
             })));
             return Ok(());
         }
@@ -818,6 +829,7 @@ impl BackgroundJob for MetadataEnrichmentJob {
             "seeded": seeded,
             "batch_size": batch_size,
             "entity_types": selected_entity_types.clone(),
+            "requeued_stale_running": requeued_stale_running,
             "provider": provider.as_ref().map(|provider| provider.name()).unwrap_or("deterministic"),
             "model": provider.as_ref().map(|provider| provider.model()).unwrap_or("wikidata"),
         })));
