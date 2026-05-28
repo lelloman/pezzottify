@@ -82,6 +82,14 @@ struct ArtistEnrichmentPayload {
     relations: Vec<crate::enrichment_store::EntityRelationV1>,
 }
 
+#[derive(Serialize)]
+struct AlbumEnrichmentPayload {
+    profile: crate::enrichment_store::AlbumEnrichmentV1,
+    tags: Vec<crate::enrichment_store::EntityTagV1>,
+    contributors: Vec<crate::enrichment_store::EntityContributorV1>,
+    relations: Vec<crate::enrichment_store::EntityRelationV1>,
+}
+
 fn format_uptime(duration: Duration) -> String {
     let total_seconds = duration.as_secs();
 
@@ -993,9 +1001,8 @@ async fn get_album(
     let id_for_status = id.clone();
 
     match tokio::task::spawn_blocking(move || catalog_store.get_album_json(&id)).await {
-        Ok(Ok(Some(album))) => Json(attach_enrichment_status(
-            album,
-            "album",
+        Ok(Ok(Some(album))) => Json(attach_album_enrichment(
+            attach_enrichment_status(album, "album", &id_for_status, &enrichment_store),
             &id_for_status,
             &enrichment_store,
         ))
@@ -1027,9 +1034,8 @@ async fn get_resolved_album(
     let id_for_status = id.clone();
 
     match tokio::task::spawn_blocking(move || catalog_store.get_resolved_album_json(&id)).await {
-        Ok(Ok(Some(album))) => Json(attach_enrichment_status(
-            album,
-            "album",
+        Ok(Ok(Some(album))) => Json(attach_album_enrichment(
+            attach_enrichment_status(album, "album", &id_for_status, &enrichment_store),
             &id_for_status,
             &enrichment_store,
         ))
@@ -2589,6 +2595,70 @@ fn attach_artist_enrichment(
 
     if let Some(obj) = value.as_object_mut() {
         let payload = ArtistEnrichmentPayload {
+            profile,
+            tags,
+            contributors,
+            relations,
+        };
+        if let Ok(enrichment_value) = serde_json::to_value(payload) {
+            obj.insert("enrichment".to_string(), enrichment_value);
+        }
+    }
+
+    value
+}
+
+fn attach_album_enrichment(
+    mut value: serde_json::Value,
+    album_id: &str,
+    enrichment_store: &OptionalEnrichmentStore,
+) -> serde_json::Value {
+    let Some(store) = enrichment_store else {
+        return value;
+    };
+
+    let profile = match store.get_album_enrichment_v1(album_id) {
+        Ok(Some(profile)) => profile,
+        Ok(None) => return value,
+        Err(err) => {
+            debug!("Failed to load album enrichment for {}: {}", album_id, err);
+            return value;
+        }
+    };
+
+    let tags = match store.list_entity_tags("album", album_id) {
+        Ok(tags) => tags,
+        Err(err) => {
+            debug!(
+                "Failed to load album enrichment tags for {}: {}",
+                album_id, err
+            );
+            Vec::new()
+        }
+    };
+    let contributors = match store.list_entity_contributors("album", album_id) {
+        Ok(contributors) => contributors,
+        Err(err) => {
+            debug!(
+                "Failed to load album enrichment contributors for {}: {}",
+                album_id, err
+            );
+            Vec::new()
+        }
+    };
+    let relations = match store.list_visible_entity_relations("album", album_id, 0.8) {
+        Ok(relations) => relations,
+        Err(err) => {
+            debug!(
+                "Failed to load album enrichment relations for {}: {}",
+                album_id, err
+            );
+            Vec::new()
+        }
+    };
+
+    if let Some(obj) = value.as_object_mut() {
+        let payload = AlbumEnrichmentPayload {
             profile,
             tags,
             contributors,
