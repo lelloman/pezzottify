@@ -243,7 +243,7 @@ onMounted(() => {
   display: grid;
   grid-template-columns: minmax(180px, 300px) minmax(0, 1fr);
   gap: clamp(20px, 3vw, 36px);
-  align-items: end;
+  align-items: start;
   padding: clamp(18px, 3vw, 32px);
   border: 1px solid var(--surface-border);
   border-radius: 8px;
