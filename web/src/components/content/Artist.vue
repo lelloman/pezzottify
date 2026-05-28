@@ -3,8 +3,27 @@
     <div class="topSection">
       <MultiSourceImage class="coverImage" :urls="coverUrls" />
       <div class="artistInfoColum">
-        <h1 class="artistName">{{ artist.name }}</h1>
-        <div class="verticalFiller"></div>
+        <div class="artistIdentity">
+          <h1 class="artistName">{{ artist.name }}</h1>
+          <p v-if="lifeSummary" class="artistLifeSummary">{{ lifeSummary }}</p>
+          <div v-if="shortBio" class="artistBioBlock">
+            <p
+              ref="bioTextRef"
+              class="artistBioText"
+              :class="{ expanded: bioExpanded }"
+            >
+              {{ shortBio }}
+            </p>
+            <button
+              v-if="bioOverflows"
+              type="button"
+              class="artistBioToggle"
+              @click="bioExpanded = !bioExpanded"
+            >
+              {{ bioExpanded ? "Show less" : "Read more" }}
+            </button>
+          </div>
+        </div>
         <div class="artistActions">
           <ToggableFavoriteIcon
             :toggled="isArtistLiked"
@@ -27,38 +46,6 @@
     <div v-if="enrichmentLabel" class="enrichmentStatus">
       {{ enrichmentLabel }}
     </div>
-    <section v-if="hasEnrichmentData" class="enrichmentPanel">
-      <div v-if="shortBio" class="enrichmentText">
-        <h2>About</h2>
-        <p>{{ shortBio }}</p>
-      </div>
-      <div v-if="enrichmentFacts.length" class="enrichmentFacts">
-        <div
-          v-for="fact in enrichmentFacts"
-          :key="fact.label"
-          class="enrichmentFact"
-        >
-          <span>{{ fact.label }}</span>
-          <strong>{{ fact.value }}</strong>
-        </div>
-      </div>
-      <div v-if="tagLabels.length" class="enrichmentGroup">
-        <h3>Styles</h3>
-        <div class="enrichmentChips">
-          <span v-for="tag in tagLabels" :key="tag" class="enrichmentChip">{{
-            tag
-          }}</span>
-        </div>
-      </div>
-      <div v-if="contributorLabels.length" class="enrichmentGroup">
-        <h3>Credits</h3>
-        <div class="enrichmentList">
-          <span v-for="credit in contributorLabels" :key="credit">{{
-            credit
-          }}</span>
-        </div>
-      </div>
-    </section>
     <div class="relatedArtistsContainer">
       <LoadArtistListItem
         v-for="artistId in artist.related"
@@ -86,7 +73,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { chooseArtistCoverImageUrl } from "@/utils";
 import { useUserStore } from "@/store/user.js";
 import { useStaticsStore } from "@/store/statics.js";
@@ -114,6 +101,9 @@ const userStore = useUserStore();
 const staticsStore = useStaticsStore();
 const remoteStore = useRemoteStore();
 const playback = usePlaybackStore();
+const bioTextRef = ref(null);
+const bioExpanded = ref(false);
+const bioOverflows = ref(false);
 
 const enrichmentLabel = computed(() => {
   const status = artist.value?.enrichment_status?.status;
@@ -125,63 +115,85 @@ const enrichmentLabel = computed(() => {
 
 const artistEnrichment = computed(() => artist.value?.enrichment || null);
 
-const titleCase = (value) => {
-  if (!value) return null;
-  return String(value)
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-};
-
 const shortBio = computed(() => {
   const profile = artistEnrichment.value?.profile;
   return profile?.summary || profile?.bio || null;
 });
 
-const enrichmentFacts = computed(() => {
-  const profile = artistEnrichment.value?.profile;
-  if (!profile) return [];
+const updateBioOverflow = async () => {
+  await nextTick();
 
-  const placeLabel = profile.is_person ? "Birthplace" : "Origin";
-  const place = profile.origin_place || profile.origin_country;
+  const element = bioTextRef.value;
+  if (!element) {
+    bioOverflows.value = false;
+    return;
+  }
 
-  return [
-    { label: "Born", value: profile.birth_date },
-    { label: "Died", value: profile.death_date },
-    { label: placeLabel, value: place },
-    { label: "Founded", value: profile.foundation_date },
-    { label: "Dissolved", value: profile.dissolution_date },
-    { label: "Language", value: titleCase(profile.primary_language) },
-  ].filter((fact) => fact.value);
-});
+  const styles = window.getComputedStyle(element);
+  const lineHeight = Number.parseFloat(styles.lineHeight);
+  const maxCollapsedHeight = Number.isFinite(lineHeight) ? lineHeight * 3 : 0;
+  bioOverflows.value =
+    maxCollapsedHeight > 0 && element.scrollHeight > maxCollapsedHeight + 1;
+};
 
-const tagLabels = computed(() => {
-  const seen = new Set();
-  return (artistEnrichment.value?.tags || [])
-    .map((tag) => tag.tag)
-    .filter((tag) => {
-      if (!tag || seen.has(tag.toLowerCase())) return false;
-      seen.add(tag.toLowerCase());
-      return true;
-    });
-});
+const formatEnrichmentDate = (value) => {
+  if (!value) return null;
 
-const contributorLabels = computed(() => {
-  return (artistEnrichment.value?.contributors || []).map((contributor) => {
-    const role = titleCase(contributor.role);
-    return role
-      ? `${contributor.contributor_name} - ${role}`
-      : contributor.contributor_name;
-  });
-});
+  const match = String(value).match(/^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/);
+  if (!match) return String(value);
 
-const hasEnrichmentData = computed(() => {
-  return Boolean(
-    shortBio.value ||
-      enrichmentFacts.value.length ||
-      tagLabels.value.length ||
-      contributorLabels.value.length,
+  const [, year, month, day] = match;
+  if (!month) return year;
+
+  const date = new Date(
+    Date.UTC(Number(year), Number(month) - 1, Number(day || 1)),
   );
+  if (Number.isNaN(date.getTime())) return String(value);
+
+  const options = day
+    ? { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }
+    : { month: "long", year: "numeric", timeZone: "UTC" };
+
+  return new Intl.DateTimeFormat(undefined, options).format(date);
+};
+
+const formatPlaceAndDate = (place, date) => {
+  return [place, date].filter(Boolean).join(", ");
+};
+
+const lifeSummary = computed(() => {
+  const profile = artistEnrichment.value?.profile;
+  if (!profile) return null;
+
+  const birthPlace =
+    profile.birth_place ||
+    profile.birthplace ||
+    (profile.is_person !== false
+      ? profile.origin_place || profile.origin_country
+      : null);
+  const deathPlace =
+    profile.death_place || profile.deathplace || profile.place_of_death;
+
+  const birth = formatPlaceAndDate(
+    birthPlace,
+    formatEnrichmentDate(profile.birth_date),
+  );
+  const death = formatPlaceAndDate(
+    deathPlace,
+    formatEnrichmentDate(profile.death_date),
+  );
+
+  return [birth, death].filter(Boolean).join(" - ") || null;
 });
+
+watch(
+  shortBio,
+  () => {
+    bioExpanded.value = false;
+    updateBioOverflow();
+  },
+  { immediate: true },
+);
 
 let artistDataUnwatcher = null;
 
@@ -235,6 +247,12 @@ watch(
 onMounted(() => {
   fetchData(props.artistId);
   remoteStore.recordImpression("artist", props.artistId);
+  updateBioOverflow();
+  window.addEventListener("resize", updateBioOverflow);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("resize", updateBioOverflow);
 });
 </script>
 
@@ -267,11 +285,64 @@ onMounted(() => {
 
 .artistInfoColum {
   min-width: 0;
+  align-self: stretch;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 24px;
   margin: 0;
+}
+
+.artistIdentity {
+  min-width: 0;
+}
+
+.artistLifeSummary {
+  margin: 12px 0 0;
+  color: var(--text-muted);
+  font-size: clamp(0.95rem, 1.3vw, 1.1rem);
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.artistBioBlock {
+  max-width: 860px;
+  margin-top: 18px;
+}
+
+.artistBioText {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.96rem;
+  line-height: 1.5;
+}
+
+.artistBioText.expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+.artistBioToggle {
+  margin: 6px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-base);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.artistBioToggle:hover {
+  color: var(--spotify-green);
 }
 
 .artistName {
@@ -281,89 +352,6 @@ onMounted(() => {
   font-weight: 900;
   line-height: 0.96;
   letter-spacing: 0;
-}
-
-.enrichmentPanel {
-  margin: 18px 0 8px;
-  padding: 18px 0;
-  border-top: 1px solid var(--surface-border);
-  border-bottom: 1px solid var(--surface-border);
-  color: var(--text-base);
-}
-
-.enrichmentText h2,
-.enrichmentGroup h3 {
-  margin: 0 0 8px;
-  color: var(--text-base);
-  font-size: 1rem;
-  font-weight: 800;
-  letter-spacing: 0;
-}
-
-.enrichmentText p {
-  max-width: 840px;
-  margin: 0 0 16px;
-  color: var(--text-muted);
-  font-size: 0.96rem;
-  line-height: 1.55;
-}
-
-.enrichmentFacts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px 18px;
-  margin: 0 0 16px;
-}
-
-.enrichmentFact {
-  min-width: 0;
-}
-
-.enrichmentFact span {
-  display: block;
-  color: var(--text-muted);
-  font-size: 0.78rem;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.enrichmentFact strong {
-  display: block;
-  margin-top: 3px;
-  color: var(--text-base);
-  font-size: 0.92rem;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-}
-
-.enrichmentGroup {
-  margin-top: 14px;
-}
-
-.enrichmentChips,
-.enrichmentList {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.enrichmentChip,
-.enrichmentList span,
-.enrichmentList a {
-  min-height: 28px;
-  padding: 5px 10px;
-  border: 1px solid var(--surface-border);
-  border-radius: 999px;
-  color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.04);
-  font-size: 0.84rem;
-  line-height: 1.2;
-  text-decoration: none;
-}
-
-.enrichmentList a:hover {
-  color: var(--text-base);
-  border-color: var(--surface-border-strong);
 }
 
 .relatedArtistsContainer {
@@ -385,6 +373,7 @@ onMounted(() => {
 
 .artistActions {
   display: flex;
+  margin-top: auto;
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
