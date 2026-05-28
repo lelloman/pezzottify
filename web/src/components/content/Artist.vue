@@ -42,9 +42,10 @@
           </button>
         </div>
       </div>
-    </div>
-    <div v-if="enrichmentLabel" class="enrichmentStatus">
-      {{ enrichmentLabel }}
+      <EnrichmentStatusIndicator
+        :status="artist.enrichment_status"
+        entityType="artist"
+      />
     </div>
     <div class="relatedArtistsContainer">
       <LoadArtistListItem
@@ -85,6 +86,7 @@ import ArtistDiscography from "@/components/common/ArtistDiscography.vue";
 import RadioIcon from "@/components/icons/RadioIcon.vue";
 import { usePlaybackStore } from "@/store/playback";
 import RadioBuilderModal from "@/components/common/RadioBuilderModal.vue";
+import EnrichmentStatusIndicator from "@/components/common/EnrichmentStatusIndicator.vue";
 
 const props = defineProps({
   artistId: {
@@ -104,14 +106,6 @@ const playback = usePlaybackStore();
 const bioTextRef = ref(null);
 const bioExpanded = ref(false);
 const bioOverflows = ref(false);
-
-const enrichmentLabel = computed(() => {
-  const status = artist.value?.enrichment_status?.status;
-  if (status === "queued") return "Enrichment queued";
-  if (status === "running") return "Enrichment running";
-  if (status === "failed") return "Enrichment failed";
-  return null;
-});
 
 const artistEnrichment = computed(() => artist.value?.enrichment || null);
 
@@ -258,6 +252,7 @@ onUnmounted(() => {
 
 <style scoped>
 .topSection {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(180px, 300px) minmax(0, 1fr);
   gap: clamp(20px, 3vw, 36px);
@@ -420,13 +415,5 @@ onUnmounted(() => {
   .coverImage {
     max-width: 280px;
   }
-}
-</style>
-
-<style scoped>
-.enrichmentStatus {
-  margin: 12px 0;
-  color: var(--text-muted);
-  font-size: 0.9rem;
 }
 </style>

@@ -51,9 +51,10 @@
           />
         </div>
       </div>
-    </div>
-    <div v-if="enrichmentLabel" class="enrichmentStatus">
-      {{ enrichmentLabel }}
+      <EnrichmentStatusIndicator
+        :status="album.enrichment_status"
+        entityType="album"
+      />
     </div>
 
     <!-- Download Request Section -->
@@ -189,6 +190,7 @@ import TrackContextMenu from "@/components/common/contextmenu/TrackContextMenu.v
 import LoadTrackListItem from "../common/LoadTrackListItem.vue";
 import { useStaticsStore } from "@/store/statics";
 import RadioBuilderModal from "@/components/common/RadioBuilderModal.vue";
+import EnrichmentStatusIndicator from "@/components/common/EnrichmentStatusIndicator.vue";
 
 const props = defineProps({
   albumId: {
@@ -207,14 +209,6 @@ const remoteStore = useRemoteStore();
 const summaryTextRef = ref(null);
 const summaryExpanded = ref(false);
 const summaryOverflows = ref(false);
-
-const enrichmentLabel = computed(() => {
-  const status = album.value?.enrichment_status?.status;
-  if (status === "queued") return "Enrichment queued";
-  if (status === "running") return "Enrichment running";
-  if (status === "failed") return "Enrichment failed";
-  return null;
-});
 
 const albumEnrichment = computed(() => album.value?.enrichment || null);
 const albumProfile = computed(() => albumEnrichment.value?.profile || null);
@@ -621,6 +615,7 @@ onUnmounted(() => {
 
 <style scoped>
 .topSection {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(180px, 300px) minmax(0, 1fr);
   gap: clamp(20px, 3vw, 36px);
@@ -867,13 +862,5 @@ onUnmounted(() => {
   .coverImage {
     max-width: 280px;
   }
-}
-</style>
-
-<style scoped>
-.enrichmentStatus {
-  margin: 12px 0;
-  color: var(--text-muted);
-  font-size: 0.9rem;
 }
 </style>
