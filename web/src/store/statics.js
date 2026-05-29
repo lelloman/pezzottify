@@ -73,6 +73,7 @@ export const useStaticsStore = defineStore("statics", () => {
         : [],
       discs: discs,
       enrichment_status: resolvedAlbum.enrichment_status || null,
+      enrichment: resolvedAlbum.enrichment || null,
     };
 
     return album;
@@ -96,6 +97,7 @@ export const useStaticsStore = defineStore("statics", () => {
       // Include availability state (defaults to available if not present)
       availability: resolvedTrack.track.availability || "available",
       enrichment_status: resolvedTrack.enrichment_status || null,
+      enrichment: resolvedTrack.enrichment || null,
     };
 
     return track;

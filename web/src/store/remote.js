@@ -75,6 +75,20 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  const setTrackLikeStatus = async (trackId, isLiked) => {
+    try {
+      if (isLiked) {
+        await axios.post(`/v1/user/liked/track/${trackId}`);
+      } else {
+        await axios.delete(`/v1/user/liked/track/${trackId}`);
+      }
+      return true;
+    } catch (error) {
+      console.error("Failed to update track liked status:", error);
+      return false;
+    }
+  };
+
   // Playlist operations
   const fetchPlaylistData = async (playlistId) => {
     try {
@@ -1369,6 +1383,7 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchUserPlaylists,
     setAlbumLikeStatus,
     setArtistLikeStatus,
+    setTrackLikeStatus,
     fetchPlaylistData,
     createNewPlaylist,
     deleteUserPlaylist,
