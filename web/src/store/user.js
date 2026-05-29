@@ -81,6 +81,20 @@ export const useUserStore = defineStore("user", () => {
     }
   };
 
+  const setTrackIsLiked = async (trackId, isLiked) => {
+    const success = await remoteStore.setTrackLikeStatus(trackId, isLiked);
+    if (success) {
+      const current = likedTrackIds.value || [];
+      if (isLiked) {
+        likedTrackIds.value = current.includes(trackId)
+          ? current
+          : [trackId, ...current];
+      } else {
+        likedTrackIds.value = current.filter((id) => id !== trackId);
+      }
+    }
+  };
+
   const getPlaylistRef = (playlistId) => {
     if (!playlistRefs[playlistId]) {
       playlistRefs[playlistId] = {
@@ -626,6 +640,7 @@ export const useUserStore = defineStore("user", () => {
     initialize,
     setAlbumIsLiked,
     setArtistIsLiked,
+    setTrackIsLiked,
     createPlaylist,
     deletePlaylist,
     loadPlaylistData,

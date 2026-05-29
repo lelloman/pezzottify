@@ -90,6 +90,14 @@ struct AlbumEnrichmentPayload {
     relations: Vec<crate::enrichment_store::EntityRelationV1>,
 }
 
+#[derive(Serialize)]
+struct TrackEnrichmentPayload {
+    profile: crate::enrichment_store::TrackEnrichmentV1,
+    tags: Vec<crate::enrichment_store::EntityTagV1>,
+    contributors: Vec<crate::enrichment_store::EntityContributorV1>,
+    relations: Vec<crate::enrichment_store::EntityRelationV1>,
+}
+
 fn format_uptime(duration: Duration) -> String {
     let total_seconds = duration.as_secs();
 
@@ -1187,9 +1195,8 @@ pub async fn get_track(
     let id_for_status = id.clone();
 
     match tokio::task::spawn_blocking(move || catalog_store.get_track_json(&id)).await {
-        Ok(Ok(Some(track))) => Json(attach_enrichment_status(
-            track,
-            "track",
+        Ok(Ok(Some(track))) => Json(attach_track_enrichment(
+            attach_enrichment_status(track, "track", &id_for_status, &enrichment_store),
             &id_for_status,
             &enrichment_store,
         ))
@@ -1221,9 +1228,8 @@ pub async fn get_resolved_track(
     let id_for_status = id.clone();
 
     match tokio::task::spawn_blocking(move || catalog_store.get_resolved_track_json(&id)).await {
-        Ok(Ok(Some(track))) => Json(attach_enrichment_status(
-            track,
-            "track",
+        Ok(Ok(Some(track))) => Json(attach_track_enrichment(
+            attach_enrichment_status(track, "track", &id_for_status, &enrichment_store),
             &id_for_status,
             &enrichment_store,
         ))
@@ -2659,6 +2665,70 @@ fn attach_album_enrichment(
 
     if let Some(obj) = value.as_object_mut() {
         let payload = AlbumEnrichmentPayload {
+            profile,
+            tags,
+            contributors,
+            relations,
+        };
+        if let Ok(enrichment_value) = serde_json::to_value(payload) {
+            obj.insert("enrichment".to_string(), enrichment_value);
+        }
+    }
+
+    value
+}
+
+fn attach_track_enrichment(
+    mut value: serde_json::Value,
+    track_id: &str,
+    enrichment_store: &OptionalEnrichmentStore,
+) -> serde_json::Value {
+    let Some(store) = enrichment_store else {
+        return value;
+    };
+
+    let profile = match store.get_track_enrichment_v1(track_id) {
+        Ok(Some(profile)) => profile,
+        Ok(None) => return value,
+        Err(err) => {
+            debug!("Failed to load track enrichment for {}: {}", track_id, err);
+            return value;
+        }
+    };
+
+    let tags = match store.list_entity_tags("track", track_id) {
+        Ok(tags) => tags,
+        Err(err) => {
+            debug!(
+                "Failed to load track enrichment tags for {}: {}",
+                track_id, err
+            );
+            Vec::new()
+        }
+    };
+    let contributors = match store.list_entity_contributors("track", track_id) {
+        Ok(contributors) => contributors,
+        Err(err) => {
+            debug!(
+                "Failed to load track enrichment contributors for {}: {}",
+                track_id, err
+            );
+            Vec::new()
+        }
+    };
+    let relations = match store.list_visible_entity_relations("track", track_id, 0.8) {
+        Ok(relations) => relations,
+        Err(err) => {
+            debug!(
+                "Failed to load track enrichment relations for {}: {}",
+                track_id, err
+            );
+            Vec::new()
+        }
+    };
+
+    if let Some(obj) = value.as_object_mut() {
+        let payload = TrackEnrichmentPayload {
             profile,
             tags,
             contributors,
