@@ -221,6 +221,26 @@ const formatEnrichmentDate = (value) => {
 
 const joinParts = (parts) => parts.filter(Boolean).join(" / ");
 
+const formatLanguageLabel = (value) => {
+  if (!value) return null;
+
+  const code = String(value).trim().toLowerCase();
+  if (!code) return null;
+  if (["zxx", "und", "none", "instrumental"].includes(code)) {
+    return "Instrumental";
+  }
+
+  try {
+    const displayNames = new Intl.DisplayNames([navigator.language], {
+      type: "language",
+    });
+    const label = displayNames.of(code);
+    return label ? label.charAt(0).toUpperCase() + label.slice(1) : value;
+  } catch {
+    return titleCase(value);
+  }
+};
+
 const albumYear = computed(() =>
   extractYear(album.value?.release_date || album.value?.date),
 );
@@ -243,7 +263,7 @@ const trackMetaSummary = computed(() => {
     profile?.composition_date
       ? `Composed ${formatEnrichmentDate(profile.composition_date)}`
       : null,
-    profile?.language || track.value?.language,
+    formatLanguageLabel(profile?.language || track.value?.language),
   ]);
 });
 
