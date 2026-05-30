@@ -84,6 +84,12 @@ import com.lelloman.pezzottify.android.ui.content.Album
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.ui.content.Track
+import com.lelloman.pezzottify.android.ui.screen.main.content.EnrichmentInfoBlock
+import com.lelloman.pezzottify.android.ui.screen.main.content.EnrichmentStatusIndicator
+import com.lelloman.pezzottify.android.ui.screen.main.content.flagBadges
+import com.lelloman.pezzottify.android.ui.screen.main.content.formatEnrichmentDate
+import com.lelloman.pezzottify.android.ui.screen.main.content.joinMetadataParts
+import com.lelloman.pezzottify.android.ui.screen.main.content.titleCase
 import com.lelloman.pezzottify.android.ui.screen.main.library.UiUserPlaylist
 import com.lelloman.pezzottify.android.ui.toArtist
 import com.lelloman.pezzottify.android.ui.toTrack
@@ -341,6 +347,10 @@ fun AlbumLoadedScreen(
                 Spacer(modifier = Modifier.height(maxHeaderHeight + playButtonSize / 2))
             }
 
+            item {
+                AlbumEnrichmentSection(album = album)
+            }
+
             // Artists row
             if (album.artistsIds.isNotEmpty()) {
                 item {
@@ -546,6 +556,45 @@ fun AlbumLoadedScreen(
             }
         }
     }
+}
+
+
+@Composable
+private fun AlbumEnrichmentSection(album: Album) {
+    val profile = album.enrichment?.profile
+    val recordingRange = joinMetadataParts(
+        formatEnrichmentDate(profile?.recordingStartDate),
+        formatEnrichmentDate(profile?.recordingEndDate),
+    )
+    val facts = listOfNotNull(
+        formatEnrichmentDate(profile?.originalReleaseDate)?.let { "Released" to it },
+        recordingRange?.let { "Recorded" to it },
+        profile?.releaseCountry?.let { "Country" to it },
+        profile?.label?.let { "Label" to it },
+        profile?.catalogNumber?.let { "Catalog" to it },
+        titleCase(profile?.albumKind)?.let { "Kind" to it },
+    )
+    val badges = flagBadges(
+        profile?.isLive to "Live",
+        profile?.isCompilation to "Compilation",
+        profile?.isSoundtrack to "Soundtrack",
+        profile?.isConceptAlbum to "Concept album",
+        profile?.isRemixAlbum to "Remix album",
+        profile?.isArchival to "Archival",
+    )
+
+    EnrichmentStatusIndicator(
+        status = album.enrichmentStatus,
+        entityType = "Album",
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+    EnrichmentInfoBlock(
+        summary = profile?.summary ?: profile?.notes,
+        facts = facts,
+        badges = badges,
+        tags = album.enrichment?.tags.orEmpty(),
+        contributors = album.enrichment?.contributors.orEmpty(),
+    )
 }
 
 @Composable

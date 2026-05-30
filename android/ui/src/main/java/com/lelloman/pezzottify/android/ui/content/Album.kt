@@ -1,5 +1,8 @@
 package com.lelloman.pezzottify.android.ui.content
 
+import com.lelloman.pezzottify.android.domain.statics.AlbumEnrichment
+import com.lelloman.pezzottify.android.domain.statics.EntityEnrichmentStatus
+
 /**
  * Album availability state based on track audio file presence (UI layer).
  */
@@ -28,6 +31,8 @@ data class Album(
     val artistsIds: List<String>,
     val discs: List<Disc> = emptyList(),
     val availability: AlbumAvailability = AlbumAvailability.Missing,
+    val enrichmentStatus: EntityEnrichmentStatus? = null,
+    val enrichment: AlbumEnrichment? = null,
 )
 
 data class Disc(

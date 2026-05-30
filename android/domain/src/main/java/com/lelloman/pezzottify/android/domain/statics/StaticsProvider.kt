@@ -75,13 +75,20 @@ class StaticsProvider internal constructor(
         }
     }
 
+    private fun Artist.hasRenderableEnrichmentState(): Boolean =
+        enrichment != null || enrichmentStatus?.status in setOf("queued", "running", "failed")
+
     fun provideArtist(itemId: String): StaticsItemFlow<Artist> {
         // Check in-memory cache first if enabled
         if (isCacheEnabled) {
             staticsCache.artistCache.get(itemId)?.let { cached ->
-                cacheMetricsCollector.recordCacheHit("artist")
-                logger.debug("provideArtist($itemId) cache hit")
-                return flowOf(StaticsItem.Loaded(itemId, cached))
+                if (cached.hasRenderableEnrichmentState()) {
+                    cacheMetricsCollector.recordCacheHit("artist")
+                    logger.debug("provideArtist($itemId) cache hit")
+                    return flowOf(StaticsItem.Loaded(itemId, cached))
+                }
+                staticsCache.artistCache.remove(itemId)
+                logger.debug("provideArtist($itemId) cache bypass: missing enrichment state")
             }
             cacheMetricsCollector.recordCacheMiss("artist")
         }

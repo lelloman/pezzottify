@@ -8,6 +8,10 @@ interface Album : StaticItem {
     val artistsIds: List<String>
     val discs: List<Disc>
     val availability: AlbumAvailability
+    val enrichmentStatus: EntityEnrichmentStatus?
+        get() = null
+    val enrichment: AlbumEnrichment?
+        get() = null
 }
 
 interface Disc {

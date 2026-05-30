@@ -53,6 +53,13 @@ import com.lelloman.pezzottify.android.ui.component.PezzottifyImageShape
 import com.lelloman.pezzottify.android.ui.content.Album
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.ui.content.Track
+import com.lelloman.pezzottify.android.ui.screen.main.content.EnrichmentInfoBlock
+import com.lelloman.pezzottify.android.ui.screen.main.content.EnrichmentStatusIndicator
+import com.lelloman.pezzottify.android.ui.screen.main.content.flagBadges
+import com.lelloman.pezzottify.android.ui.screen.main.content.formatEnrichmentDate
+import com.lelloman.pezzottify.android.ui.screen.main.content.formatLanguageLabel
+import com.lelloman.pezzottify.android.ui.screen.main.content.joinMetadataParts
+import com.lelloman.pezzottify.android.ui.screen.main.content.titleCase
 import kotlin.math.min
 
 @Composable
@@ -157,6 +164,10 @@ private fun TrackLoadedScreen(
         ) {
             item {
                 Spacer(modifier = Modifier.height(maxHeaderHeight + playButtonSize / 2))
+            }
+
+            item {
+                TrackEnrichmentSection(track = track)
             }
 
             // Duration info
@@ -379,6 +390,49 @@ private fun TrackLoadedScreen(
             }
         }
     }
+}
+
+
+@Composable
+private fun TrackEnrichmentSection(track: Track) {
+    val profile = track.enrichment?.profile
+    val movement = joinMetadataParts(
+        profile?.movementNumber?.let { "No. $it" },
+        profile?.movementTitle,
+    )
+    val facts = listOfNotNull(
+        profile?.workTitle?.let { "Work" to it },
+        movement?.let { "Movement" to it },
+        titleCase(profile?.form)?.let { "Form" to it },
+        profile?.keySignature?.let { "Key" to it },
+        profile?.opusNumber?.let { "Opus" to it },
+        profile?.catalogNumber?.let { "Catalog" to it },
+        formatEnrichmentDate(profile?.recordingDate)?.let { "Recorded" to it },
+        formatEnrichmentDate(profile?.compositionDate)?.let { "Composed" to it },
+        formatLanguageLabel(profile?.language)?.let { "Language" to it },
+        titleCase(profile?.trackKind)?.let { "Kind" to it },
+    )
+    val badges = flagBadges(
+        profile?.isInstrumental to "Instrumental",
+        profile?.isLive to "Live",
+        profile?.isCover to "Cover",
+        profile?.isRemix to "Remix",
+        profile?.isRemaster to "Remaster",
+        profile?.isArrangement to "Arrangement",
+    )
+
+    EnrichmentStatusIndicator(
+        status = track.enrichmentStatus,
+        entityType = "Track",
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+    EnrichmentInfoBlock(
+        summary = profile?.summary ?: profile?.notes ?: profile?.performanceContext,
+        facts = facts,
+        badges = badges,
+        tags = track.enrichment?.tags.orEmpty(),
+        contributors = track.enrichment?.contributors.orEmpty(),
+    )
 }
 
 @Composable

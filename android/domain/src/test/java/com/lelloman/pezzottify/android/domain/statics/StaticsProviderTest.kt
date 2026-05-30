@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.domain.statics
 import com.google.common.truth.Truth.assertThat
 import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.cache.CacheMetricsCollector
+import com.lelloman.pezzottify.android.domain.cache.LruCache
 import com.lelloman.pezzottify.android.domain.cache.StaticsCache
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.skeleton.DiscographyCacheFetcher
@@ -135,6 +136,31 @@ class StaticsProviderTest {
     }
 
     @Test
+    fun `provideArtist bypasses cached artist without enrichment state`() = runTest {
+        val artistId = "artist-stale-cache"
+        val cachedArtist = TestArtist(id = artistId, name = "Cached")
+        val storedArtist = TestArtist(id = artistId, name = "Stored")
+        val artistCache = LruCache<String, Artist>(
+            maxEntries = { 10 },
+            maxSizeBytes = { 10_000 },
+            ttlMillis = 60_000,
+            sizeCalculator = { 1 },
+        )
+        artistCache.put(artistId, cachedArtist)
+
+        every { userSettingsStore.isInMemoryCacheEnabled } returns MutableStateFlow(true)
+        every { staticsCache.artistCache } returns artistCache
+        every { staticsStore.getArtist(artistId) } returns MutableStateFlow(storedArtist)
+        every { fetchStateStore.get(artistId) } returns MutableStateFlow(null)
+
+        val result = staticsProvider.provideArtist(artistId).first()
+
+        assertThat(result).isInstanceOf(StaticsItem.Loaded::class.java)
+        assertThat((result as StaticsItem.Loaded).data).isSameInstanceAs(storedArtist)
+        verify(exactly = 1) { staticsStore.getArtist(artistId) }
+    }
+
+    @Test
     fun `provideAlbum does not retry errored items when backoff not expired`() = runTest {
         // Given: an error state with future tryNextTime (backoff not yet expired)
         val albumId = "album-456"
@@ -226,4 +252,13 @@ class StaticsProviderTest {
         val loaded = result as StaticsItem.Loaded
         assertThat(loaded.data.albumsIds).isEmpty()
     }
+
+    private data class TestArtist(
+    override val id: String,
+    override val name: String = id,
+    override val displayImageId: String? = null,
+    override val related: List<String> = emptyList(),
+    override val enrichmentStatus: EntityEnrichmentStatus? = null,
+    override val enrichment: ArtistEnrichment? = null,
+) : Artist
 }

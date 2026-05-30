@@ -1,7 +1,9 @@
 package com.lelloman.pezzottify.android.domain.remoteapi.response
 
 import com.lelloman.pezzottify.android.domain.statics.Album
+import com.lelloman.pezzottify.android.domain.statics.AlbumEnrichment
 import com.lelloman.pezzottify.android.domain.statics.AlbumAvailability
+import com.lelloman.pezzottify.android.domain.statics.EntityEnrichmentStatus
 import com.lelloman.pezzottify.android.domain.statics.TrackAvailability
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -88,6 +90,9 @@ data class AlbumResponse(
     val album: AlbumData,
     val artists: List<ArtistData>,
     val discs: List<Disc>,
+    @SerialName("enrichment_status")
+    val enrichmentStatus: EntityEnrichmentStatus? = null,
+    val enrichment: AlbumEnrichment? = null,
 )
 
 fun AlbumResponse.toDomain() = object : Album {
@@ -109,4 +114,8 @@ fun AlbumResponse.toDomain() = object : Album {
         }
     override val availability: AlbumAvailability
         get() = this@toDomain.album.albumAvailability
+    override val enrichmentStatus: EntityEnrichmentStatus?
+        get() = this@toDomain.enrichmentStatus
+    override val enrichment: AlbumEnrichment?
+        get() = this@toDomain.enrichment
 }

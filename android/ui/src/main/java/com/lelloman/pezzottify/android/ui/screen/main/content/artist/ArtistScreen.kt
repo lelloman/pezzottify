@@ -57,6 +57,13 @@ import com.lelloman.pezzottify.android.ui.component.SkeletonAlbumGridItem
 import com.lelloman.pezzottify.android.ui.content.Artist
 import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
+import com.lelloman.pezzottify.android.ui.screen.main.content.EnrichmentInfoBlock
+import com.lelloman.pezzottify.android.ui.screen.main.content.EnrichmentStatusIndicator
+import com.lelloman.pezzottify.android.ui.screen.main.content.flagBadges
+import com.lelloman.pezzottify.android.ui.screen.main.content.formatEnrichmentDate
+import com.lelloman.pezzottify.android.ui.screen.main.content.formatLanguageLabel
+import com.lelloman.pezzottify.android.ui.screen.main.content.joinMetadataParts
+import com.lelloman.pezzottify.android.ui.screen.main.content.titleCase
 import com.lelloman.pezzottify.android.ui.theme.PezzottifyTheme
 import com.lelloman.pezzottify.android.ui.toAlbum
 import com.lelloman.pezzottify.android.ui.toArtist
@@ -208,6 +215,10 @@ fun ArtistLoadedScreen(
             // Spacer for header (extra space for like button overlap)
             item {
                 Spacer(modifier = Modifier.height(maxHeaderHeight + likeButtonSize / 2))
+            }
+
+            item {
+                ArtistEnrichmentSection(artist = artist)
             }
 
             // Related Artists
@@ -421,6 +432,40 @@ fun ArtistLoadedScreen(
             }
         }
     }
+}
+
+
+@Composable
+private fun ArtistEnrichmentSection(artist: Artist) {
+    val profile = artist.enrichment?.profile
+    val facts = listOfNotNull(
+        joinMetadataParts(profile?.originPlace, profile?.originCountry)?.let { "Birth place" to it },
+        formatEnrichmentDate(profile?.birthDate)?.let { "Born" to it },
+        formatEnrichmentDate(profile?.deathDate)?.let { "Died" to it },
+        formatEnrichmentDate(profile?.foundationDate)?.let { "Founded" to it },
+        formatEnrichmentDate(profile?.dissolutionDate)?.let { "Dissolved" to it },
+        formatLanguageLabel(profile?.primaryLanguage)?.let { "Language" to it },
+    )
+    val badges = flagBadges(
+        profile?.isComposer to "Composer",
+        profile?.isPerformer to "Performer",
+        profile?.isConductor to "Conductor",
+        profile?.isProducer to "Producer",
+        profile?.isGroup to "Group",
+    )
+
+    EnrichmentStatusIndicator(
+        status = artist.enrichmentStatus,
+        entityType = "Artist",
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+    EnrichmentInfoBlock(
+        summary = profile?.summary ?: profile?.bio,
+        facts = facts,
+        badges = badges,
+        tags = emptyList(),
+        contributors = artist.enrichment?.contributors.orEmpty(),
+    )
 }
 
 /**

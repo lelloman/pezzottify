@@ -7,4 +7,8 @@ interface Track : StaticItem {
     val artistsIds: List<String>
     val durationSeconds: Int
     val availability: TrackAvailability
+    val enrichmentStatus: EntityEnrichmentStatus?
+        get() = null
+    val enrichment: TrackEnrichment?
+        get() = null
 }

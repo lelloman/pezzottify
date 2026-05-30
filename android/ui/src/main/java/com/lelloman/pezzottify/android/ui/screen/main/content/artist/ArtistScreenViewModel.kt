@@ -31,6 +31,7 @@ class ArtistScreenViewModel @AssistedInject constructor(
         viewModelScope.launch {
             // Clear error states to force retry of previously failed items
             interactor.retryErroredItems(listOf(artistId))
+            interactor.refreshArtist(artistId)
             // Fetch first page of albums and appears-on albums
             interactor.fetchFirstDiscographyPage(artistId)
             interactor.fetchFirstAppearsOnPage(artistId)
@@ -121,6 +122,7 @@ class ArtistScreenViewModel @AssistedInject constructor(
         suspend fun fetchFirstAppearsOnPage(artistId: String)
         suspend fun fetchMoreAppearsOn(artistId: String)
         suspend fun retryErroredItems(itemIds: List<String>)
+        suspend fun refreshArtist(artistId: String)
     }
 
     @AssistedFactory
