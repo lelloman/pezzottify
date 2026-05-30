@@ -39,6 +39,8 @@ class UiContentResolver(
                             it.data.displayImageId,
                         ),
                         related = it.data.related,
+                        enrichmentStatus = it.data.enrichmentStatus,
+                        enrichment = it.data.enrichment,
                     )
                 )
             }
@@ -65,6 +67,8 @@ class UiContentResolver(
                             )
                         },
                         availability = it.data.availability.toAlbumAvailability(),
+                        enrichmentStatus = it.data.enrichmentStatus,
+                        enrichment = it.data.enrichment,
                     )
                 )
             }
@@ -94,6 +98,8 @@ class UiContentResolver(
                                     artists = emptyList(),
                                     durationSeconds = trackItem.data.durationSeconds,
                                     availability = trackItem.data.availability.toTrackAvailability(),
+                                    enrichmentStatus = trackItem.data.enrichmentStatus,
+                                    enrichment = trackItem.data.enrichment,
                                 )
                             )
                         )
@@ -107,6 +113,8 @@ class UiContentResolver(
                                     artists = artists.toList(),
                                     durationSeconds = trackItem.data.durationSeconds,
                                     availability = trackItem.data.availability.toTrackAvailability(),
+                                    enrichmentStatus = trackItem.data.enrichmentStatus,
+                                    enrichment = trackItem.data.enrichment,
                                 )
                             )
                         }

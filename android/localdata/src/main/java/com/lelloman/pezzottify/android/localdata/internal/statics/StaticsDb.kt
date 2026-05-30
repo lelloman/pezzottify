@@ -39,7 +39,7 @@ internal abstract class StaticsDb : RoomDatabase() {
     abstract fun skeletonDao(): SkeletonDao
 
     companion object {
-        const val VERSION = 11
+        const val VERSION = 12
         const val NAME = "StaticsDb"
     }
 }

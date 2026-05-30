@@ -1,5 +1,8 @@
 package com.lelloman.pezzottify.android.ui.content
 
+import com.lelloman.pezzottify.android.domain.statics.EntityEnrichmentStatus
+import com.lelloman.pezzottify.android.domain.statics.TrackEnrichment
+
 data class ArtistInfo(
     val id: String,
     val name: String,
@@ -25,6 +28,8 @@ data class Track(
     val artists: List<ArtistInfo>,
     val durationSeconds: Int,
     val availability: TrackAvailability = TrackAvailability.Available,
+    val enrichmentStatus: EntityEnrichmentStatus? = null,
+    val enrichment: TrackEnrichment? = null,
 ) {
     /** Whether the track can be played */
     val isPlayable: Boolean

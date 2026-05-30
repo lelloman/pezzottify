@@ -1,6 +1,8 @@
 package com.lelloman.pezzottify.android.domain.remoteapi.response
 
 import com.lelloman.pezzottify.android.domain.statics.Track
+import com.lelloman.pezzottify.android.domain.statics.EntityEnrichmentStatus
+import com.lelloman.pezzottify.android.domain.statics.TrackEnrichment
 import com.lelloman.pezzottify.android.domain.statics.TrackAvailability
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -32,6 +34,9 @@ data class TrackResponse(
     val track: TrackData,
     val album: AlbumData,
     val artists: List<TrackArtist>,
+    @SerialName("enrichment_status")
+    val enrichmentStatus: EntityEnrichmentStatus? = null,
+    val enrichment: TrackEnrichment? = null,
 )
 
 fun TrackResponse.toDomain() = object : Track {
@@ -47,4 +52,8 @@ fun TrackResponse.toDomain() = object : Track {
         get() = (this@toDomain.track.durationMs / 1000).toInt()
     override val availability: TrackAvailability
         get() = this@toDomain.track.availability
+    override val enrichmentStatus: EntityEnrichmentStatus?
+        get() = this@toDomain.enrichmentStatus
+    override val enrichment: TrackEnrichment?
+        get() = this@toDomain.enrichment
 }

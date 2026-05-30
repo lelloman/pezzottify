@@ -227,6 +227,10 @@ class ArtistScreenViewModelTest {
         override suspend fun retryErroredItems(itemIds: List<String>) {
             // No-op for tests
         }
+
+        override suspend fun refreshArtist(artistId: String) {
+            // No-op for tests
+        }
     }
 
     private class FakeContentResolver : ContentResolver {

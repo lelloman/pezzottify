@@ -4,6 +4,8 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.lelloman.pezzottify.android.domain.statics.AlbumAvailability
+import com.lelloman.pezzottify.android.domain.statics.AlbumEnrichment
+import com.lelloman.pezzottify.android.domain.statics.EntityEnrichmentStatus
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -31,6 +33,12 @@ internal data class Album(
     @ColumnInfo(name = COLUMN_AVAILABILITY, defaultValue = "missing")
     override val availability: AlbumAvailability = AlbumAvailability.Missing,
 
+    @ColumnInfo(name = COLUMN_ENRICHMENT_STATUS)
+    override val enrichmentStatus: EntityEnrichmentStatus? = null,
+
+    @ColumnInfo(name = COLUMN_ENRICHMENT)
+    override val enrichment: AlbumEnrichment? = null,
+
     @ColumnInfo(name = COLUMN_CACHED_AT, defaultValue = "0")
     val cachedAt: Long = System.currentTimeMillis(),
 
@@ -42,6 +50,8 @@ internal data class Album(
         const val COLUMN_ID = "id"
         const val COLUMN_AVAILABILITY = "availability"
         const val COLUMN_CACHED_AT = "cached_at"
+        const val COLUMN_ENRICHMENT_STATUS = "enrichment_status"
+        const val COLUMN_ENRICHMENT = "enrichment"
     }
 }
 
@@ -53,5 +63,7 @@ internal fun com.lelloman.pezzottify.android.domain.statics.Album.quack(): Album
     artistsIds = artistsIds,
     discs = discs.map { Disc(tracksIds = it.tracksIds) },
     availability = availability,
+    enrichmentStatus = enrichmentStatus,
+    enrichment = enrichment,
     cachedAt = System.currentTimeMillis(),
 )

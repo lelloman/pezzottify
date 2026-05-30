@@ -60,11 +60,11 @@ Manual trigger params:
 }
 ```
 
-`entity_types` is optional. When omitted, the job claims all supported entity types.
+`entity_types` is optional. When omitted, the job claims all supported entity types. These trigger parameters only scope a single run; they do not change the shared LLM provider settings.
 
 ## LLM Configuration
 
-The job uses the shared `[agent.llm]` configuration. It supports Ollama and OpenAI-compatible providers. Simple-AI can be used if it exposes an OpenAI-compatible chat endpoint.
+The job reuses the existing shared `[agent]` / `[agent.llm]` configuration. It does not add metadata-specific model, provider, base URL, or API key settings. The existing agent LLM supports Ollama and OpenAI-compatible providers. Simple-AI can be used if it exposes an OpenAI-compatible chat endpoint.
 
 ```toml
 [agent]

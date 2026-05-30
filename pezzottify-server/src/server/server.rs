@@ -1250,6 +1250,7 @@ async fn post_batch_content(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
+    State(enrichment_store): State<OptionalEnrichmentStore>,
     Json(request): Json<BatchContentRequest>,
 ) -> Response {
     let total_items = request.artists.len() + request.albums.len() + request.tracks.len();
@@ -1291,7 +1292,14 @@ async fn post_batch_content(
         };
 
         let batch_result = match result {
-            Ok(Some(data)) => BatchItemResult::Ok { ok: data },
+            Ok(Some(data)) => {
+                let data = attach_artist_enrichment(
+                    attach_enrichment_status(data, "artist", &item.id, &enrichment_store),
+                    &item.id,
+                    &enrichment_store,
+                );
+                BatchItemResult::Ok { ok: data }
+            }
             Ok(None) => BatchItemResult::Error {
                 error: "not_found".to_string(),
             },
@@ -1318,7 +1326,14 @@ async fn post_batch_content(
         };
 
         let batch_result = match result {
-            Ok(Some(data)) => BatchItemResult::Ok { ok: data },
+            Ok(Some(data)) => {
+                let data = attach_album_enrichment(
+                    attach_enrichment_status(data, "album", &item.id, &enrichment_store),
+                    &item.id,
+                    &enrichment_store,
+                );
+                BatchItemResult::Ok { ok: data }
+            }
             Ok(None) => BatchItemResult::Error {
                 error: "not_found".to_string(),
             },
@@ -1345,7 +1360,14 @@ async fn post_batch_content(
         };
 
         let batch_result = match result {
-            Ok(Some(data)) => BatchItemResult::Ok { ok: data },
+            Ok(Some(data)) => {
+                let data = attach_track_enrichment(
+                    attach_enrichment_status(data, "track", &item.id, &enrichment_store),
+                    &item.id,
+                    &enrichment_store,
+                );
+                BatchItemResult::Ok { ok: data }
+            }
             Ok(None) => BatchItemResult::Error {
                 error: "not_found".to_string(),
             },

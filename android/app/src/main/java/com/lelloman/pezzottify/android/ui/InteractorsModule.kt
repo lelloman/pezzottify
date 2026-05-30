@@ -22,6 +22,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ResolvedSearchResult
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchSection
+import com.lelloman.pezzottify.android.domain.remoteapi.response.toDomain
 import com.lelloman.pezzottify.android.domain.settings.BackgroundSyncInterval
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateNotifyWhatsNewSetting
@@ -1294,6 +1295,13 @@ class InteractorsModule {
 
         override suspend fun retryErroredItems(itemIds: List<String>) {
             staticsProvider.retryErroredItems(itemIds)
+        }
+
+        override suspend fun refreshArtist(artistId: String) {
+            when (val response = remoteApiClient.getArtist(artistId)) {
+                is RemoteApiResponse.Success -> staticsStore.storeArtist(response.data.toDomain())
+                is RemoteApiResponse.Error -> Unit
+            }
         }
     }
 

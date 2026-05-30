@@ -1,6 +1,8 @@
 package com.lelloman.pezzottify.android.domain.remoteapi.response
 
 import com.lelloman.pezzottify.android.domain.statics.Artist
+import com.lelloman.pezzottify.android.domain.statics.ArtistEnrichment
+import com.lelloman.pezzottify.android.domain.statics.EntityEnrichmentStatus
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -26,6 +28,9 @@ data class ArtistResponse(
     val artist: ArtistData,
     @SerialName("related_artists")
     val relatedArtists: List<ArtistData>,
+    @SerialName("enrichment_status")
+    val enrichmentStatus: EntityEnrichmentStatus? = null,
+    val enrichment: ArtistEnrichment? = null,
 )
 
 fun ArtistResponse.toDomain() = object : Artist {
@@ -37,4 +42,8 @@ fun ArtistResponse.toDomain() = object : Artist {
         get() = this@toDomain.artist.id // Images are fetched by artist ID
     override val related: List<String>
         get() = this@toDomain.relatedArtists.map { it.id }
+    override val enrichmentStatus: EntityEnrichmentStatus?
+        get() = this@toDomain.enrichmentStatus
+    override val enrichment: ArtistEnrichment?
+        get() = this@toDomain.enrichment
 }
