@@ -26,10 +26,9 @@ import androidx.compose.ui.unit.dp
 import com.lelloman.pezzottify.android.domain.statics.EntityContributor
 import com.lelloman.pezzottify.android.domain.statics.EntityEnrichmentStatus
 import com.lelloman.pezzottify.android.domain.statics.EntityTag
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeParseException
-import java.time.format.FormatStyle
+import java.text.DateFormat
+import java.text.ParseException
+import java.text.SimpleDateFormat
 import java.util.Locale
 
 @Composable
@@ -175,16 +174,20 @@ fun formatEnrichmentDate(value: String?): String? {
     return try {
         when {
             Regex("^\\d{4}-\\d{2}$").matches(text) -> {
-                val date = LocalDate.parse("$text-01")
-                DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()).format(date)
+                val date = SimpleDateFormat("yyyy-MM", Locale.ROOT).apply {
+                    isLenient = false
+                }.parse(text) ?: return text
+                SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(date)
             }
             Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(text) -> {
-                val date = LocalDate.parse(text)
-                DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).format(date)
+                val date = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply {
+                    isLenient = false
+                }.parse(text) ?: return text
+                DateFormat.getDateInstance(DateFormat.MEDIUM, Locale.getDefault()).format(date)
             }
             else -> text
         }
-    } catch (_: DateTimeParseException) {
+    } catch (_: ParseException) {
         text
     }
 }
