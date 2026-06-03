@@ -3607,6 +3607,28 @@ async fn admin_prepare_backup(
     }
 }
 
+async fn admin_get_storage_report(
+    session: Session,
+    State(config): State<ServerConfig>,
+    State(db_registry): State<super::state::GuardedDbRegistry>,
+) -> Response {
+    debug!("Storage report requested by user_id={}", session.user_id);
+
+    let db_paths = db_registry.all();
+    let result = tokio::task::spawn_blocking(move || {
+        super::storage_report::collect_storage_report(&config, db_paths)
+    })
+    .await;
+
+    match result {
+        Ok(report) => (StatusCode::OK, Json(report)).into_response(),
+        Err(e) => {
+            error!("Storage report task panicked: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 // ============================================================================
 // Admin Job API handlers
 // ============================================================================
@@ -5704,6 +5726,7 @@ pub async fn make_app(
     let admin_server_routes: Router = Router::new()
         .route("/reboot", post(reboot_server))
         .route("/backup/prepare", post(admin_prepare_backup))
+        .route("/storage", get(admin_get_storage_report))
         .route("/jobs", get(admin_list_jobs))
         .route("/jobs/audit", get(admin_get_job_audit_log))
         .route("/jobs/{job_id}", get(admin_get_job))
