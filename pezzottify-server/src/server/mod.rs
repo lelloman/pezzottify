@@ -11,6 +11,7 @@ mod search;
 #[allow(clippy::module_inception)]
 pub mod server;
 pub mod session;
+mod storage_report;
 // Skeleton sync module removed - Android now uses on-demand discography API
 // mod skeleton;
 pub mod state;

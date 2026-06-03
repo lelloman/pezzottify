@@ -23,6 +23,78 @@
       {{ rebootError }}
     </div>
 
+    <h2 class="sectionTitle storageTitle">Storage</h2>
+
+    <div class="storageCard">
+      <div class="storageHeader">
+        <div>
+          <h3 class="controlTitle">Disk Usage</h3>
+          <p class="controlDescription">Storage used by SQLite databases, media, and operational upload data.</p>
+        </div>
+        <button
+          class="refreshButton small"
+          :disabled="storageLoading"
+          @click="loadStorageReport"
+        >
+          {{ storageLoading ? "Refreshing..." : "Refresh" }}
+        </button>
+      </div>
+
+      <div v-if="storageLoading" class="loadingMessage">Loading storage usage...</div>
+      <div v-else-if="storageError" class="errorMessage">{{ storageError }}</div>
+      <div v-else-if="storageReport" class="storageBody">
+        <div class="storageStats">
+          <div class="storageStat">
+            <span class="statValue">{{ formatBytes(storageReport.total_bytes) }}</span>
+            <span class="statLabel">Total tracked</span>
+          </div>
+          <div class="storageStat">
+            <span class="statValue">{{ formatBytes(storageReport.database_total_bytes) }}</span>
+            <span class="statLabel">Databases</span>
+          </div>
+          <div class="storageStat">
+            <span class="statValue">{{ formatBytes(storageReport.filesystem_total_bytes) }}</span>
+            <span class="statLabel">Media and uploads</span>
+          </div>
+        </div>
+
+        <div class="storageRows">
+          <div
+            v-for="db in storageReport.databases"
+            :key="`db-${db.id}`"
+            class="storageRow"
+          >
+            <div class="storageMeta">
+              <span class="storageName">{{ db.label }}</span>
+              <span class="storagePath" :title="db.path">{{ db.path }}</span>
+              <span v-if="db.wal_bytes || db.shm_bytes" class="storageBreakdown">
+                DB {{ formatBytes(db.main_bytes) }} · WAL {{ formatBytes(db.wal_bytes) }} · SHM {{ formatBytes(db.shm_bytes) }}
+              </span>
+            </div>
+            <div class="storageMeasure">
+              <div class="storageBar"><span :style="{ width: storagePercent(db.total_bytes) }"></span></div>
+              <span class="storageSize">{{ formatBytes(db.total_bytes) }}</span>
+            </div>
+          </div>
+
+          <div
+            v-for="component in storageReport.components"
+            :key="`component-${component.id}`"
+            class="storageRow"
+          >
+            <div class="storageMeta">
+              <span class="storageName">{{ component.label }}</span>
+              <span class="storagePath" :title="component.path">{{ component.path }}</span>
+            </div>
+            <div class="storageMeasure">
+              <div class="storageBar"><span :style="{ width: storagePercent(component.bytes) }"></span></div>
+              <span class="storageSize">{{ formatBytes(component.bytes) }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <h2 class="sectionTitle searchTitle">Search Settings</h2>
 
     <div class="controlCard searchSettings">
@@ -359,6 +431,10 @@ const showConfirmDialog = ref(false);
 const isRebooting = ref(false);
 const rebootError = ref(null);
 
+const storageReport = ref(null);
+const storageLoading = ref(true);
+const storageError = ref(null);
+
 // Relevance filter state
 const filterLoading = ref(true);
 const filterError = ref(null);
@@ -426,6 +502,18 @@ const handleReboot = async () => {
   }
   // If successful, the server will restart and we'll lose connection
   // The button stays in "Rebooting..." state
+};
+
+const loadStorageReport = async () => {
+  storageLoading.value = true;
+  storageError.value = null;
+  const data = await remoteStore.fetchStorageReport();
+  if (data === null) {
+    storageError.value = "Failed to load storage usage";
+  } else {
+    storageReport.value = data;
+  }
+  storageLoading.value = false;
 };
 
 const loadRelevanceFilter = async () => {
@@ -597,6 +685,26 @@ const formatNumber = (value) => {
   return Number(value || 0).toLocaleString();
 };
 
+const formatBytes = (bytes) => {
+  const value = Number(bytes || 0);
+  if (value < 1024) return `${value} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let scaled = value / 1024;
+  let unitIndex = 0;
+  while (scaled >= 1024 && unitIndex < units.length - 1) {
+    scaled /= 1024;
+    unitIndex += 1;
+  }
+  return `${scaled.toFixed(scaled >= 10 ? 1 : 2)} ${units[unitIndex]}`;
+};
+
+const storagePercent = (bytes) => {
+  const total = Number(storageReport.value?.total_bytes || 0);
+  const value = Number(bytes || 0);
+  if (total <= 0 || value <= 0) return "0%";
+  return `${Math.min(100, (value / total) * 100).toFixed(1)}%`;
+};
+
 const modelForNamespace = (namespace) => {
   const spec = embeddingCoverage.value?.specs?.find((item) => item.namespace === namespace);
   return spec ? spec.model : "unknown model";
@@ -732,6 +840,7 @@ const formatDetails = (details) => {
 };
 
 onMounted(() => {
+  loadStorageReport();
   loadRelevanceFilter();
   loadEmbeddingCoverage();
   loadJobs();
@@ -813,6 +922,126 @@ onMounted(() => {
   border-radius: var(--radius-md);
   color: #dc2626;
   font-size: var(--text-sm);
+}
+
+.storageTitle {
+  margin-top: var(--spacing-8);
+}
+
+.storageCard {
+  padding: var(--spacing-4);
+  margin-bottom: var(--spacing-4);
+  background-color: var(--bg-elevated-base);
+  border-radius: var(--radius-lg);
+}
+
+.storageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-4);
+  margin-bottom: var(--spacing-4);
+}
+
+.storageBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+}
+
+.storageStats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spacing-3);
+}
+
+.storageStat {
+  padding: var(--spacing-3);
+  background-color: var(--bg-highlight);
+  border-radius: var(--radius-md);
+}
+
+.storageRows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.storageRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  align-items: center;
+  gap: var(--spacing-4);
+  padding: var(--spacing-3);
+  background-color: var(--bg-base);
+  border-radius: var(--radius-md);
+}
+
+.storageMeta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: var(--spacing-1);
+}
+
+.storageName {
+  color: var(--text-base);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+}
+
+.storagePath,
+.storageBreakdown {
+  color: var(--text-subdued);
+  font-size: var(--text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storageMeasure {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px;
+  align-items: center;
+  gap: var(--spacing-3);
+}
+
+.storageBar {
+  height: 8px;
+  overflow: hidden;
+  background-color: var(--bg-elevated-highlight);
+  border-radius: var(--radius-full);
+}
+
+.storageBar span {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  background-color: var(--highlight);
+  border-radius: inherit;
+}
+
+.storageSize {
+  color: var(--text-base);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  text-align: right;
+  white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  .storageStats {
+    grid-template-columns: 1fr;
+  }
+
+  .storageRow {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-2);
+  }
+
+  .storageMeasure {
+    grid-template-columns: minmax(0, 1fr) 72px;
+  }
 }
 
 .jobsTitle {

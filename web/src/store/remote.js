@@ -647,6 +647,16 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  const fetchStorageReport = async () => {
+    try {
+      const response = await axios.get("/v1/admin/storage");
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch storage report:", error);
+      return null;
+    }
+  };
+
   const fetchBackgroundJobs = async () => {
     try {
       const response = await axios.get("/v1/admin/jobs");
@@ -1432,6 +1442,7 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchOnlineUsers,
     // Admin API - Server Control
     rebootServer,
+    fetchStorageReport,
     fetchBackgroundJobs,
     fetchAudioEmbeddingCoverage,
     triggerBackgroundJob,
