@@ -480,6 +480,7 @@ async fn main() -> Result<()> {
 
         // Then update periodically (every 15 minutes)
         let mut interval = tokio::time::interval(Duration::from_secs(15 * 60));
+        interval.tick().await;
         loop {
             interval.tick().await;
             metrics::update_storage_metrics(&db_dir_for_metrics, &media_path_for_metrics);
