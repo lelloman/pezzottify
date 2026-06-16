@@ -21,6 +21,16 @@ export const SectionType = {
   DONE: "done",
 };
 
+function buildStreamingSearchUrl(query, options = {}) {
+  const encodedQuery = encodeURIComponent(query);
+  const searchMode = options.searchMode || "expanded";
+  let url = `/v1/content/search/stream?q=${encodedQuery}&search_mode=${encodeURIComponent(searchMode)}`;
+  if (options.excludeUnavailable) {
+    url += "&exclude_unavailable=true";
+  }
+  return url;
+}
+
 /**
  * Executes a streaming search and calls the callback for each section received.
  *
@@ -32,15 +42,16 @@ export const SectionType = {
  * @param {boolean} options.excludeUnavailable - If true, exclude unavailable content
  * @returns {function} Abort function to cancel the stream
  */
-export function streamingSearch(query, onSection, onError, onComplete, options = {}) {
+export function streamingSearch(
+  query,
+  onSection,
+  onError,
+  onComplete,
+  options = {},
+) {
   const controller = new AbortController();
-  const encodedQuery = encodeURIComponent(query);
-  let url = `/v1/content/search/stream?q=${encodedQuery}`;
-  if (options.excludeUnavailable) {
-    url += "&exclude_unavailable=true";
-  }
 
-  fetch(url, {
+  fetch(buildStreamingSearchUrl(query, options), {
     method: "GET",
     headers: {
       Accept: "text/event-stream",
@@ -98,6 +109,72 @@ export function streamingSearch(query, onSection, onError, onComplete, options =
 
   // Return abort function
   return () => controller.abort();
+}
+
+/**
+ * Executes a streaming search and resolves with all emitted sections.
+ *
+ * @param {string} query - The search query
+ * @param {Object} options - Optional search options
+ * @param {AbortSignal} signal - Optional abort signal
+ * @returns {Promise<Array>} Streamed sections
+ */
+export async function fetchStreamingSearchSections(
+  query,
+  options = {},
+  signal,
+) {
+  const response = await fetch(buildStreamingSearchUrl(query, options), {
+    method: "GET",
+    headers: {
+      Accept: "text/event-stream",
+    },
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Search failed: ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const sections = [];
+  let buffer = "";
+
+  const processLine = (line) => {
+    if (!line.startsWith("data:")) {
+      return;
+    }
+
+    const jsonStr = line.slice(5).trim();
+    if (!jsonStr) {
+      return;
+    }
+
+    sections.push(JSON.parse(jsonStr));
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop();
+
+    for (const line of lines) {
+      processLine(line);
+    }
+  }
+
+  if (buffer) {
+    processLine(buffer);
+  }
+
+  return sections;
 }
 
 /**

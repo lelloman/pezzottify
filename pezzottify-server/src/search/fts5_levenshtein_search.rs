@@ -19,6 +19,7 @@ use super::{
 use crate::catalog_store::{CatalogStore, SearchableContentType};
 use anyhow::Result;
 use rusqlite::Connection;
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
 use tracing::{debug, error, info, warn};
@@ -838,6 +839,63 @@ impl Fts5LevenshteinSearchVault {
         corrected
     }
 
+    fn expanded_query_variants(&self, query: &str) -> Vec<String> {
+        let tokens: Vec<&str> = query.split_whitespace().collect();
+        if tokens.is_empty() || tokens.len() > 5 {
+            return Vec::new();
+        }
+
+        let vocabulary = self.vocabulary.read().unwrap();
+        if vocabulary.is_empty() {
+            return Vec::new();
+        }
+
+        let mut candidate_lists = Vec::with_capacity(tokens.len());
+        for token in tokens {
+            let mut candidates: Vec<String> = vocabulary
+                .find_best_matches(token, self.max_edit_distance, EXPANDED_TOKEN_CANDIDATES)
+                .into_iter()
+                .map(str::to_string)
+                .collect();
+
+            if candidates.is_empty() {
+                candidates.push(token.to_string());
+            }
+
+            candidate_lists.push(candidates);
+        }
+
+        let mut variants = Vec::new();
+        Self::build_query_variants(&candidate_lists, 0, &mut Vec::new(), &mut variants);
+        variants
+    }
+
+    fn build_query_variants(
+        candidate_lists: &[Vec<String>],
+        index: usize,
+        current: &mut Vec<String>,
+        variants: &mut Vec<String>,
+    ) {
+        if variants.len() >= EXPANDED_MAX_VARIANTS {
+            return;
+        }
+
+        if index == candidate_lists.len() {
+            variants.push(current.join(" "));
+            return;
+        }
+
+        for candidate in &candidate_lists[index] {
+            current.push(candidate.clone());
+            Self::build_query_variants(candidate_lists, index + 1, current, variants);
+            current.pop();
+
+            if variants.len() >= EXPANDED_MAX_VARIANTS {
+                break;
+            }
+        }
+    }
+
     /// Record an impression (page view) for an item.
     /// Increments today's impression count for the given item.
     pub fn record_impression(&self, item_id: &str, item_type: HashedItemType) {
@@ -1087,6 +1145,8 @@ impl Fts5LevenshteinSearchVault {
 
 /// Weight factor for popularity boost (0.5 = max 50% boost for most popular items)
 const POPULARITY_WEIGHT: f64 = 0.5;
+const EXPANDED_TOKEN_CANDIDATES: usize = 3;
+const EXPANDED_MAX_VARIANTS: usize = 16;
 
 impl SearchVault for Fts5LevenshteinSearchVault {
     fn search(
@@ -1209,6 +1269,90 @@ impl SearchVault for Fts5LevenshteinSearchVault {
                 Vec::new()
             }
         }
+    }
+
+    fn search_expanded(
+        &self,
+        query: &str,
+        max_results: usize,
+        filter: Option<Vec<HashedItemType>>,
+    ) -> Vec<SearchResult> {
+        let mut results = SearchVault::search(self, query, max_results, filter.clone());
+        if results.len() >= max_results {
+            return results;
+        }
+
+        let mut seen_items: HashSet<(String, HashedItemType)> = results
+            .iter()
+            .map(|result| (result.item_id.clone(), result.item_type))
+            .collect();
+        let mut tried_queries = HashSet::new();
+        tried_queries.insert(self.correct_query(query).to_lowercase());
+
+        for variant in self.expanded_query_variants(query) {
+            if results.len() >= max_results {
+                break;
+            }
+
+            if !tried_queries.insert(variant.to_lowercase()) {
+                continue;
+            }
+
+            for result in SearchVault::search(self, &variant, max_results, filter.clone()) {
+                if seen_items.insert((result.item_id.clone(), result.item_type)) {
+                    results.push(result);
+                    if results.len() >= max_results {
+                        break;
+                    }
+                }
+            }
+        }
+
+        results
+    }
+
+    fn search_expanded_with_availability(
+        &self,
+        query: &str,
+        max_results: usize,
+        filter: Option<Vec<HashedItemType>>,
+        available_only: bool,
+    ) -> Vec<SearchResult> {
+        let mut results =
+            self.search_with_availability(query, max_results, filter.clone(), available_only);
+        if results.len() >= max_results {
+            return results;
+        }
+
+        let mut seen_items: HashSet<(String, HashedItemType)> = results
+            .iter()
+            .map(|result| (result.item_id.clone(), result.item_type))
+            .collect();
+        let mut tried_queries = HashSet::new();
+        tried_queries.insert(self.correct_query(query).to_lowercase());
+
+        for variant in self.expanded_query_variants(query) {
+            if results.len() >= max_results {
+                break;
+            }
+
+            if !tried_queries.insert(variant.to_lowercase()) {
+                continue;
+            }
+
+            for result in
+                self.search_with_availability(&variant, max_results, filter.clone(), available_only)
+            {
+                if seen_items.insert((result.item_id.clone(), result.item_type)) {
+                    results.push(result);
+                    if results.len() >= max_results {
+                        break;
+                    }
+                }
+            }
+        }
+
+        results
     }
 
     fn rebuild_index(&self) -> anyhow::Result<()> {
@@ -1651,6 +1795,83 @@ mod tests {
         let results = vault.search("Metalica", 10, None);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].item_id, "a2");
+    }
+
+    #[test]
+    fn test_typo_correction_search_after_large_same_length_bucket() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+
+        let mut items = Vec::new();
+        for i in 0..6_000 {
+            items.push(SearchableItem {
+                id: format!("filler_{i}"),
+                name: format!("x{i:04}"),
+                content_type: SearchableContentType::Artist,
+                additional_text: vec![],
+                is_available: true,
+            });
+        }
+        items.push(SearchableItem {
+            id: "lucio_dalla".to_string(),
+            name: "Lucio Dalla".to_string(),
+            content_type: SearchableContentType::Artist,
+            additional_text: vec![],
+            is_available: true,
+        });
+
+        let catalog = Arc::new(MockCatalogStore::new(items));
+        let vault =
+            Fts5LevenshteinSearchVault::new(catalog, &db_path, &crate::backup::DbRegistry::new())
+                .unwrap();
+
+        let results = vault.search("fucio dalla", 10, None);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].item_id, "lucio_dalla");
+    }
+
+    #[test]
+    fn test_expanded_search_uses_token_alternatives_for_exact_words() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+
+        let items = vec![
+            SearchableItem {
+                id: "lucio_dalla".to_string(),
+                name: "Lucio Dalla".to_string(),
+                content_type: SearchableContentType::Artist,
+                additional_text: vec![],
+                is_available: true,
+            },
+            SearchableItem {
+                id: "palla".to_string(),
+                name: "Palla".to_string(),
+                content_type: SearchableContentType::Track,
+                additional_text: vec![],
+                is_available: true,
+            },
+            SearchableItem {
+                id: "alla".to_string(),
+                name: "Alla".to_string(),
+                content_type: SearchableContentType::Track,
+                additional_text: vec![],
+                is_available: true,
+            },
+        ];
+
+        let catalog = Arc::new(MockCatalogStore::new(items));
+        let vault =
+            Fts5LevenshteinSearchVault::new(catalog, &db_path, &crate::backup::DbRegistry::new())
+                .unwrap();
+
+        assert!(vault.search("fucio palla", 10, None).is_empty());
+        assert!(vault.search("fucio alla", 10, None).is_empty());
+
+        let palla_results = vault.search_expanded("fucio palla", 10, None);
+        assert_eq!(palla_results[0].item_id, "lucio_dalla");
+
+        let alla_results = vault.search_expanded("fucio alla", 10, None);
+        assert_eq!(alla_results[0].item_id, "lucio_dalla");
     }
 
     #[test]
