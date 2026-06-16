@@ -89,6 +89,27 @@ pub trait SearchVault: Send + Sync {
         filter: Option<Vec<HashedItemType>>,
     ) -> Vec<SearchResult>;
 
+    /// Search with bounded fallback passes for typo-heavy queries.
+    fn search_expanded(
+        &self,
+        query: &str,
+        max_results: usize,
+        filter: Option<Vec<HashedItemType>>,
+    ) -> Vec<SearchResult> {
+        self.search(query, max_results, filter)
+    }
+
+    /// Search with bounded fallback passes and availability filtering.
+    fn search_expanded_with_availability(
+        &self,
+        query: &str,
+        max_results: usize,
+        filter: Option<Vec<HashedItemType>>,
+        available_only: bool,
+    ) -> Vec<SearchResult> {
+        self.search_with_availability(query, max_results, filter, available_only)
+    }
+
     /// Rebuild the entire search index from the catalog.
     ///
     /// This should be called when the catalog changes (e.g., when a batch is closed).
@@ -265,6 +286,25 @@ impl<T: SearchVault + ?Sized> SearchVault for std::sync::Arc<T> {
         filter: Option<Vec<HashedItemType>>,
     ) -> Vec<SearchResult> {
         (**self).search(query, max_results, filter)
+    }
+
+    fn search_expanded(
+        &self,
+        query: &str,
+        max_results: usize,
+        filter: Option<Vec<HashedItemType>>,
+    ) -> Vec<SearchResult> {
+        (**self).search_expanded(query, max_results, filter)
+    }
+
+    fn search_expanded_with_availability(
+        &self,
+        query: &str,
+        max_results: usize,
+        filter: Option<Vec<HashedItemType>>,
+        available_only: bool,
+    ) -> Vec<SearchResult> {
+        (**self).search_expanded_with_availability(query, max_results, filter, available_only)
     }
 
     fn rebuild_index(&self) -> anyhow::Result<()> {

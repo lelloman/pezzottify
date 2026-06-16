@@ -126,6 +126,7 @@ const fetchCatalogResults = async (query, filters) => {
     resolve: true,
     limit: 15,
     exclude_unavailable: excludeUnavailable.value,
+    search_mode: "expanded",
   };
   if (filters) {
     requestBody.filters = filters;

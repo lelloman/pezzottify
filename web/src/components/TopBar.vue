@@ -191,6 +191,7 @@
 
 <script setup>
 import { ref, watch, computed, onMounted, onBeforeUnmount } from "vue";
+import { storeToRefs } from "pinia";
 import { debounce } from "lodash-es"; // Lightweight debounce
 import { useRouter, useRoute } from "vue-router";
 import CrossIcon from "./icons/CrossIcon.vue";
@@ -204,11 +205,18 @@ import MusicNoteIcon from "./icons/MusicNoteIcon.vue";
 import MultiSourceImage from "./common/MultiSourceImage.vue";
 import { formatImageUrl } from "../utils";
 import { wsConnectionStatus, wsServerVersion } from "../services/websocket";
+import {
+  fetchStreamingSearchSections,
+  sectionsToResults,
+} from "../services/streamingSearch";
 import { useUserStore } from "../store/user";
 import { useIngestionStore } from "../store/ingestion";
+import { useDebugStore } from "../store/debug";
 
 const userStore = useUserStore();
 const ingestionStore = useIngestionStore();
+const debugStore = useDebugStore();
+const { excludeUnavailable, useOrganicSearch } = storeToRefs(debugStore);
 
 // App version injected by Vite at build time
 const appVersion = __APP_VERSION__; // eslint-disable-line no-undef
@@ -225,7 +233,7 @@ const searchSuggestions = ref([]);
 
 const RECENT_SEARCHES_KEY = "pezzottify_recent_searches";
 const MAX_RECENT_SEARCHES = 5;
-const SUGGESTION_LIMIT = 8;
+const SUGGESTION_FETCH_LIMIT = 30;
 let suggestionAbortController = null;
 const suggestionImageUrlCache = new Map();
 
@@ -320,24 +328,37 @@ const fetchSuggestions = debounce(async (query) => {
   suggestionError.value = false;
 
   try {
-    const response = await fetch("/v1/content/search", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: trimmed,
-        resolve: true,
-        limit: SUGGESTION_LIMIT,
-        exclude_unavailable: true,
-      }),
-      signal: suggestionAbortController.signal,
-    });
+    if (useOrganicSearch.value) {
+      const response = await fetch("/v1/content/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: trimmed,
+          resolve: true,
+          limit: SUGGESTION_FETCH_LIMIT,
+          exclude_unavailable: excludeUnavailable.value,
+          search_mode: "expanded",
+        }),
+        signal: suggestionAbortController.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`Search suggestions failed: ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Search suggestions failed: ${response.status}`);
+      }
+
+      const payload = await response.json();
+      searchSuggestions.value = Array.isArray(payload) ? payload : [];
+    } else {
+      const sections = await fetchStreamingSearchSections(
+        trimmed,
+        { excludeUnavailable: excludeUnavailable.value },
+        suggestionAbortController.signal,
+      );
+      searchSuggestions.value = sectionsToResults(sections).slice(
+        0,
+        SUGGESTION_FETCH_LIMIT,
+      );
     }
-
-    const payload = await response.json();
-    searchSuggestions.value = Array.isArray(payload) ? payload : [];
   } catch (error) {
     if (error.name !== "AbortError") {
       console.error("Search suggestion error:", error);

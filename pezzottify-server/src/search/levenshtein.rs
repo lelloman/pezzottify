@@ -96,10 +96,6 @@ impl Vocabulary {
         }
     }
 
-    /// Maximum number of candidates to check for fuzzy matching.
-    /// This prevents extremely slow searches on large vocabularies.
-    const MAX_CANDIDATES: usize = 5_000;
-
     /// Find the best matching word within the given max edit distance.
     /// Returns None if no match is found within the threshold.
     ///
@@ -123,70 +119,87 @@ impl Vocabulary {
             return self.words_set.get(&query).map(|s| s.as_str());
         }
 
-        // Collect candidate indices - words within length range
-        let mut candidates: Vec<usize> = Vec::new();
+        let candidate_lengths = Self::candidate_lengths(query_len, max_distance);
 
-        // Only consider words with length within max_distance of query length
-        // Prioritize exact length first, then nearby lengths
+        // Find the best match among all plausible length buckets. Do not cap this
+        // list arbitrarily: in large catalogs a valid correction can be beyond the
+        // first N words of the same length bucket.
+        let mut best_match: Option<MatchCandidate> = None;
 
-        // Start with exact length matches (most likely to be good matches)
-        if let Some(indices) = self.by_length.get(&query_len) {
-            candidates.extend(indices.iter().take(Self::MAX_CANDIDATES));
-        }
+        for len in candidate_lengths {
+            let Some(indices) = self.by_length.get(&len) else {
+                continue;
+            };
 
-        // Add nearby lengths if we have room
-        for offset in 1..=max_distance {
-            if candidates.len() >= Self::MAX_CANDIDATES {
-                break;
-            }
-            // Shorter words
-            if query_len >= offset {
-                if let Some(indices) = self.by_length.get(&(query_len - offset)) {
-                    let remaining = Self::MAX_CANDIDATES - candidates.len();
-                    candidates.extend(indices.iter().take(remaining));
-                }
-            }
-            // Longer words
-            if candidates.len() < Self::MAX_CANDIDATES {
-                if let Some(indices) = self.by_length.get(&(query_len + offset)) {
-                    let remaining = Self::MAX_CANDIDATES - candidates.len();
-                    candidates.extend(indices.iter().take(remaining));
-                }
-            }
-        }
+            for &idx in indices {
+                let word = &self.words[idx];
+                let distance = levenshtein_distance(&query, word);
 
-        // Find the best match among candidates
-        // Track (index, distance, length_diff) for tie-breaking
-        let mut best_match: Option<(usize, usize, usize)> = None;
-
-        for &idx in &candidates {
-            let word = &self.words[idx];
-            let distance = levenshtein_distance(&query, word);
-
-            if distance <= max_distance {
-                let length_diff = (word.len() as isize - query_len as isize).unsigned_abs();
-
-                match best_match {
-                    None => best_match = Some((idx, distance, length_diff)),
-                    Some((_, best_dist, best_len_diff)) => {
-                        // Prefer lower distance, or same distance but closer length
-                        // (substitutions are better than insertions/deletions)
-                        if distance < best_dist
-                            || (distance == best_dist && length_diff < best_len_diff)
-                        {
-                            best_match = Some((idx, distance, length_diff));
-                        }
+                if distance <= max_distance {
+                    let candidate = MatchCandidate::new(idx, distance, &query, word);
+                    if best_match
+                        .as_ref()
+                        .map(|best| candidate.is_better_than(best))
+                        .unwrap_or(true)
+                    {
+                        best_match = Some(candidate);
                     }
                 }
+            }
+        }
 
-                // Early exit if we found an exact or near-exact match
-                if distance <= 1 {
-                    break;
+        best_match.map(|candidate| self.words[candidate.index].as_str())
+    }
+
+    pub fn find_best_matches(&self, query: &str, max_distance: usize, limit: usize) -> Vec<&str> {
+        if limit == 0 {
+            return Vec::new();
+        }
+
+        let query = query.to_lowercase();
+        let query_len = query.len();
+
+        if query_len < 3 {
+            return Vec::new();
+        }
+
+        let candidate_lengths = Self::candidate_lengths(query_len, max_distance);
+        let mut matches = Vec::new();
+
+        for len in candidate_lengths {
+            let Some(indices) = self.by_length.get(&len) else {
+                continue;
+            };
+
+            for &idx in indices {
+                let word = &self.words[idx];
+                let distance = levenshtein_distance(&query, word);
+
+                if distance <= max_distance {
+                    matches.push(MatchCandidate::new(idx, distance, &query, word));
                 }
             }
         }
 
-        best_match.map(|(idx, _, _)| self.words[idx].as_str())
+        matches.sort_by(|left, right| left.cmp_for_match_order(right));
+        matches
+            .into_iter()
+            .take(limit)
+            .map(|candidate| self.words[candidate.index].as_str())
+            .collect()
+    }
+
+    fn candidate_lengths(query_len: usize, max_distance: usize) -> Vec<usize> {
+        let mut lengths = vec![query_len];
+
+        for offset in 1..=max_distance {
+            if query_len >= offset {
+                lengths.push(query_len - offset);
+            }
+            lengths.push(query_len + offset);
+        }
+
+        lengths
     }
 
     /// Correct a query by replacing each word with its best vocabulary match.
@@ -223,6 +236,54 @@ impl Default for Vocabulary {
     fn default() -> Self {
         Self::new()
     }
+}
+
+struct MatchCandidate {
+    index: usize,
+    distance: usize,
+    length_diff: usize,
+    shared_suffix: usize,
+    shared_prefix: usize,
+}
+
+impl MatchCandidate {
+    fn new(index: usize, distance: usize, query: &str, word: &str) -> Self {
+        Self {
+            index,
+            distance,
+            length_diff: (word.len() as isize - query.len() as isize).unsigned_abs(),
+            shared_suffix: common_suffix_len(query, word),
+            shared_prefix: common_prefix_len(query, word),
+        }
+    }
+
+    fn cmp_for_match_order(&self, other: &Self) -> std::cmp::Ordering {
+        self.distance
+            .cmp(&other.distance)
+            .then_with(|| self.length_diff.cmp(&other.length_diff))
+            .then_with(|| other.shared_suffix.cmp(&self.shared_suffix))
+            .then_with(|| other.shared_prefix.cmp(&self.shared_prefix))
+            .then_with(|| self.index.cmp(&other.index))
+    }
+
+    fn is_better_than(&self, other: &Self) -> bool {
+        self.cmp_for_match_order(other).is_lt()
+    }
+}
+
+fn common_prefix_len(a: &str, b: &str) -> usize {
+    a.chars()
+        .zip(b.chars())
+        .take_while(|(a_char, b_char)| a_char == b_char)
+        .count()
+}
+
+fn common_suffix_len(a: &str, b: &str) -> usize {
+    a.chars()
+        .rev()
+        .zip(b.chars().rev())
+        .take_while(|(a_char, b_char)| a_char == b_char)
+        .count()
 }
 
 #[cfg(test)]
@@ -335,6 +396,34 @@ mod tests {
         // Full query correction
         let corrected = vocab.correct_query("fucio palla", 2);
         assert_eq!(corrected, "lucio dalla");
+    }
+
+    #[test]
+    fn test_lucio_dalla_correction_after_large_same_length_bucket() {
+        let mut vocab = Vocabulary::new();
+
+        for i in 0..6_000 {
+            vocab.add_word(&format!("x{:04}", i));
+        }
+        vocab.add_text("Lucio Dalla");
+
+        assert_eq!(vocab.find_best_match("fucio", 2), Some("lucio"));
+        assert_eq!(vocab.correct_query("fucio dalla", 2), "lucio dalla");
+    }
+
+    #[test]
+    fn test_find_best_matches_includes_exact_and_fuzzy_alternatives() {
+        let mut vocab = Vocabulary::new();
+        vocab.add_text("Lucio Dalla Palla Alla");
+
+        assert_eq!(
+            vocab.find_best_matches("palla", 2, 3),
+            vec!["palla", "dalla", "alla"]
+        );
+        assert_eq!(
+            vocab.find_best_matches("alla", 2, 3),
+            vec!["alla", "dalla", "palla"]
+        );
     }
 
     #[test]

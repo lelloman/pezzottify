@@ -37,6 +37,14 @@ pub enum SearchFilter {
     Track,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum SearchMode {
+    #[default]
+    Strict,
+    Expanded,
+}
+
 #[derive(Deserialize)]
 struct SearchBody {
     pub query: String,
@@ -52,6 +60,10 @@ struct SearchBody {
     /// If true, exclude unavailable content from results
     #[serde(default)]
     pub exclude_unavailable: bool,
+
+    /// Search strategy. Defaults to strict for backwards-compatible API behavior.
+    #[serde(default)]
+    pub search_mode: SearchMode,
 }
 
 fn resolve_search_results(
@@ -77,6 +89,19 @@ impl IntoResponse for SearchResponse {
             SearchResponse::Raw(t) => t.into_response(),
             SearchResponse::Resolved(t) => t.into_response(),
         }
+    }
+}
+
+fn run_search(
+    search_vault: &dyn SearchVault,
+    query: &str,
+    limit: usize,
+    filters: Option<Vec<HashedItemType>>,
+    mode: SearchMode,
+) -> Vec<SearchResult> {
+    match mode {
+        SearchMode::Strict => search_vault.search(query, limit, filters),
+        SearchMode::Expanded => search_vault.search_expanded(query, limit, filters),
     }
 }
 
@@ -120,9 +145,15 @@ fn search_with_availability_filter(
     query: &str,
     limit: usize,
     filters: Option<Vec<HashedItemType>>,
+    mode: SearchMode,
 ) -> Vec<SearchResult> {
-    // Use the new availability-aware search that does filtering at query time
-    let results = search_vault.search_with_availability(query, limit, filters, true);
+    // Use availability-aware search that filters at query time.
+    let results = match mode {
+        SearchMode::Strict => search_vault.search_with_availability(query, limit, filters, true),
+        SearchMode::Expanded => {
+            search_vault.search_expanded_with_availability(query, limit, filters, true)
+        }
+    };
     relevance_filter.filter(results)
 }
 
@@ -249,10 +280,13 @@ async fn search(
 
     if payload.resolve {
         // For resolved results, fetch more upfront since we need to resolve anyway
-        let search_results =
-            server_state
-                .search_vault
-                .search(payload.query.as_str(), limit, filters);
+        let search_results = run_search(
+            server_state.search_vault.as_ref(),
+            payload.query.as_str(),
+            limit,
+            filters,
+            payload.search_mode,
+        );
         let filtered_results = relevance_filter.filter(search_results);
 
         let mut resolved = resolve_search_results(&server_state.catalog_store, filtered_results);
@@ -272,14 +306,18 @@ async fn search(
             &payload.query,
             limit,
             filters,
+            payload.search_mode,
         );
         SearchResponse::Raw(Json(results))
     } else {
         // No availability filter - simple search
-        let search_results =
-            server_state
-                .search_vault
-                .search(payload.query.as_str(), limit, filters);
+        let search_results = run_search(
+            server_state.search_vault.as_ref(),
+            payload.query.as_str(),
+            limit,
+            filters,
+            payload.search_mode,
+        );
         let filtered_results = relevance_filter.filter(search_results);
         SearchResponse::Raw(Json(filtered_results))
     }
@@ -296,6 +334,9 @@ struct StreamingSearchQuery {
     /// If true, exclude unavailable content from results
     #[serde(default)]
     exclude_unavailable: bool,
+    /// Search strategy. Defaults to strict for backwards-compatible API behavior.
+    #[serde(default)]
+    search_mode: SearchMode,
 }
 
 async fn streaming_search(
@@ -307,9 +348,13 @@ async fn streaming_search(
     let max_results = server_state.config.streaming_search.top_results_limit
         + server_state.config.streaming_search.other_results_limit
         + 50;
-    let search_results = server_state
-        .search_vault
-        .search(&params.q, max_results, None);
+    let search_results = run_search(
+        server_state.search_vault.as_ref(),
+        &params.q,
+        max_results,
+        None,
+        params.search_mode,
+    );
 
     // Get the user_manager from state
     let user_manager = server_state.user_manager.lock().unwrap();
