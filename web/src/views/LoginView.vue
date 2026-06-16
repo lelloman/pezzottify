@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import { useAuthStore } from "@/store/auth.js";
 import { useRouter } from "vue-router";
+import MusicNoteIcon from "@/components/icons/MusicNoteIcon.vue";
 
 const authStore = useAuthStore();
 const router = useRouter();
@@ -70,7 +71,10 @@ async function handlePasswordLogin() {
   <div class="login-container">
     <div class="login-card">
       <div class="login-header">
-        <h1 class="app-title">Pezzottify</h1>
+        <h1 class="app-title">
+          <MusicNoteIcon class="app-logo-icon" />
+          <span class="app-wordmark">ezzottify</span>
+        </h1>
         <p class="login-subtitle">Sign in to continue</p>
       </div>
 
@@ -150,11 +154,28 @@ async function handlePasswordLogin() {
 }
 
 .app-title {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin: 0 0 8px 0;
+  color: var(--accent-color);
+}
+
+.app-logo-icon {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+}
+
+.app-wordmark {
+  color: var(--accent-color);
   font-size: 32px;
   font-weight: 600;
-  color: var(--accent-color);
-  margin: 0 0 8px 0;
-  letter-spacing: -0.5px;
+  line-height: 1;
+  margin-left: -10px;
+  transform: translateY(1px);
+  white-space: nowrap;
 }
 
 .login-subtitle {

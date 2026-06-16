@@ -1,8 +1,13 @@
 <template>
   <header>
     <div class="topBarContent">
-      <router-link to="/" class="logoLink scaleClickFeedback" title="Home">
+      <router-link
+        to="/"
+        class="logoLink scaleClickFeedback"
+        title="Pezzottify Home"
+      >
         <MusicNoteIcon class="logoIcon" />
+        <span class="logoWordmark">ezzottify</span>
       </router-link>
       <div class="searchInputContainer">
         <div class="searchBar">
@@ -294,9 +299,11 @@ header {
 .logoLink {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 40px;
+  justify-content: flex-start;
+  gap: 0;
+  min-width: 40px;
   height: 40px;
+  padding: 0 8px 0 4px;
   border-radius: 8px;
   color: var(--spotify-green);
   flex-shrink: 0;
@@ -312,6 +319,17 @@ header {
 .logoIcon {
   width: 28px;
   height: 28px;
+  flex-shrink: 0;
+}
+
+.logoWordmark {
+  color: var(--spotify-green);
+  font-size: 1.08rem;
+  font-weight: var(--font-bold);
+  line-height: 1;
+  margin-left: -8px;
+  transform: translateY(1px);
+  white-space: nowrap;
 }
 
 .userActions {
