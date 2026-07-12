@@ -446,6 +446,20 @@ pub trait CatalogStore: Send + Sync {
 
     /// Look up an artist rowid by MusicBrainz ID.
     fn get_artist_rowid_by_mbid(&self, mbid: &str) -> Result<Option<i64>>;
+
+    /// Look up multiple artist rowids by MusicBrainz ID.
+    ///
+    /// Stores should override this with a single batched query. The default
+    /// preserves compatibility for lightweight and test implementations.
+    fn get_artist_rowids_by_mbids(&self, mbids: &[String]) -> Result<Vec<(String, i64)>> {
+        let mut resolved = Vec::new();
+        for mbid in mbids {
+            if let Some(rowid) = self.get_artist_rowid_by_mbid(mbid)? {
+                resolved.push((mbid.clone(), rowid));
+            }
+        }
+        Ok(resolved)
+    }
 }
 
 /// A searchable item for the search index.

@@ -24,6 +24,7 @@ use crate::config::RelatedArtistsSettings;
 use crate::related_artists::lastfm::LastFmClient;
 use crate::related_artists::musicbrainz::MusicBrainzClient;
 use crate::server_store::{CatalogContentType, CatalogEventType};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, error, info, warn};
@@ -202,6 +203,21 @@ impl RelatedArtistsEnrichmentJob {
 
             // Resolve similar artists back to catalog entries
             let mut related_pairs: Vec<(i64, f64)> = Vec::new();
+            let similar_mbids = similar
+                .iter()
+                .filter_map(|artist| artist.mbid.clone())
+                .collect::<Vec<_>>();
+            let mut rowids_by_mbid = ctx
+                .catalog_store
+                .get_artist_rowids_by_mbids(&similar_mbids)
+                .map_err(|e| {
+                    JobError::ExecutionFailed(format!(
+                        "Failed to resolve related artist MBIDs for {}: {}",
+                        spotify_id, e
+                    ))
+                })?
+                .into_iter()
+                .collect::<HashMap<_, _>>();
 
             for similar_artist in &similar {
                 let Some(similar_mbid) = &similar_artist.mbid else {
@@ -209,9 +225,9 @@ impl RelatedArtistsEnrichmentJob {
                 };
 
                 // Check if we already have this mbid in our catalog
-                let related_rowid = match ctx.catalog_store.get_artist_rowid_by_mbid(similar_mbid) {
-                    Ok(Some(rowid)) => Some(rowid),
-                    Ok(None) => {
+                let related_rowid = match rowids_by_mbid.get(similar_mbid).copied() {
+                    Some(rowid) => Some(rowid),
+                    None => {
                         // Try to resolve via MusicBrainz → Spotify ID
                         match self.musicbrainz.lookup_spotify_id_for_mbid(similar_mbid) {
                             Ok(Some(related_spotify_id)) => {
@@ -222,10 +238,15 @@ impl RelatedArtistsEnrichmentJob {
                                         let _ = ctx
                                             .catalog_store
                                             .set_artist_mbid(&related_spotify_id, similar_mbid);
-                                        ctx.catalog_store
+                                        let rowid = ctx
+                                            .catalog_store
                                             .get_artist_rowid_by_mbid(similar_mbid)
                                             .ok()
-                                            .flatten()
+                                            .flatten();
+                                        if let Some(rowid) = rowid {
+                                            rowids_by_mbid.insert(similar_mbid.clone(), rowid);
+                                        }
+                                        rowid
                                     }
                                     _ => None,
                                 }
@@ -233,7 +254,6 @@ impl RelatedArtistsEnrichmentJob {
                             _ => None,
                         }
                     }
-                    Err(_) => None,
                 };
 
                 if let Some(rowid) = related_rowid {
