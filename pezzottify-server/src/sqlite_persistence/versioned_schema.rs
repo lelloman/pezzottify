@@ -63,6 +63,8 @@ pub struct Column<'a, S: AsRef<str>> {
 pub struct Table {
     pub name: &'static str,
     pub columns: &'static [Column<'static, &'static str>],
+    /// Index name and column specification. The specification may end with an
+    /// uppercase ` WHERE ` followed by a SQLite partial-index predicate.
     pub indices: &'static [(&'static str, &'static str)],
     pub unique_constraints: &'static [&'static [&'static str]],
 }
@@ -118,11 +120,18 @@ impl Table {
         create_sql.push_str(");");
         conn.execute(&create_sql, params![])?;
 
-        for (index_name, column_name) in self.indices {
+        for (index_name, index_spec) in self.indices {
+            let (columns, predicate) = match index_spec.split_once(" WHERE ") {
+                Some((columns, predicate)) => (columns, Some(predicate)),
+                None => (*index_spec, None),
+            };
+            let where_clause = predicate
+                .map(|predicate| format!(" WHERE {predicate}"))
+                .unwrap_or_default();
             conn.execute(
                 &format!(
-                    "CREATE INDEX {} ON {}({});",
-                    index_name, self.name, column_name
+                    "CREATE INDEX {} ON {}({}){};",
+                    index_name, self.name, columns, where_clause
                 ),
                 params![],
             )?;
