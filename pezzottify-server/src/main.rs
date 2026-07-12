@@ -126,6 +126,30 @@ impl From<&CliArgs> for config::CliConfig {
     }
 }
 
+#[cfg(unix)]
+async fn shutdown_signal() -> &'static str {
+    let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        .expect("failed to install SIGTERM handler");
+
+    tokio::select! {
+        result = tokio::signal::ctrl_c() => {
+            if let Err(e) = result {
+                error!("Failed to listen for SIGINT: {}", e);
+            }
+            "SIGINT"
+        }
+        _ = terminate.recv() => "SIGTERM",
+    }
+}
+
+#[cfg(not(unix))]
+async fn shutdown_signal() -> &'static str {
+    if let Err(e) = tokio::signal::ctrl_c().await {
+        error!("Failed to listen for shutdown signal: {}", e);
+    }
+    "Ctrl+C"
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli_args = CliArgs::parse();
@@ -543,8 +567,8 @@ async fn main() -> Result<()> {
             info!("Scheduler stopped");
             Ok(())
         },
-        _ = tokio::signal::ctrl_c() => {
-            info!("Received Ctrl+C, initiating graceful shutdown");
+        signal = shutdown_signal() => {
+            info!("Received {}, initiating graceful shutdown", signal);
             shutdown_token.cancel();
             // Give the scheduler a moment to shut down gracefully
             tokio::time::sleep(Duration::from_millis(100)).await;
