@@ -1036,6 +1036,26 @@ impl SqliteCatalogStore {
             Err(e) => Err(e.into()),
         }
     }
+
+    /// Look up artist rowids for a batch of MusicBrainz IDs.
+    pub fn get_artist_rowids_by_mbids(&self, mbids: &[String]) -> Result<Vec<(String, i64)>> {
+        if mbids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+        let placeholders = mbids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!("SELECT mbid, rowid FROM artists WHERE mbid IN ({placeholders})");
+        let mut stmt = conn.prepare(&sql)?;
+        let resolved = stmt
+            .query_map(params_from_iter(mbids.iter()), |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(resolved)
+    }
 }
 
 // =============================================================================
@@ -3047,6 +3067,10 @@ impl CatalogStore for SqliteCatalogStore {
     fn get_artist_rowid_by_mbid(&self, mbid: &str) -> Result<Option<i64>> {
         SqliteCatalogStore::get_artist_rowid_by_mbid(self, mbid)
     }
+
+    fn get_artist_rowids_by_mbids(&self, mbids: &[String]) -> Result<Vec<(String, i64)>> {
+        SqliteCatalogStore::get_artist_rowids_by_mbids(self, mbids)
+    }
 }
 
 #[cfg(test)]
@@ -3066,6 +3090,44 @@ mod tests {
         )
         .unwrap();
         (store, temp_dir)
+    }
+
+    #[test]
+    fn test_get_artist_rowids_by_mbids_batches_matches_and_omits_missing() {
+        let (store, _temp_dir) = create_test_store();
+        {
+            let conn = store.write_conn.lock().unwrap();
+            for (id, mbid) in [
+                ("artist-1", "mbid-1"),
+                ("artist-2", "mbid-2"),
+                ("artist-3", "mbid-3"),
+            ] {
+                conn.execute(
+                    "INSERT INTO artists
+                     (id, name, followers_total, popularity, artist_available, mbid, mbid_lookup_status)
+                     VALUES (?1, ?1, 0, 0, 0, ?2, 1)",
+                    params![id, mbid],
+                )
+                .unwrap();
+            }
+        }
+
+        let requested = vec![
+            "mbid-2".to_string(),
+            "missing".to_string(),
+            "mbid-1".to_string(),
+        ];
+        let resolved = store
+            .get_artist_rowids_by_mbids(&requested)
+            .unwrap()
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+
+        assert_eq!(resolved.len(), 2);
+        assert!(resolved.contains_key("mbid-1"));
+        assert!(resolved.contains_key("mbid-2"));
+        assert!(!resolved.contains_key("missing"));
+        assert!(store.get_artist_rowids_by_mbids(&[]).unwrap().is_empty());
     }
 
     fn sample_embedding(
