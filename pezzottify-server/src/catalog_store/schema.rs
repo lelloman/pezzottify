@@ -37,6 +37,18 @@ const ARTISTS_TABLE: Table = Table {
     indices: &[
         ("idx_artists_id", "id"),
         ("idx_artists_available", "artist_available"),
+        (
+            "idx_artists_mbid_nonnull",
+            "mbid WHERE mbid IS NOT NULL",
+        ),
+        (
+            "idx_artists_need_mbid",
+            "artist_available DESC, popularity DESC WHERE mbid_lookup_status = 0",
+        ),
+        (
+            "idx_artists_need_related",
+            "artist_available DESC, popularity DESC WHERE mbid_lookup_status = 1 AND mbid IS NOT NULL",
+        ),
     ],
     unique_constraints: &[&["id"]],
 };
@@ -484,6 +496,41 @@ pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             Ok(())
         }),
     },
+    VersionedSchema {
+        version: 7,
+        tables: &[
+            ARTISTS_TABLE,
+            ALBUMS_TABLE,
+            TRACKS_TABLE,
+            TRACK_ARTISTS_TABLE,
+            ARTIST_ALBUMS_TABLE,
+            ARTIST_GENRES_TABLE,
+            ALBUM_IMAGES_TABLE,
+            ARTIST_IMAGES_TABLE,
+            RELATED_ARTISTS_TABLE,
+            ENTITY_EMBEDDINGS_TABLE,
+        ],
+        migration: Some(|tx: &rusqlite::Connection| {
+            tx.execute(
+                "CREATE INDEX IF NOT EXISTS idx_artists_mbid_nonnull
+                 ON artists(mbid) WHERE mbid IS NOT NULL",
+                [],
+            )?;
+            tx.execute(
+                "CREATE INDEX IF NOT EXISTS idx_artists_need_mbid
+                 ON artists(artist_available DESC, popularity DESC)
+                 WHERE mbid_lookup_status = 0",
+                [],
+            )?;
+            tx.execute(
+                "CREATE INDEX IF NOT EXISTS idx_artists_need_related
+                 ON artists(artist_available DESC, popularity DESC)
+                 WHERE mbid_lookup_status = 1 AND mbid IS NOT NULL",
+                [],
+            )?;
+            Ok(())
+        }),
+    },
 ];
 
 #[cfg(test)]
@@ -514,6 +561,63 @@ mod tests {
             )
             .unwrap();
         assert_eq!(table_count, 1);
+    }
+
+    #[test]
+    fn test_latest_schema_creates_related_artist_enrichment_indexes() {
+        let conn = Connection::open_in_memory().unwrap();
+        let schema = CATALOG_VERSIONED_SCHEMAS.last().unwrap();
+        schema.create(&conn).unwrap();
+
+        for index_name in [
+            "idx_artists_mbid_nonnull",
+            "idx_artists_need_mbid",
+            "idx_artists_need_related",
+        ] {
+            let count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?1",
+                    [index_name],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(count, 1, "missing index {index_name}");
+        }
+
+        let candidate_plan: String = conn
+            .query_row(
+                "EXPLAIN QUERY PLAN
+                 SELECT id, rowid FROM artists
+                 WHERE mbid_lookup_status = 0
+                 ORDER BY artist_available DESC, popularity DESC
+                 LIMIT 200",
+                [],
+                |row| row.get(3),
+            )
+            .unwrap();
+        assert!(candidate_plan.contains("idx_artists_need_mbid"));
+
+        let related_candidate_plan: String = conn
+            .query_row(
+                "EXPLAIN QUERY PLAN
+                 SELECT id, mbid, rowid FROM artists
+                 WHERE mbid_lookup_status = 1 AND mbid IS NOT NULL
+                 ORDER BY artist_available DESC, popularity DESC
+                 LIMIT 200",
+                [],
+                |row| row.get(3),
+            )
+            .unwrap();
+        assert!(related_candidate_plan.contains("idx_artists_need_related"));
+
+        let mbid_plan: String = conn
+            .query_row(
+                "EXPLAIN QUERY PLAN SELECT rowid FROM artists WHERE mbid = ?1",
+                ["test-mbid"],
+                |row| row.get(3),
+            )
+            .unwrap();
+        assert!(mbid_plan.contains("idx_artists_mbid_nonnull"));
     }
 
     #[test]
