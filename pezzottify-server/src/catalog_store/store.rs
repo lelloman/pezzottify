@@ -131,20 +131,7 @@ impl SqliteCatalogStore {
 
         db_registry.register(db_path_ref.to_path_buf(), &write_conn)?;
 
-        let artist_count: i64 = write_conn
-            .query_row("SELECT COUNT(*) FROM artists", [], |r| r.get(0))
-            .unwrap_or(0);
-        let album_count: i64 = write_conn
-            .query_row("SELECT COUNT(*) FROM albums", [], |r| r.get(0))
-            .unwrap_or(0);
-        let track_count: i64 = write_conn
-            .query_row("SELECT COUNT(*) FROM tracks", [], |r| r.get(0))
-            .unwrap_or(0);
-
-        info!(
-            "Opened Spotify catalog: {} artists, {} albums, {} tracks",
-            artist_count, album_count, track_count
-        );
+        info!("Opened Spotify catalog");
 
         let mut read_pool = Vec::with_capacity(read_pool_size);
         for _ in 0..read_pool_size {
