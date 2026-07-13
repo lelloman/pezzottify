@@ -10,6 +10,7 @@
 pub mod album_embedding_sync;
 pub mod audio_analysis;
 pub mod catalog_availability_stats;
+pub mod catalog_cardinality_stats;
 pub mod device_pruning;
 pub mod featured_albums;
 pub mod ingestion_cleanup;
@@ -27,6 +28,7 @@ pub use audio_analysis::AudioAnalysisJob;
 pub use catalog_availability_stats::{
     CatalogAvailabilityStatsJob, CatalogAvailabilityStatsSnapshot,
 };
+pub use catalog_cardinality_stats::CatalogCardinalityStatsJob;
 pub use device_pruning::DevicePruningJob;
 pub use featured_albums::{FeaturedAlbum, FeaturedAlbumsJob, FeaturedAlbumsSnapshot};
 pub use ingestion_cleanup::IngestionCleanupJob;

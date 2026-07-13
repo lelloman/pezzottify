@@ -6,6 +6,8 @@ use std::time::Duration;
 /// Schedule for when a job should run.
 #[derive(Debug, Clone)]
 pub enum JobSchedule {
+    /// Run only when explicitly triggered through the admin API.
+    Manual,
     /// Run at specific times using cron syntax
     Cron(String),
     /// Run at fixed intervals

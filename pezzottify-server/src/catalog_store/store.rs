@@ -4,7 +4,10 @@
 //! from the Spotify metadata database dump.
 
 use super::models::*;
-use super::schema::{create_artist_enrichment_enqueue_trigger, CATALOG_VERSIONED_SCHEMAS};
+use super::schema::{
+    create_artist_enrichment_enqueue_trigger, create_catalog_stats_triggers,
+    initialize_empty_catalog_stats, CATALOG_VERSIONED_SCHEMAS,
+};
 use super::trait_def::{
     AlbumTrackRef, AlbumTracklist, CatalogStore, SearchableContentType, SearchableItem,
 };
@@ -47,6 +50,8 @@ fn migrate_if_needed(conn: &mut Connection) -> Result<()> {
         info!("Creating catalog db schema at version {}", latest_version);
         latest_schema.create(conn)?;
         create_artist_enrichment_enqueue_trigger(conn)?;
+        initialize_empty_catalog_stats(conn)?;
+        create_catalog_stats_triggers(conn)?;
         return Ok(());
     }
 
@@ -820,26 +825,146 @@ impl SqliteCatalogStore {
 
     /// Get the number of artists.
     pub fn get_artists_count(&self) -> usize {
-        let read_conn = self.get_read_conn();
-        let conn = read_conn.lock().unwrap();
-        conn.query_row("SELECT COUNT(*) FROM artists", [], |r| r.get::<_, i64>(0))
-            .unwrap_or(0) as usize
+        self.get_catalog_cardinality_stats()
+            .ok()
+            .flatten()
+            .map(|stats| stats.artists)
+            .unwrap_or(0)
     }
 
     /// Get the number of albums.
     pub fn get_albums_count(&self) -> usize {
-        let read_conn = self.get_read_conn();
-        let conn = read_conn.lock().unwrap();
-        conn.query_row("SELECT COUNT(*) FROM albums", [], |r| r.get::<_, i64>(0))
-            .unwrap_or(0) as usize
+        self.get_catalog_cardinality_stats()
+            .ok()
+            .flatten()
+            .map(|stats| stats.albums)
+            .unwrap_or(0)
     }
 
     /// Get the number of tracks.
     pub fn get_tracks_count(&self) -> usize {
+        self.get_catalog_cardinality_stats()
+            .ok()
+            .flatten()
+            .map(|stats| stats.tracks)
+            .unwrap_or(0)
+    }
+
+    pub fn get_catalog_cardinality_stats(&self) -> Result<Option<CatalogCardinalityStats>> {
         let read_conn = self.get_read_conn();
         let conn = read_conn.lock().unwrap();
-        conn.query_row("SELECT COUNT(*) FROM tracks", [], |r| r.get::<_, i64>(0))
-            .unwrap_or(0) as usize
+        let row = conn
+            .query_row(
+                "SELECT artists_count, albums_count, tracks_count,
+                        mutation_version, updated_at
+                 FROM catalog_stats WHERE id = 1 AND is_valid = 1",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, i64>(3)?,
+                        row.get::<_, i64>(4)?,
+                    ))
+                },
+            )
+            .optional()?;
+        row.map(|(artists, albums, tracks, mutation_version, updated_at)| {
+            Ok(CatalogCardinalityStats {
+                artists: usize::try_from(artists).context("invalid persisted artist count")?,
+                albums: usize::try_from(albums).context("invalid persisted album count")?,
+                tracks: usize::try_from(tracks).context("invalid persisted track count")?,
+                mutation_version,
+                updated_at,
+            })
+        })
+        .transpose()
+    }
+
+    fn count_table_rows_cancellable(
+        &self,
+        table: &str,
+        is_cancelled: &(dyn Fn() -> bool + Send + Sync),
+    ) -> Result<i64> {
+        const BATCH_SIZE: i64 = 10_000;
+        const BATCH_DELAY: std::time::Duration = std::time::Duration::from_millis(10);
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+        let sql = format!(
+            "SELECT COUNT(*), COALESCE(MAX(rowid), ?1)
+             FROM (
+                 SELECT rowid FROM {table}
+                 WHERE rowid > ?1 ORDER BY rowid LIMIT ?2
+             )"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let mut last_rowid = i64::MIN;
+        let mut total = 0i64;
+        loop {
+            if is_cancelled() {
+                anyhow::bail!("cancelled");
+            }
+            let (batch_count, batch_last_rowid): (i64, i64) = stmt
+                .query_row(params![last_rowid, BATCH_SIZE], |row| {
+                    Ok((row.get(0)?, row.get(1)?))
+                })?;
+            if batch_count == 0 {
+                break;
+            }
+            total += batch_count;
+            last_rowid = batch_last_rowid;
+            std::thread::sleep(BATCH_DELAY);
+        }
+        Ok(total)
+    }
+
+    pub fn rebuild_catalog_cardinality_stats(
+        &self,
+        is_cancelled: &(dyn Fn() -> bool + Send + Sync),
+    ) -> Result<CatalogCardinalityStats> {
+        let expected_mutation_version = {
+            let read_conn = self.get_read_conn();
+            let conn = read_conn.lock().unwrap();
+            conn.query_row(
+                "SELECT mutation_version FROM catalog_stats WHERE id = 1",
+                [],
+                |row| row.get::<_, i64>(0),
+            )?
+        };
+
+        let artists = self.count_table_rows_cancellable("artists", is_cancelled)?;
+        let albums = self.count_table_rows_cancellable("albums", is_cancelled)?;
+        let tracks = self.count_table_rows_cancellable("tracks", is_cancelled)?;
+        if is_cancelled() {
+            anyhow::bail!("cancelled");
+        }
+
+        let now = Utc::now().timestamp();
+        let conn = self.write_conn.lock().unwrap();
+        conn.execute("BEGIN IMMEDIATE", [])?;
+        let result = (|| -> Result<()> {
+            let changed = conn.execute(
+                "UPDATE catalog_stats
+                 SET artists_count = ?1, albums_count = ?2, tracks_count = ?3,
+                     is_valid = 1, updated_at = ?4
+                 WHERE id = 1 AND mutation_version = ?5",
+                params![artists, albums, tracks, now, expected_mutation_version],
+            )?;
+            if changed != 1 {
+                anyhow::bail!("catalog changed while counts were being rebuilt; retry the job");
+            }
+            Ok(())
+        })();
+        Self::finish_explicit_transaction(&conn, result)?;
+
+        Ok(CatalogCardinalityStats {
+            artists: usize::try_from(artists)?,
+            albums: usize::try_from(albums)?,
+            tracks: usize::try_from(tracks)?,
+            mutation_version: expected_mutation_version,
+            updated_at: now,
+        })
     }
 
     // =========================================================================
@@ -1375,6 +1500,17 @@ impl CatalogStore for SqliteCatalogStore {
         SqliteCatalogStore::get_tracks_count(self)
     }
 
+    fn get_catalog_cardinality_stats(&self) -> Result<Option<CatalogCardinalityStats>> {
+        SqliteCatalogStore::get_catalog_cardinality_stats(self)
+    }
+
+    fn rebuild_catalog_cardinality_stats(
+        &self,
+        is_cancelled: &(dyn Fn() -> bool + Send + Sync),
+    ) -> Result<CatalogCardinalityStats> {
+        SqliteCatalogStore::rebuild_catalog_cardinality_stats(self, is_cancelled)
+    }
+
     fn refresh_availability_and_stats(&self) -> Result<AvailabilityRefreshResult> {
         self.refresh_availability_and_stats_with_cancel(&|| false)
     }
@@ -1673,23 +1809,8 @@ impl CatalogStore for SqliteCatalogStore {
         let read_conn = self.get_read_conn();
         let conn = read_conn.lock().unwrap();
 
-        let artist_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM artists", [], |r| r.get(0))
-            .unwrap_or(0);
-        let album_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM albums", [], |r| r.get(0))
-            .unwrap_or(0);
-        let track_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM tracks", [], |r| r.get(0))
-            .unwrap_or(0);
-
-        let total = artist_count + album_count + track_count;
-        info!(
-            "Indexing all content: {} artists, {} albums, {} tracks ({} total)",
-            artist_count, album_count, track_count, total
-        );
-
-        let mut items = Vec::with_capacity(total as usize);
+        info!("Indexing all catalog content");
+        let mut items = Vec::new();
 
         let mut artist_stmt = conn
             .prepare("SELECT id, name, artist_available FROM artists ORDER BY popularity DESC")?;
@@ -3289,7 +3410,7 @@ mod tests {
     }
 
     #[test]
-    fn test_v8_queue_migration_does_not_backfill_existing_catalog() {
+    fn test_catalog_migrations_do_not_backfill_queue_or_cardinality_stats() {
         let mut conn = Connection::open_in_memory().unwrap();
         CATALOG_VERSIONED_SCHEMAS[7].create(&conn).unwrap();
         conn.pragma_update(None, "user_version", BASE_DB_VERSION + 7)
@@ -3311,6 +3432,15 @@ mod tests {
             .unwrap();
         assert_eq!(queued, 0, "migration must not backfill the catalog");
 
+        let stats_valid: i64 = conn
+            .query_row(
+                "SELECT is_valid FROM catalog_stats WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stats_valid, 0, "migration must not count the catalog");
+
         conn.execute(
             "INSERT INTO artists (id, name, followers_total, popularity)
              VALUES ('after-migration', 'After Migration', 0, 0)",
@@ -3323,6 +3453,74 @@ mod tests {
             })
             .unwrap();
         assert_eq!(queued_after_insert, 1);
+    }
+
+    #[test]
+    fn test_catalog_cardinality_stats_rebuild_and_incremental_updates() {
+        let (store, _temp_dir) = create_test_store();
+        {
+            let conn = store.write_conn.lock().unwrap();
+            conn.execute(
+                "UPDATE catalog_stats
+                 SET artists_count = NULL, albums_count = NULL, tracks_count = NULL,
+                     is_valid = 0",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO artists (id, name, followers_total, popularity)
+                 VALUES ('artist', 'Artist', 0, 0)",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO albums
+                 (id, name, album_type, label, popularity, release_date, release_date_precision)
+                 VALUES ('album', 'Album', 'album', '', 0, '2026', 'year')",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO tracks
+                 (id, name, album_rowid, track_number, popularity, disc_number, duration_ms, explicit)
+                 VALUES ('track', 'Track', (SELECT rowid FROM albums WHERE id = 'album'),
+                         1, 0, 1, 1000, 0)",
+                [],
+            )
+            .unwrap();
+        }
+
+        assert!(store.get_catalog_cardinality_stats().unwrap().is_none());
+        let rebuilt = store.rebuild_catalog_cardinality_stats(&|| false).unwrap();
+        assert_eq!((rebuilt.artists, rebuilt.albums, rebuilt.tracks), (1, 1, 1));
+        assert_eq!(store.get_artists_count(), 1);
+        assert_eq!(store.get_albums_count(), 1);
+        assert_eq!(store.get_tracks_count(), 1);
+
+        {
+            let conn = store.write_conn.lock().unwrap();
+            conn.execute(
+                "INSERT INTO artists (id, name, followers_total, popularity)
+                 VALUES ('artist-2', 'Artist 2', 0, 0)",
+                [],
+            )
+            .unwrap();
+            conn.execute("DELETE FROM tracks WHERE id = 'track'", [])
+                .unwrap();
+        }
+        let updated = store.get_catalog_cardinality_stats().unwrap().unwrap();
+        assert_eq!((updated.artists, updated.albums, updated.tracks), (2, 1, 0));
+    }
+
+    #[test]
+    fn test_catalog_cardinality_stats_rebuild_is_cancellable() {
+        let (store, _temp_dir) = create_test_store();
+        let before = store.get_catalog_cardinality_stats().unwrap().unwrap();
+        let error = store
+            .rebuild_catalog_cardinality_stats(&|| true)
+            .unwrap_err();
+        assert_eq!(error.to_string(), "cancelled");
+        assert_eq!(store.get_catalog_cardinality_stats().unwrap(), Some(before));
     }
 
     #[test]
