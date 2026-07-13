@@ -106,6 +106,11 @@ impl JobScheduler {
             }
         }
 
+        // Persist a first-run policy before evaluating due interval jobs. This
+        // prevents heavy jobs from being treated as immediately due merely
+        // because their schedule row does not exist yet.
+        self.initialize_missing_schedule_states().await;
+
         // Fire OnStartup hooks
         self.trigger_jobs_for_hook(HookEvent::OnStartup).await;
 
@@ -139,6 +144,42 @@ impl JobScheduler {
         }
 
         info!("Job scheduler stopped");
+    }
+
+    async fn initialize_missing_schedule_states(&self) {
+        let now = chrono::Utc::now();
+        let state = self.shared_state.read().await;
+        for (job_id, job) in &state.jobs {
+            if self
+                .server_store
+                .get_schedule_state(job_id)
+                .ok()
+                .flatten()
+                .is_some()
+            {
+                continue;
+            }
+
+            let Some(interval) = Self::scheduled_interval(job.schedule()) else {
+                continue;
+            };
+            let next_run_at = if job.run_on_startup() {
+                now
+            } else {
+                now + chrono::Duration::from_std(interval).unwrap_or_default()
+            };
+            let schedule_state = crate::server_store::JobScheduleState {
+                job_id: job_id.clone(),
+                next_run_at,
+                last_run_at: None,
+            };
+            if let Err(error) = self.server_store.update_schedule_state(&schedule_state) {
+                warn!(
+                    "Failed to initialize schedule state for {}: {}",
+                    job_id, error
+                );
+            }
+        }
     }
 
     /// Handle a command from the SchedulerHandle.
@@ -695,6 +736,37 @@ mod tests {
         cancelled: Arc<AtomicBool>,
     }
 
+    struct DeferredIntervalTestJob {
+        id: &'static str,
+        run_on_startup: bool,
+    }
+
+    impl BackgroundJob for DeferredIntervalTestJob {
+        fn id(&self) -> &'static str {
+            self.id
+        }
+
+        fn name(&self) -> &'static str {
+            "Interval Test Job"
+        }
+
+        fn description(&self) -> &'static str {
+            "Tests first-run scheduling policy"
+        }
+
+        fn schedule(&self) -> JobSchedule {
+            JobSchedule::Interval(Duration::from_secs(3600))
+        }
+
+        fn run_on_startup(&self) -> bool {
+            self.run_on_startup
+        }
+
+        fn execute(&self, _ctx: &JobContext) -> Result<(), JobError> {
+            Ok(())
+        }
+    }
+
     impl BackgroundJob for CancellableTestJob {
         fn id(&self) -> &'static str {
             self.id
@@ -782,6 +854,37 @@ mod tests {
         let jobs = handle.list_jobs().await.unwrap();
         assert_eq!(jobs.len(), 1);
         assert_eq!(jobs[0].id, "test_job");
+    }
+
+    #[tokio::test]
+    async fn test_first_run_policy_defers_heavy_interval_job() {
+        let (mut scheduler, _handle, _temp_dir, _hook_sender) = create_test_scheduler();
+        scheduler
+            .register_job(Arc::new(DeferredIntervalTestJob {
+                id: "deferred_interval_job",
+                run_on_startup: false,
+            }))
+            .await;
+
+        let before = chrono::Utc::now();
+        scheduler.initialize_missing_schedule_states().await;
+        let schedule = scheduler
+            .server_store
+            .get_schedule_state("deferred_interval_job")
+            .unwrap()
+            .unwrap();
+        assert!(schedule.next_run_at >= before + chrono::Duration::minutes(59));
+        assert!(schedule.last_run_at.is_none());
+
+        // Initialization is idempotent and must not move an existing schedule.
+        let original_next_run = schedule.next_run_at;
+        scheduler.initialize_missing_schedule_states().await;
+        let unchanged = scheduler
+            .server_store
+            .get_schedule_state("deferred_interval_job")
+            .unwrap()
+            .unwrap();
+        assert_eq!(unchanged.next_run_at, original_next_run);
     }
 
     #[tokio::test]

@@ -4,7 +4,7 @@
 //! from the Spotify metadata database dump.
 
 use super::models::*;
-use super::schema::CATALOG_VERSIONED_SCHEMAS;
+use super::schema::{create_artist_enrichment_enqueue_trigger, CATALOG_VERSIONED_SCHEMAS};
 use super::trait_def::{
     AlbumTrackRef, AlbumTracklist, CatalogStore, SearchableContentType, SearchableItem,
 };
@@ -46,6 +46,7 @@ fn migrate_if_needed(conn: &mut Connection) -> Result<()> {
         // Brand new database - create the latest schema directly
         info!("Creating catalog db schema at version {}", latest_version);
         latest_schema.create(conn)?;
+        create_artist_enrichment_enqueue_trigger(conn)?;
         return Ok(());
     }
 
@@ -96,6 +97,11 @@ fn migrate_if_needed(conn: &mut Connection) -> Result<()> {
     );
     Ok(())
 }
+
+const ENRICHMENT_MAX_ATTEMPTS: i64 = 8;
+const ENRICHMENT_RETRY_BASE_SECS: i64 = 60 * 60;
+const ENRICHMENT_RETRY_MAX_SECS: i64 = 7 * 24 * 60 * 60;
+const ENRICHMENT_CLAIM_LEASE_SECS: i64 = 6 * 60 * 60;
 
 impl SqliteCatalogStore {
     /// Create a new SqliteCatalogStore.
@@ -855,45 +861,193 @@ impl SqliteCatalogStore {
 
     /// Get artists needing MusicBrainz ID lookup (status = 0).
     pub fn get_artists_needing_mbid(&self, limit: usize) -> Result<Vec<(String, i64)>> {
-        let read_conn = self.get_read_conn();
-        let conn = read_conn.lock().unwrap();
-
-        let mut stmt = conn.prepare_cached(
-            "SELECT id, rowid FROM artists WHERE mbid_lookup_status = 0 ORDER BY artist_available DESC, popularity DESC LIMIT ?1",
-        )?;
-
-        let results = stmt
-            .query_map(params![limit as i64], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(results)
+        let conn = self.write_conn.lock().unwrap();
+        conn.execute("BEGIN IMMEDIATE", [])?;
+        let result = (|| -> Result<Vec<(String, i64)>> {
+            let rowids = Self::claim_artist_enrichment_batch(
+                &conn,
+                "mbid",
+                "a.mbid_lookup_status = 0",
+                limit,
+            )?;
+            let mut results = Vec::with_capacity(rowids.len());
+            let mut stmt = conn.prepare_cached("SELECT id FROM artists WHERE rowid = ?1")?;
+            for rowid in rowids {
+                let id = stmt.query_row(params![rowid], |row| row.get(0))?;
+                results.push((id, rowid));
+            }
+            Ok(results)
+        })();
+        Self::finish_explicit_transaction(&conn, result)
     }
 
     /// Get artists needing related artists fetch (status = 1, has mbid).
     pub fn get_artists_needing_related(&self, limit: usize) -> Result<Vec<(String, String, i64)>> {
-        let read_conn = self.get_read_conn();
-        let conn = read_conn.lock().unwrap();
+        let conn = self.write_conn.lock().unwrap();
+        conn.execute("BEGIN IMMEDIATE", [])?;
+        let result = (|| -> Result<Vec<(String, String, i64)>> {
+            let rowids = Self::claim_artist_enrichment_batch(
+                &conn,
+                "related",
+                "a.mbid_lookup_status = 1 AND a.mbid IS NOT NULL",
+                limit,
+            )?;
+            let mut results = Vec::with_capacity(rowids.len());
+            let mut stmt = conn.prepare_cached("SELECT id, mbid FROM artists WHERE rowid = ?1")?;
+            for rowid in rowids {
+                let (id, mbid) = stmt.query_row(params![rowid], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?;
+                results.push((id, mbid, rowid));
+            }
+            Ok(results)
+        })();
+        Self::finish_explicit_transaction(&conn, result)
+    }
 
-        let mut stmt = conn.prepare_cached(
-            "SELECT id, mbid, rowid FROM artists
-             WHERE mbid_lookup_status = 1 AND mbid IS NOT NULL
-             ORDER BY artist_available DESC, popularity DESC
-             LIMIT ?1",
+    fn claim_artist_enrichment_batch(
+        conn: &Connection,
+        phase: &str,
+        eligibility_sql: &str,
+        limit: usize,
+    ) -> Result<Vec<i64>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let now = Utc::now().timestamp();
+        conn.execute(
+            "UPDATE artist_enrichment_queue
+             SET status = 'queued', next_attempt_at = ?1, updated_at = ?1,
+                 last_error = COALESCE(last_error || '; ', '') || 'claim lease expired'
+             WHERE phase = ?2 AND status = 'in_progress' AND updated_at <= ?3",
+            params![now, phase, now - ENRICHMENT_CLAIM_LEASE_SECS],
         )?;
 
-        let results = stmt
-            .query_map(params![limit as i64], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, i64>(2)?,
-                ))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
+        // Existing catalogs are admitted gradually. The correlated primary-key
+        // lookup excludes retries and permanent failures without a table-wide
+        // queue backfill during migration.
+        let admission_sql = format!(
+            "INSERT OR IGNORE INTO artist_enrichment_queue
+                (artist_rowid, phase, status, attempt_count, next_attempt_at,
+                 priority, created_at, updated_at)
+             SELECT a.rowid, ?1, 'queued', 0, ?2,
+                    a.artist_available * 1000 + a.popularity, ?2, ?2
+             FROM artists a
+             WHERE {eligibility_sql}
+               AND NOT EXISTS (
+                   SELECT 1 FROM artist_enrichment_queue q
+                   WHERE q.artist_rowid = a.rowid AND q.phase = ?1
+               )
+             ORDER BY a.artist_available DESC, a.popularity DESC, a.rowid ASC
+             LIMIT ?3"
+        );
+        conn.execute(&admission_sql, params![phase, now, limit as i64])?;
 
-        Ok(results)
+        let mut stmt = conn.prepare_cached(
+            "SELECT artist_rowid
+             FROM artist_enrichment_queue
+             WHERE phase = ?1 AND status = 'queued' AND next_attempt_at <= ?2
+             ORDER BY next_attempt_at ASC, priority DESC, artist_rowid ASC
+             LIMIT ?3",
+        )?;
+        let rowids = stmt
+            .query_map(params![phase, now, limit as i64], |row| row.get(0))?
+            .collect::<Result<Vec<i64>, _>>()?;
+        drop(stmt);
+
+        for rowid in &rowids {
+            conn.execute(
+                "UPDATE artist_enrichment_queue
+                 SET status = 'in_progress', attempt_count = attempt_count + 1,
+                     last_attempt_at = ?1, updated_at = ?1, last_error = NULL
+                 WHERE artist_rowid = ?2 AND phase = ?3 AND status = 'queued'",
+                params![now, rowid, phase],
+            )?;
+        }
+        Ok(rowids)
+    }
+
+    fn finish_explicit_transaction<T>(conn: &Connection, result: Result<T>) -> Result<T> {
+        match result {
+            Ok(value) => {
+                conn.execute("COMMIT", [])?;
+                Ok(value)
+            }
+            Err(error) => {
+                let _ = conn.execute("ROLLBACK", []);
+                Err(error)
+            }
+        }
+    }
+
+    fn record_artist_enrichment_failure(
+        &self,
+        artist_rowid: i64,
+        phase: &str,
+        error: &str,
+    ) -> Result<()> {
+        let conn = self.write_conn.lock().unwrap();
+        let now = Utc::now().timestamp();
+        let attempts: i64 = conn.query_row(
+            "SELECT attempt_count FROM artist_enrichment_queue
+             WHERE artist_rowid = ?1 AND phase = ?2",
+            params![artist_rowid, phase],
+            |row| row.get(0),
+        )?;
+
+        if attempts >= ENRICHMENT_MAX_ATTEMPTS {
+            conn.execute(
+                "UPDATE artist_enrichment_queue
+                 SET status = 'permanent_failure', next_attempt_at = NULL,
+                     last_error = ?1, updated_at = ?2
+                 WHERE artist_rowid = ?3 AND phase = ?4",
+                params![error, now, artist_rowid, phase],
+            )?;
+        } else {
+            let exponent = u32::try_from(attempts.saturating_sub(1))
+                .unwrap_or(0)
+                .min(20);
+            let delay = ENRICHMENT_RETRY_BASE_SECS
+                .saturating_mul(1_i64 << exponent)
+                .min(ENRICHMENT_RETRY_MAX_SECS);
+            // Stable per-task jitter (0-10%) avoids synchronized retries while
+            // preserving deterministic behavior in tests and across restarts.
+            let jitter = if delay >= 10 {
+                artist_rowid.rem_euclid(delay / 10 + 1)
+            } else {
+                0
+            };
+            conn.execute(
+                "UPDATE artist_enrichment_queue
+                 SET status = 'queued', next_attempt_at = ?1,
+                     last_error = ?2, updated_at = ?3
+                 WHERE artist_rowid = ?4 AND phase = ?5",
+                params![now + delay + jitter, error, now, artist_rowid, phase],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn record_artist_mbid_failure(&self, artist_rowid: i64, error: &str) -> Result<()> {
+        self.record_artist_enrichment_failure(artist_rowid, "mbid", error)
+    }
+
+    pub fn record_artist_related_failure(&self, artist_rowid: i64, error: &str) -> Result<()> {
+        self.record_artist_enrichment_failure(artist_rowid, "related", error)
+    }
+
+    pub fn release_artist_enrichment_claims(&self) -> Result<()> {
+        let conn = self.write_conn.lock().unwrap();
+        let now = Utc::now().timestamp();
+        conn.execute(
+            "UPDATE artist_enrichment_queue
+             SET status = 'queued', next_attempt_at = ?1, updated_at = ?1,
+                 last_error = 'claim released after cancellation'
+             WHERE status = 'in_progress'",
+            params![now],
+        )?;
+        Ok(())
     }
 
     /// Get MusicBrainz ID for an artist.
@@ -913,21 +1067,56 @@ impl SqliteCatalogStore {
     /// Set MusicBrainz ID for an artist, marking status = 1.
     pub fn set_artist_mbid(&self, artist_id: &str, mbid: &str) -> Result<()> {
         let conn = self.write_conn.lock().unwrap();
-        conn.execute(
-            "UPDATE artists SET mbid = ?1, mbid_lookup_status = 1 WHERE id = ?2",
-            params![mbid, artist_id],
-        )?;
-        Ok(())
+        conn.execute("BEGIN IMMEDIATE", [])?;
+        let result = (|| -> Result<()> {
+            let now = Utc::now().timestamp();
+            conn.execute(
+                "UPDATE artists SET mbid = ?1, mbid_lookup_status = 1 WHERE id = ?2",
+                params![mbid, artist_id],
+            )?;
+            conn.execute(
+                "UPDATE artist_enrichment_queue
+                 SET status = 'completed', next_attempt_at = NULL,
+                     last_error = NULL, updated_at = ?1
+                 WHERE artist_rowid = (SELECT rowid FROM artists WHERE id = ?2)
+                   AND phase = 'mbid'",
+                params![now, artist_id],
+            )?;
+            conn.execute(
+                "INSERT OR IGNORE INTO artist_enrichment_queue
+                    (artist_rowid, phase, status, attempt_count, next_attempt_at,
+                     priority, created_at, updated_at)
+                 SELECT rowid, 'related', 'queued', 0, ?1,
+                        artist_available * 1000 + popularity, ?1, ?1
+                 FROM artists WHERE id = ?2",
+                params![now, artist_id],
+            )?;
+            Ok(())
+        })();
+        Self::finish_explicit_transaction(&conn, result)
     }
 
     /// Mark artist mbid as not found (status = 2).
     pub fn mark_artist_mbid_not_found(&self, artist_id: &str) -> Result<()> {
         let conn = self.write_conn.lock().unwrap();
-        conn.execute(
-            "UPDATE artists SET mbid_lookup_status = 2 WHERE id = ?1",
-            params![artist_id],
-        )?;
-        Ok(())
+        conn.execute("BEGIN IMMEDIATE", [])?;
+        let result = (|| -> Result<()> {
+            let now = Utc::now().timestamp();
+            conn.execute(
+                "UPDATE artists SET mbid_lookup_status = 2 WHERE id = ?1",
+                params![artist_id],
+            )?;
+            conn.execute(
+                "UPDATE artist_enrichment_queue
+                 SET status = 'completed', next_attempt_at = NULL,
+                     last_error = 'MusicBrainz ID not found', updated_at = ?1
+                 WHERE artist_rowid = (SELECT rowid FROM artists WHERE id = ?2)
+                   AND phase = 'mbid'",
+                params![now, artist_id],
+            )?;
+            Ok(())
+        })();
+        Self::finish_explicit_transaction(&conn, result)
     }
 
     /// Store related artists and mark status = 3.
@@ -954,6 +1143,14 @@ impl SqliteCatalogStore {
             conn.execute(
                 "UPDATE artists SET mbid_lookup_status = 3 WHERE rowid = ?1",
                 params![artist_rowid],
+            )?;
+
+            conn.execute(
+                "UPDATE artist_enrichment_queue
+                 SET status = 'completed', next_attempt_at = NULL,
+                     last_error = NULL, updated_at = ?1
+                 WHERE artist_rowid = ?2 AND phase = 'related'",
+                params![Utc::now().timestamp(), artist_rowid],
             )?;
 
             Ok(())
@@ -3056,6 +3253,18 @@ impl CatalogStore for SqliteCatalogStore {
         SqliteCatalogStore::mark_artist_mbid_not_found(self, artist_id)
     }
 
+    fn record_artist_mbid_failure(&self, artist_rowid: i64, error: &str) -> Result<()> {
+        SqliteCatalogStore::record_artist_mbid_failure(self, artist_rowid, error)
+    }
+
+    fn record_artist_related_failure(&self, artist_rowid: i64, error: &str) -> Result<()> {
+        SqliteCatalogStore::record_artist_related_failure(self, artist_rowid, error)
+    }
+
+    fn release_artist_enrichment_claims(&self) -> Result<()> {
+        SqliteCatalogStore::release_artist_enrichment_claims(self)
+    }
+
     fn set_related_artists(&self, artist_rowid: i64, related: &[(i64, f64)]) -> Result<()> {
         SqliteCatalogStore::set_related_artists(self, artist_rowid, related)
     }
@@ -3090,6 +3299,43 @@ mod tests {
         )
         .unwrap();
         (store, temp_dir)
+    }
+
+    #[test]
+    fn test_v8_queue_migration_does_not_backfill_existing_catalog() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        CATALOG_VERSIONED_SCHEMAS[7].create(&conn).unwrap();
+        conn.pragma_update(None, "user_version", BASE_DB_VERSION + 7)
+            .unwrap();
+        for index in 0..100 {
+            conn.execute(
+                "INSERT INTO artists (id, name, followers_total, popularity)
+                 VALUES (?1, ?1, 0, 0)",
+                params![format!("artist-{index}")],
+            )
+            .unwrap();
+        }
+
+        migrate_if_needed(&mut conn).unwrap();
+        let queued: i64 = conn
+            .query_row("SELECT COUNT(*) FROM artist_enrichment_queue", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(queued, 0, "migration must not backfill the catalog");
+
+        conn.execute(
+            "INSERT INTO artists (id, name, followers_total, popularity)
+             VALUES ('after-migration', 'After Migration', 0, 0)",
+            [],
+        )
+        .unwrap();
+        let queued_after_insert: i64 = conn
+            .query_row("SELECT COUNT(*) FROM artist_enrichment_queue", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(queued_after_insert, 1);
     }
 
     #[test]
@@ -3128,6 +3374,150 @@ mod tests {
         assert!(resolved.contains_key("mbid-2"));
         assert!(!resolved.contains_key("missing"));
         assert!(store.get_artist_rowids_by_mbids(&[]).unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_artist_enrichment_queue_retries_without_starving_next_artist() {
+        let (store, _temp_dir) = create_test_store();
+        let (high_rowid, low_rowid) = {
+            let conn = store.write_conn.lock().unwrap();
+            conn.execute(
+                "INSERT INTO artists
+                 (id, name, followers_total, popularity, artist_available)
+                 VALUES ('high', 'High', 0, 90, 1), ('low', 'Low', 0, 10, 0)",
+                [],
+            )
+            .unwrap();
+            let high = conn
+                .query_row("SELECT rowid FROM artists WHERE id = 'high'", [], |row| {
+                    row.get(0)
+                })
+                .unwrap();
+            let low = conn
+                .query_row("SELECT rowid FROM artists WHERE id = 'low'", [], |row| {
+                    row.get(0)
+                })
+                .unwrap();
+            (high, low)
+        };
+
+        let first = store.get_artists_needing_mbid(1).unwrap();
+        assert_eq!(first, vec![("high".to_string(), high_rowid)]);
+        store
+            .record_artist_mbid_failure(high_rowid, "temporary upstream failure")
+            .unwrap();
+
+        let second = store.get_artists_needing_mbid(1).unwrap();
+        assert_eq!(second, vec![("low".to_string(), low_rowid)]);
+
+        let conn = store.write_conn.lock().unwrap();
+        let state: (String, i64, i64, String) = conn
+            .query_row(
+                "SELECT status, attempt_count, next_attempt_at, last_error
+                 FROM artist_enrichment_queue
+                 WHERE artist_rowid = ?1 AND phase = 'mbid'",
+                params![high_rowid],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(state.0, "queued");
+        assert_eq!(state.1, 1);
+        assert!(state.2 > Utc::now().timestamp());
+        assert_eq!(state.3, "temporary upstream failure");
+    }
+
+    #[test]
+    fn test_artist_enrichment_queue_tracks_independent_phases_to_completion() {
+        let (store, _temp_dir) = create_test_store();
+        let artist_rowid = {
+            let conn = store.write_conn.lock().unwrap();
+            conn.execute(
+                "INSERT INTO artists
+                 (id, name, followers_total, popularity, artist_available)
+                 VALUES ('artist', 'Artist', 0, 50, 1)",
+                [],
+            )
+            .unwrap();
+            conn.last_insert_rowid()
+        };
+
+        assert_eq!(store.get_artists_needing_mbid(1).unwrap().len(), 1);
+        store.set_artist_mbid("artist", "mbid-artist").unwrap();
+
+        let related = store.get_artists_needing_related(1).unwrap();
+        assert_eq!(
+            related,
+            vec![(
+                "artist".to_string(),
+                "mbid-artist".to_string(),
+                artist_rowid
+            )]
+        );
+        store.set_related_artists(artist_rowid, &[]).unwrap();
+
+        let conn = store.write_conn.lock().unwrap();
+        let states = conn
+            .prepare(
+                "SELECT phase, status FROM artist_enrichment_queue
+                 WHERE artist_rowid = ?1 ORDER BY phase",
+            )
+            .unwrap()
+            .query_map(params![artist_rowid], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(
+            states,
+            vec![
+                ("mbid".to_string(), "completed".to_string()),
+                ("related".to_string(), "completed".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_artist_enrichment_queue_quarantines_after_bounded_attempts() {
+        let (store, _temp_dir) = create_test_store();
+        let artist_rowid = {
+            let conn = store.write_conn.lock().unwrap();
+            conn.execute(
+                "INSERT INTO artists
+                 (id, name, followers_total, popularity, artist_available)
+                 VALUES ('poison', 'Poison', 0, 99, 1)",
+                [],
+            )
+            .unwrap();
+            conn.last_insert_rowid()
+        };
+
+        for _ in 0..ENRICHMENT_MAX_ATTEMPTS {
+            let claimed = store.get_artists_needing_mbid(1).unwrap();
+            assert_eq!(claimed.len(), 1);
+            store
+                .record_artist_mbid_failure(artist_rowid, "still failing")
+                .unwrap();
+            let conn = store.write_conn.lock().unwrap();
+            conn.execute(
+                "UPDATE artist_enrichment_queue SET next_attempt_at = 0
+                 WHERE artist_rowid = ?1 AND status = 'queued'",
+                params![artist_rowid],
+            )
+            .unwrap();
+        }
+
+        assert!(store.get_artists_needing_mbid(1).unwrap().is_empty());
+        let conn = store.write_conn.lock().unwrap();
+        let state: (String, i64, Option<i64>) = conn
+            .query_row(
+                "SELECT status, attempt_count, next_attempt_at
+                 FROM artist_enrichment_queue WHERE artist_rowid = ?1",
+                params![artist_rowid],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(state, ("permanent_failure".to_string(), 8, None));
     }
 
     fn sample_embedding(

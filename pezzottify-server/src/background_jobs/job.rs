@@ -103,6 +103,12 @@ pub trait BackgroundJob: Send + Sync {
         ShutdownBehavior::Cancellable
     }
 
+    /// Whether an interval job with no persisted schedule should run immediately.
+    /// Heavy jobs should return false so first startup establishes a future run.
+    fn run_on_startup(&self) -> bool {
+        true
+    }
+
     /// Execute the job.
     ///
     /// This method is called from a blocking context using `spawn_blocking`.
