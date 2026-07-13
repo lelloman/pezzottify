@@ -154,6 +154,21 @@ pub trait CatalogStore: Send + Sync {
     /// Get the number of tracks in the catalog.
     fn get_tracks_count(&self) -> usize;
 
+    /// Read exact persisted catalog counts in O(1), or None until initialized.
+    fn get_catalog_cardinality_stats(&self) -> Result<Option<super::CatalogCardinalityStats>> {
+        Ok(None)
+    }
+
+    /// Explicitly rebuild persisted counts by scanning the catalog.
+    fn rebuild_catalog_cardinality_stats(
+        &self,
+        _is_cancelled: &(dyn Fn() -> bool + Send + Sync),
+    ) -> Result<super::CatalogCardinalityStats> {
+        Err(anyhow::anyhow!(
+            "catalog cardinality reconciliation not supported by this store"
+        ))
+    }
+
     /// Reconcile availability with filesystem truth and return aggregate stats.
     ///
     /// Implementations should:

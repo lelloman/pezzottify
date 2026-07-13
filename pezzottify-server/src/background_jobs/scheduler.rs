@@ -76,6 +76,7 @@ impl JobScheduler {
 
     fn scheduled_interval(schedule: JobSchedule) -> Option<Duration> {
         match schedule {
+            JobSchedule::Manual => None,
             JobSchedule::Interval(interval) => Some(interval),
             JobSchedule::JitteredInterval { interval, jitter } => {
                 if jitter.is_zero() {
@@ -287,6 +288,7 @@ impl JobScheduler {
         now: chrono::DateTime<chrono::Utc>,
     ) -> Option<chrono::DateTime<chrono::Utc>> {
         match schedule {
+            JobSchedule::Manual => None,
             JobSchedule::Interval(_interval) => {
                 // Get last run time from server store
                 if let Ok(Some(state)) = self.server_store.get_schedule_state(job_id) {

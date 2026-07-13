@@ -226,6 +226,95 @@ const ARTIST_ENRICHMENT_QUEUE_TABLE: Table = Table {
     unique_constraints: &[&["artist_rowid", "phase"]],
 };
 
+/// O(1) catalog cardinalities maintained transactionally by insert/delete triggers.
+const CATALOG_STATS_TABLE: Table = Table {
+    name: "catalog_stats",
+    columns: &[
+        sqlite_column!("id", &SqlType::Integer, is_primary_key = true),
+        sqlite_column!("artists_count", &SqlType::Integer),
+        sqlite_column!("albums_count", &SqlType::Integer),
+        sqlite_column!("tracks_count", &SqlType::Integer),
+        sqlite_column!(
+            "is_valid",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some("0")
+        ),
+        sqlite_column!(
+            "mutation_version",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some("0")
+        ),
+        sqlite_column!("updated_at", &SqlType::Integer, non_null = true),
+    ],
+    indices: &[],
+    unique_constraints: &[],
+};
+
+pub(crate) fn create_catalog_stats_triggers(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TRIGGER IF NOT EXISTS trg_catalog_stats_artists_insert
+         AFTER INSERT ON artists BEGIN
+             UPDATE catalog_stats SET
+                 artists_count = CASE WHEN is_valid = 1 THEN artists_count + 1 ELSE artists_count END,
+                 mutation_version = mutation_version + 1,
+                 updated_at = CAST(strftime('%s', 'now') AS INTEGER)
+             WHERE id = 1;
+         END;
+         CREATE TRIGGER IF NOT EXISTS trg_catalog_stats_artists_delete
+         AFTER DELETE ON artists BEGIN
+             UPDATE catalog_stats SET
+                 artists_count = CASE WHEN is_valid = 1 THEN MAX(artists_count - 1, 0) ELSE artists_count END,
+                 mutation_version = mutation_version + 1,
+                 updated_at = CAST(strftime('%s', 'now') AS INTEGER)
+             WHERE id = 1;
+         END;
+         CREATE TRIGGER IF NOT EXISTS trg_catalog_stats_albums_insert
+         AFTER INSERT ON albums BEGIN
+             UPDATE catalog_stats SET
+                 albums_count = CASE WHEN is_valid = 1 THEN albums_count + 1 ELSE albums_count END,
+                 mutation_version = mutation_version + 1,
+                 updated_at = CAST(strftime('%s', 'now') AS INTEGER)
+             WHERE id = 1;
+         END;
+         CREATE TRIGGER IF NOT EXISTS trg_catalog_stats_albums_delete
+         AFTER DELETE ON albums BEGIN
+             UPDATE catalog_stats SET
+                 albums_count = CASE WHEN is_valid = 1 THEN MAX(albums_count - 1, 0) ELSE albums_count END,
+                 mutation_version = mutation_version + 1,
+                 updated_at = CAST(strftime('%s', 'now') AS INTEGER)
+             WHERE id = 1;
+         END;
+         CREATE TRIGGER IF NOT EXISTS trg_catalog_stats_tracks_insert
+         AFTER INSERT ON tracks BEGIN
+             UPDATE catalog_stats SET
+                 tracks_count = CASE WHEN is_valid = 1 THEN tracks_count + 1 ELSE tracks_count END,
+                 mutation_version = mutation_version + 1,
+                 updated_at = CAST(strftime('%s', 'now') AS INTEGER)
+             WHERE id = 1;
+         END;
+         CREATE TRIGGER IF NOT EXISTS trg_catalog_stats_tracks_delete
+         AFTER DELETE ON tracks BEGIN
+             UPDATE catalog_stats SET
+                 tracks_count = CASE WHEN is_valid = 1 THEN MAX(tracks_count - 1, 0) ELSE tracks_count END,
+                 mutation_version = mutation_version + 1,
+                 updated_at = CAST(strftime('%s', 'now') AS INTEGER)
+             WHERE id = 1;
+         END;",
+    )
+}
+
+pub(crate) fn initialize_empty_catalog_stats(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT OR IGNORE INTO catalog_stats
+         (id, artists_count, albums_count, tracks_count, is_valid, mutation_version, updated_at)
+         VALUES (1, 0, 0, 0, 1, 0, CAST(strftime('%s', 'now') AS INTEGER))",
+        [],
+    )?;
+    Ok(())
+}
+
 pub(crate) fn create_artist_enrichment_enqueue_trigger(
     conn: &rusqlite::Connection,
 ) -> rusqlite::Result<()> {
@@ -658,6 +747,44 @@ pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             Ok(())
         }),
     },
+    VersionedSchema {
+        version: 9,
+        tables: &[
+            ARTISTS_TABLE,
+            ALBUMS_TABLE,
+            TRACKS_TABLE,
+            TRACK_ARTISTS_TABLE,
+            ARTIST_ALBUMS_TABLE,
+            ARTIST_GENRES_TABLE,
+            ALBUM_IMAGES_TABLE,
+            ARTIST_IMAGES_TABLE,
+            RELATED_ARTISTS_TABLE,
+            ENTITY_EMBEDDINGS_TABLE,
+            ARTIST_ENRICHMENT_QUEUE_TABLE,
+            CATALOG_STATS_TABLE,
+        ],
+        migration: Some(|tx: &rusqlite::Connection| {
+            tx.execute_batch(
+                "CREATE TABLE IF NOT EXISTS catalog_stats (
+                    id INTEGER PRIMARY KEY,
+                    artists_count INTEGER,
+                    albums_count INTEGER,
+                    tracks_count INTEGER,
+                    is_valid INTEGER NOT NULL DEFAULT 0,
+                    mutation_version INTEGER NOT NULL DEFAULT 0,
+                    updated_at INTEGER NOT NULL
+                );
+                INSERT OR IGNORE INTO catalog_stats
+                    (id, artists_count, albums_count, tracks_count, is_valid,
+                     mutation_version, updated_at)
+                VALUES
+                    (1, NULL, NULL, NULL, 0, 0,
+                     CAST(strftime('%s', 'now') AS INTEGER));",
+            )?;
+            create_catalog_stats_triggers(tx)?;
+            Ok(())
+        }),
+    },
 ];
 
 #[cfg(test)]
@@ -834,6 +961,66 @@ mod tests {
             )
             .unwrap();
         assert!(claim_plan.contains("idx_artist_enrichment_queue_claim"));
+    }
+
+    #[test]
+    fn test_latest_schema_catalog_stats_triggers_track_cardinality_changes() {
+        let conn = Connection::open_in_memory().unwrap();
+        CATALOG_VERSIONED_SCHEMAS
+            .last()
+            .unwrap()
+            .create(&conn)
+            .unwrap();
+        initialize_empty_catalog_stats(&conn).unwrap();
+        create_catalog_stats_triggers(&conn).unwrap();
+
+        conn.execute(
+            "INSERT INTO artists (id, name, followers_total, popularity)
+             VALUES ('artist', 'Artist', 0, 0)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO albums
+             (id, name, album_type, label, popularity, release_date, release_date_precision)
+             VALUES ('album', 'Album', 'album', '', 0, '2026', 'year')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO tracks
+             (id, name, album_rowid, track_number, popularity, disc_number, duration_ms, explicit)
+             VALUES ('track', 'Track', (SELECT rowid FROM albums WHERE id = 'album'),
+                     1, 0, 1, 1000, 0)",
+            [],
+        )
+        .unwrap();
+
+        let counts: (i64, i64, i64, i64) = conn
+            .query_row(
+                "SELECT artists_count, albums_count, tracks_count, mutation_version
+                 FROM catalog_stats WHERE id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(counts, (1, 1, 1, 3));
+
+        conn.execute("DELETE FROM tracks WHERE id = 'track'", [])
+            .unwrap();
+        conn.execute("DELETE FROM albums WHERE id = 'album'", [])
+            .unwrap();
+        conn.execute("DELETE FROM artists WHERE id = 'artist'", [])
+            .unwrap();
+        let counts_after_delete: (i64, i64, i64, i64) = conn
+            .query_row(
+                "SELECT artists_count, albums_count, tracks_count, mutation_version
+                 FROM catalog_stats WHERE id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(counts_after_delete, (0, 0, 0, 6));
     }
 
     #[test]

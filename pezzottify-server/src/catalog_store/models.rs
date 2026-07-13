@@ -356,6 +356,16 @@ pub struct CatalogAvailabilityStats {
     pub tracks: AvailabilityCount,
 }
 
+/// Persisted exact catalog cardinalities maintained by database triggers.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CatalogCardinalityStats {
+    pub artists: usize,
+    pub albums: usize,
+    pub tracks: usize,
+    pub mutation_version: i64,
+    pub updated_at: i64,
+}
+
 /// Number of rows repaired during availability reconciliation.
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct AvailabilityRepairSummary {

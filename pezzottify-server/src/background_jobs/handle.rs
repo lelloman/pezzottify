@@ -36,6 +36,13 @@ pub struct JobScheduleInfo {
 impl From<JobSchedule> for JobScheduleInfo {
     fn from(schedule: JobSchedule) -> Self {
         match schedule {
+            JobSchedule::Manual => JobScheduleInfo {
+                schedule_type: "manual".to_string(),
+                value_secs: None,
+                jitter_secs: None,
+                cron: None,
+                hooks: None,
+            },
             JobSchedule::Cron(expr) => JobScheduleInfo {
                 schedule_type: "cron".to_string(),
                 cron: Some(expr),
@@ -296,6 +303,16 @@ mod tests {
         assert_eq!(info.schedule_type, "cron");
         assert_eq!(info.cron, Some("0 0 * * *".to_string()));
         assert!(info.value_secs.is_none());
+        assert!(info.hooks.is_none());
+    }
+
+    #[test]
+    fn test_job_schedule_info_from_manual() {
+        let info: JobScheduleInfo = JobSchedule::Manual.into();
+        assert_eq!(info.schedule_type, "manual");
+        assert!(info.value_secs.is_none());
+        assert!(info.jitter_secs.is_none());
+        assert!(info.cron.is_none());
         assert!(info.hooks.is_none());
     }
 

@@ -10,9 +10,10 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 
 // Import modules from the library crate
 use pezzottify_server::background_jobs::jobs::{
-    AlbumEmbeddingSyncJob, AudioAnalysisJob, CatalogAvailabilityStatsJob, DevicePruningJob,
-    FeaturedAlbumsJob, IngestionCleanupJob, MetadataEnrichmentJob, PopularContentJob,
-    RelatedArtistsEnrichmentJob, TrackEmbeddingSyncJob, WhatsNewBatchJob,
+    AlbumEmbeddingSyncJob, AudioAnalysisJob, CatalogAvailabilityStatsJob,
+    CatalogCardinalityStatsJob, DevicePruningJob, FeaturedAlbumsJob, IngestionCleanupJob,
+    MetadataEnrichmentJob, PopularContentJob, RelatedArtistsEnrichmentJob, TrackEmbeddingSyncJob,
+    WhatsNewBatchJob,
 };
 use pezzottify_server::background_jobs::{create_scheduler, GuardedSearchVault, JobContext};
 use pezzottify_server::backup::DbRegistry;
@@ -206,11 +207,16 @@ async fn main() -> Result<()> {
     // Initialize metrics system
     info!("Initializing metrics...");
     metrics::init_metrics();
-    metrics::init_catalog_metrics(
-        catalog_store.get_artists_count(),
-        catalog_store.get_albums_count(),
-        catalog_store.get_tracks_count(),
-    );
+    match catalog_store.get_catalog_cardinality_stats()? {
+        Some(stats) => {
+            metrics::init_catalog_metrics(stats.artists, stats.albums, stats.tracks);
+        }
+        None => {
+            tracing::warn!(
+                "Catalog counts are not initialized; run the catalog_cardinality_stats admin job"
+            );
+        }
+    }
 
     // Create user store (will create DB if not exists)
     if !app_config.user_db_path().exists() {
@@ -321,6 +327,9 @@ async fn main() -> Result<()> {
         .register_job(Arc::new(CatalogAvailabilityStatsJob::from_settings(
             &app_config.background_jobs.catalog_availability_stats,
         )))
+        .await;
+    scheduler
+        .register_job(Arc::new(CatalogCardinalityStatsJob))
         .await;
     scheduler
         .register_job(Arc::new(WhatsNewBatchJob::from_settings(
