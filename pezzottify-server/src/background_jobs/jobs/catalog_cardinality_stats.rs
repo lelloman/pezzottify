@@ -6,6 +6,7 @@ use crate::background_jobs::{
     JobAuditLogger,
 };
 use crate::server::metrics;
+use std::sync::Arc;
 use std::time::Instant;
 use tracing::info;
 
@@ -37,9 +38,12 @@ impl BackgroundJob for CatalogCardinalityStatsJob {
         let started_at = Instant::now();
         audit.log_started(None);
 
+        let cancellation_token = ctx.cancellation_token.clone();
+        let is_cancelled: Arc<dyn Fn() -> bool + Send + Sync> =
+            Arc::new(move || cancellation_token.is_cancelled());
         let stats = match ctx
             .catalog_store
-            .rebuild_catalog_cardinality_stats(&|| ctx.is_cancelled())
+            .rebuild_catalog_cardinality_stats(is_cancelled)
         {
             Ok(stats) => stats,
             Err(error) if ctx.is_cancelled() || error.to_string() == "cancelled" => {

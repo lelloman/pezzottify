@@ -162,7 +162,7 @@ pub trait CatalogStore: Send + Sync {
     /// Explicitly rebuild persisted counts by scanning the catalog.
     fn rebuild_catalog_cardinality_stats(
         &self,
-        _is_cancelled: &(dyn Fn() -> bool + Send + Sync),
+        _is_cancelled: std::sync::Arc<dyn Fn() -> bool + Send + Sync>,
     ) -> Result<super::CatalogCardinalityStats> {
         Err(anyhow::anyhow!(
             "catalog cardinality reconciliation not supported by this store"

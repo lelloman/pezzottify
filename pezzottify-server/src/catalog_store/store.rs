@@ -885,43 +885,47 @@ impl SqliteCatalogStore {
     fn count_table_rows_cancellable(
         &self,
         table: &str,
-        is_cancelled: &(dyn Fn() -> bool + Send + Sync),
+        covering_index: &str,
+        is_cancelled: Arc<dyn Fn() -> bool + Send + Sync>,
     ) -> Result<i64> {
-        const BATCH_SIZE: i64 = 10_000;
-        const BATCH_DELAY: std::time::Duration = std::time::Duration::from_millis(10);
+        // SUM(1), rather than SQLite's optimized COUNT(*), keeps the VM progress
+        // handler active while the covering index is scanned. The narrow
+        // availability index avoids reading the much larger table payload pages.
+        const PROGRESS_OPS: i32 = 10_000;
+        const PROGRESS_DELAY: std::time::Duration = std::time::Duration::from_millis(10);
+        if is_cancelled() {
+            anyhow::bail!("cancelled");
+        }
         let read_conn = self.get_read_conn();
         let conn = read_conn.lock().unwrap();
         let sql = format!(
-            "SELECT COUNT(*), COALESCE(MAX(rowid), ?1)
-             FROM (
-                 SELECT rowid FROM {table}
-                 WHERE rowid > ?1 ORDER BY rowid LIMIT ?2
-             )"
+            "SELECT COALESCE(SUM(1), 0)
+             FROM {table} INDEXED BY {covering_index}"
         );
-        let mut stmt = conn.prepare(&sql)?;
-        let mut last_rowid = i64::MIN;
-        let mut total = 0i64;
-        loop {
-            if is_cancelled() {
-                anyhow::bail!("cancelled");
-            }
-            let (batch_count, batch_last_rowid): (i64, i64) = stmt
-                .query_row(params![last_rowid, BATCH_SIZE], |row| {
-                    Ok((row.get(0)?, row.get(1)?))
-                })?;
-            if batch_count == 0 {
-                break;
-            }
-            total += batch_count;
-            last_rowid = batch_last_rowid;
-            std::thread::sleep(BATCH_DELAY);
+        let progress_is_cancelled = is_cancelled.clone();
+        conn.progress_handler(
+            PROGRESS_OPS,
+            Some(move || {
+                if progress_is_cancelled() {
+                    true
+                } else {
+                    std::thread::sleep(PROGRESS_DELAY);
+                    false
+                }
+            }),
+        );
+        let result = conn.query_row(&sql, [], |row| row.get::<_, i64>(0));
+        conn.progress_handler(0, None::<fn() -> bool>);
+        match result {
+            Ok(count) => Ok(count),
+            Err(_) if is_cancelled() => anyhow::bail!("cancelled"),
+            Err(error) => Err(error.into()),
         }
-        Ok(total)
     }
 
     pub fn rebuild_catalog_cardinality_stats(
         &self,
-        is_cancelled: &(dyn Fn() -> bool + Send + Sync),
+        is_cancelled: Arc<dyn Fn() -> bool + Send + Sync>,
     ) -> Result<CatalogCardinalityStats> {
         let expected_mutation_version = {
             let read_conn = self.get_read_conn();
@@ -933,9 +937,21 @@ impl SqliteCatalogStore {
             )?
         };
 
-        let artists = self.count_table_rows_cancellable("artists", is_cancelled)?;
-        let albums = self.count_table_rows_cancellable("albums", is_cancelled)?;
-        let tracks = self.count_table_rows_cancellable("tracks", is_cancelled)?;
+        let artists = self.count_table_rows_cancellable(
+            "artists",
+            "idx_artists_available",
+            is_cancelled.clone(),
+        )?;
+        let albums = self.count_table_rows_cancellable(
+            "albums",
+            "idx_albums_availability",
+            is_cancelled.clone(),
+        )?;
+        let tracks = self.count_table_rows_cancellable(
+            "tracks",
+            "idx_tracks_available",
+            is_cancelled.clone(),
+        )?;
         if is_cancelled() {
             anyhow::bail!("cancelled");
         }
@@ -1506,7 +1522,7 @@ impl CatalogStore for SqliteCatalogStore {
 
     fn rebuild_catalog_cardinality_stats(
         &self,
-        is_cancelled: &(dyn Fn() -> bool + Send + Sync),
+        is_cancelled: Arc<dyn Fn() -> bool + Send + Sync>,
     ) -> Result<CatalogCardinalityStats> {
         SqliteCatalogStore::rebuild_catalog_cardinality_stats(self, is_cancelled)
     }
@@ -3491,7 +3507,9 @@ mod tests {
         }
 
         assert!(store.get_catalog_cardinality_stats().unwrap().is_none());
-        let rebuilt = store.rebuild_catalog_cardinality_stats(&|| false).unwrap();
+        let rebuilt = store
+            .rebuild_catalog_cardinality_stats(Arc::new(|| false))
+            .unwrap();
         assert_eq!((rebuilt.artists, rebuilt.albums, rebuilt.tracks), (1, 1, 1));
         assert_eq!(store.get_artists_count(), 1);
         assert_eq!(store.get_albums_count(), 1);
@@ -3517,10 +3535,39 @@ mod tests {
         let (store, _temp_dir) = create_test_store();
         let before = store.get_catalog_cardinality_stats().unwrap().unwrap();
         let error = store
-            .rebuild_catalog_cardinality_stats(&|| true)
+            .rebuild_catalog_cardinality_stats(Arc::new(|| true))
             .unwrap_err();
         assert_eq!(error.to_string(), "cancelled");
         assert_eq!(store.get_catalog_cardinality_stats().unwrap(), Some(before));
+    }
+
+    #[test]
+    fn test_catalog_cardinality_index_scan_is_cancellable_while_running() {
+        let (store, _temp_dir) = create_test_store();
+        {
+            let conn = store.write_conn.lock().unwrap();
+            conn.execute_batch(
+                "WITH RECURSIVE ids(value) AS (
+                     SELECT 1 UNION ALL SELECT value + 1 FROM ids WHERE value < 5000
+                 )
+                 INSERT INTO artists (id, name, followers_total, popularity)
+                 SELECT 'artist-' || value, 'Artist ' || value, 0, 0 FROM ids",
+            )
+            .unwrap();
+        }
+
+        let checks = Arc::new(AtomicUsize::new(0));
+        let callback_checks = checks.clone();
+        let error = store
+            .count_table_rows_cancellable(
+                "artists",
+                "idx_artists_available",
+                Arc::new(move || callback_checks.fetch_add(1, Ordering::SeqCst) > 0),
+            )
+            .unwrap_err();
+
+        assert_eq!(error.to_string(), "cancelled");
+        assert!(checks.load(Ordering::SeqCst) >= 2);
     }
 
     #[test]
