@@ -254,6 +254,18 @@ impl CatalogStore for NullCatalogStore {
         anyhow::bail!("NullCatalogStore does not support write operations")
     }
 
+    fn record_artist_mbid_failure(&self, _artist_rowid: i64, _error: &str) -> Result<()> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
+
+    fn record_artist_related_failure(&self, _artist_rowid: i64, _error: &str) -> Result<()> {
+        anyhow::bail!("NullCatalogStore does not support write operations")
+    }
+
+    fn release_artist_enrichment_claims(&self) -> Result<()> {
+        Ok(())
+    }
+
     fn set_related_artists(&self, _artist_rowid: i64, _related: &[(i64, f64)]) -> Result<()> {
         anyhow::bail!("NullCatalogStore does not support write operations")
     }

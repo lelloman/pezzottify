@@ -72,6 +72,10 @@ impl BackgroundJob for RelatedArtistsEnrichmentJob {
         ShutdownBehavior::Cancellable
     }
 
+    fn run_on_startup(&self) -> bool {
+        false
+    }
+
     fn execute(&self, ctx: &JobContext) -> Result<(), JobError> {
         let audit = JobAuditLogger::new(Arc::clone(&ctx.server_store), self.id());
         let batch_size = self.settings.batch_size;
@@ -98,6 +102,16 @@ impl BackgroundJob for RelatedArtistsEnrichmentJob {
 }
 
 impl RelatedArtistsEnrichmentJob {
+    fn return_cancelled(&self, ctx: &JobContext) -> Result<(), JobError> {
+        if let Err(error) = ctx.catalog_store.release_artist_enrichment_claims() {
+            warn!(
+                "Failed to release enrichment claims during cancellation: {}",
+                error
+            );
+        }
+        Err(JobError::Cancelled)
+    }
+
     fn run_enrichment(
         &self,
         ctx: &JobContext,
@@ -123,9 +137,9 @@ impl RelatedArtistsEnrichmentJob {
             artists_needing_mbid.len()
         );
 
-        for (spotify_id, _artist_rowid) in &artists_needing_mbid {
+        for (spotify_id, artist_rowid) in &artists_needing_mbid {
             if ctx.is_cancelled() {
-                return Err(JobError::Cancelled);
+                return self.return_cancelled(ctx);
             }
 
             match self.musicbrainz.lookup_mbid_for_spotify_id(spotify_id) {
@@ -147,8 +161,15 @@ impl RelatedArtistsEnrichmentJob {
                     }
                 }
                 Err(e) => {
-                    // Network error - leave status unchanged for retry
                     warn!("MusicBrainz lookup failed for {}: {}", spotify_id, e);
+                    ctx.catalog_store
+                        .record_artist_mbid_failure(*artist_rowid, &e.to_string())
+                        .map_err(|queue_error| {
+                            JobError::ExecutionFailed(format!(
+                                "Failed to schedule MusicBrainz retry for {}: {}",
+                                spotify_id, queue_error
+                            ))
+                        })?;
                     mbid_errors += 1;
                 }
             }
@@ -160,7 +181,7 @@ impl RelatedArtistsEnrichmentJob {
         );
 
         if ctx.is_cancelled() {
-            return Err(JobError::Cancelled);
+            return self.return_cancelled(ctx);
         }
 
         // =====================================================================
@@ -183,7 +204,7 @@ impl RelatedArtistsEnrichmentJob {
 
         for (spotify_id, mbid, artist_rowid) in &artists_needing_related {
             if ctx.is_cancelled() {
-                return Err(JobError::Cancelled);
+                return self.return_cancelled(ctx);
             }
 
             let similar = match self
@@ -196,6 +217,14 @@ impl RelatedArtistsEnrichmentJob {
                         "Last.fm lookup failed for {} (mbid {}): {}",
                         spotify_id, mbid, e
                     );
+                    ctx.catalog_store
+                        .record_artist_related_failure(*artist_rowid, &e.to_string())
+                        .map_err(|queue_error| {
+                            JobError::ExecutionFailed(format!(
+                                "Failed to schedule Last.fm retry for {}: {}",
+                                spotify_id, queue_error
+                            ))
+                        })?;
                     related_errors += 1;
                     continue;
                 }

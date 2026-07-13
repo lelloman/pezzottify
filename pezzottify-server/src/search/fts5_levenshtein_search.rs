@@ -1682,6 +1682,23 @@ mod tests {
             fn mark_artist_mbid_not_found(&self, _artist_id: &str) -> anyhow::Result<()> {
                 Ok(())
             }
+            fn record_artist_mbid_failure(
+                &self,
+                _artist_rowid: i64,
+                _error: &str,
+            ) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn record_artist_related_failure(
+                &self,
+                _artist_rowid: i64,
+                _error: &str,
+            ) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn release_artist_enrichment_claims(&self) -> anyhow::Result<()> {
+                Ok(())
+            }
             fn set_related_artists(
                 &self,
                 _artist_rowid: i64,

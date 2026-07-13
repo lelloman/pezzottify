@@ -437,6 +437,15 @@ pub trait CatalogStore: Send + Sync {
     /// Mark an artist's mbid as not found (status = 2).
     fn mark_artist_mbid_not_found(&self, artist_id: &str) -> Result<()>;
 
+    /// Record a transient MusicBrainz lookup failure and schedule bounded retry.
+    fn record_artist_mbid_failure(&self, artist_rowid: i64, error: &str) -> Result<()>;
+
+    /// Record a transient Last.fm lookup failure and schedule bounded retry.
+    fn record_artist_related_failure(&self, artist_rowid: i64, error: &str) -> Result<()>;
+
+    /// Return claims held by a cancelled enrichment worker to the ready queue.
+    fn release_artist_enrichment_claims(&self) -> Result<()>;
+
     /// Store related artist relationships and mark status = 3 (done).
     /// Each tuple is (related_artist_rowid, match_score).
     fn set_related_artists(&self, artist_rowid: i64, related: &[(i64, f64)]) -> Result<()>;

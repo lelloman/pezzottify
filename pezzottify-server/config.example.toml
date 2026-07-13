@@ -94,6 +94,8 @@ read_pool_size = 4
 # batch_size = 50
 # similar_artists_limit = 20
 # interval_hours = 12
+# On a fresh schedule the first automatic run waits one full interval; manual
+# runs remain available through the admin API.
 
 # Audio Embeddings
 # Periodically generates missing track embeddings through Simple-AI.

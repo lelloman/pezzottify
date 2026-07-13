@@ -5,7 +5,9 @@
 //! Images are stored as URLs to Spotify CDN (lazy download on first access).
 
 use crate::sqlite_column;
-use crate::sqlite_persistence::{Column, SqlType, Table, VersionedSchema};
+use crate::sqlite_persistence::{
+    Column, ForeignKey, ForeignKeyOnChange, SqlType, Table, VersionedSchema,
+};
 
 // =============================================================================
 // Core Tables - Spotify Schema
@@ -127,7 +129,16 @@ const TRACK_ARTISTS_TABLE: Table = Table {
     name: "track_artists",
     columns: &[
         sqlite_column!("track_rowid", &SqlType::Integer, non_null = true),
-        sqlite_column!("artist_rowid", &SqlType::Integer, non_null = true),
+        sqlite_column!(
+            "artist_rowid",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "artists",
+                foreign_column: "rowid",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
         sqlite_column!("role", &SqlType::Integer), // 0=main, 1=featured, 2=composer, 3=remixer, 4=conductor, 5=orchestra
     ],
     indices: &[
@@ -183,6 +194,83 @@ const RELATED_ARTISTS_TABLE: Table = Table {
     ],
     unique_constraints: &[&["artist_rowid", "related_artist_rowid"]],
 };
+
+/// Durable work queue for MusicBrainz and related-artist enrichment.
+///
+/// Rows are admitted lazily in bounded batches for existing catalogs, while
+/// newly inserted artists are enqueued by a trigger. This avoids a multi-million
+/// row backfill during schema migration.
+const ARTIST_ENRICHMENT_QUEUE_TABLE: Table = Table {
+    name: "artist_enrichment_queue",
+    columns: &[
+        sqlite_column!("artist_rowid", &SqlType::Integer, non_null = true),
+        sqlite_column!("phase", &SqlType::Text, non_null = true),
+        sqlite_column!("status", &SqlType::Text, non_null = true),
+        sqlite_column!(
+            "attempt_count",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some("0")
+        ),
+        sqlite_column!("next_attempt_at", &SqlType::Integer),
+        sqlite_column!("last_attempt_at", &SqlType::Integer),
+        sqlite_column!("last_error", &SqlType::Text),
+        sqlite_column!("priority", &SqlType::Integer, non_null = true),
+        sqlite_column!("created_at", &SqlType::Integer, non_null = true),
+        sqlite_column!("updated_at", &SqlType::Integer, non_null = true),
+    ],
+    indices: &[(
+        "idx_artist_enrichment_queue_claim",
+        "phase, status, next_attempt_at, priority DESC, artist_rowid",
+    )],
+    unique_constraints: &[&["artist_rowid", "phase"]],
+};
+
+pub(crate) fn create_artist_enrichment_enqueue_trigger(
+    conn: &rusqlite::Connection,
+) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TRIGGER IF NOT EXISTS trg_artists_enqueue_mbid
+         AFTER INSERT ON artists
+         WHEN NEW.mbid_lookup_status = 0
+         BEGIN
+             INSERT OR IGNORE INTO artist_enrichment_queue
+                 (artist_rowid, phase, status, attempt_count, next_attempt_at,
+                  priority, created_at, updated_at)
+             VALUES
+                 (NEW.rowid, 'mbid', 'queued', 0,
+                  CAST(strftime('%s', 'now') AS INTEGER),
+                  NEW.artist_available * 1000 + NEW.popularity,
+                  CAST(strftime('%s', 'now') AS INTEGER),
+                  CAST(strftime('%s', 'now') AS INTEGER));
+         END;
+
+         CREATE TRIGGER IF NOT EXISTS trg_artists_requeue_mbid
+         AFTER UPDATE OF mbid_lookup_status ON artists
+         WHEN NEW.mbid_lookup_status = 0 AND OLD.mbid_lookup_status != 0
+         BEGIN
+             INSERT INTO artist_enrichment_queue
+                 (artist_rowid, phase, status, attempt_count, next_attempt_at,
+                  last_attempt_at, last_error, priority, created_at, updated_at)
+             VALUES
+                 (NEW.rowid, 'mbid', 'queued', 0,
+                  CAST(strftime('%s', 'now') AS INTEGER), NULL, NULL,
+                  NEW.artist_available * 1000 + NEW.popularity,
+                  CAST(strftime('%s', 'now') AS INTEGER),
+                  CAST(strftime('%s', 'now') AS INTEGER))
+             ON CONFLICT(artist_rowid, phase) DO UPDATE SET
+                 status = 'queued',
+                 attempt_count = 0,
+                 next_attempt_at = excluded.next_attempt_at,
+                 last_attempt_at = NULL,
+                 last_error = NULL,
+                 priority = excluded.priority,
+                 updated_at = excluded.updated_at;
+             DELETE FROM artist_enrichment_queue
+             WHERE artist_rowid = NEW.rowid AND phase = 'related';
+         END;",
+    )
+}
 
 // =============================================================================
 // Generic Embeddings
@@ -428,7 +516,7 @@ pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             // Create related_artists junction table
             tx.execute(
                 "CREATE TABLE IF NOT EXISTS related_artists (
-                    artist_rowid INTEGER NOT NULL,
+                    artist_rowid INTEGER NOT NULL REFERENCES artists(rowid) ON DELETE CASCADE,
                     related_artist_rowid INTEGER NOT NULL,
                     match_score REAL NOT NULL,
                     UNIQUE(artist_rowid, related_artist_rowid)
@@ -531,6 +619,45 @@ pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             Ok(())
         }),
     },
+    VersionedSchema {
+        version: 8,
+        tables: &[
+            ARTISTS_TABLE,
+            ALBUMS_TABLE,
+            TRACKS_TABLE,
+            TRACK_ARTISTS_TABLE,
+            ARTIST_ALBUMS_TABLE,
+            ARTIST_GENRES_TABLE,
+            ALBUM_IMAGES_TABLE,
+            ARTIST_IMAGES_TABLE,
+            RELATED_ARTISTS_TABLE,
+            ENTITY_EMBEDDINGS_TABLE,
+            ARTIST_ENRICHMENT_QUEUE_TABLE,
+        ],
+        migration: Some(|tx: &rusqlite::Connection| {
+            tx.execute_batch(
+                "CREATE TABLE IF NOT EXISTS artist_enrichment_queue (
+                    artist_rowid INTEGER NOT NULL,
+                    phase TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    attempt_count INTEGER NOT NULL DEFAULT 0,
+                    next_attempt_at INTEGER,
+                    last_attempt_at INTEGER,
+                    last_error TEXT,
+                    priority INTEGER NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    UNIQUE(artist_rowid, phase)
+                );
+                CREATE INDEX IF NOT EXISTS idx_artist_enrichment_queue_claim
+                    ON artist_enrichment_queue(
+                        phase, status, next_attempt_at, priority DESC, artist_rowid
+                    );",
+            )?;
+            create_artist_enrichment_enqueue_trigger(tx)?;
+            Ok(())
+        }),
+    },
 ];
 
 #[cfg(test)]
@@ -618,6 +745,95 @@ mod tests {
             )
             .unwrap();
         assert!(mbid_plan.contains("idx_artists_mbid_nonnull"));
+    }
+
+    #[test]
+    fn test_latest_schema_creates_durable_artist_enrichment_queue() {
+        let conn = Connection::open_in_memory().unwrap();
+        let schema = CATALOG_VERSIONED_SCHEMAS.last().unwrap();
+        schema.create(&conn).unwrap();
+        create_artist_enrichment_enqueue_trigger(&conn).unwrap();
+
+        let table_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'table' AND name = 'artist_enrichment_queue'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_count, 1);
+
+        conn.execute(
+            "INSERT INTO artists (id, name, followers_total, popularity, artist_available)
+             VALUES ('new-artist', 'New Artist', 0, 77, 1)",
+            [],
+        )
+        .unwrap();
+        let queued: (String, String, i64) = conn
+            .query_row(
+                "SELECT phase, status, priority FROM artist_enrichment_queue",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(queued, ("mbid".to_string(), "queued".to_string(), 1077));
+
+        conn.execute(
+            "UPDATE artist_enrichment_queue
+             SET status = 'permanent_failure', attempt_count = 8
+             WHERE artist_rowid = (SELECT rowid FROM artists WHERE id = 'new-artist')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO artist_enrichment_queue
+             (artist_rowid, phase, status, attempt_count, priority, created_at, updated_at)
+             SELECT rowid, 'related', 'completed', 1, 1077, 0, 0
+             FROM artists WHERE id = 'new-artist'",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE artists SET mbid_lookup_status = 2 WHERE id = 'new-artist'",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE artists SET mbid_lookup_status = 0 WHERE id = 'new-artist'",
+            [],
+        )
+        .unwrap();
+        let reset: (String, i64) = conn
+            .query_row(
+                "SELECT status, attempt_count FROM artist_enrichment_queue",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(reset, ("queued".to_string(), 0));
+        let phase_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM artist_enrichment_queue", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            phase_count, 1,
+            "reset must discard stale related phase state"
+        );
+
+        let claim_plan: String = conn
+            .query_row(
+                "EXPLAIN QUERY PLAN
+                 SELECT artist_rowid FROM artist_enrichment_queue
+                 WHERE phase = 'mbid' AND status = 'queued'
+                   AND next_attempt_at <= 9999999999
+                 ORDER BY next_attempt_at ASC, priority DESC, artist_rowid ASC LIMIT 100",
+                [],
+                |row| row.get(3),
+            )
+            .unwrap();
+        assert!(claim_plan.contains("idx_artist_enrichment_queue_claim"));
     }
 
     #[test]
