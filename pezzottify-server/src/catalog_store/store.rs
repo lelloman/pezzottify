@@ -892,7 +892,11 @@ impl SqliteCatalogStore {
         // handler active while the covering index is scanned. The narrow
         // availability index avoids reading the much larger table payload pages.
         const PROGRESS_OPS: i32 = 10_000;
-        const PROGRESS_DELAY: std::time::Duration = std::time::Duration::from_millis(10);
+        // Production measurements showed that even roughly 3 MB/s of sustained
+        // reads can saturate the catalog SSD. Keep this one-time repair at a
+        // deliberately tiny duty cycle; completion time is secondary to keeping
+        // foreground requests responsive.
+        const PROGRESS_DELAY: std::time::Duration = std::time::Duration::from_millis(250);
         if is_cancelled() {
             anyhow::bail!("cancelled");
         }
