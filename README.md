@@ -34,6 +34,7 @@ Start with the component docs when working in a specific area:
 - [Web README](web/README.md)
 - [Android README](android/README.md)
 - [Metadata Enrichment v1](docs/metadata-enrichment-v1.md)
+- [Catalog Operations](docs/catalog-operations.md)
 
 ## Quick Start
 
@@ -96,6 +97,8 @@ Media files are stored separately from metadata:
 ```
 
 `catalog.db` stores imported catalog metadata. `user.db` stores accounts and user state. `server.db` stores operational state such as background job audits. `enrichment.db` stores audio and metadata enrichment tables.
+
+Catalog cardinalities are persisted and maintained transactionally so server startup never scans the full catalog. Bootstrap and repair procedures for large catalogs are documented in [Catalog Operations](docs/catalog-operations.md).
 
 ## Authentication And Permissions
 

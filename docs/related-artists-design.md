@@ -85,23 +85,41 @@ With a warm cache:
 
 ## Implementation Status
 
-Implemented as a background job (`RelatedArtistsEnrichmentJob`) with two-phase execution:
+Implemented as a cancellable background job (`RelatedArtistsEnrichmentJob`) with two independent durable phases:
 
 - **Phase 1**: Batch of artists with `mbid_lookup_status=0` → MusicBrainz lookup → status 1 (found) or 2 (not found)
 - **Phase 2**: Batch of artists with `mbid_lookup_status=1` → Last.fm similar → resolve mbids back to catalog → store relationships → status 3 (done)
 
-### Schema (migration v5)
+### Durable execution
+
+`artist_enrichment_queue` stores one task per artist and phase. Tasks move through `queued`, `in_progress`, `completed`, or `permanent_failure` and record their attempt count, next-attempt time, last error, stable priority, and timestamps.
+
+- Claims are bounded by the configured batch size and ordered through the queue claim index.
+- Existing catalog candidates are admitted lazily; schema migration does not backfill millions of queue rows.
+- Newly inserted artists are enqueued by a database trigger.
+- Transient failures use exponential backoff from one hour up to seven days, with stable per-artist jitter.
+- A phase is quarantined as `permanent_failure` after eight failed claims, preventing one bad artist from occupying every run.
+- Explicitly resetting an artist's MBID lookup state requeues it for operator-driven retry.
+- Cancellation releases active claims. A six-hour lease recovers claims left behind by an ungraceful process exit.
+
+### Schema
 
 - `artists` table: added `mbid TEXT`, `mbid_lookup_status INTEGER NOT NULL DEFAULT 0`
 - New `related_artists` table: `artist_rowid`, `related_artist_rowid`, `match_score REAL`
+- `artist_enrichment_queue`: durable task state keyed by artist and phase
+- Partial catalog indexes support MBID and related-artist candidate admission without full scans
 
 ### Configuration
 
 Enabled via `[related_artists]` section in config TOML. Requires `lastfm_api_key` and `musicbrainz_user_agent`. See `config.example.toml`.
+
+The batch size applies independently to each phase, so a run may process up to that many MBID tasks and that many related-artist tasks. A fresh schedule waits one full configured interval before its first automatic run; administrators can still trigger a manual canary immediately.
+
+For large catalogs, start with a small batch and low `similar_artists_limit`, verify storage and request behavior, and then increase deliberately. Disabling the section and gracefully restarting the server is the operational rollback if enrichment causes unacceptable foreground impact.
 
 ### Key files
 
 - `src/related_artists/musicbrainz.rs` — MusicBrainz API client (rate limited 1 req/sec)
 - `src/related_artists/lastfm.rs` — Last.fm API client (rate limited 5 req/sec)
 - `src/background_jobs/jobs/related_artists_enrichment.rs` — the background job
-- `src/catalog_store/schema.rs` — migration v5
+- `src/catalog_store/schema.rs` — catalog tables, indexes, queue, and triggers

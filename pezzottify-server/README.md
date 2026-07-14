@@ -566,6 +566,8 @@ Requires `ServerAdmin` permission.
 
 `metadata_enrichment_v1` supports trigger params such as `{"batch_size": 10, "entity_types": ["artist", "track"]}`.
 
+`catalog_cardinality_stats` is a manual-only bootstrap/repair job for persisted artist, album, and track counts. It can be expensive on very large catalogs and must not be scheduled as routine maintenance. See [Catalog Operations](../docs/catalog-operations.md) for its atomic publication, cancellation, and monitoring behavior.
+
 #### Changelog Management
 
 Requires `EditCatalog` permission.
