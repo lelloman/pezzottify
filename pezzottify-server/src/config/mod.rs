@@ -513,7 +513,9 @@ impl AppConfig {
                     _ => AlbumEmbeddingDerivationSpec::defaults(),
                 };
                 let album_derivations = AlbumEmbeddingDerivationsSettings {
-                    enabled: album_file.enabled.unwrap_or(true),
+                    // Album derivation is an expensive maintenance workload and must be
+                    // explicitly enabled by operators.
+                    enabled: album_file.enabled.unwrap_or(false),
                     interval_hours: album_file
                         .interval_hours
                         .unwrap_or_else(|| ae.interval_hours.unwrap_or(24)),
@@ -1269,7 +1271,7 @@ mod tests {
         assert_eq!(settings.max_tracks_per_run, 1000);
         assert_eq!(settings.request_timeout_secs, 300);
         assert_eq!(settings.specs, AudioEmbeddingSpec::defaults());
-        assert!(settings.album_derivations.enabled);
+        assert!(!settings.album_derivations.enabled);
         assert_eq!(settings.album_derivations.interval_hours, 24);
         assert_eq!(settings.album_derivations.jitter_minutes, 120);
         assert_eq!(settings.album_derivations.max_albums_per_run, 1000);

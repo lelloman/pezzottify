@@ -121,7 +121,7 @@ read_pool_size = 4
 # entity_type = "album" when every catalog track is present on disk and has
 # the required source embedding.
 # [audio_embeddings.album_derivations]
-# enabled = true
+# enabled = false
 # interval_hours = 24
 # jitter_minutes = 120
 # max_albums_per_run = 1000
