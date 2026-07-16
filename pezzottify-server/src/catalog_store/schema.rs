@@ -83,10 +83,6 @@ const ALBUMS_TABLE: Table = Table {
         ("idx_albums_id", "id"),
         ("idx_albums_upc", "external_id_upc"),
         ("idx_albums_availability", "album_availability"),
-        (
-            "idx_albums_complete_id",
-            "id WHERE album_availability = 'complete'",
-        ),
         ("idx_album_fingerprint", "track_count, total_duration_ms"),
     ],
     unique_constraints: &[&["id"]],
@@ -789,31 +785,6 @@ pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             Ok(())
         }),
     },
-    VersionedSchema {
-        version: 10,
-        tables: &[
-            ARTISTS_TABLE,
-            ALBUMS_TABLE,
-            TRACKS_TABLE,
-            TRACK_ARTISTS_TABLE,
-            ARTIST_ALBUMS_TABLE,
-            ARTIST_GENRES_TABLE,
-            ALBUM_IMAGES_TABLE,
-            ARTIST_IMAGES_TABLE,
-            RELATED_ARTISTS_TABLE,
-            ENTITY_EMBEDDINGS_TABLE,
-            ARTIST_ENRICHMENT_QUEUE_TABLE,
-            CATALOG_STATS_TABLE,
-        ],
-        migration: Some(|tx: &rusqlite::Connection| {
-            tx.execute(
-                "CREATE INDEX IF NOT EXISTS idx_albums_complete_id
-                 ON albums(id) WHERE album_availability = 'complete'",
-                [],
-            )?;
-            Ok(())
-        }),
-    },
 ];
 
 #[cfg(test)]
@@ -844,23 +815,6 @@ mod tests {
             )
             .unwrap();
         assert_eq!(table_count, 1);
-    }
-
-    #[test]
-    fn test_latest_schema_creates_album_pagination_index() {
-        let conn = Connection::open_in_memory().unwrap();
-        let schema = CATALOG_VERSIONED_SCHEMAS.last().unwrap();
-        schema.create(&conn).unwrap();
-
-        let index_sql: String = conn
-            .query_row(
-                "SELECT sql FROM sqlite_master
-                 WHERE type = 'index' AND name = 'idx_albums_complete_id'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert!(index_sql.contains("ON albums(id) WHERE album_availability = 'complete'"));
     }
 
     #[test]
