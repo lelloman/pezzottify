@@ -32,6 +32,7 @@ pub struct AlbumTrackRef {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AlbumTracklist {
+    pub album_rowid: i64,
     pub album_id: String,
     pub tracks: Vec<AlbumTrackRef>,
 }
@@ -241,7 +242,7 @@ pub trait CatalogStore: Send + Sync {
     /// List one bounded page of complete album tracklists ordered by album ID.
     fn list_complete_album_tracklists_page(
         &self,
-        _after_album_id: Option<&str>,
+        _after_album_rowid: Option<i64>,
         _limit: usize,
     ) -> Result<Vec<AlbumTracklist>> {
         Ok(Vec::new())

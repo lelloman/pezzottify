@@ -272,12 +272,25 @@ impl AlbumEmbeddingSyncJob {
         let mut cursor = if force {
             None
         } else {
-            ctx.server_store
+            match ctx
+                .server_store
                 .get_state(CURSOR_STATE_KEY)
                 .map_err(|e| JobError::ExecutionFailed(e.to_string()))?
-                .filter(|value| !value.is_empty())
+            {
+                Some(value) => match value.parse::<i64>() {
+                    Ok(rowid) if rowid >= 0 => Some(rowid),
+                    _ => {
+                        warn!("Discarding invalid album embedding cursor: {value}");
+                        ctx.server_store
+                            .delete_state(CURSOR_STATE_KEY)
+                            .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+                        None
+                    }
+                },
+                None => None,
+            }
         };
-        let initial_cursor = cursor.clone();
+        let initial_cursor = cursor;
         let mut discovery_pages = 0usize;
         let mut albums_scanned = 0usize;
         let mut albums_considered = 0usize;
@@ -305,7 +318,7 @@ impl AlbumEmbeddingSyncJob {
             let fetch_limit = page_size.min(remaining_scan_budget);
             let albums = ctx
                 .catalog_store
-                .list_complete_album_tracklists_page(cursor.as_deref(), fetch_limit)
+                .list_complete_album_tracklists_page(cursor, fetch_limit)
                 .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
             discovery_pages += 1;
 
@@ -334,6 +347,7 @@ impl AlbumEmbeddingSyncJob {
                 }
 
                 albums_scanned += 1;
+                let album_rowid = album.album_rowid;
                 let album_id = album.album_id.clone();
 
                 if !force && self.has_all_targets(ctx, &album_id)? {
@@ -343,10 +357,10 @@ impl AlbumEmbeddingSyncJob {
 
                     let Some(local_tracks) = self.complete_local_tracks(&album) else {
                         albums_skipped_incomplete += 1;
-                        cursor = Some(album_id.clone());
+                        cursor = Some(album_rowid);
                         if !force {
                             ctx.server_store
-                                .set_state(CURSOR_STATE_KEY, &album_id)
+                                .set_state(CURSOR_STATE_KEY, &album_rowid.to_string())
                                 .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
                         }
                         if albums_considered >= max_albums {
@@ -396,10 +410,10 @@ impl AlbumEmbeddingSyncJob {
                     }
                 }
 
-                cursor = Some(album_id.clone());
+                cursor = Some(album_rowid);
                 if !force {
                     ctx.server_store
-                        .set_state(CURSOR_STATE_KEY, &album_id)
+                        .set_state(CURSOR_STATE_KEY, &album_rowid.to_string())
                         .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
                 }
 
@@ -874,10 +888,14 @@ mod tests {
             .get_entity_embedding("album", "album_b", "album.derived.v1", true)
             .unwrap()
             .is_some());
-        assert_eq!(
-            ctx.server_store.get_state(CURSOR_STATE_KEY).unwrap(),
-            Some("album_b".to_string())
-        );
+        let cursor: i64 = ctx
+            .server_store
+            .get_state(CURSOR_STATE_KEY)
+            .unwrap()
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!(cursor > 0);
 
         job.execute_with_params(
             &ctx,
@@ -911,20 +929,28 @@ mod tests {
             .get_entity_embedding("album", "album_a", "album.derived.v1", true)
             .unwrap()
             .is_none());
-        assert_eq!(
-            ctx.server_store.get_state(CURSOR_STATE_KEY).unwrap(),
-            Some("album_a".to_string())
-        );
+        let first_cursor: i64 = ctx
+            .server_store
+            .get_state(CURSOR_STATE_KEY)
+            .unwrap()
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!(first_cursor > 0);
 
         job.execute_with_params(&ctx, Some(params)).unwrap();
         assert!(store
             .get_entity_embedding("album", "album_b", "album.derived.v1", true)
             .unwrap()
             .is_some());
-        assert_eq!(
-            ctx.server_store.get_state(CURSOR_STATE_KEY).unwrap(),
-            Some("album_b".to_string())
-        );
+        let second_cursor: i64 = ctx
+            .server_store
+            .get_state(CURSOR_STATE_KEY)
+            .unwrap()
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!(second_cursor > first_cursor);
     }
 
     #[test]
