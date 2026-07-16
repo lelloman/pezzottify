@@ -7,6 +7,8 @@ use anyhow::Result;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
+pub const MAX_ALBUM_TRACKLIST_PAGE_SIZE: usize = 1_000;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct TrackEmbeddingNamespaceCoverage {
     pub namespace: String,
@@ -236,8 +238,12 @@ pub trait CatalogStore: Send + Sync {
         })
     }
 
-    /// List album tracklists ordered by album ID, limited by album count.
-    fn list_album_tracklists(&self, _limit: usize) -> Result<Vec<AlbumTracklist>> {
+    /// List one bounded page of complete album tracklists ordered by album ID.
+    fn list_complete_album_tracklists_page(
+        &self,
+        _after_album_id: Option<&str>,
+        _limit: usize,
+    ) -> Result<Vec<AlbumTracklist>> {
         Ok(Vec::new())
     }
 

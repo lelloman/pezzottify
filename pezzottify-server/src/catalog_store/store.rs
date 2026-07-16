@@ -10,6 +10,7 @@ use super::schema::{
 };
 use super::trait_def::{
     AlbumTrackRef, AlbumTracklist, CatalogStore, SearchableContentType, SearchableItem,
+    MAX_ALBUM_TRACKLIST_PAGE_SIZE,
 };
 use crate::sqlite_persistence::BASE_DB_VERSION;
 use anyhow::{anyhow, Context, Result};
@@ -2056,29 +2057,65 @@ impl CatalogStore for SqliteCatalogStore {
         })
     }
 
-    fn list_album_tracklists(&self, limit: usize) -> Result<Vec<AlbumTracklist>> {
+    fn list_complete_album_tracklists_page(
+        &self,
+        after_album_id: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<AlbumTracklist>> {
         if limit == 0 {
             return Ok(Vec::new());
         }
-        let limit = limit.min(i64::MAX as usize);
+        // Keep the store boundary safe even if a caller supplies an accidental
+        // unbounded value. Jobs can choose smaller pages but never larger ones.
+        let limit = limit.min(MAX_ALBUM_TRACKLIST_PAGE_SIZE) as i64;
+
+        let (sql, query_params) = if let Some(after_album_id) = after_album_id {
+            (
+                "WITH candidates AS MATERIALIZED (
+                    SELECT rowid, id
+                    FROM albums INDEXED BY idx_albums_complete_id
+                    WHERE album_availability = 'complete'
+                      AND id > ?1
+                      AND EXISTS (
+                          SELECT 1 FROM tracks t2 WHERE t2.album_rowid = albums.rowid
+                      )
+                    ORDER BY id
+                    LIMIT ?2
+                 )
+                 SELECT c.id, t.id, t.audio_uri
+                 FROM candidates c
+                 JOIN tracks t ON t.album_rowid = c.rowid
+                 ORDER BY c.id, t.disc_number, t.track_number, t.id",
+                vec![
+                    Value::Text(after_album_id.to_string()),
+                    Value::Integer(limit),
+                ],
+            )
+        } else {
+            (
+                "WITH candidates AS MATERIALIZED (
+                    SELECT rowid, id
+                    FROM albums INDEXED BY idx_albums_complete_id
+                    WHERE album_availability = 'complete'
+                      AND EXISTS (
+                          SELECT 1 FROM tracks t2 WHERE t2.album_rowid = albums.rowid
+                      )
+                    ORDER BY id
+                    LIMIT ?1
+                 )
+                 SELECT c.id, t.id, t.audio_uri
+                 FROM candidates c
+                 JOIN tracks t ON t.album_rowid = c.rowid
+                 ORDER BY c.id, t.disc_number, t.track_number, t.id",
+                vec![Value::Integer(limit)],
+            )
+        };
 
         let read_conn = self.get_read_conn();
         let conn = read_conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT a.id, t.id, t.audio_uri
-             FROM albums a
-             JOIN tracks t ON t.album_rowid = a.rowid
-             WHERE a.rowid IN (
-                 SELECT a2.rowid
-                 FROM albums a2
-                 WHERE EXISTS (SELECT 1 FROM tracks t2 WHERE t2.album_rowid = a2.rowid)
-                 ORDER BY a2.id
-                 LIMIT ?1
-             )
-             ORDER BY a.id, t.disc_number, t.track_number, t.id",
-        )?;
+        let mut stmt = conn.prepare(sql)?;
 
-        let mut rows = stmt.query(params![limit as i64])?;
+        let mut rows = stmt.query(params_from_iter(query_params))?;
         let mut albums = Vec::<AlbumTracklist>::new();
         while let Some(row) = rows.next()? {
             let album_id: String = row.get(0)?;
@@ -3472,6 +3509,32 @@ mod tests {
     }
 
     #[test]
+    fn test_catalog_migration_v9_to_v10_adds_album_pagination_index() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        CATALOG_VERSIONED_SCHEMAS[9].create(&conn).unwrap();
+        conn.execute("DROP INDEX idx_albums_complete_id", [])
+            .unwrap();
+        conn.pragma_update(None, "user_version", BASE_DB_VERSION + 9)
+            .unwrap();
+
+        migrate_if_needed(&mut conn).unwrap();
+
+        let index_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'index' AND name = 'idx_albums_complete_id'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(index_count, 1);
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, (BASE_DB_VERSION + 10) as i64);
+    }
+
+    #[test]
     fn test_catalog_cardinality_stats_rebuild_and_incremental_updates() {
         let (store, _temp_dir) = create_test_store();
         {
@@ -4046,6 +4109,100 @@ mod tests {
             .unwrap();
         assert_eq!(tracks.len(), 1);
         assert_eq!(tracks[0], ("track_a".to_string(), "a.mp3".to_string()));
+    }
+
+    #[test]
+    fn test_complete_album_tracklist_pages_are_bounded_and_use_keyset_cursor() {
+        let (store, _temp_dir) = create_test_store();
+        {
+            let conn = store.write_conn.lock().unwrap();
+            for (album_id, availability) in [
+                ("album_a", "complete"),
+                ("album_b", "partial"),
+                ("album_c", "complete"),
+            ] {
+                conn.execute(
+                    "INSERT INTO albums
+                        (id, name, album_type, label, popularity, release_date,
+                         release_date_precision, album_availability)
+                     VALUES (?1, ?1, 'album', '', 0, '2024', 'year', ?2)",
+                    params![album_id, availability],
+                )
+                .unwrap();
+                for track_number in 1..=2 {
+                    conn.execute(
+                        "INSERT INTO tracks
+                            (id, name, album_rowid, track_number, popularity, disc_number,
+                             duration_ms, explicit, audio_uri, track_available)
+                         VALUES (?1, ?1,
+                            (SELECT rowid FROM albums WHERE id = ?2), ?3, 0, 1,
+                            1000, 0, ?4, 1)",
+                        params![
+                            format!("{album_id}_track_{track_number}"),
+                            album_id,
+                            track_number,
+                            format!("{album_id}_{track_number}.ogg")
+                        ],
+                    )
+                    .unwrap();
+                }
+            }
+        }
+
+        let first = store.list_complete_album_tracklists_page(None, 1).unwrap();
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].album_id, "album_a");
+        assert_eq!(first[0].tracks.len(), 2);
+
+        let second = store
+            .list_complete_album_tracklists_page(Some("album_a"), 1)
+            .unwrap();
+        assert_eq!(second.len(), 1);
+        assert_eq!(second[0].album_id, "album_c");
+
+        assert!(store
+            .list_complete_album_tracklists_page(Some("album_c"), 1)
+            .unwrap()
+            .is_empty());
+        assert!(store
+            .list_complete_album_tracklists_page(None, 0)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn test_complete_album_page_candidate_plan_uses_pagination_index() {
+        let (store, _temp_dir) = create_test_store();
+        let conn = store.write_conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare(
+                "EXPLAIN QUERY PLAN
+                 SELECT rowid, id
+                 FROM albums INDEXED BY idx_albums_complete_id
+                 WHERE album_availability = 'complete'
+                   AND id > ?1
+                 ORDER BY id
+                 LIMIT ?2",
+            )
+            .unwrap();
+        let details = stmt
+            .query_map(params!["album_a", 100], |row| row.get::<_, String>(3))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+
+        assert!(
+            details
+                .iter()
+                .any(|detail| detail.contains("idx_albums_complete_id")),
+            "unexpected query plan: {details:?}"
+        );
+        assert!(
+            details
+                .iter()
+                .all(|detail| !detail.contains("USE TEMP B-TREE FOR ORDER BY")),
+            "candidate selection must not globally sort: {details:?}"
+        );
     }
 
     #[test]
