@@ -17,6 +17,6 @@ pub use store::SqliteCatalogStore;
 pub use trait_def::{
     AlbumEmbeddingCoverage, AlbumEmbeddingNamespaceCoverage, AlbumTrackRef, AlbumTracklist,
     CatalogStore, SearchableContentType, SearchableItem, TrackEmbeddingCoverage,
-    TrackEmbeddingNamespaceCoverage,
+    TrackEmbeddingNamespaceCoverage, MAX_ALBUM_TRACKLIST_PAGE_SIZE,
 };
 pub use validation::{validate_album, validate_artist, validate_track, ValidationError};

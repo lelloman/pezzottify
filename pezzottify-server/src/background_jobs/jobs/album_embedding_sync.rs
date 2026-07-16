@@ -8,7 +8,9 @@ use crate::background_jobs::{
     job::{BackgroundJob, JobError, JobSchedule, ShutdownBehavior},
     JobAuditLogger,
 };
-use crate::catalog_store::{AlbumTrackRef, AlbumTracklist, EntityEmbeddingUpsert};
+use crate::catalog_store::{
+    AlbumTrackRef, AlbumTracklist, EntityEmbeddingUpsert, MAX_ALBUM_TRACKLIST_PAGE_SIZE,
+};
 use crate::config::{
     AlbumEmbeddingAggregation, AlbumEmbeddingDerivationSpec, AlbumEmbeddingDerivationsSettings,
 };
@@ -17,6 +19,14 @@ use serde_json::{json, Map, Value};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tracing::{info, warn};
+
+const CURSOR_STATE_KEY: &str = "background_job.album_embedding_sync.cursor";
+const DEFAULT_PAGE_SIZE: usize = 100;
+const MAX_ALBUMS_PER_RUN: usize = 10_000;
+const DEFAULT_SCAN_MULTIPLIER: usize = 10;
+const MAX_ALBUMS_SCANNED_PER_RUN: usize = 100_000;
+const DEFAULT_MAX_RUNTIME_SECS: u64 = 60 * 60;
+const MAX_RUNTIME_SECS: u64 = 24 * 60 * 60;
 
 #[derive(Clone)]
 pub struct AlbumEmbeddingSyncJob {
@@ -28,6 +38,9 @@ pub struct AlbumEmbeddingSyncJob {
 struct AlbumEmbeddingSyncParams {
     max_albums: Option<usize>,
     force: Option<bool>,
+    page_size: Option<usize>,
+    max_albums_scanned: Option<usize>,
+    max_runtime_secs: Option<u64>,
 }
 
 impl AlbumEmbeddingSyncJob {
@@ -225,112 +238,234 @@ impl AlbumEmbeddingSyncJob {
         let max_albums = params
             .max_albums
             .unwrap_or(self.settings.max_albums_per_run)
-            .max(1);
+            .clamp(1, MAX_ALBUMS_PER_RUN);
         let force = params.force.unwrap_or(false);
+        let page_size = params
+            .page_size
+            .unwrap_or(DEFAULT_PAGE_SIZE)
+            .clamp(1, MAX_ALBUM_TRACKLIST_PAGE_SIZE);
+        let max_albums_scanned = params
+            .max_albums_scanned
+            .unwrap_or_else(|| {
+                max_albums
+                    .saturating_mul(DEFAULT_SCAN_MULTIPLIER)
+                    .max(page_size)
+            })
+            .clamp(1, MAX_ALBUMS_SCANNED_PER_RUN);
+        let max_runtime = Duration::from_secs(
+            params
+                .max_runtime_secs
+                .unwrap_or(DEFAULT_MAX_RUNTIME_SECS)
+                .clamp(1, MAX_RUNTIME_SECS),
+        );
         let target_namespaces = self.target_namespaces();
 
         audit.log_started(Some(json!({
             "max_albums": max_albums,
+            "max_albums_scanned": max_albums_scanned,
+            "max_runtime_secs": max_runtime.as_secs(),
+            "page_size": page_size,
             "force": force,
             "target_namespaces": target_namespaces,
         })));
 
-        let album_selection_limit = if force { max_albums } else { usize::MAX };
-        let albums = ctx
-            .catalog_store
-            .list_album_tracklists(album_selection_limit)
-            .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
-
+        let mut cursor = if force {
+            None
+        } else {
+            ctx.server_store
+                .get_state(CURSOR_STATE_KEY)
+                .map_err(|e| JobError::ExecutionFailed(e.to_string()))?
+                .filter(|value| !value.is_empty())
+        };
+        let initial_cursor = cursor.clone();
+        let mut discovery_pages = 0usize;
+        let mut albums_scanned = 0usize;
         let mut albums_considered = 0usize;
         let mut albums_complete_local = 0usize;
+        let mut albums_skipped_all_targets = 0usize;
         let mut albums_skipped_incomplete = 0usize;
         let mut embeddings_stored = 0usize;
         let mut specs_skipped_existing = 0usize;
         let mut specs_skipped_missing_source = 0usize;
         let mut failures = 0usize;
+        let mut cursor_wrapped = false;
+        let mut stop_reason = "catalog_exhausted";
 
-        for album in albums {
+        while albums_considered < max_albums && albums_scanned < max_albums_scanned {
             if ctx.is_cancelled() {
                 audit.log_failed("Cancelled", None);
                 return Err(JobError::Cancelled);
             }
-            if !force && self.has_all_targets(ctx, &album.album_id)? {
-                continue;
-            }
-            if albums_considered >= max_albums {
+            if started_at.elapsed() >= max_runtime {
+                stop_reason = "max_runtime";
                 break;
             }
-            albums_considered += 1;
 
-            let Some(local_tracks) = self.complete_local_tracks(&album) else {
-                albums_skipped_incomplete += 1;
-                continue;
-            };
-            albums_complete_local += 1;
-            let track_ids = local_tracks
-                .iter()
-                .map(|(track_id, _)| track_id.clone())
-                .collect::<Vec<_>>();
-            let audio_uris = local_tracks
-                .iter()
-                .map(|(_, audio_uri)| audio_uri.clone())
-                .collect::<Vec<_>>();
+            let remaining_scan_budget = max_albums_scanned - albums_scanned;
+            let fetch_limit = page_size.min(remaining_scan_budget);
+            let albums = ctx
+                .catalog_store
+                .list_complete_album_tracklists_page(cursor.as_deref(), fetch_limit)
+                .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+            discovery_pages += 1;
 
-            for spec in &self.settings.specs {
+            if albums.is_empty() {
+                if !force {
+                    ctx.server_store
+                        .delete_state(CURSOR_STATE_KEY)
+                        .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+                    cursor = None;
+                    cursor_wrapped = true;
+                }
+                stop_reason = "catalog_exhausted";
+                break;
+            }
+
+            let mut stop_after_page = false;
+            for album in albums {
                 if ctx.is_cancelled() {
                     audit.log_failed("Cancelled", None);
                     return Err(JobError::Cancelled);
                 }
+                if started_at.elapsed() >= max_runtime {
+                    stop_reason = "max_runtime";
+                    stop_after_page = true;
+                    break;
+                }
 
-                match self.process_spec(ctx, &album.album_id, &track_ids, &audio_uris, spec, force)
-                {
-                    Ok(SpecOutcome::Stored) => embeddings_stored += 1,
-                    Ok(SpecOutcome::SkippedExisting) => specs_skipped_existing += 1,
-                    Ok(SpecOutcome::SkippedMissingSource) => specs_skipped_missing_source += 1,
-                    Err(e) => {
-                        failures += 1;
-                        warn!(
-                            "Failed to derive album embedding for album {} namespace {}: {}",
-                            album.album_id, spec.target_namespace, e
-                        );
+                albums_scanned += 1;
+                let album_id = album.album_id.clone();
+
+                if !force && self.has_all_targets(ctx, &album_id)? {
+                    albums_skipped_all_targets += 1;
+                } else {
+                    albums_considered += 1;
+
+                    let Some(local_tracks) = self.complete_local_tracks(&album) else {
+                        albums_skipped_incomplete += 1;
+                        cursor = Some(album_id.clone());
+                        if !force {
+                            ctx.server_store
+                                .set_state(CURSOR_STATE_KEY, &album_id)
+                                .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+                        }
+                        if albums_considered >= max_albums {
+                            stop_reason = "max_albums";
+                            stop_after_page = true;
+                            break;
+                        }
+                        continue;
+                    };
+                    albums_complete_local += 1;
+                    let track_ids = local_tracks
+                        .iter()
+                        .map(|(track_id, _)| track_id.clone())
+                        .collect::<Vec<_>>();
+                    let audio_uris = local_tracks
+                        .iter()
+                        .map(|(_, audio_uri)| audio_uri.clone())
+                        .collect::<Vec<_>>();
+
+                    for spec in &self.settings.specs {
+                        if ctx.is_cancelled() {
+                            audit.log_failed("Cancelled", None);
+                            return Err(JobError::Cancelled);
+                        }
+
+                        match self.process_spec(
+                            ctx,
+                            &album_id,
+                            &track_ids,
+                            &audio_uris,
+                            spec,
+                            force,
+                        ) {
+                            Ok(SpecOutcome::Stored) => embeddings_stored += 1,
+                            Ok(SpecOutcome::SkippedExisting) => specs_skipped_existing += 1,
+                            Ok(SpecOutcome::SkippedMissingSource) => {
+                                specs_skipped_missing_source += 1
+                            }
+                            Err(e) => {
+                                failures += 1;
+                                warn!(
+                                    "Failed to derive album embedding for album {} namespace {}: {}",
+                                    album_id, spec.target_namespace, e
+                                );
+                            }
+                        }
                     }
+                }
+
+                cursor = Some(album_id.clone());
+                if !force {
+                    ctx.server_store
+                        .set_state(CURSOR_STATE_KEY, &album_id)
+                        .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+                }
+
+                if albums_considered >= max_albums {
+                    stop_reason = "max_albums";
+                    stop_after_page = true;
+                    break;
                 }
             }
 
-            if albums_considered.is_multiple_of(50) {
-                audit.log_progress(json!({
-                    "albums_considered": albums_considered,
-                    "albums_complete_local": albums_complete_local,
-                    "albums_skipped_incomplete": albums_skipped_incomplete,
-                    "embeddings_stored": embeddings_stored,
-                    "specs_skipped_existing": specs_skipped_existing,
-                    "specs_skipped_missing_source": specs_skipped_missing_source,
-                    "failures": failures,
-                }));
+            audit.log_progress(json!({
+                "phase": "derive",
+                "discovery_pages": discovery_pages,
+                "albums_scanned": albums_scanned,
+                "albums_considered": albums_considered,
+                "albums_complete_local": albums_complete_local,
+                "albums_skipped_all_targets": albums_skipped_all_targets,
+                "albums_skipped_incomplete": albums_skipped_incomplete,
+                "embeddings_stored": embeddings_stored,
+                "specs_skipped_existing": specs_skipped_existing,
+                "specs_skipped_missing_source": specs_skipped_missing_source,
+                "failures": failures,
+                "cursor": cursor,
+            }));
+
+            if stop_after_page {
+                break;
             }
+        }
+
+        if albums_scanned >= max_albums_scanned && albums_considered < max_albums {
+            stop_reason = "max_albums_scanned";
         }
 
         let duration_ms = started_at.elapsed().as_millis() as u64;
         info!(
-            "Album embedding sync completed: considered={} complete_local={} incomplete={} stored={} skipped_existing={} missing_source={} failures={} duration_ms={}",
+            "Album embedding sync completed: pages={} scanned={} considered={} complete_local={} all_targets={} incomplete={} stored={} skipped_existing={} missing_source={} failures={} stop_reason={} duration_ms={}",
+            discovery_pages,
+            albums_scanned,
             albums_considered,
             albums_complete_local,
+            albums_skipped_all_targets,
             albums_skipped_incomplete,
             embeddings_stored,
             specs_skipped_existing,
             specs_skipped_missing_source,
             failures,
+            stop_reason,
             duration_ms
         );
         audit.log_completed(Some(json!({
             "duration_ms": duration_ms,
+            "stop_reason": stop_reason,
+            "discovery_pages": discovery_pages,
+            "albums_scanned": albums_scanned,
             "albums_considered": albums_considered,
             "albums_complete_local": albums_complete_local,
+            "albums_skipped_all_targets": albums_skipped_all_targets,
             "albums_skipped_incomplete": albums_skipped_incomplete,
             "embeddings_stored": embeddings_stored,
             "specs_skipped_existing": specs_skipped_existing,
             "specs_skipped_missing_source": specs_skipped_missing_source,
             "failures": failures,
+            "initial_cursor": initial_cursor,
+            "final_cursor": cursor,
+            "cursor_wrapped": cursor_wrapped,
         })));
 
         Ok(())
@@ -443,10 +578,19 @@ mod tests {
 
     #[test]
     fn params_deserialize_manual_run_options() {
-        let params: AlbumEmbeddingSyncParams =
-            serde_json::from_value(json!({"max_albums": 7, "force": true})).unwrap();
+        let params: AlbumEmbeddingSyncParams = serde_json::from_value(json!({
+            "max_albums": 7,
+            "force": true,
+            "page_size": 3,
+            "max_albums_scanned": 21,
+            "max_runtime_secs": 30,
+        }))
+        .unwrap();
         assert_eq!(params.max_albums, Some(7));
         assert_eq!(params.force, Some(true));
+        assert_eq!(params.page_size, Some(3));
+        assert_eq!(params.max_albums_scanned, Some(21));
+        assert_eq!(params.max_runtime_secs, Some(30));
     }
 
     #[test]
@@ -678,6 +822,9 @@ mod tests {
             .unwrap();
         assert_eq!(existing.vector.unwrap(), vec![99.0]);
 
+        ctx.server_store
+            .set_state(CURSOR_STATE_KEY, "scheduled_cursor")
+            .unwrap();
         job.execute_with_params(&ctx, Some(json!({"force": true})))
             .unwrap();
         let recomputed = store
@@ -686,5 +833,105 @@ mod tests {
             .unwrap();
         assert_eq!(recomputed.vector.unwrap(), vec![2.0]);
         assert_eq!(recomputed.metadata["source_embedding_count"], 2);
+        assert_eq!(
+            ctx.server_store.get_state(CURSOR_STATE_KEY).unwrap(),
+            Some("scheduled_cursor".to_string())
+        );
+    }
+
+    #[test]
+    fn completed_first_page_does_not_starve_later_album() {
+        let (job, ctx, store, temp_dir) = create_context();
+        for album_id in ["album_a", "album_b"] {
+            let uri = format!("{album_id}.ogg");
+            seed_album(&store, album_id, &[Some(&uri)]);
+            write_media_file(&temp_dir, &uri);
+            upsert_track_embedding(&store, &format!("{album_id}_track_0"), vec![2.0]);
+        }
+        store
+            .upsert_entity_embedding(&EntityEmbeddingUpsert {
+                entity_type: "album".to_string(),
+                entity_id: "album_a".to_string(),
+                namespace: "album.derived.v1".to_string(),
+                vector: vec![99.0],
+                dtype: "float32".to_string(),
+                metadata: json!({}),
+                model: json!({}),
+            })
+            .unwrap();
+
+        job.execute_with_params(
+            &ctx,
+            Some(json!({
+                "max_albums": 1,
+                "page_size": 1,
+                "max_albums_scanned": 2,
+            })),
+        )
+        .unwrap();
+
+        assert!(store
+            .get_entity_embedding("album", "album_b", "album.derived.v1", true)
+            .unwrap()
+            .is_some());
+        assert_eq!(
+            ctx.server_store.get_state(CURSOR_STATE_KEY).unwrap(),
+            Some("album_b".to_string())
+        );
+
+        job.execute_with_params(
+            &ctx,
+            Some(json!({
+                "max_albums": 1,
+                "page_size": 1,
+                "max_albums_scanned": 1,
+            })),
+        )
+        .unwrap();
+        assert_eq!(ctx.server_store.get_state(CURSOR_STATE_KEY).unwrap(), None);
+    }
+
+    #[test]
+    fn durable_cursor_advances_past_underivable_album_between_runs() {
+        let (job, ctx, store, temp_dir) = create_context();
+        for album_id in ["album_a", "album_b"] {
+            let uri = format!("{album_id}.ogg");
+            seed_album(&store, album_id, &[Some(&uri)]);
+            write_media_file(&temp_dir, &uri);
+        }
+        upsert_track_embedding(&store, "album_b_track_0", vec![4.0]);
+
+        let params = json!({
+            "max_albums": 1,
+            "page_size": 1,
+            "max_albums_scanned": 1,
+        });
+        job.execute_with_params(&ctx, Some(params.clone())).unwrap();
+        assert!(store
+            .get_entity_embedding("album", "album_a", "album.derived.v1", true)
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            ctx.server_store.get_state(CURSOR_STATE_KEY).unwrap(),
+            Some("album_a".to_string())
+        );
+
+        job.execute_with_params(&ctx, Some(params)).unwrap();
+        assert!(store
+            .get_entity_embedding("album", "album_b", "album.derived.v1", true)
+            .unwrap()
+            .is_some());
+        assert_eq!(
+            ctx.server_store.get_state(CURSOR_STATE_KEY).unwrap(),
+            Some("album_b".to_string())
+        );
+    }
+
+    #[test]
+    fn cancellation_before_discovery_is_effective() {
+        let (job, ctx, _store, _temp_dir) = create_context();
+        ctx.cancellation_token.cancel();
+
+        assert!(matches!(job.execute(&ctx), Err(JobError::Cancelled)));
     }
 }
