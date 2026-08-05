@@ -507,16 +507,34 @@ async fn main() -> Result<()> {
     let db_dir_for_metrics = app_config.db_dir.clone();
     let media_path_for_metrics = app_config.media_path.clone();
     tokio::spawn(async move {
-        // Update storage metrics immediately at startup
-        metrics::update_storage_metrics(&db_dir_for_metrics, &media_path_for_metrics);
-        info!("Storage metrics initialized");
+        // Recursively walking the media catalog performs blocking filesystem
+        // metadata I/O. Keep it off Tokio's HTTP executor so a cold directory
+        // cache cannot stall metrics scrapes and API requests.
+        let initial_db_dir = db_dir_for_metrics.clone();
+        let initial_media_path = media_path_for_metrics.clone();
+        match tokio::task::spawn_blocking(move || {
+            metrics::update_storage_metrics(&initial_db_dir, &initial_media_path);
+        })
+        .await
+        {
+            Ok(()) => info!("Storage metrics initialized"),
+            Err(e) => error!("Storage metrics initialization task failed: {}", e),
+        }
 
         // Then update periodically (every 15 minutes)
         let mut interval = tokio::time::interval(Duration::from_secs(15 * 60));
         interval.tick().await;
         loop {
             interval.tick().await;
-            metrics::update_storage_metrics(&db_dir_for_metrics, &media_path_for_metrics);
+            let db_dir = db_dir_for_metrics.clone();
+            let media_path = media_path_for_metrics.clone();
+            if let Err(e) = tokio::task::spawn_blocking(move || {
+                metrics::update_storage_metrics(&db_dir, &media_path);
+            })
+            .await
+            {
+                error!("Storage metrics update task failed: {}", e);
+            }
         }
     });
 

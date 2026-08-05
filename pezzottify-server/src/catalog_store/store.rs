@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use tracing::info;
 
 /// SQLite-backed catalog store for Spotify metadata.
@@ -1537,6 +1538,7 @@ impl CatalogStore for SqliteCatalogStore {
         is_cancelled: &(dyn Fn() -> bool + Send + Sync),
     ) -> Result<AvailabilityRefreshResult> {
         const BATCH_SIZE: i64 = 1000;
+        let refresh_started = Instant::now();
         let conn = self.write_conn.lock().unwrap();
         conn.execute("BEGIN IMMEDIATE", [])?;
 
@@ -1551,7 +1553,12 @@ impl CatalogStore for SqliteCatalogStore {
             let mut album_updates = Vec::new();
             let mut artist_updates = Vec::new();
 
-            // Reconcile track availability against filesystem truth.
+            // Reconcile the tracks that the catalog currently considers
+            // available against filesystem truth. The availability index makes
+            // this proportional to the local catalog (tens of thousands of
+            // tracks in production), rather than the full Spotify metadata dump
+            // (hundreds of millions of tracks).
+            let tracks_started = Instant::now();
             let mut last_track_rowid = 0i64;
             loop {
                 if is_cancelled() {
@@ -1560,8 +1567,8 @@ impl CatalogStore for SqliteCatalogStore {
 
                 let mut tracks_stmt = conn.prepare_cached(
                     "SELECT rowid, id, audio_uri, track_available
-                     FROM tracks
-                     WHERE rowid > ?1
+                     FROM tracks INDEXED BY idx_tracks_available
+                     WHERE track_available = 1 AND rowid > ?1
                      ORDER BY rowid
                      LIMIT ?2",
                 )?;
@@ -1614,15 +1621,25 @@ impl CatalogStore for SqliteCatalogStore {
                 }
                 last_track_rowid = batch_last_rowid;
             }
+            info!(
+                elapsed_ms = tracks_started.elapsed().as_millis() as u64,
+                tracks_updated, "Catalog availability track verification completed"
+            );
 
-            // Recompute album availability from track flags.
-            let mut last_album_rowid = 0i64;
-            loop {
-                if is_cancelled() {
-                    anyhow::bail!("cancelled");
-                }
+            // Album and artist availability are derived from track flags by the
+            // normal mutation paths. Recompute them only when filesystem
+            // verification actually repaired a track. With no repairs, these
+            // full-table derivations cannot produce a different result and only
+            // evict useful database and filesystem cache.
+            let derived_started = Instant::now();
+            if tracks_updated > 0 {
+                let mut last_album_rowid = 0i64;
+                loop {
+                    if is_cancelled() {
+                        anyhow::bail!("cancelled");
+                    }
 
-                let mut albums_stmt = conn.prepare_cached(
+                    let mut albums_stmt = conn.prepare_cached(
                     "SELECT a.rowid, a.id,
                         CASE
                             WHEN COALESCE(t.available_tracks, 0) = 0 THEN 'missing'
@@ -1650,52 +1667,52 @@ impl CatalogStore for SqliteCatalogStore {
                  LIMIT ?2",
                 )?;
 
-                let mut rows = albums_stmt.query(params![last_album_rowid, BATCH_SIZE])?;
-                let mut pending_updates: Vec<(i64, String, String)> = Vec::new();
-                let mut batch_last_rowid = last_album_rowid;
-                while let Some(row) = rows.next()? {
+                    let mut rows = albums_stmt.query(params![last_album_rowid, BATCH_SIZE])?;
+                    let mut pending_updates: Vec<(i64, String, String)> = Vec::new();
+                    let mut batch_last_rowid = last_album_rowid;
+                    while let Some(row) = rows.next()? {
+                        if is_cancelled() {
+                            anyhow::bail!("cancelled");
+                        }
+                        let album_rowid: i64 = row.get(0)?;
+                        let album_id: String = row.get(1)?;
+                        let computed_availability: String = row.get(2)?;
+                        pending_updates.push((album_rowid, album_id, computed_availability));
+                        batch_last_rowid = album_rowid;
+                    }
+                    drop(rows);
+                    drop(albums_stmt);
+
+                    if batch_last_rowid == last_album_rowid {
+                        break;
+                    }
+
+                    for (album_rowid, album_id, computed_availability) in pending_updates {
+                        if is_cancelled() {
+                            anyhow::bail!("cancelled");
+                        }
+                        conn.execute(
+                            "UPDATE albums SET album_availability = ?1 WHERE rowid = ?2",
+                            params![computed_availability, album_rowid],
+                        )?;
+                        albums_updated += 1;
+                        album_updates.push(AvailabilityItemUpdate {
+                            id: album_id,
+                            available: computed_availability != "missing",
+                        });
+                    }
+                    last_album_rowid = batch_last_rowid;
+                }
+
+                // Recompute artist availability from credited available tracks.
+                let mut last_artist_rowid = 0i64;
+                loop {
                     if is_cancelled() {
                         anyhow::bail!("cancelled");
                     }
-                    let album_rowid: i64 = row.get(0)?;
-                    let album_id: String = row.get(1)?;
-                    let computed_availability: String = row.get(2)?;
-                    pending_updates.push((album_rowid, album_id, computed_availability));
-                    batch_last_rowid = album_rowid;
-                }
-                drop(rows);
-                drop(albums_stmt);
 
-                if batch_last_rowid == last_album_rowid {
-                    break;
-                }
-
-                for (album_rowid, album_id, computed_availability) in pending_updates {
-                    if is_cancelled() {
-                        anyhow::bail!("cancelled");
-                    }
-                    conn.execute(
-                        "UPDATE albums SET album_availability = ?1 WHERE rowid = ?2",
-                        params![computed_availability, album_rowid],
-                    )?;
-                    albums_updated += 1;
-                    album_updates.push(AvailabilityItemUpdate {
-                        id: album_id,
-                        available: computed_availability != "missing",
-                    });
-                }
-                last_album_rowid = batch_last_rowid;
-            }
-
-            // Recompute artist availability from credited available tracks.
-            let mut last_artist_rowid = 0i64;
-            loop {
-                if is_cancelled() {
-                    anyhow::bail!("cancelled");
-                }
-
-                let mut artists_stmt = conn.prepare_cached(
-                    "SELECT a.rowid, a.id,
+                    let mut artists_stmt = conn.prepare_cached(
+                        "SELECT a.rowid, a.id,
                         CASE WHEN EXISTS (
                             SELECT 1
                             FROM track_artists ta
@@ -1715,64 +1732,101 @@ impl CatalogStore for SqliteCatalogStore {
                         ) THEN 1 ELSE 0 END
                  ORDER BY a.rowid
                  LIMIT ?2",
-                )?;
-
-                let mut rows = artists_stmt.query(params![last_artist_rowid, BATCH_SIZE])?;
-                let mut pending_updates: Vec<(i64, String, i32)> = Vec::new();
-                let mut batch_last_rowid = last_artist_rowid;
-                while let Some(row) = rows.next()? {
-                    if is_cancelled() {
-                        anyhow::bail!("cancelled");
-                    }
-                    let artist_rowid: i64 = row.get(0)?;
-                    let artist_id: String = row.get(1)?;
-                    let computed_available: i32 = row.get(2)?;
-                    pending_updates.push((artist_rowid, artist_id, computed_available));
-                    batch_last_rowid = artist_rowid;
-                }
-                drop(rows);
-                drop(artists_stmt);
-
-                if batch_last_rowid == last_artist_rowid {
-                    break;
-                }
-
-                for (artist_rowid, artist_id, computed_available) in pending_updates {
-                    if is_cancelled() {
-                        anyhow::bail!("cancelled");
-                    }
-                    conn.execute(
-                        "UPDATE artists SET artist_available = ?1 WHERE rowid = ?2",
-                        params![computed_available, artist_rowid],
                     )?;
-                    artists_updated += 1;
-                    artist_updates.push(AvailabilityItemUpdate {
-                        id: artist_id,
-                        available: computed_available == 1,
-                    });
+
+                    let mut rows = artists_stmt.query(params![last_artist_rowid, BATCH_SIZE])?;
+                    let mut pending_updates: Vec<(i64, String, i32)> = Vec::new();
+                    let mut batch_last_rowid = last_artist_rowid;
+                    while let Some(row) = rows.next()? {
+                        if is_cancelled() {
+                            anyhow::bail!("cancelled");
+                        }
+                        let artist_rowid: i64 = row.get(0)?;
+                        let artist_id: String = row.get(1)?;
+                        let computed_available: i32 = row.get(2)?;
+                        pending_updates.push((artist_rowid, artist_id, computed_available));
+                        batch_last_rowid = artist_rowid;
+                    }
+                    drop(rows);
+                    drop(artists_stmt);
+
+                    if batch_last_rowid == last_artist_rowid {
+                        break;
+                    }
+
+                    for (artist_rowid, artist_id, computed_available) in pending_updates {
+                        if is_cancelled() {
+                            anyhow::bail!("cancelled");
+                        }
+                        conn.execute(
+                            "UPDATE artists SET artist_available = ?1 WHERE rowid = ?2",
+                            params![computed_available, artist_rowid],
+                        )?;
+                        artists_updated += 1;
+                        artist_updates.push(AvailabilityItemUpdate {
+                            id: artist_id,
+                            available: computed_available == 1,
+                        });
+                    }
+                    last_artist_rowid = batch_last_rowid;
                 }
-                last_artist_rowid = batch_last_rowid;
             }
+            info!(
+                elapsed_ms = derived_started.elapsed().as_millis() as u64,
+                skipped = tracks_updated == 0,
+                albums_updated,
+                artists_updated,
+                "Catalog availability derived-state reconciliation completed"
+            );
 
             // Compute aggregate stats.
             if is_cancelled() {
                 anyhow::bail!("cancelled");
             }
-            let (tracks_total, tracks_available): (i64, i64) = conn.query_row(
-                "SELECT COUNT(*), COALESCE(SUM(CASE WHEN track_available = 1 THEN 1 ELSE 0 END), 0) FROM tracks",
-                [],
-                |r| Ok((r.get(0)?, r.get(1)?)),
+            let stats_started = Instant::now();
+            let stats: Option<(i64, i64, i64, i64, i64, i64)> = conn
+                .query_row(
+                    "SELECT
+                         artists_count,
+                         (SELECT COUNT(*) FROM artists INDEXED BY idx_artists_available
+                          WHERE artist_available = 1),
+                         albums_count,
+                         (SELECT COUNT(*) FROM albums INDEXED BY idx_albums_availability
+                          WHERE album_availability = 'complete') +
+                         (SELECT COUNT(*) FROM albums INDEXED BY idx_albums_availability
+                          WHERE album_availability = 'partial'),
+                         tracks_count,
+                         (SELECT COUNT(*) FROM tracks INDEXED BY idx_tracks_available
+                          WHERE track_available = 1)
+                     FROM catalog_stats
+                     WHERE id = 1 AND is_valid = 1",
+                    [],
+                    |r| {
+                        Ok((
+                            r.get(0)?,
+                            r.get(1)?,
+                            r.get(2)?,
+                            r.get(3)?,
+                            r.get(4)?,
+                            r.get(5)?,
+                        ))
+                    },
+                )
+                .optional()?;
+            let (
+                artists_total,
+                artists_available,
+                albums_total,
+                albums_available,
+                tracks_total,
+                tracks_available,
+            ) = stats.context(
+                "catalog cardinality stats are not initialized; run catalog_cardinality_stats",
             )?;
-            let (albums_total, albums_available): (i64, i64) = conn.query_row(
-                "SELECT COUNT(*), COALESCE(SUM(CASE WHEN album_availability != 'missing' THEN 1 ELSE 0 END), 0) FROM albums",
-                [],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )?;
-            let (artists_total, artists_available): (i64, i64) = conn.query_row(
-                "SELECT COUNT(*), COALESCE(SUM(CASE WHEN artist_available = 1 THEN 1 ELSE 0 END), 0) FROM artists",
-                [],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )?;
+            info!(
+                elapsed_ms = stats_started.elapsed().as_millis() as u64,
+                "Catalog availability aggregate statistics completed"
+            );
 
             let tracks_total = tracks_total.max(0) as usize;
             let tracks_available = tracks_available.max(0) as usize;
@@ -1813,6 +1867,10 @@ impl CatalogStore for SqliteCatalogStore {
         match result {
             Ok(stats) => {
                 conn.execute("COMMIT", [])?;
+                info!(
+                    elapsed_ms = refresh_started.elapsed().as_millis() as u64,
+                    "Catalog availability refresh committed"
+                );
                 Ok(stats)
             }
             Err(e) => {
@@ -4418,6 +4476,55 @@ mod tests {
             .get_entity_embedding("track", "track1", "musicfm.mean.v1", true)
             .unwrap();
         assert!(stored.is_some());
+    }
+
+    #[test]
+    fn test_refresh_availability_fast_path_returns_persisted_totals_and_indexed_counts() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let store = SqliteCatalogStore::new(
+            temp_dir.path().join("test.db"),
+            temp_dir.path(),
+            1,
+            &crate::backup::DbRegistry::new(),
+        )
+        .unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("audio")).unwrap();
+        std::fs::write(temp_dir.path().join("audio/track1.ogg"), b"audio").unwrap();
+
+        {
+            let conn = store.write_conn.lock().unwrap();
+            conn.execute_batch(
+                "INSERT INTO artists
+                     (id, name, followers_total, popularity, artist_available, mbid_lookup_status)
+                 VALUES ('artist1', 'Artist 1', 0, 0, 1, 0);
+                 INSERT INTO albums
+                     (id, name, album_type, label, popularity, release_date,
+                      release_date_precision, album_availability)
+                 VALUES ('album1', 'Album 1', 'album', '', 0, '2024', 'year', 'partial');
+                 INSERT INTO tracks
+                     (id, name, album_rowid, track_number, popularity, disc_number,
+                      duration_ms, explicit, audio_uri, track_available)
+                 VALUES
+                     ('track1', 'Track 1', (SELECT rowid FROM albums WHERE id='album1'),
+                      1, 0, 1, 1000, 0, 'audio/track1.ogg', 1),
+                     ('track2', 'Track 2', (SELECT rowid FROM albums WHERE id='album1'),
+                      2, 0, 1, 1000, 0, NULL, 0);",
+            )
+            .unwrap();
+        }
+
+        let refresh = store.refresh_availability_and_stats().unwrap();
+
+        assert_eq!(refresh.repaired.tracks_updated, 0);
+        assert_eq!(refresh.repaired.albums_updated, 0);
+        assert_eq!(refresh.repaired.artists_updated, 0);
+        assert_eq!(refresh.stats.artists.total, 1);
+        assert_eq!(refresh.stats.artists.available, 1);
+        assert_eq!(refresh.stats.albums.total, 1);
+        assert_eq!(refresh.stats.albums.available, 1);
+        assert_eq!(refresh.stats.tracks.total, 2);
+        assert_eq!(refresh.stats.tracks.available, 1);
+        assert_eq!(refresh.stats.tracks.unavailable, 1);
     }
 
     #[test]

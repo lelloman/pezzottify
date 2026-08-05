@@ -7,7 +7,7 @@ use prometheus::{
     Registry, TextEncoder,
 };
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use walkdir::WalkDir;
 
 /// Metric name prefix for all Pezzottify metrics
@@ -596,14 +596,33 @@ pub fn update_memory_usage() {
 
 /// Handler for the /metrics endpoint
 pub async fn metrics_handler() -> impl IntoResponse {
+    let request_started = Instant::now();
+
     // Update memory usage before returning metrics
     update_memory_usage();
 
     let encoder = TextEncoder::new();
+    let gather_started = Instant::now();
     let metric_families = REGISTRY.gather();
+    let gather_elapsed = gather_started.elapsed();
 
     let mut buffer = vec![];
-    match encoder.encode(&metric_families, &mut buffer) {
+    let encode_started = Instant::now();
+    let result = encoder.encode(&metric_families, &mut buffer);
+    let encode_elapsed = encode_started.elapsed();
+    let request_elapsed = request_started.elapsed();
+    if request_elapsed >= Duration::from_secs(1) {
+        tracing::warn!(
+            total_ms = request_elapsed.as_millis() as u64,
+            gather_ms = gather_elapsed.as_millis() as u64,
+            encode_ms = encode_elapsed.as_millis() as u64,
+            metric_families = metric_families.len(),
+            response_bytes = buffer.len(),
+            "Slow Prometheus metrics response"
+        );
+    }
+
+    match result {
         Ok(()) => {
             let response = String::from_utf8(buffer).unwrap_or_else(|_| String::from(""));
             (StatusCode::OK, response)
