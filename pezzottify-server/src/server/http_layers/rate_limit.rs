@@ -4,7 +4,7 @@
 //! both peer IP and account handle; other route groups use user-based burst limits.
 #![allow(dead_code)]
 
-use crate::server::metrics::record_rate_limit_hit;
+use crate::server::metrics::{record_rate_limit_hit, request_route_label};
 use axum::{
     body::{to_bytes, Body},
     extract::{ConnectInfo, Request},
@@ -159,6 +159,7 @@ pub fn rate_limit_error_handler(err: GovernorError, req: Request<Body>) -> Respo
             // Extract context for logging
             let path = req.uri().path();
             let method = req.method().as_str();
+            let metric_route = request_route_label(req.extensions());
 
             // Try to extract user_id or IP for logging and metrics
             let (identifier, identifier_type) =
@@ -176,7 +177,7 @@ pub fn rate_limit_error_handler(err: GovernorError, req: Request<Body>) -> Respo
             warn!("Rate limit exceeded: {} {} {}", method, path, identifier);
 
             // Record metric for Prometheus
-            record_rate_limit_hit(path, identifier_type);
+            record_rate_limit_hit(metric_route, identifier_type);
 
             // Return 429 with simple message
             StatusCode::TOO_MANY_REQUESTS.into_response()

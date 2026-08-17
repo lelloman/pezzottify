@@ -11,6 +11,57 @@ use common::{
 };
 use reqwest::StatusCode;
 
+#[tokio::test]
+async fn test_http_metrics_use_bounded_route_templates() {
+    pezzottify_server::server::metrics::init_metrics();
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    let probe = "cardinality-probe-secret";
+    let _ = client
+        .client
+        .get(format!(
+            "{}/v1/content/artist/{}?probe={}",
+            server.base_url, ARTIST_1_ID, probe
+        ))
+        .send()
+        .await
+        .unwrap();
+    let _ = client
+        .client
+        .get(format!(
+            "{}/v1/content/artist/attacker-controlled-id?probe={}",
+            server.base_url, probe
+        ))
+        .send()
+        .await
+        .unwrap();
+    let _ = client
+        .client
+        .get(format!("{}/unmatched/{}", server.base_url, probe))
+        .send()
+        .await
+        .unwrap();
+
+    let paths: Vec<_> = pezzottify_server::server::metrics::REGISTRY
+        .gather()
+        .into_iter()
+        .filter(|family| family.get_name() == "pezzottify_http_requests_total")
+        .flat_map(|family| family.get_metric().to_vec())
+        .flat_map(|metric| metric.get_label().to_vec())
+        .filter(|label| label.get_name() == "path")
+        .map(|label| label.get_value().to_owned())
+        .collect();
+
+    assert!(paths.iter().any(|path| path == "/v1/content/artist/{id}"));
+    assert!(paths.iter().any(|path| path == "<unmatched>"));
+    assert!(paths.iter().all(|path| !path.contains(probe)));
+    assert!(paths.iter().all(|path| !path.contains(ARTIST_1_ID)));
+    assert!(paths
+        .iter()
+        .all(|path| !path.contains("attacker-controlled-id")));
+}
+
 // =============================================================================
 // Artist Tests
 // =============================================================================
