@@ -11,6 +11,12 @@ logging_level = "path"
 content_cache_age_sec = 60
 frontend_dir_path = "/app/web"
 
+# Session cookies are HTTPS-only and use the __Host- prefix by default.
+# Set this to false only for local development served directly over plain HTTP.
+secure_session_cookies = true
+# Browser cookie lifetime in seconds. Server-side token expiry remains authoritative.
+session_cookie_max_age_secs = 604800
+
 # Downloader service URL (enables download manager when set)
 # The downloader should be on the same Docker network (pezzottify-internal)
 # downloader_url = "http://downloader:3002"

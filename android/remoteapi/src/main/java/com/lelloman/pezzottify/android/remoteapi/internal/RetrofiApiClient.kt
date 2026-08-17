@@ -61,7 +61,7 @@ internal interface RetrofitApiClient {
     @POST("/v1/auth/login")
     suspend fun login(@Body request: LoginRequest): Response<LoginSuccessResponse>
 
-    @GET("/v1/auth/logout")
+    @POST("/v1/auth/logout")
     suspend fun logout(@Header("Authorization") authToken: String): Response<Unit>
 
     @GET("/v1/content/artist/{artistId}")

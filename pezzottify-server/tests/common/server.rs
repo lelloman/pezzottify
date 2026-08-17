@@ -161,6 +161,8 @@ impl TestServer {
             content_cache_age_sec: 0, // Disable caching in tests
             frontend_dir_path: None,
             disable_password_auth: false,
+            secure_session_cookies: false,
+            session_cookie_max_age_secs: 7 * 24 * 60 * 60,
             streaming_search: pezzottify_server::config::StreamingSearchSettings::default(),
             download_manager: pezzottify_server::config::DownloadManagerSettings::default(),
             db_dir: temp_db_dir.path().to_path_buf(),

@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import axios from "axios";
+import { getCsrfToken } from "@/services/csrf";
 
 export const useRemoteStore = defineStore("remote", () => {
   const setBlockHttpCache = (value) => {
@@ -1174,6 +1175,10 @@ export const useRemoteStore = defineStore("remote", () => {
       xhr.open("POST", "/v1/ingestion/upload");
       if (idToken) {
         xhr.setRequestHeader("Authorization", idToken);
+      }
+      const csrfToken = getCsrfToken();
+      if (csrfToken) {
+        xhr.setRequestHeader("X-CSRF-Token", csrfToken);
       }
       xhr.send(formData);
     });

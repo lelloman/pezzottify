@@ -8,12 +8,71 @@
 use super::constants::*;
 use reqwest::Response;
 use serde_json::json;
-use std::time::Duration;
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
+/// reqwest client that mirrors the browser's CSRF interceptor for unsafe methods.
+pub struct TestHttpClient {
+    inner: reqwest::Client,
+    csrf_token: Arc<Mutex<Option<String>>>,
+}
+
+impl TestHttpClient {
+    fn new() -> Self {
+        Self {
+            inner: reqwest::Client::builder()
+                .cookie_store(true)
+                .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
+                .build()
+                .expect("Failed to build reqwest client"),
+            csrf_token: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    fn capture_csrf(&self, response: &Response) {
+        if let Some(cookie) = response
+            .cookies()
+            .find(|cookie| cookie.name().ends_with("csrf_token"))
+        {
+            *self.csrf_token.lock().unwrap() = Some(cookie.value().to_owned());
+        }
+    }
+
+    fn protect(&self, request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        match self.csrf_token.lock().unwrap().as_deref() {
+            Some(token) => request.header("X-CSRF-Token", token),
+            None => request,
+        }
+    }
+
+    pub fn get(&self, url: impl reqwest::IntoUrl) -> reqwest::RequestBuilder {
+        self.inner.get(url)
+    }
+
+    pub fn post(&self, url: impl reqwest::IntoUrl) -> reqwest::RequestBuilder {
+        self.protect(self.inner.post(url))
+    }
+
+    #[allow(dead_code)]
+    pub fn post_without_csrf(&self, url: impl reqwest::IntoUrl) -> reqwest::RequestBuilder {
+        self.inner.post(url)
+    }
+
+    pub fn put(&self, url: impl reqwest::IntoUrl) -> reqwest::RequestBuilder {
+        self.protect(self.inner.put(url))
+    }
+
+    pub fn delete(&self, url: impl reqwest::IntoUrl) -> reqwest::RequestBuilder {
+        self.protect(self.inner.delete(url))
+    }
+}
 
 /// HTTP test client with cookie-based session management
 pub struct TestClient {
     /// The underlying reqwest client (public for custom requests in tests)
-    pub client: reqwest::Client,
+    pub client: TestHttpClient,
     /// The base URL of the test server
     pub base_url: String,
 }
@@ -25,11 +84,7 @@ impl TestClient {
     /// Use this for testing authentication flows.
     /// For most tests, use `authenticated()` or `authenticated_admin()` instead.
     pub fn new(base_url: String) -> Self {
-        let client = reqwest::Client::builder()
-            .cookie_store(true) // Automatically handle session cookies
-            .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
-            .build()
-            .expect("Failed to build reqwest client");
+        let client = TestHttpClient::new();
 
         Self { client, base_url }
     }
@@ -96,7 +151,8 @@ impl TestClient {
         password: &str,
         device_uuid: &str,
     ) -> Response {
-        self.client
+        let response = self
+            .client
             .post(format!("{}/v1/auth/login", self.base_url))
             .json(&json!({
                 "user_handle": handle,
@@ -107,7 +163,9 @@ impl TestClient {
             }))
             .send()
             .await
-            .expect("Login request failed")
+            .expect("Login request failed");
+        self.client.capture_csrf(&response);
+        response
     }
 
     /// Creates an authenticated client for a specific device
@@ -129,10 +187,10 @@ impl TestClient {
         client
     }
 
-    /// GET /v1/auth/logout
+    /// POST /v1/auth/logout
     pub async fn logout(&self) -> Response {
         self.client
-            .get(format!("{}/v1/auth/logout", self.base_url))
+            .post(format!("{}/v1/auth/logout", self.base_url))
             .send()
             .await
             .expect("Logout request failed")
@@ -140,11 +198,14 @@ impl TestClient {
 
     /// GET /v1/auth/session
     pub async fn get_session(&self) -> Response {
-        self.client
+        let response = self
+            .client
             .get(format!("{}/v1/auth/session", self.base_url))
             .send()
             .await
-            .expect("Get session request failed")
+            .expect("Get session request failed");
+        self.client.capture_csrf(&response);
+        response
     }
 
     // ========================================================================

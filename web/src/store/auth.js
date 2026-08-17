@@ -138,7 +138,7 @@ export const useAuthStore = defineStore("auth", {
 
       // Call server logout to clear the auth_token cookie (for password login)
       try {
-        await axios.get("/v1/auth/logout");
+        await axios.post("/v1/auth/logout");
       } catch (error) {
         // Ignore errors - user might not have a server session
         console.debug("Server logout:", error?.response?.status || error);

@@ -12,6 +12,8 @@ use axum_extra::extract::cookie::{Cookie, CookieJar};
 use std::time::{Duration, SystemTime};
 use tracing::{debug, warn};
 
+use super::session_cookie::session_cookie_name;
+
 #[derive(Debug, Clone)]
 pub struct Session {
     pub user_id: usize,
@@ -53,7 +55,7 @@ async fn extract_session_token_from_cookies(
     CookieJar::from_request_parts(parts, &ctx)
         .await
         .expect("Could not read cookies into CookieJar.")
-        .get(COOKIE_SESSION_TOKEN_KEY)
+        .get(session_cookie_name(ctx.config.secure_session_cookies))
         .map(Cookie::value)
         .map(|s| s.to_string())
 }

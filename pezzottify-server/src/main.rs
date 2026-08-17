@@ -572,6 +572,8 @@ async fn main() -> Result<()> {
             app_config.metrics_port,
             app_config.content_cache_age_sec,
             app_config.frontend_dir_path.clone(),
+            app_config.secure_session_cookies,
+            app_config.session_cookie_max_age_secs,
             Some(scheduler_handle),
             server_store,
             oidc_config,
