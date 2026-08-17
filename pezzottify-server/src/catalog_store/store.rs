@@ -2474,35 +2474,39 @@ impl CatalogStore for SqliteCatalogStore {
         }
     }
 
-    fn update_album(&self, album: &Album, artist_ids: Option<&[String]>) -> Result<()> {
+    fn update_album_metadata(
+        &self,
+        album_id: &str,
+        metadata: &AlbumMetadataUpdate,
+        artist_ids: Option<&[String]>,
+    ) -> Result<()> {
         let conn = self.write_conn.lock().unwrap();
         conn.execute("BEGIN IMMEDIATE", [])?;
 
         let result = (|| -> Result<()> {
             let album_rowid: i64 = match conn.query_row(
                 "SELECT rowid FROM albums WHERE id = ?1",
-                params![&album.id],
+                params![album_id],
                 |r| r.get(0),
             ) {
                 Ok(rowid) => rowid,
                 Err(rusqlite::Error::QueryReturnedNoRows) => {
-                    anyhow::bail!("Album with id '{}' not found", album.id);
+                    anyhow::bail!("Album with id '{}' not found", album_id);
                 }
                 Err(e) => return Err(e.into()),
             };
 
             conn.execute(
                 "UPDATE albums SET name = ?1, album_type = ?2, external_id_upc = ?3, label = ?4,
-                 popularity = ?5, release_date = ?6, release_date_precision = ?7, album_availability = ?8 WHERE rowid = ?9",
+                 popularity = ?5, release_date = ?6, release_date_precision = ?7 WHERE rowid = ?8",
                 params![
-                    &album.name,
-                    album.album_type.to_db_str(),
-                    &album.external_id_upc,
-                    album.label.as_deref().unwrap_or(""),
-                    album.popularity,
-                    &album.release_date,
-                    &album.release_date_precision,
-                    album.album_availability.to_db_str(),
+                    &metadata.name,
+                    metadata.album_type.to_db_str(),
+                    &metadata.external_id_upc,
+                    metadata.label.as_deref().unwrap_or(""),
+                    metadata.popularity,
+                    &metadata.release_date,
+                    &metadata.release_date_precision,
                     album_rowid,
                 ],
             )?;

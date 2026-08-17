@@ -1531,6 +1531,20 @@ struct CreateAlbumRequest {
 }
 
 #[derive(Debug, Deserialize)]
+struct UpdateAlbumMetadataRequest {
+    name: String,
+    #[serde(default)]
+    album_type: String,
+    artist_ids: Option<Vec<String>>,
+    label: Option<String>,
+    release_date: Option<String>,
+    release_date_precision: Option<String>,
+    external_id_upc: Option<String>,
+    #[serde(default = "default_popularity")]
+    popularity: i32,
+}
+
+#[derive(Debug, Deserialize)]
 struct CreateTrackRequest {
     id: String,
     name: String,
@@ -1680,12 +1694,11 @@ async fn update_album(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
     Path(id): Path<String>,
-    Json(data): Json<CreateAlbumRequest>,
+    Json(data): Json<UpdateAlbumMetadataRequest>,
 ) -> Response {
-    use crate::catalog_store::{validate_album, Album, AlbumAvailability, AlbumType};
+    use crate::catalog_store::{validate_album_metadata, AlbumMetadataUpdate, AlbumType};
 
-    let album = Album {
-        id,
+    let metadata = AlbumMetadataUpdate {
         name: data.name,
         album_type: AlbumType::from_db_str(&data.album_type),
         label: data.label,
@@ -1693,20 +1706,13 @@ async fn update_album(
         release_date_precision: data.release_date_precision,
         external_id_upc: data.external_id_upc,
         popularity: data.popularity,
-        album_availability: AlbumAvailability::Missing,
     };
 
-    if let Err(e) = validate_album(&album) {
+    if let Err(e) = validate_album_metadata(&id, &metadata) {
         return (StatusCode::BAD_REQUEST, e.to_string()).into_response();
     }
 
-    let artist_ids = if data.artist_ids.is_empty() {
-        None
-    } else {
-        Some(data.artist_ids.as_slice())
-    };
-
-    match catalog_store.update_album(&album, artist_ids) {
+    match catalog_store.update_album_metadata(&id, &metadata, data.artist_ids.as_deref()) {
         Ok(()) => StatusCode::OK.into_response(),
         Err(e) => {
             let msg = e.to_string();

@@ -1574,9 +1574,10 @@ mod tests {
             ) -> anyhow::Result<()> {
                 anyhow::bail!("MockCatalogStore does not support write operations")
             }
-            fn update_album(
+            fn update_album_metadata(
                 &self,
-                _album: &crate::catalog_store::Album,
+                _album_id: &str,
+                _metadata: &crate::catalog_store::AlbumMetadataUpdate,
                 _artist_ids: Option<&[String]>,
             ) -> anyhow::Result<()> {
                 anyhow::bail!("MockCatalogStore does not support write operations")

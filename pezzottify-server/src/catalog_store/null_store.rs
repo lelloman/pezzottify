@@ -146,7 +146,12 @@ impl CatalogStore for NullCatalogStore {
         anyhow::bail!("NullCatalogStore does not support write operations")
     }
 
-    fn update_album(&self, _album: &super::Album, _artist_ids: Option<&[String]>) -> Result<()> {
+    fn update_album_metadata(
+        &self,
+        _album_id: &str,
+        _metadata: &super::AlbumMetadataUpdate,
+        _artist_ids: Option<&[String]>,
+    ) -> Result<()> {
         anyhow::bail!("NullCatalogStore does not support write operations")
     }
 

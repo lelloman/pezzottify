@@ -19,4 +19,6 @@ pub use trait_def::{
     CatalogStore, SearchableContentType, SearchableItem, TrackEmbeddingCoverage,
     TrackEmbeddingNamespaceCoverage, MAX_ALBUM_TRACKLIST_PAGE_SIZE,
 };
-pub use validation::{validate_album, validate_artist, validate_track, ValidationError};
+pub use validation::{
+    validate_album, validate_album_metadata, validate_artist, validate_track, ValidationError,
+};
