@@ -352,7 +352,7 @@ async fn require_report_bug(
     next.run(request).await
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 struct LoginBody {
     pub user_handle: String,
     pub password: String,
@@ -3218,7 +3218,6 @@ async fn login(
     Json(body): Json<LoginBody>,
 ) -> Response {
     let start = Instant::now();
-    debug!("login() called with {:?}", body);
 
     // Check if password auth is disabled
     if config.disable_password_auth {
