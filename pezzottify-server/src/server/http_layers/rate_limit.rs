@@ -1,19 +1,20 @@
 //! Rate limiting middleware using tower-governor
 //!
-//! Implements both per-minute and per-hour rate limits with different configurations
-//! for different route groups. Uses IP-based limiting for login endpoints and
-//! user-based limiting for authenticated endpoints.
+//! Login endpoints have burst and sustained limits. Password login is limited by
+//! both peer IP and account handle; other route groups use user-based burst limits.
 #![allow(dead_code)]
 
 use crate::server::metrics::record_rate_limit_hit;
 use axum::{
-    body::Body,
+    body::{to_bytes, Body},
     extract::{ConnectInfo, Request},
     http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use std::net::SocketAddr;
+use serde::Deserialize;
+use sha2::{Digest, Sha256};
+use std::net::{IpAddr, SocketAddr};
 use tower_governor::{key_extractor::KeyExtractor, GovernorError};
 use tracing::warn;
 
@@ -23,6 +24,9 @@ use tracing::warn;
 
 /// Login attempts per minute per IP (strict - prevents brute force)
 pub const LOGIN_PER_MINUTE: u32 = 10;
+
+/// Maximum size buffered to obtain the account key before password login.
+const MAX_LOGIN_BODY_LENGTH: usize = 16 * 1024;
 
 /// Global requests per minute per user (prevents runaway bugs)
 pub const GLOBAL_PER_MINUTE: u32 = 5000;
@@ -43,29 +47,12 @@ pub const WRITE_PER_MINUTE: u32 = 60;
 // Rate Limit Constants (per hour)
 // ============================================================================
 
-/// Login attempts per hour per IP
-#[allow(dead_code)]
+/// Sustained login-attempt refill rate per hour.
 pub const LOGIN_PER_HOUR: u32 = 100;
 
-/// Global requests per hour per user
-#[allow(dead_code)]
-pub const GLOBAL_PER_HOUR: u32 = 20000;
-
-/// Search requests per hour per user
-#[allow(dead_code)]
-pub const SEARCH_PER_HOUR: u32 = 5000;
-
-/// Content read requests per hour per user
-#[allow(dead_code)]
-pub const CONTENT_READ_PER_HOUR: u32 = 100000;
-
-/// Stream requests per hour per user
-#[allow(dead_code)]
-pub const STREAM_PER_HOUR: u32 = 10000;
-
-/// Write operations per hour per user
-#[allow(dead_code)]
-pub const WRITE_PER_HOUR: u32 = 5000;
+/// Replenishment interval for the sustained login bucket. The bucket allows the
+/// same initial burst as the per-minute limiter, then replenishes at 100/hour.
+pub const LOGIN_SUSTAINED_REPLENISH_MILLIS: u64 = 3_600_000_u64 / LOGIN_PER_HOUR as u64;
 
 // ============================================================================
 // Key Extractors
@@ -76,14 +63,64 @@ pub const WRITE_PER_HOUR: u32 = 5000;
 pub struct IpKeyExtractor;
 
 impl KeyExtractor for IpKeyExtractor {
-    type Key = SocketAddr;
+    type Key = IpAddr;
 
     fn extract<T>(&self, req: &Request<T>) -> Result<Self::Key, GovernorError> {
         req.extensions()
             .get::<ConnectInfo<SocketAddr>>()
-            .map(|ConnectInfo(addr)| *addr)
+            .map(|ConnectInfo(addr)| addr.ip())
             .ok_or(GovernorError::UnableToExtractKey)
     }
+}
+
+/// Extracts a privacy-preserving account key inserted by
+/// [`extract_login_account_for_rate_limit`].
+#[derive(Clone)]
+pub struct LoginAccountKeyExtractor;
+
+#[derive(Clone, Copy)]
+struct LoginAccountKey([u8; 32]);
+
+impl KeyExtractor for LoginAccountKeyExtractor {
+    type Key = [u8; 32];
+
+    fn extract<T>(&self, req: &Request<T>) -> Result<Self::Key, GovernorError> {
+        req.extensions()
+            .get::<LoginAccountKey>()
+            .map(|key| key.0)
+            .ok_or(GovernorError::UnableToExtractKey)
+    }
+}
+
+#[derive(Deserialize)]
+struct LoginAccountBody {
+    user_handle: String,
+}
+
+fn login_account_key(bytes: &[u8]) -> LoginAccountKey {
+    // Malformed login requests share a bucket. Valid handles deliberately retain
+    // their exact form because account lookup is case-sensitive.
+    let handle = serde_json::from_slice::<LoginAccountBody>(bytes)
+        .map(|body| body.user_handle)
+        .unwrap_or_default();
+    LoginAccountKey(Sha256::digest(handle.as_bytes()).into())
+}
+
+/// Buffers the small password-login body once, inserts its hashed account key for
+/// the account limiter, and restores the body for Axum's JSON extractor.
+pub async fn extract_login_account_for_rate_limit(
+    mut request: Request<Body>,
+    next: Next,
+) -> Response {
+    let body = std::mem::replace(request.body_mut(), Body::empty());
+    let bytes = match to_bytes(body, MAX_LOGIN_BODY_LENGTH).await {
+        Ok(bytes) => bytes,
+        Err(_) => return StatusCode::PAYLOAD_TOO_LARGE.into_response(),
+    };
+
+    request.extensions_mut().insert(login_account_key(&bytes));
+    *request.body_mut() = Body::from(bytes);
+    next.run(request).await
 }
 
 /// Extracts user ID from session for user-based rate limiting
@@ -174,8 +211,13 @@ pub async fn extract_user_id_for_rate_limit(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::Method;
-    use std::net::{IpAddr, Ipv4Addr};
+    use axum::{http::Method, middleware, routing::post, Router};
+    use std::{
+        net::{IpAddr, Ipv4Addr},
+        sync::Arc,
+    };
+    use tower::ServiceExt;
+    use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
 
     fn create_test_request() -> Request<Body> {
         Request::builder()
@@ -204,45 +246,22 @@ mod tests {
 
     #[test]
     fn test_rate_limit_constants_per_hour() {
-        // Verify per-hour rate limits are reasonable
+        // Verify sustained login throttling is configured at 100 attempts/hour.
         assert_eq!(LOGIN_PER_HOUR, 100);
-        assert_eq!(GLOBAL_PER_HOUR, 20000);
-        assert_eq!(SEARCH_PER_HOUR, 5000);
-        assert_eq!(CONTENT_READ_PER_HOUR, 100000);
-        assert_eq!(STREAM_PER_HOUR, 10000);
-        assert_eq!(WRITE_PER_HOUR, 5000);
-
-        // Verify ordering
-        const { assert!(CONTENT_READ_PER_HOUR > GLOBAL_PER_HOUR) };
-        const { assert!(GLOBAL_PER_HOUR > SEARCH_PER_HOUR) };
+        assert_eq!(LOGIN_SUSTAINED_REPLENISH_MILLIS, 36_000);
     }
 
     #[test]
     fn test_rate_limit_consistency_minute_vs_hour() {
-        // Some endpoints have intentionally restrictive hourly limits
-        // to prevent sustained abuse, even with short burst allowances
-
-        // Login has very low hourly limit to prevent brute force
+        // Login allows a short burst but replenishes much more slowly in its
+        // sustained bucket.
         assert_eq!(LOGIN_PER_MINUTE, 10);
         assert_eq!(LOGIN_PER_HOUR, 100);
-        // Note: 10 per minute would be 600/hour if sustained, but capped at 100
-
-        // Search has restrictive hourly limit
-        assert_eq!(SEARCH_PER_MINUTE, 100);
-        assert_eq!(SEARCH_PER_HOUR, 5000);
-        // Note: 100 per minute would be 6000/hour if sustained, but capped at 5000
-
-        // Write operations have moderate hourly limit
-        assert_eq!(WRITE_PER_MINUTE, 60);
-        assert_eq!(WRITE_PER_HOUR, 5000);
-
-        // Stream operations
-        assert_eq!(STREAM_PER_MINUTE, 200);
-        assert_eq!(STREAM_PER_HOUR, 10000);
+        const { assert!(LOGIN_PER_HOUR < LOGIN_PER_MINUTE * 60) };
     }
 
     #[test]
-    fn test_ip_key_extractor_extracts_socket_addr() {
+    fn test_ip_key_extractor_extracts_ip_without_port() {
         let extractor = IpKeyExtractor;
         let mut request = create_test_request();
 
@@ -251,7 +270,7 @@ mod tests {
 
         let result = extractor.extract(&request);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), socket_addr);
+        assert_eq!(result.unwrap(), socket_addr.ip());
     }
 
     #[test]
@@ -282,8 +301,154 @@ mod tests {
         let result2 = extractor.extract(&request2).unwrap();
 
         assert_ne!(result1, result2);
-        assert_eq!(result1.ip(), IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)));
-        assert_eq!(result2.ip(), IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)));
+        assert_eq!(result1, IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)));
+        assert_eq!(result2, IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)));
+    }
+
+    #[test]
+    fn test_ip_key_extractor_same_ip_different_ports() {
+        let extractor = IpKeyExtractor;
+        let mut request1 = create_test_request();
+        let mut request2 = create_test_request();
+        request1
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::LOCALHOST),
+                8080,
+            )));
+        request2
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::LOCALHOST),
+                9090,
+            )));
+
+        assert_eq!(
+            extractor.extract(&request1).unwrap(),
+            extractor.extract(&request2).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_ip_key_extractor_ignores_untrusted_forwarded_headers() {
+        let extractor = IpKeyExtractor;
+        let mut request = create_test_request();
+        let peer_ip = IpAddr::V4(Ipv4Addr::new(192, 0, 2, 10));
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::new(peer_ip, 8080)));
+        request
+            .headers_mut()
+            .insert("x-forwarded-for", "203.0.113.99".parse().unwrap());
+
+        assert_eq!(extractor.extract(&request).unwrap(), peer_ip);
+    }
+
+    #[test]
+    fn test_login_account_key_is_stable_and_does_not_contain_the_handle() {
+        let first = login_account_key(br#"{"user_handle":"alice","password":"one"}"#);
+        let second = login_account_key(br#"{"user_handle":"alice","password":"two"}"#);
+        let other = login_account_key(br#"{"user_handle":"bob","password":"one"}"#);
+
+        assert_eq!(first.0, second.0);
+        assert_ne!(first.0, other.0);
+        assert!(!format!("{:?}", first.0).contains("alice"));
+    }
+
+    #[tokio::test]
+    async fn test_ip_limiter_cannot_be_bypassed_by_reconnecting_from_another_port() {
+        let config = Arc::new(
+            GovernorConfigBuilder::default()
+                .per_second(60)
+                .burst_size(1)
+                .key_extractor(IpKeyExtractor)
+                .finish()
+                .unwrap(),
+        );
+        let app = Router::new()
+            .route("/login", post(|| async { StatusCode::OK }))
+            .layer(GovernorLayer::new(config));
+
+        let mut first = Request::post("/login").body(Body::empty()).unwrap();
+        first.extensions_mut().insert(ConnectInfo(SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            10_001,
+        )));
+        let mut reconnect = Request::post("/login").body(Body::empty()).unwrap();
+        reconnect
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::LOCALHOST),
+                10_002,
+            )));
+
+        assert_eq!(app.clone().oneshot(first).await.unwrap().status(), 200);
+        assert_eq!(app.oneshot(reconnect).await.unwrap().status(), 429);
+    }
+
+    #[tokio::test]
+    async fn test_account_limiter_applies_across_different_peer_ips() {
+        let config = Arc::new(
+            GovernorConfigBuilder::default()
+                .per_second(60)
+                .burst_size(1)
+                .key_extractor(LoginAccountKeyExtractor)
+                .finish()
+                .unwrap(),
+        );
+        let app = Router::new()
+            .route("/login", post(|| async { StatusCode::OK }))
+            .layer(GovernorLayer::new(config))
+            .layer(middleware::from_fn(extract_login_account_for_rate_limit));
+
+        let login_body = || Body::from(r#"{"user_handle":"alice","password":"sentinel-password"}"#);
+        let mut first = Request::post("/login").body(login_body()).unwrap();
+        first.extensions_mut().insert(ConnectInfo(SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)),
+            10_001,
+        )));
+        let mut other_ip = Request::post("/login").body(login_body()).unwrap();
+        other_ip
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(198, 51, 100, 2)),
+                10_002,
+            )));
+
+        assert_eq!(app.clone().oneshot(first).await.unwrap().status(), 200);
+        assert_eq!(app.oneshot(other_ip).await.unwrap().status(), 429);
+    }
+
+    #[tokio::test]
+    async fn test_account_extraction_restores_body_for_login_handler() {
+        async fn handler(axum::Json(body): axum::Json<LoginAccountBody>) -> String {
+            body.user_handle
+        }
+
+        let app = Router::new()
+            .route("/login", post(handler))
+            .layer(middleware::from_fn(extract_login_account_for_rate_limit));
+        let request = Request::post("/login")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"user_handle":"alice"}"#))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        let body = to_bytes(response.into_body(), 1024).await.unwrap();
+
+        assert_eq!(body, "alice");
+    }
+
+    #[tokio::test]
+    async fn test_account_extraction_rejects_oversized_login_body() {
+        let app = Router::new()
+            .route("/login", post(|| async { StatusCode::OK }))
+            .layer(middleware::from_fn(extract_login_account_for_rate_limit));
+        let request = Request::post("/login")
+            .body(Body::from(vec![b'x'; MAX_LOGIN_BODY_LENGTH + 1]))
+            .unwrap();
+
+        assert_eq!(app.oneshot(request).await.unwrap().status(), 413);
     }
 
     #[test]

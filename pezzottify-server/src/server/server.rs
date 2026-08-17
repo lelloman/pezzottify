@@ -54,10 +54,11 @@ use tower_governor::GovernorLayer;
 #[cfg(feature = "slowdown")]
 use super::slowdown_request;
 use super::{
-    embeddings, extract_user_id_for_rate_limit, http_cache, log_requests, make_search_admin_routes,
-    make_search_routes, recommendation_routes, state::*, IpKeyExtractor, RequestsLoggingLevel,
-    ServerConfig, UserOrIpKeyExtractor, CONTENT_READ_PER_MINUTE, GLOBAL_PER_MINUTE,
-    LOGIN_PER_MINUTE, SEARCH_PER_MINUTE, STREAM_PER_MINUTE, WRITE_PER_MINUTE,
+    embeddings, extract_login_account_for_rate_limit, extract_user_id_for_rate_limit, http_cache,
+    log_requests, make_search_admin_routes, make_search_routes, recommendation_routes, state::*,
+    IpKeyExtractor, LoginAccountKeyExtractor, RequestsLoggingLevel, ServerConfig,
+    UserOrIpKeyExtractor, CONTENT_READ_PER_MINUTE, GLOBAL_PER_MINUTE, LOGIN_PER_MINUTE,
+    LOGIN_SUSTAINED_REPLENISH_MILLIS, SEARCH_PER_MINUTE, STREAM_PER_MINUTE, WRITE_PER_MINUTE,
 };
 use crate::server::session::Session;
 use crate::user::auth::AuthTokenValue;
@@ -5413,8 +5414,10 @@ pub async fn make_app(
         debug!("Ingestion not enabled");
     }
 
-    // Login route with strict IP-based rate limiting (10 req/min = 1 token per 6000ms)
-    let login_rate_limit = Arc::new(
+    // Login attempts are protected by a short burst bucket and a slower sustained
+    // bucket. Peer IP is used directly: forwarded headers are intentionally ignored
+    // unless a future deployment explicitly configures trusted proxies.
+    let login_ip_burst_limit = Arc::new(
         GovernorConfigBuilder::default()
             .per_millisecond(60000_u64.saturating_div(u64::from(LOGIN_PER_MINUTE)))
             .burst_size(LOGIN_PER_MINUTE)
@@ -5422,18 +5425,66 @@ pub async fn make_app(
             .finish()
             .unwrap(),
     );
+    let login_ip_sustained_limit = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_millisecond(LOGIN_SUSTAINED_REPLENISH_MILLIS)
+            .burst_size(LOGIN_PER_MINUTE)
+            .key_extractor(IpKeyExtractor)
+            .finish()
+            .unwrap(),
+    );
+    let login_account_burst_limit = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_millisecond(60000_u64.saturating_div(u64::from(LOGIN_PER_MINUTE)))
+            .burst_size(LOGIN_PER_MINUTE)
+            .key_extractor(LoginAccountKeyExtractor)
+            .finish()
+            .unwrap(),
+    );
+    let login_account_sustained_limit = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_millisecond(LOGIN_SUSTAINED_REPLENISH_MILLIS)
+            .burst_size(LOGIN_PER_MINUTE)
+            .key_extractor(LoginAccountKeyExtractor)
+            .finish()
+            .unwrap(),
+    );
+
+    // Governor's keyed state store needs periodic maintenance when clients can
+    // continuously introduce new IP/account keys.
+    let ip_burst_limiter = login_ip_burst_limit.limiter().clone();
+    let ip_sustained_limiter = login_ip_sustained_limit.limiter().clone();
+    let account_burst_limiter = login_account_burst_limit.limiter().clone();
+    let account_sustained_limiter = login_account_sustained_limit.limiter().clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(600));
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            ip_burst_limiter.retain_recent();
+            ip_sustained_limiter.retain_recent();
+            account_burst_limiter.retain_recent();
+            account_sustained_limiter.retain_recent();
+        }
+    });
 
     // Password-based login (legacy, will be removed after OIDC migration)
     let password_login_routes: Router = Router::new()
         .route("/login", post(login))
-        .layer(GovernorLayer::new(login_rate_limit.clone()))
+        .layer(GovernorLayer::new(login_account_burst_limit))
+        .layer(GovernorLayer::new(login_account_sustained_limit))
+        // Axum layers execute bottom-to-top: insert the account key before its limiters.
+        .layer(middleware::from_fn(extract_login_account_for_rate_limit))
+        .layer(GovernorLayer::new(login_ip_burst_limit.clone()))
+        .layer(GovernorLayer::new(login_ip_sustained_limit.clone()))
         .with_state(state.clone());
 
     // OIDC login routes (also rate-limited)
     let oidc_login_routes: Router = Router::new()
         .route("/oidc/login", get(oidc_login))
         .route("/oidc/callback", get(oidc_callback))
-        .layer(GovernorLayer::new(login_rate_limit))
+        .layer(GovernorLayer::new(login_ip_burst_limit))
+        .layer(GovernorLayer::new(login_ip_sustained_limit))
         .with_state(state.clone());
 
     // Other auth routes without rate limiting (already authenticated)
