@@ -1,5 +1,6 @@
 import axios from "axios";
 import * as oidc from "./oidc";
+import { getCsrfToken } from "./csrf";
 
 let isRefreshing = false;
 let failedQueue = [];
@@ -55,6 +56,14 @@ export function setupAxiosInterceptors() {
   // Request interceptor: Add Authorization header
   axios.interceptors.request.use(
     async (config) => {
+      const method = (config.method || "get").toLowerCase();
+      if (!["get", "head", "options"].includes(method)) {
+        const token = getCsrfToken();
+        if (token) {
+          config.headers["X-CSRF-Token"] = token;
+        }
+      }
+
       // Skip auth header for certain auth endpoints
       if (shouldSkipAuthHeader(config.url)) {
         return config;

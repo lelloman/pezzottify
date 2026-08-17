@@ -5,6 +5,8 @@ metrics_port = 9091
 logging_level = "path"
 content_cache_age_sec = 60
 frontend_dir_path = "/app/web"
+secure_session_cookies = false # E2E is intentionally served over plain HTTP.
+session_cookie_max_age_secs = 604800
 event_retention_days = 30
 
 [oidc]

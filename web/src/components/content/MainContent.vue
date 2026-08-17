@@ -54,6 +54,7 @@ import { useDebugStore } from "@/store/debug";
 import { storeToRefs } from "pinia";
 import SearchWrapper from "./SearchWrapper.vue";
 import { streamingSearch } from "@/services/streamingSearch";
+import { withCsrfHeader } from "@/services/csrf";
 
 const debugStore = useDebugStore();
 const { useOrganicSearch, excludeUnavailable } = storeToRefs(debugStore);
@@ -134,7 +135,7 @@ const fetchCatalogResults = async (query, filters) => {
   try {
     const response = await fetch("/v1/content/search", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: withCsrfHeader({ "Content-Type": "application/json" }),
       body: JSON.stringify(requestBody),
     });
     return await response.json();

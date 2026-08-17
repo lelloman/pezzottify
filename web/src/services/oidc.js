@@ -166,24 +166,6 @@ export function getLastUsername() {
 }
 
 /**
- * Set the session cookie with the ID token.
- * This is needed for WebSocket connections since browsers can't send custom headers.
- */
-function setSessionCookie(idToken) {
-  // Set cookie with SameSite=Lax for security (matches backend cookie settings)
-  document.cookie = `session_token=${idToken}; path=/; SameSite=Lax`;
-  console.debug("[OIDC] Session cookie set");
-}
-
-/**
- * Clear the session cookie.
- */
-function clearSessionCookie() {
-  document.cookie = "session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-  console.debug("[OIDC] Session cookie cleared");
-}
-
-/**
  * Get a human-readable device name based on browser/platform info.
  */
 function getDeviceName() {
@@ -241,10 +223,6 @@ export async function handleCallback() {
   try {
     const user = await manager.signinRedirectCallback();
     console.debug("[OIDC] Callback handled successfully");
-    // Set cookie for WebSocket auth (browsers can't send custom headers on WebSocket)
-    if (user?.id_token) {
-      setSessionCookie(user.id_token);
-    }
     notifyServiceWorker(user?.id_token || null);
     scheduleRefreshForUser(user);
     return user;
@@ -257,14 +235,13 @@ export async function handleCallback() {
 /**
  * Get the current user from storage.
  * Returns null if not logged in.
- * Also ensures the session cookie is set for WebSocket connections.
+ * The backend session check converts the Authorization token into an HttpOnly
+ * cookie for WebSocket authentication.
  */
 export async function getUser() {
   const manager = getUserManager();
   const user = await manager.getUser();
-  // Ensure cookie is set if we have a valid user (for WebSocket)
     if (user?.id_token && !user.expired) {
-      setSessionCookie(user.id_token);
       notifyServiceWorker(user.id_token);
       scheduleRefreshForUser(user);
     }
@@ -405,10 +382,6 @@ async function performRefresh() {
       hasNewRefreshToken,
       newRefreshTokenLength,
     });
-    // Update cookie with new token for WebSocket
-    if (newUser?.id_token) {
-      setSessionCookie(newUser.id_token);
-    }
     notifyServiceWorker(newUser?.id_token || null);
     scheduleRefreshForUser(newUser);
     return newUser;
@@ -498,8 +471,6 @@ function parseRetryAfter(error) {
 export async function logout(redirectToProvider = false) {
   const manager = getUserManager();
 
-  // Clear the session cookie
-  clearSessionCookie();
   notifyServiceWorker(null);
   clearRefreshTimeout();
 

@@ -100,6 +100,8 @@ pub struct AppConfig {
     pub logging_level: RequestsLoggingLevel,
     pub content_cache_age_sec: usize,
     pub frontend_dir_path: Option<String>,
+    pub secure_session_cookies: bool,
+    pub session_cookie_max_age_secs: u64,
     pub downloader_url: Option<String>,
     pub downloader_timeout_sec: u64,
     pub event_retention_days: u64,
@@ -161,6 +163,12 @@ impl AppConfig {
         let frontend_dir_path = file
             .frontend_dir_path
             .or_else(|| cli.frontend_dir_path.clone());
+        let secure_session_cookies = file.secure_session_cookies.unwrap_or(true);
+        let session_cookie_max_age_secs =
+            file.session_cookie_max_age_secs.unwrap_or(7 * 24 * 60 * 60);
+        if session_cookie_max_age_secs == 0 {
+            bail!("session_cookie_max_age_secs must be greater than zero");
+        }
 
         let downloader_url = file
             .downloader_url
@@ -549,6 +557,8 @@ impl AppConfig {
             logging_level,
             content_cache_age_sec,
             frontend_dir_path,
+            secure_session_cookies,
+            session_cookie_max_age_secs,
             downloader_url,
             downloader_timeout_sec,
             event_retention_days,
@@ -1132,6 +1142,8 @@ mod tests {
         assert_eq!(config.logging_level, RequestsLoggingLevel::Headers);
         assert_eq!(config.content_cache_age_sec, 7200);
         assert_eq!(config.frontend_dir_path, Some("/frontend".to_string()));
+        assert!(config.secure_session_cookies);
+        assert_eq!(config.session_cookie_max_age_secs, 604_800);
         assert_eq!(
             config.downloader_url,
             Some("http://downloader:3002".to_string())
@@ -1160,6 +1172,8 @@ mod tests {
             media_path: Some("/toml/media".to_string()),
             port: Some(4000),
             logging_level: Some("body".to_string()),
+            secure_session_cookies: Some(false),
+            session_cookie_max_age_secs: Some(86_400),
             ..Default::default()
         };
 
@@ -1173,6 +1187,26 @@ mod tests {
         // CLI value used when TOML doesn't specify
         assert_eq!(config.metrics_port, 9091);
         assert_eq!(config.content_cache_age_sec, 3600);
+        assert!(!config.secure_session_cookies);
+        assert_eq!(config.session_cookie_max_age_secs, 86_400);
+    }
+
+    #[test]
+    fn test_rejects_zero_session_cookie_lifetime() {
+        let temp_dir = make_temp_db_dir();
+        let cli = CliConfig {
+            db_dir: Some(temp_dir.path().to_path_buf()),
+            ..Default::default()
+        };
+        let file_config = FileConfig {
+            session_cookie_max_age_secs: Some(0),
+            ..Default::default()
+        };
+
+        let error = AppConfig::resolve(&cli, Some(file_config)).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("session_cookie_max_age_secs must be greater than zero"));
     }
 
     #[test]

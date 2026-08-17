@@ -34,7 +34,7 @@ use crate::{
         FullUserStore, Permission, UserRole,
     },
 };
-use axum_extra::extract::cookie::{Cookie, SameSite};
+use axum_extra::extract::cookie::CookieJar;
 use tower_http::services::{ServeDir, ServeFile};
 
 const AUDIO_EMBEDDING_COVERAGE_TIMEOUT: Duration = Duration::from_secs(20);
@@ -61,6 +61,9 @@ use super::{
     LOGIN_SUSTAINED_REPLENISH_MILLIS, SEARCH_PER_MINUTE, STREAM_PER_MINUTE, WRITE_PER_MINUTE,
 };
 use crate::server::session::Session;
+use crate::server::session_cookie::{
+    append_expired_session_cookies, append_session_cookies, require_csrf,
+};
 use crate::user::auth::AuthTokenValue;
 use axum::extract::Request;
 use axum::middleware::Next;
@@ -3312,16 +3315,17 @@ async fn login(
                     };
                     let response_body = serde_json::to_string(&response_body).unwrap();
 
-                    let cookie_value = HeaderValue::from_str(&format!(
-                        "session_token={}; Path=/; HttpOnly",
-                        auth_token.value.0.clone()
-                    ))
-                    .unwrap();
-                    response::Builder::new()
+                    let mut response = response::Builder::new()
                         .status(StatusCode::CREATED)
-                        .header(axum::http::header::SET_COOKIE, cookie_value)
                         .body(Body::from(response_body))
-                        .unwrap()
+                        .unwrap();
+                    append_session_cookies(
+                        &mut response,
+                        auth_token.value.0.clone(),
+                        None,
+                        &config,
+                    );
+                    response
                 }
                 Err(err) => {
                     error!("Error with auth token generation: {}", err);
@@ -3335,24 +3339,23 @@ async fn login(
     StatusCode::UNAUTHORIZED.into_response()
 }
 
-async fn logout(State(user_manager): State<GuardedUserManager>, session: Session) -> Response {
+async fn logout(
+    State(user_manager): State<GuardedUserManager>,
+    State(config): State<ServerConfig>,
+    session: Session,
+) -> Response {
     // Try to delete auth token from database (for legacy sessions)
     // For OIDC sessions, this will fail since JWT isn't stored in DB - that's OK
     let mut locked_manager = user_manager.lock().unwrap();
     let _ = locked_manager.delete_auth_token(&session.user_id, &AuthTokenValue(session.token));
 
-    // Always clear the session cookie
-    let cookie_value = Cookie::build(Cookie::new("session_token", ""))
-        .path("/")
-        .expires(time::OffsetDateTime::now_utc() - time::Duration::days(1)) // Expire it in the past
-        .same_site(SameSite::Lax)
-        .build();
-
-    response::Builder::new()
+    // Always clear both cookies using exactly the same attributes used when setting them.
+    let mut response = response::Builder::new()
         .status(StatusCode::OK)
-        .header(axum::http::header::SET_COOKIE, cookie_value.to_string())
         .body(Body::empty())
-        .unwrap()
+        .unwrap();
+    append_expired_session_cookies(&mut response, &config);
+    response
 }
 
 // ============================================================================
@@ -3434,6 +3437,7 @@ async fn oidc_callback(
     State(oidc_client): State<OptionalOidcClient>,
     State(auth_state_store): State<GuardedAuthStateStore>,
     State(user_manager): State<GuardedUserManager>,
+    State(config): State<ServerConfig>,
 ) -> Response {
     let start = Instant::now();
     debug!("OIDC callback received with state={}", params.state);
@@ -3523,23 +3527,22 @@ async fn oidc_callback(
     super::metrics::record_login_attempt("success", start.elapsed());
     info!("OIDC login successful for user_id={}", user_id);
 
-    // Set the ID token as a cookie for web clients
-    let cookie_value = HeaderValue::from_str(&format!(
-        "session_token={}; Path=/; HttpOnly; SameSite=Lax",
-        auth_result.id_token
-    ))
-    .unwrap();
-
     // Redirect to the app after successful authentication
-    response::Builder::new()
+    let mut response = response::Builder::new()
         .status(StatusCode::FOUND)
-        .header(axum::http::header::SET_COOKIE, cookie_value)
         .header(axum::http::header::LOCATION, "/")
         .body(Body::empty())
-        .unwrap()
+        .unwrap();
+    append_session_cookies(&mut response, auth_result.id_token, None, &config);
+    response
 }
 
-async fn get_session(State(user_manager): State<GuardedUserManager>, session: Session) -> Response {
+async fn get_session(
+    State(user_manager): State<GuardedUserManager>,
+    State(config): State<ServerConfig>,
+    cookie_jar: CookieJar,
+    session: Session,
+) -> Response {
     let locked_manager = user_manager.lock().unwrap();
 
     // Get the user handle from user_id
@@ -3563,7 +3566,16 @@ async fn get_session(State(user_manager): State<GuardedUserManager>, session: Se
         permissions: session.permissions.clone(),
     };
 
-    Json(response_body).into_response()
+    let mut response = Json(response_body).into_response();
+    // Refresh the browser cookie and issue a CSRF token. This also converts an
+    // Authorization-authenticated OIDC session into an HttpOnly cookie for WebSockets.
+    let csrf_token = cookie_jar
+        .get(crate::server::session_cookie::csrf_cookie_name(
+            config.secure_session_cookies,
+        ))
+        .map(|cookie| cookie.value().to_owned());
+    append_session_cookies(&mut response, session.token, csrf_token, &config);
+    response
 }
 
 async fn reboot_server(session: Session) -> Response {
@@ -5489,7 +5501,7 @@ pub async fn make_app(
 
     // Other auth routes without rate limiting (already authenticated)
     let other_auth_routes: Router = Router::new()
-        .route("/logout", get(logout))
+        .route("/logout", post(logout))
         .route("/session", get(get_session))
         .route("/challenge", get(get_challenge))
         .route("/challenge", post(post_challenge))
@@ -5988,6 +6000,8 @@ pub async fn make_app(
         extract_user_id_for_rate_limit,
     ));
 
+    app = app.layer(middleware::from_fn_with_state(state.clone(), require_csrf));
+
     app = app.layer(middleware::from_fn_with_state(state.clone(), log_requests));
 
     Ok(app)
@@ -6008,6 +6022,8 @@ pub async fn run_server(
     metrics_port: u16,
     content_cache_age_sec: usize,
     frontend_dir_path: Option<String>,
+    secure_session_cookies: bool,
+    session_cookie_max_age_secs: u64,
     scheduler_handle: Option<SchedulerHandle>,
     server_store: Arc<dyn crate::server_store::ServerStore>,
     oidc_config: Option<crate::config::OidcConfig>,
@@ -6033,6 +6049,8 @@ pub async fn run_server(
         content_cache_age_sec,
         frontend_dir_path,
         disable_password_auth,
+        secure_session_cookies,
+        session_cookie_max_age_secs,
         streaming_search,
         download_manager,
         db_dir,
@@ -6376,7 +6394,6 @@ mod tests {
             "/v1/content/track/123/resolved",
             "/v1/content/image/123",
             "/v1/content/stream/123",
-            "/v1/auth/logout",
             // Admin routes (require ManagePermissions)
             "/v1/admin/users",
             "/v1/admin/users/testuser/roles",
@@ -6391,6 +6408,15 @@ mod tests {
             // 401 Unauthorized - not authenticated
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         }
+
+        let mut request = Request::builder()
+            .method("POST")
+            .uri("/v1/auth/logout")
+            .body(Body::empty())
+            .unwrap();
+        request.extensions_mut().insert(ConnectInfo(test_addr));
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
         // Test search route
         let mut request = Request::builder()

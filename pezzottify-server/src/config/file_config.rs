@@ -13,6 +13,9 @@ pub struct FileConfig {
     pub logging_level: Option<String>,
     pub content_cache_age_sec: Option<usize>,
     pub frontend_dir_path: Option<String>,
+    /// Disable only for local development served over plain HTTP.
+    pub secure_session_cookies: Option<bool>,
+    pub session_cookie_max_age_secs: Option<u64>,
     pub downloader_url: Option<String>,
     pub downloader_timeout_sec: Option<u64>,
     pub event_retention_days: Option<u64>,

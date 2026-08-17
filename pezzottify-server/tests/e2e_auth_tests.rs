@@ -8,6 +8,88 @@ use common::{TestClient, TestServer, ADMIN_PASS, ADMIN_USER, ARTIST_1_ID, TEST_P
 use reqwest::StatusCode;
 
 #[tokio::test]
+async fn test_login_sets_consistent_session_and_csrf_cookie_policy() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::new(server.base_url.clone());
+
+    let response = client.login(TEST_USER, TEST_PASS).await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let cookies: Vec<_> = response
+        .headers()
+        .get_all(reqwest::header::SET_COOKIE)
+        .iter()
+        .map(|value| value.to_str().unwrap())
+        .collect();
+    assert_eq!(cookies.len(), 2);
+
+    let session = cookies
+        .iter()
+        .find(|cookie| cookie.starts_with("session_token="))
+        .expect("missing session cookie");
+    assert!(session.contains("HttpOnly"));
+    assert!(session.contains("SameSite=Lax"));
+    assert!(session.contains("Path=/"));
+    assert!(session.contains("Max-Age=604800"));
+
+    let csrf = cookies
+        .iter()
+        .find(|cookie| cookie.starts_with("csrf_token="))
+        .expect("missing CSRF cookie");
+    assert!(!csrf.contains("HttpOnly"));
+    assert!(csrf.contains("SameSite=Lax"));
+    assert!(csrf.contains("Path=/"));
+    assert!(csrf.contains("Max-Age=604800"));
+}
+
+#[tokio::test]
+async fn test_cookie_authenticated_logout_requires_csrf_and_post() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::new(server.base_url.clone());
+    assert_eq!(
+        client.login(TEST_USER, TEST_PASS).await.status(),
+        StatusCode::CREATED
+    );
+
+    let response = client
+        .client
+        .post_without_csrf(format!("{}/v1/auth/logout", server.base_url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    let response = client
+        .client
+        .post_without_csrf(format!("{}/v1/auth/logout", server.base_url))
+        .header("X-CSRF-Token", "attacker-controlled-token")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    let response = client
+        .client
+        .get(format!("{}/v1/auth/logout", server.base_url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+
+    let response = client.logout().await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let expired: Vec<_> = response
+        .headers()
+        .get_all(reqwest::header::SET_COOKIE)
+        .iter()
+        .map(|value| value.to_str().unwrap())
+        .collect();
+    assert_eq!(expired.len(), 2);
+    assert!(expired.iter().all(|cookie| cookie.contains("Max-Age=0")));
+    assert!(expired.iter().all(|cookie| cookie.contains("Path=/")));
+}
+
+#[tokio::test]
 async fn test_login_with_valid_credentials() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
