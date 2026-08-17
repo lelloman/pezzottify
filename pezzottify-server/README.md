@@ -951,16 +951,22 @@ All custom metrics use the `pezzottify_` prefix for easy filtering. Important me
 
 | Metric | Type | Description |
 | ------ | ---- | ----------- |
-| `pezzottify_http_requests_total` | Counter | Total HTTP requests by method, path, and status |
-| `pezzottify_http_request_duration_seconds` | Histogram | Request duration by method and path |
+| `pezzottify_http_requests_total` | Counter | Total HTTP requests by method, matched route template, and status |
+| `pezzottify_http_request_duration_seconds` | Histogram | Request duration by method and matched route template |
 | `pezzottify_auth_login_attempts_total` | Counter | Login attempts by status |
 | `pezzottify_rate_limit_hits_total` | Counter | Rate limit violations by endpoint |
 | `pezzottify_db_query_duration_seconds` | Histogram | Database query duration by operation |
 | `pezzottify_catalog_items_total` | Gauge | Catalog items by entity type |
 | `pezzottify_errors_total` | Counter | Server errors by type and endpoint |
-| `pezzottify_bandwidth_bytes_total` | Counter | Bytes transferred by user and endpoint category |
+| `pezzottify_bandwidth_bytes_total` | Counter | Bytes transferred by endpoint category |
 | `pezzottify_listening_events_total` | Counter | Listening events by client type and completion |
 | `pezzottify_downloader_requests_total` | Counter | Downloader requests by operation and status |
 | `pezzottify_downloader_errors_total` | Counter | Downloader errors by operation and type |
 
 The production monitoring stack, including Prometheus, Grafana, Alertmanager, and notification wiring, is maintained in the [homelab](https://github.com/lelloman/homelab) deployment repository.
+
+HTTP metric cardinality is intentionally bounded: route labels come only from Axum's registered
+route templates plus one `<unmatched>` fallback, query strings and path parameters are excluded,
+and non-standard HTTP methods share the `OTHER` label. Bandwidth metrics use the fixed endpoint
+categories and never expose user identifiers. Per-user bandwidth analytics remain in the
+access-controlled application database and admin APIs rather than Prometheus labels.

@@ -1,6 +1,10 @@
 #![allow(dead_code)]
 
-use axum::{http::StatusCode, response::IntoResponse};
+use axum::{
+    extract::MatchedPath,
+    http::{Extensions, StatusCode},
+    response::IntoResponse,
+};
 use lazy_static::lazy_static;
 use prometheus::{
     Counter, CounterVec, Encoder, Gauge, GaugeVec, Histogram, HistogramOpts, HistogramVec, Opts,
@@ -15,6 +19,7 @@ const PREFIX: &str = "pezzottify";
 
 /// Service name for homelab storage metrics
 const SERVICE_NAME: &str = "pezzottify";
+pub const UNMATCHED_ROUTE_LABEL: &str = "<unmatched>";
 
 lazy_static! {
     // Global Prometheus registry
@@ -100,13 +105,13 @@ lazy_static! {
 
     // Bandwidth Metrics
     pub static ref BANDWIDTH_BYTES_TOTAL: CounterVec = CounterVec::new(
-        Opts::new(format!("{PREFIX}_bandwidth_bytes_total"), "Total bytes transferred"),
-        &["user_id", "endpoint_category", "direction"]
+        Opts::new(format!("{PREFIX}_bandwidth_bytes_total"), "Total bytes transferred by endpoint category"),
+        &["endpoint_category", "direction"]
     ).expect("Failed to create bandwidth_bytes_total metric");
 
     pub static ref BANDWIDTH_REQUESTS_TOTAL: CounterVec = CounterVec::new(
-        Opts::new(format!("{PREFIX}_bandwidth_requests_total"), "Total requests by user and endpoint category"),
-        &["user_id", "endpoint_category"]
+        Opts::new(format!("{PREFIX}_bandwidth_requests_total"), "Total requests by endpoint category"),
+        &["endpoint_category"]
     ).expect("Failed to create bandwidth_requests_total metric");
 
     // Listening Stats Metrics
@@ -336,14 +341,33 @@ pub fn init_catalog_metrics(num_artists: usize, num_albums: usize, num_tracks: u
 }
 
 /// Record an HTTP request
-pub fn record_http_request(method: &str, path: &str, status: u16, duration: Duration) {
+pub fn record_http_request(method: &str, route: &str, status: u16, duration: Duration) {
+    let method = http_method_label(method);
     HTTP_REQUESTS_TOTAL
-        .with_label_values(&[method, path, &status.to_string()])
+        .with_label_values(&[method, route, &status.to_string()])
         .inc();
 
     HTTP_REQUEST_DURATION_SECONDS
-        .with_label_values(&[method, path])
+        .with_label_values(&[method, route])
         .observe(duration.as_secs_f64());
+}
+
+/// Return only Axum's bounded route template, never a raw request URI.
+pub fn request_route_label(extensions: &Extensions) -> &str {
+    extensions
+        .get::<MatchedPath>()
+        .map(MatchedPath::as_str)
+        .unwrap_or(UNMATCHED_ROUTE_LABEL)
+}
+
+/// Keep arbitrary HTTP extension methods from creating attacker-controlled labels.
+fn http_method_label(method: &str) -> &str {
+    match method {
+        "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS" | "CONNECT" | "TRACE" => {
+            method
+        }
+        _ => "OTHER",
+    }
 }
 
 /// Record a login attempt
@@ -406,17 +430,13 @@ pub fn categorize_endpoint(path: &str) -> &'static str {
 }
 
 /// Record bandwidth usage for a request/response
-pub fn record_bandwidth(user_id: Option<usize>, endpoint_category: &str, response_bytes: u64) {
-    let user_id_str = user_id
-        .map(|id| id.to_string())
-        .unwrap_or_else(|| "anonymous".to_string());
-
+pub fn record_bandwidth(endpoint_category: &str, response_bytes: u64) {
     BANDWIDTH_BYTES_TOTAL
-        .with_label_values(&[&user_id_str, endpoint_category, "response"])
+        .with_label_values(&[endpoint_category, "response"])
         .inc_by(response_bytes as f64);
 
     BANDWIDTH_REQUESTS_TOTAL
-        .with_label_values(&[&user_id_str, endpoint_category])
+        .with_label_values(&[endpoint_category])
         .inc();
 }
 
@@ -800,6 +820,34 @@ mod tests {
     }
 
     #[test]
+    fn non_standard_http_methods_share_one_bounded_label() {
+        init_metrics();
+        let route = "/__cardinality_test__/{id}";
+        record_http_request("ATTACKER-METHOD-ONE", route, 200, Duration::ZERO);
+        record_http_request("ATTACKER-METHOD-TWO", route, 200, Duration::ZERO);
+
+        let matching_metrics: Vec<_> = REGISTRY
+            .gather()
+            .into_iter()
+            .filter(|family| family.get_name() == "pezzottify_http_requests_total")
+            .flat_map(|family| family.get_metric().to_vec())
+            .filter(|metric| {
+                metric
+                    .get_label()
+                    .iter()
+                    .any(|label| label.get_name() == "path" && label.get_value() == route)
+            })
+            .collect();
+
+        assert_eq!(matching_metrics.len(), 1);
+        assert!(matching_metrics[0]
+            .get_label()
+            .iter()
+            .any(|label| label.get_name() == "method" && label.get_value() == "OTHER"));
+        assert_eq!(matching_metrics[0].get_counter().get_value(), 2.0);
+    }
+
+    #[test]
     fn test_record_login_attempt() {
         // Ensure metrics are initialized
         init_metrics();
@@ -905,11 +953,9 @@ mod tests {
         // Ensure metrics are initialized
         init_metrics();
 
-        // Record bandwidth for authenticated user
-        record_bandwidth(Some(42), "stream", 1024 * 1024);
-
-        // Record bandwidth for anonymous user
-        record_bandwidth(None, "catalog", 512);
+        // Record bandwidth for two bounded endpoint categories.
+        record_bandwidth("stream", 1024 * 1024);
+        record_bandwidth("catalog", 512);
 
         // Verify metrics exist
         let metrics = REGISTRY.gather();
@@ -928,6 +974,13 @@ mod tests {
             bandwidth_requests.is_some(),
             "Bandwidth requests metric should exist"
         );
+        for family in [bandwidth_bytes.unwrap(), bandwidth_requests.unwrap()] {
+            assert!(family
+                .get_metric()
+                .iter()
+                .flat_map(|metric| metric.get_label())
+                .all(|label| label.get_name() != "user_id"));
+        }
     }
 
     #[test]

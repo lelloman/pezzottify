@@ -2,7 +2,9 @@
 #![allow(dead_code)] // Used as middleware
 
 use super::super::state::ServerState;
-use crate::server::metrics::{categorize_endpoint, record_bandwidth, record_http_request};
+use crate::server::metrics::{
+    categorize_endpoint, record_bandwidth, record_http_request, request_route_label,
+};
 use axum::extract::State;
 use axum::{
     body::Body,
@@ -176,8 +178,10 @@ pub async fn log_requests(
     let start = Instant::now();
 
     let method = request.method().to_string();
-    let uri = request.uri().to_string();
     let path = request.uri().path().to_string();
+    // MatchedPath contains the bounded route template (for example
+    // `/v1/content/track/{id}`), never path parameters or a query string.
+    let metric_route = request_route_label(request.extensions()).to_string();
 
     if level > RequestsLoggingLevel::None {
         // Query parameters may contain OAuth authorization codes and other credentials.
@@ -274,7 +278,7 @@ pub async fn log_requests(
     }
 
     // Record HTTP request metrics for Prometheus
-    record_http_request(&method, &uri, status, duration);
+    record_http_request(&method, &metric_route, status, duration);
 
     // Record bandwidth metrics
     let response_bytes = match parse_content_length(response.headers()) {
@@ -286,7 +290,7 @@ pub async fn log_requests(
     let endpoint_category = categorize_endpoint(&path);
 
     // Record to Prometheus
-    record_bandwidth(user_id, endpoint_category, response_bytes);
+    record_bandwidth(endpoint_category, response_bytes);
 
     // Record to database if user is authenticated
     if let Some(uid) = user_id {
