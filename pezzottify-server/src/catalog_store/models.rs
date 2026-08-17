@@ -146,6 +146,21 @@ pub struct Album {
     pub album_availability: AlbumAvailability,
 }
 
+/// User-editable album metadata.
+///
+/// Operational state such as availability is deliberately excluded so a
+/// metadata edit cannot overwrite values maintained from local media state.
+#[derive(Clone, Debug)]
+pub struct AlbumMetadataUpdate {
+    pub name: String,
+    pub album_type: AlbumType,
+    pub label: Option<String>,
+    pub release_date: Option<String>,
+    pub release_date_precision: Option<String>,
+    pub external_id_upc: Option<String>,
+    pub popularity: i32,
+}
+
 /// Track availability state
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]

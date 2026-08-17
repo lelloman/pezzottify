@@ -276,8 +276,13 @@ pub trait CatalogStore: Send + Sync {
     /// Create a new album. Returns error if ID already exists.
     fn create_album(&self, album: &super::Album, artist_ids: &[String]) -> Result<()>;
 
-    /// Update an existing album. Returns error if not found.
-    fn update_album(&self, album: &super::Album, artist_ids: Option<&[String]>) -> Result<()>;
+    /// Update user-editable metadata for an existing album. Returns error if not found.
+    fn update_album_metadata(
+        &self,
+        album_id: &str,
+        metadata: &super::AlbumMetadataUpdate,
+        artist_ids: Option<&[String]>,
+    ) -> Result<()>;
 
     /// Delete an album by ID. Returns true if deleted, false if not found.
     fn delete_album(&self, id: &str) -> Result<bool>;

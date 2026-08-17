@@ -177,6 +177,46 @@ async fn test_get_multiple_albums() {
     assert_eq!(album2["name"], ALBUM_2_TITLE);
 }
 
+#[tokio::test]
+async fn test_updating_album_metadata_preserves_availability() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated_admin(server.base_url.clone()).await;
+
+    let response = client.get_album(ALBUM_1_ID).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let album_before: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(album_before["album_availability"], "complete");
+
+    let response = client
+        .client
+        .put(format!(
+            "{}/v1/content/album/{}",
+            server.base_url, ALBUM_1_ID
+        ))
+        .json(&serde_json::json!({
+            "name": "Updated Album Title",
+            "album_type": "album",
+            "artist_ids": [ARTIST_1_ID],
+            "label": "Updated Label",
+            "release_date": "2024",
+            "release_date_precision": "year",
+            "external_id_upc": "123456789012",
+            "popularity": 75,
+            "album_availability": "missing"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = client.get_album(ALBUM_1_ID).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let album_after: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(album_after["name"], "Updated Album Title");
+    assert_eq!(album_after["label"], "Updated Label");
+    assert_eq!(album_after["album_availability"], "complete");
+}
+
 // =============================================================================
 // Track Tests
 // =============================================================================

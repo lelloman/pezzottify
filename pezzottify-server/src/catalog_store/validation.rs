@@ -3,7 +3,7 @@
 //! Provides validation functions to ensure data integrity before
 //! inserting or updating entities in the catalog store.
 
-use super::models::{Album, Artist, Track};
+use super::models::{Album, AlbumMetadataUpdate, Artist, Track};
 use std::fmt;
 
 /// Validation error types
@@ -74,6 +74,17 @@ pub fn validate_album(album: &Album) -> ValidationResult<()> {
         return Err(ValidationError::EmptyField { field: "id" });
     }
     if album.name.trim().is_empty() {
+        return Err(ValidationError::EmptyField { field: "name" });
+    }
+    Ok(())
+}
+
+/// Validate an album metadata update.
+pub fn validate_album_metadata(id: &str, metadata: &AlbumMetadataUpdate) -> ValidationResult<()> {
+    if id.trim().is_empty() {
+        return Err(ValidationError::EmptyField { field: "id" });
+    }
+    if metadata.name.trim().is_empty() {
         return Err(ValidationError::EmptyField { field: "name" });
     }
     Ok(())
@@ -158,6 +169,18 @@ mod tests {
         }
     }
 
+    fn make_valid_album_metadata() -> AlbumMetadataUpdate {
+        AlbumMetadataUpdate {
+            name: "Updated Album".to_string(),
+            album_type: AlbumType::Album,
+            label: None,
+            release_date: Some("2024".to_string()),
+            release_date_precision: Some("year".to_string()),
+            external_id_upc: None,
+            popularity: 50,
+        }
+    }
+
     #[test]
     fn test_validate_artist_valid() {
         let artist = make_valid_artist();
@@ -192,6 +215,19 @@ mod tests {
         album.id = "".to_string();
         let err = validate_album(&album).unwrap_err();
         assert!(matches!(err, ValidationError::EmptyField { field: "id" }));
+    }
+
+    #[test]
+    fn test_validate_album_metadata_valid() {
+        assert!(validate_album_metadata("album-1", &make_valid_album_metadata()).is_ok());
+    }
+
+    #[test]
+    fn test_validate_album_metadata_empty_name() {
+        let mut metadata = make_valid_album_metadata();
+        metadata.name = "  ".to_string();
+        let err = validate_album_metadata("album-1", &metadata).unwrap_err();
+        assert!(matches!(err, ValidationError::EmptyField { field: "name" }));
     }
 
     #[test]
