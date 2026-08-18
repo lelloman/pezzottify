@@ -2384,6 +2384,7 @@ dependencies = [
  "infer",
  "jsonwebtoken",
  "lazy_static",
+ "libc",
  "mockall",
  "openidconnect",
  "prometheus",

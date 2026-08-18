@@ -132,6 +132,10 @@ pub trait CatalogStore: Send + Sync {
     /// Get the filesystem path to a track's audio file.
     fn get_track_audio_path(&self, track_id: &str) -> Option<PathBuf>;
 
+    /// Safely open a track's audio file and return its validated path.
+    /// Implementations should prevent path traversal and symlink escapes.
+    fn open_track_audio_file(&self, track_id: &str) -> Result<Option<(std::fs::File, PathBuf)>>;
+
     /// Get the album ID for a track (needed for audio path resolution).
     fn get_track_album_id(&self, track_id: &str) -> Option<String>;
 

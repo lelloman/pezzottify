@@ -201,20 +201,22 @@ pub async fn stream_track(
 
     debug!("Streaming track: {}", track.name);
 
-    // Get audio file path - returns None if audio not available
-    let path = match catalog_store.get_track_audio_path(&id) {
-        None => {
+    // Open through the catalog's root-confined resolver. This prevents catalog
+    // paths and symlinks from escaping the configured media directory.
+    let (file, path) = match catalog_store.open_track_audio_file(&id) {
+        Ok(None) => {
             debug!("Track {} audio not available", track.name);
             return StatusCode::NOT_FOUND.into_response();
         }
-        Some(path) => path,
+        Ok(Some(opened)) => opened,
+        Err(error) => {
+            debug!(%error, track_id = %id, "Refused or failed to open track audio");
+            return StatusCode::NOT_FOUND.into_response();
+        }
     };
     debug!("Streaming track from path {}", path.display());
 
-    let mut file = match File::open(&path).await {
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-        Ok(file) => file,
-    };
+    let mut file = File::from_std(file);
     let file_length = match file.metadata().await {
         Ok(metadata) => metadata.len(),
         Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),

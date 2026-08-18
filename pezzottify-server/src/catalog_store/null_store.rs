@@ -78,6 +78,10 @@ impl CatalogStore for NullCatalogStore {
         None
     }
 
+    fn open_track_audio_file(&self, _track_id: &str) -> Result<Option<(std::fs::File, PathBuf)>> {
+        Ok(None)
+    }
+
     fn get_track_album_id(&self, _track_id: &str) -> Option<String> {
         None
     }
