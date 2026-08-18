@@ -49,7 +49,7 @@ pub struct UserLikedContent {
     pub content_type: LikedContentType,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct UserPlaylist {
     pub id: String,
     pub user_id: usize,

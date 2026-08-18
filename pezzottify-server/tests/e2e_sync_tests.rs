@@ -184,6 +184,42 @@ async fn test_get_sync_events_after_like() {
 }
 
 #[tokio::test]
+async fn test_idempotency_key_prevents_duplicate_mutation_events() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+    let url = format!(
+        "{}/v1/user/liked/track/idempotency-test-track",
+        server.base_url
+    );
+
+    for _ in 0..2 {
+        let response = client
+            .client
+            .post(&url)
+            .header("Idempotency-Key", "e2e-like-operation-1")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    let response = client.get_sync_events(0).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: serde_json::Value = response.json().await.unwrap();
+    let matching: Vec<_> = body["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|event| event["operation_id"] == "e2e-like-operation-1")
+        .collect();
+    assert_eq!(matching.len(), 1);
+    assert_eq!(
+        matching[0]["payload"]["content_id"],
+        "idempotency-test-track"
+    );
+}
+
+#[tokio::test]
 async fn test_get_sync_events_after_unlike() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;

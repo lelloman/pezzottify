@@ -254,6 +254,8 @@ impl DownloadSyncNotifier {
                 // Create a minimal stored event for broadcast even if storage failed
                 StoredEvent {
                     seq: 0,
+                    operation_id: None,
+                    operation_index: 0,
                     event,
                     server_timestamp: chrono::Utc::now().timestamp(),
                 }

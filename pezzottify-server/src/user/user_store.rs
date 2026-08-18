@@ -2,6 +2,7 @@ use super::auth::{AuthToken, AuthTokenValue, UserAuthCredentials};
 use super::device::{Device, DeviceRegistration, DeviceSharePolicy};
 use super::permissions::{Permission, PermissionGrant, UserRole};
 use super::settings::UserSetting;
+use super::sync_events::UserSyncSnapshot;
 use super::user_models::{
     BandwidthSummary, BandwidthUsage, DailyListeningStats, LikedContentType, ListeningEvent,
     ListeningSummary, TrackListeningStats, TrackPlayCount, UserListeningHistoryEntry, UserPlaylist,
@@ -369,6 +370,73 @@ pub trait UserEventStore: Send + Sync {
     /// Deletes events older than the given Unix timestamp.
     /// Returns the number of deleted events.
     fn prune_events_older_than(&self, before_timestamp: i64) -> Result<u64>;
+
+    /// Atomically update a like and append its sync event.
+    fn set_liked_content_with_event(
+        &self,
+        user_id: usize,
+        content_id: &str,
+        content_type: LikedContentType,
+        liked: bool,
+        operation_id: Option<&str>,
+    ) -> Result<StoredEvent> {
+        let _ = (user_id, content_id, content_type, liked, operation_id);
+        anyhow::bail!("Atomic user sync mutations are not supported")
+    }
+
+    /// Atomically create a playlist and append its sync event.
+    fn create_playlist_with_event(
+        &self,
+        user_id: usize,
+        playlist_name: &str,
+        creator_id: usize,
+        track_ids: Vec<String>,
+        operation_id: Option<&str>,
+    ) -> Result<(String, StoredEvent)> {
+        let _ = (user_id, playlist_name, creator_id, track_ids, operation_id);
+        anyhow::bail!("Atomic user sync mutations are not supported")
+    }
+
+    /// Atomically update a playlist and append all corresponding sync events.
+    fn update_playlist_with_events(
+        &self,
+        playlist_id: &str,
+        user_id: usize,
+        playlist_name: Option<String>,
+        track_ids: Option<Vec<String>>,
+        operation_id: Option<&str>,
+    ) -> Result<Vec<StoredEvent>> {
+        let _ = (playlist_id, user_id, playlist_name, track_ids, operation_id);
+        anyhow::bail!("Atomic user sync mutations are not supported")
+    }
+
+    /// Atomically delete a playlist and append its sync event.
+    fn delete_playlist_with_event(
+        &self,
+        playlist_id: &str,
+        user_id: usize,
+        operation_id: Option<&str>,
+    ) -> Result<StoredEvent> {
+        let _ = (playlist_id, user_id, operation_id);
+        anyhow::bail!("Atomic user sync mutations are not supported")
+    }
+
+    /// Atomically update a batch of settings and append their sync events.
+    fn set_settings_with_events(
+        &self,
+        user_id: usize,
+        settings: Vec<UserSetting>,
+        operation_id: Option<&str>,
+    ) -> Result<Vec<StoredEvent>> {
+        let _ = (user_id, settings, operation_id);
+        anyhow::bail!("Atomic user sync mutations are not supported")
+    }
+
+    /// Read all full-sync state and its sequence in one consistent transaction.
+    fn get_sync_snapshot(&self, user_id: usize) -> Result<UserSyncSnapshot> {
+        let _ = user_id;
+        anyhow::bail!("Consistent user sync snapshots are not supported")
+    }
 }
 
 /// Combined trait for user storage with bandwidth, listening tracking, settings, devices, events, and notifications

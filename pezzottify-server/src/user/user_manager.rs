@@ -73,6 +73,23 @@ impl UserManager {
             .set_user_liked_content(user_id, content_id, content_type, liked)
     }
 
+    pub fn set_user_liked_content_with_event(
+        &self,
+        user_id: usize,
+        content_id: &str,
+        content_type: LikedContentType,
+        liked: bool,
+        operation_id: Option<&str>,
+    ) -> Result<super::sync_events::StoredEvent> {
+        self.user_store.set_liked_content_with_event(
+            user_id,
+            content_id,
+            content_type,
+            liked,
+            operation_id,
+        )
+    }
+
     /// Append an event to the user's sync event log.
     pub fn append_event(
         &self,
@@ -325,6 +342,29 @@ impl UserManager {
             .create_user_playlist(user_id, playlist_name, creator_id, track_ids)
     }
 
+    pub fn create_user_playlist_with_event(
+        &self,
+        user_id: usize,
+        playlist_name: &str,
+        creator_id: usize,
+        track_ids: Vec<String>,
+        operation_id: Option<&str>,
+    ) -> Result<(String, super::sync_events::StoredEvent)> {
+        if track_ids.len() > MAX_PLAYLIST_SIZE {
+            bail!(
+                "Playlist size exceeds maximum limit of {} songs.",
+                MAX_PLAYLIST_SIZE
+            );
+        }
+        self.user_store.create_playlist_with_event(
+            user_id,
+            playlist_name,
+            creator_id,
+            track_ids,
+            operation_id,
+        )
+    }
+
     pub fn update_user_playlist(
         &self,
         playlist_id: &str,
@@ -343,6 +383,42 @@ impl UserManager {
         }
         self.user_store
             .update_user_playlist(playlist_id, user_id, playlist_name, track_ids)
+    }
+
+    pub fn update_user_playlist_with_events(
+        &self,
+        playlist_id: &str,
+        user_id: usize,
+        playlist_name: Option<String>,
+        track_ids: Option<Vec<String>>,
+        operation_id: Option<&str>,
+    ) -> Result<Vec<super::sync_events::StoredEvent>> {
+        if track_ids
+            .as_ref()
+            .is_some_and(|tracks| tracks.len() > MAX_PLAYLIST_SIZE)
+        {
+            bail!(
+                "Playlist size exceeds maximum limit of {} songs.",
+                MAX_PLAYLIST_SIZE
+            );
+        }
+        self.user_store.update_playlist_with_events(
+            playlist_id,
+            user_id,
+            playlist_name,
+            track_ids,
+            operation_id,
+        )
+    }
+
+    pub fn delete_user_playlist_with_event(
+        &self,
+        playlist_id: &str,
+        user_id: usize,
+        operation_id: Option<&str>,
+    ) -> Result<super::sync_events::StoredEvent> {
+        self.user_store
+            .delete_playlist_with_event(playlist_id, user_id, operation_id)
     }
 
     pub fn delete_user_playlist(&self, playlist_id: &str, user_id: usize) -> Result<()> {
@@ -392,6 +468,33 @@ impl UserManager {
         self.update_user_playlist(playlist_id, user_id, None, Some(new_tracks))
     }
 
+    pub fn add_playlist_tracks_with_event(
+        &self,
+        playlist_id: &str,
+        user_id: usize,
+        track_ids: Vec<String>,
+        operation_id: Option<&str>,
+    ) -> Result<Vec<super::sync_events::StoredEvent>> {
+        let playlist = self.user_store.get_user_playlist(playlist_id, user_id)?;
+        if playlist.tracks.len() + track_ids.len() > MAX_PLAYLIST_SIZE {
+            bail!("Adding tracks would exceed maximum playlist size");
+        }
+        for track_id in &track_ids {
+            if !matches!(self.catalog_store.get_track_json(track_id), Ok(Some(_))) {
+                bail!("Track with id {} does not exist.", track_id);
+            }
+        }
+        let mut new_tracks = playlist.tracks;
+        new_tracks.extend(track_ids);
+        self.update_user_playlist_with_events(
+            playlist_id,
+            user_id,
+            None,
+            Some(new_tracks),
+            operation_id,
+        )
+    }
+
     pub fn remove_tracks_from_playlist(
         &self,
         playlist_id: &str,
@@ -415,6 +518,29 @@ impl UserManager {
             }
         }
         self.update_user_playlist(playlist_id, user_id, None, Some(new_tracks))
+    }
+
+    pub fn remove_tracks_from_playlist_with_event(
+        &self,
+        playlist_id: &str,
+        user_id: usize,
+        tracks_positions: Vec<usize>,
+        operation_id: Option<&str>,
+    ) -> Result<Vec<super::sync_events::StoredEvent>> {
+        let playlist = self.user_store.get_user_playlist(playlist_id, user_id)?;
+        let tracks = playlist
+            .tracks
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, track)| (!tracks_positions.contains(&index)).then_some(track))
+            .collect();
+        self.update_user_playlist_with_events(
+            playlist_id,
+            user_id,
+            None,
+            Some(tracks),
+            operation_id,
+        )
     }
 
     pub fn get_user_permissions(&self, user_id: usize) -> Result<Vec<Permission>> {
@@ -705,6 +831,16 @@ impl UserManager {
 
     pub fn set_user_setting(&self, user_id: usize, setting: UserSetting) -> Result<()> {
         self.user_store.set_user_setting(user_id, setting)
+    }
+
+    pub fn set_user_settings_with_events(
+        &self,
+        user_id: usize,
+        settings: Vec<UserSetting>,
+        operation_id: Option<&str>,
+    ) -> Result<Vec<super::sync_events::StoredEvent>> {
+        self.user_store
+            .set_settings_with_events(user_id, settings, operation_id)
     }
 
     pub fn get_all_user_settings(&self, user_id: usize) -> Result<Vec<UserSetting>> {
@@ -1028,6 +1164,13 @@ impl UserManager {
     /// Get the current (latest) sequence number for a user.
     pub fn get_current_seq(&self, user_id: usize) -> Result<i64> {
         self.user_store.get_current_seq(user_id)
+    }
+
+    pub fn get_sync_snapshot(
+        &self,
+        user_id: usize,
+    ) -> Result<super::sync_events::UserSyncSnapshot> {
+        self.user_store.get_sync_snapshot(user_id)
     }
 
     /// Get the minimum available sequence number for a user.

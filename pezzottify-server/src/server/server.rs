@@ -42,7 +42,7 @@ const AUDIO_EMBEDDING_COVERAGE_TIMEOUT: Duration = Duration::from_secs(20);
 use axum::{
     body::Body,
     extract::{DefaultBodyLimit, Path, Query, State},
-    http::{header, response, HeaderValue, StatusCode},
+    http::{header, response, HeaderMap, HeaderValue, StatusCode},
     middleware,
     response::{IntoResponse, Response},
     routing::{delete, get, post, put},
@@ -489,109 +489,52 @@ fn default_bug_report_limit() -> usize {
 // Sync API Handlers
 // ========================================================================
 
+fn idempotency_key(headers: &HeaderMap) -> Result<Option<String>, StatusCode> {
+    let Some(value) = headers.get("idempotency-key") else {
+        return Ok(None);
+    };
+    let value = value.to_str().map_err(|_| StatusCode::BAD_REQUEST)?.trim();
+    if value.is_empty() || value.len() > 128 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    Ok(Some(value.to_owned()))
+}
+
 /// GET /v1/sync/state - Returns full user state for initial sync
 async fn get_sync_state(
     session: Session,
     State(user_manager): State<GuardedUserManager>,
 ) -> Response {
     let um = user_manager.lock().unwrap();
-
-    // Get current sequence number
-    let seq = match um.get_current_seq(session.user_id) {
-        Ok(seq) => seq,
+    let snapshot = match um.get_sync_snapshot(session.user_id) {
+        Ok(snapshot) => snapshot,
         Err(err) => {
-            error!("Error getting current seq: {}", err);
+            error!("Error getting consistent sync snapshot: {}", err);
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
 
-    // Get likes for all content types
-    let albums = match um.get_user_liked_content(session.user_id, LikedContentType::Album) {
-        Ok(v) => v,
-        Err(err) => {
-            error!("Error getting liked albums: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-    let artists = match um.get_user_liked_content(session.user_id, LikedContentType::Artist) {
-        Ok(v) => v,
-        Err(err) => {
-            error!("Error getting liked artists: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-    let tracks = match um.get_user_liked_content(session.user_id, LikedContentType::Track) {
-        Ok(v) => v,
-        Err(err) => {
-            error!("Error getting liked tracks: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-
-    // Get all user settings
-    let settings = match um.get_all_user_settings(session.user_id) {
-        Ok(s) => s,
-        Err(err) => {
-            error!("Error getting user settings: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-
-    // Get all playlists with their full data
-    let playlist_ids = match um.get_user_playlists(session.user_id) {
-        Ok(p) => p,
-        Err(err) => {
-            error!("Error getting user playlists: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-
-    let mut playlists = Vec::new();
-    for playlist_id in playlist_ids {
-        match um.get_user_playlist(&playlist_id, session.user_id) {
-            Ok(playlist) => {
-                playlists.push(PlaylistState {
-                    id: playlist.id,
-                    name: playlist.name,
-                    tracks: playlist.tracks,
-                });
-            }
-            Err(err) => {
-                warn!("Error getting playlist {}: {}", playlist_id, err);
-                // Continue with other playlists
-            }
-        }
-    }
-
-    // Get permissions
-    let permissions = match um.get_user_permissions(session.user_id) {
-        Ok(p) => p,
-        Err(err) => {
-            error!("Error getting user permissions: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-
-    // Get notifications
-    let notifications = match um.get_user_notifications(session.user_id) {
-        Ok(n) => n,
-        Err(err) => {
-            error!("Error getting user notifications: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
+    let playlists = snapshot
+        .playlists
+        .into_iter()
+        .map(|playlist| PlaylistState {
+            id: playlist.id,
+            name: playlist.name,
+            tracks: playlist.tracks,
+        })
+        .collect();
 
     Json(SyncStateResponse {
-        seq,
+        seq: snapshot.seq,
         likes: LikesState {
-            albums,
-            artists,
-            tracks,
+            albums: snapshot.liked_albums,
+            artists: snapshot.liked_artists,
+            tracks: snapshot.liked_tracks,
         },
-        settings,
+        settings: snapshot.settings,
         playlists,
-        permissions,
-        notifications,
+        permissions: snapshot.permissions,
+        notifications: snapshot.notifications,
     })
     .into_response()
 }
@@ -2168,6 +2111,7 @@ fn parse_content_type(content_type_str: &str) -> Option<LikedContentType> {
 
 async fn add_user_liked_content(
     session: Session,
+    headers: HeaderMap,
     State(user_manager): State<GuardedUserManager>,
     State(connection_manager): State<GuardedConnectionManager>,
     Path((content_type_str, content_id)): Path<(String, String)>,
@@ -2176,28 +2120,29 @@ async fn add_user_liked_content(
         return StatusCode::BAD_REQUEST.into_response();
     };
 
+    let operation_id = match idempotency_key(&headers) {
+        Ok(value) => value,
+        Err(status) => return status.into_response(),
+    };
     let stored_event = {
         let um = user_manager.lock().unwrap();
-        match um.set_user_liked_content(session.user_id, &content_id, content_type, true) {
-            Ok(_) => {
-                let event = UserEvent::ContentLiked {
-                    content_type,
-                    content_id: content_id.to_string(),
-                };
-                match um.append_event(session.user_id, &event) {
-                    Ok(stored) => Some(stored),
-                    Err(e) => {
-                        warn!("Failed to log sync event: {}", e);
-                        None
-                    }
-                }
+        match um.set_user_liked_content_with_event(
+            session.user_id,
+            &content_id,
+            content_type,
+            true,
+            operation_id.as_deref(),
+        ) {
+            Ok(stored) => stored,
+            Err(err) => {
+                error!("Failed to atomically like content: {}", err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
-            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         }
     };
 
     // Broadcast to other devices if we have a stored event and device_id
-    if let (Some(stored_event), Some(device_id)) = (stored_event, session.device_id) {
+    if let Some(device_id) = session.device_id {
         let ws_msg = super::websocket::messages::ServerMessage::new(
             super::websocket::messages::msg_types::SYNC,
             super::websocket::messages::sync::SyncEventMessage {
@@ -2214,6 +2159,7 @@ async fn add_user_liked_content(
 
 async fn delete_user_liked_content(
     session: Session,
+    headers: HeaderMap,
     State(user_manager): State<GuardedUserManager>,
     State(connection_manager): State<GuardedConnectionManager>,
     Path((content_type_str, content_id)): Path<(String, String)>,
@@ -2222,28 +2168,29 @@ async fn delete_user_liked_content(
         return StatusCode::BAD_REQUEST.into_response();
     };
 
+    let operation_id = match idempotency_key(&headers) {
+        Ok(value) => value,
+        Err(status) => return status.into_response(),
+    };
     let stored_event = {
         let um = user_manager.lock().unwrap();
-        match um.set_user_liked_content(session.user_id, &content_id, content_type, false) {
-            Ok(_) => {
-                let event = UserEvent::ContentUnliked {
-                    content_type,
-                    content_id: content_id.to_string(),
-                };
-                match um.append_event(session.user_id, &event) {
-                    Ok(stored) => Some(stored),
-                    Err(e) => {
-                        warn!("Failed to log sync event: {}", e);
-                        None
-                    }
-                }
+        match um.set_user_liked_content_with_event(
+            session.user_id,
+            &content_id,
+            content_type,
+            false,
+            operation_id.as_deref(),
+        ) {
+            Ok(stored) => stored,
+            Err(err) => {
+                error!("Failed to atomically unlike content: {}", err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
-            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         }
     };
 
     // Broadcast to other devices if we have a stored event and device_id
-    if let (Some(stored_event), Some(device_id)) = (stored_event, session.device_id) {
+    if let Some(device_id) = session.device_id {
         let ws_msg = super::websocket::messages::ServerMessage::new(
             super::websocket::messages::msg_types::SYNC,
             super::websocket::messages::sync::SyncEventMessage {
@@ -2277,39 +2224,34 @@ async fn get_user_liked_content(
 
 async fn post_playlist(
     session: Session,
+    headers: HeaderMap,
     State(user_manager): State<GuardedUserManager>,
     State(connection_manager): State<GuardedConnectionManager>,
     Json(body): Json<CreatePlaylistBody>,
 ) -> Response {
+    let operation_id = match idempotency_key(&headers) {
+        Ok(value) => value,
+        Err(status) => return status.into_response(),
+    };
     let (id, stored_event) = {
         let um = user_manager.lock().unwrap();
-        match um.create_user_playlist(
+        match um.create_user_playlist_with_event(
             session.user_id,
             &body.name,
             session.user_id,
             body.track_ids.clone(),
+            operation_id.as_deref(),
         ) {
-            Ok(id) => {
-                // Log sync event
-                let event = UserEvent::PlaylistCreated {
-                    playlist_id: id.clone(),
-                    name: body.name.clone(),
-                };
-                let stored_event = match um.append_event(session.user_id, &event) {
-                    Ok(stored) => Some(stored),
-                    Err(e) => {
-                        warn!("Failed to log sync event: {}", e);
-                        None
-                    }
-                };
-                (Some(id), stored_event)
+            Ok(result) => result,
+            Err(err) => {
+                error!("Failed to atomically create playlist: {}", err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
-            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         }
     };
 
     // Broadcast to other devices
-    if let (Some(stored_event), Some(device_id)) = (stored_event, session.device_id) {
+    if let Some(device_id) = session.device_id {
         let ws_msg = super::websocket::messages::ServerMessage::new(
             super::websocket::messages::msg_types::SYNC,
             super::websocket::messages::sync::SyncEventMessage {
@@ -2326,45 +2268,27 @@ async fn post_playlist(
 
 async fn put_playlist(
     session: Session,
+    headers: HeaderMap,
     State(user_manager): State<GuardedUserManager>,
     State(connection_manager): State<GuardedConnectionManager>,
     Path(id): Path<String>,
     Json(body): Json<UpdatePlaylistBody>,
 ) -> Response {
     debug!("Updating playlist with id {}", id);
+    let operation_id = match idempotency_key(&headers) {
+        Ok(value) => value,
+        Err(status) => return status.into_response(),
+    };
     let stored_events = {
         let um = user_manager.lock().unwrap();
-        match um.update_user_playlist(
+        match um.update_user_playlist_with_events(
             &id,
             session.user_id,
-            body.name.clone(),
-            body.track_ids.clone(),
+            body.name,
+            body.track_ids,
+            operation_id.as_deref(),
         ) {
-            Ok(_) => {
-                // Log sync events for name and/or tracks changes
-                let mut events = Vec::new();
-                if let Some(name) = body.name {
-                    let event = UserEvent::PlaylistRenamed {
-                        playlist_id: id.clone(),
-                        name,
-                    };
-                    match um.append_event(session.user_id, &event) {
-                        Ok(stored) => events.push(stored),
-                        Err(e) => warn!("Failed to log sync event: {}", e),
-                    }
-                }
-                if let Some(track_ids) = body.track_ids {
-                    let event = UserEvent::PlaylistTracksUpdated {
-                        playlist_id: id.clone(),
-                        track_ids,
-                    };
-                    match um.append_event(session.user_id, &event) {
-                        Ok(stored) => events.push(stored),
-                        Err(e) => warn!("Failed to log sync event: {}", e),
-                    }
-                }
-                events
-            }
+            Ok(events) => events,
             Err(err) => {
                 debug!("Error updating playlist: {}", err);
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
@@ -2392,32 +2316,28 @@ async fn put_playlist(
 
 async fn delete_playlist(
     session: Session,
+    headers: HeaderMap,
     State(user_manager): State<GuardedUserManager>,
     State(connection_manager): State<GuardedConnectionManager>,
     Path(id): Path<String>,
 ) -> Response {
+    let operation_id = match idempotency_key(&headers) {
+        Ok(value) => value,
+        Err(status) => return status.into_response(),
+    };
     let stored_event = {
         let um = user_manager.lock().unwrap();
-        match um.delete_user_playlist(&id, session.user_id) {
-            Ok(_) => {
-                // Log sync event
-                let event = UserEvent::PlaylistDeleted {
-                    playlist_id: id.clone(),
-                };
-                match um.append_event(session.user_id, &event) {
-                    Ok(stored) => Some(stored),
-                    Err(e) => {
-                        warn!("Failed to log sync event: {}", e);
-                        None
-                    }
-                }
+        match um.delete_user_playlist_with_event(&id, session.user_id, operation_id.as_deref()) {
+            Ok(stored) => stored,
+            Err(err) => {
+                error!("Failed to atomically delete playlist: {}", err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
-            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         }
     };
 
     // Broadcast to other devices
-    if let (Some(stored_event), Some(device_id)) = (stored_event, session.device_id) {
+    if let Some(device_id) = session.device_id {
         let ws_msg = super::websocket::messages::ServerMessage::new(
             super::websocket::messages::msg_types::SYNC,
             super::websocket::messages::sync::SyncEventMessage {
@@ -2455,47 +2375,45 @@ async fn get_playlist(
 
 async fn add_playlist_tracks(
     session: Session,
+    headers: HeaderMap,
     State(user_manager): State<GuardedUserManager>,
     State(connection_manager): State<GuardedConnectionManager>,
     Path(id): Path<String>,
     Json(body): Json<AddTracksToPlaylistBody>,
 ) -> Response {
-    let stored_event = {
+    let operation_id = match idempotency_key(&headers) {
+        Ok(value) => value,
+        Err(status) => return status.into_response(),
+    };
+    let stored_events = {
         let um = user_manager.lock().unwrap();
-        match um.add_playlist_tracks(&id, session.user_id, body.tracks_ids) {
-            Ok(_) => {
-                // Fetch updated track list and log sync event
-                if let Ok(playlist) = um.get_user_playlist(&id, session.user_id) {
-                    let event = UserEvent::PlaylistTracksUpdated {
-                        playlist_id: id.clone(),
-                        track_ids: playlist.tracks,
-                    };
-                    match um.append_event(session.user_id, &event) {
-                        Ok(stored) => Some(stored),
-                        Err(e) => {
-                            warn!("Failed to log sync event: {}", e);
-                            None
-                        }
-                    }
-                } else {
-                    None
-                }
+        match um.add_playlist_tracks_with_event(
+            &id,
+            session.user_id,
+            body.tracks_ids,
+            operation_id.as_deref(),
+        ) {
+            Ok(events) => events,
+            Err(err) => {
+                error!("Failed to atomically add playlist tracks: {}", err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
-            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         }
     };
 
     // Broadcast to other devices
-    if let (Some(stored_event), Some(device_id)) = (stored_event, session.device_id) {
-        let ws_msg = super::websocket::messages::ServerMessage::new(
-            super::websocket::messages::msg_types::SYNC,
-            super::websocket::messages::sync::SyncEventMessage {
-                event: stored_event,
-            },
-        );
-        connection_manager
-            .send_to_other_devices(session.user_id, device_id, ws_msg)
-            .await;
+    if let Some(device_id) = session.device_id {
+        for stored_event in stored_events {
+            let ws_msg = super::websocket::messages::ServerMessage::new(
+                super::websocket::messages::msg_types::SYNC,
+                super::websocket::messages::sync::SyncEventMessage {
+                    event: stored_event,
+                },
+            );
+            connection_manager
+                .send_to_other_devices(session.user_id, device_id, ws_msg)
+                .await;
+        }
     }
 
     StatusCode::OK.into_response()
@@ -2503,47 +2421,45 @@ async fn add_playlist_tracks(
 
 async fn remove_tracks_from_playlist(
     session: Session,
+    headers: HeaderMap,
     State(user_manager): State<GuardedUserManager>,
     State(connection_manager): State<GuardedConnectionManager>,
     Path(id): Path<String>,
     Json(body): Json<RemoveTracksFromPlaylist>,
 ) -> Response {
-    let stored_event = {
+    let operation_id = match idempotency_key(&headers) {
+        Ok(value) => value,
+        Err(status) => return status.into_response(),
+    };
+    let stored_events = {
         let um = user_manager.lock().unwrap();
-        match um.remove_tracks_from_playlist(&id, session.user_id, body.tracks_positions) {
-            Ok(_) => {
-                // Fetch updated track list and log sync event
-                if let Ok(playlist) = um.get_user_playlist(&id, session.user_id) {
-                    let event = UserEvent::PlaylistTracksUpdated {
-                        playlist_id: id.clone(),
-                        track_ids: playlist.tracks,
-                    };
-                    match um.append_event(session.user_id, &event) {
-                        Ok(stored) => Some(stored),
-                        Err(e) => {
-                            warn!("Failed to log sync event: {}", e);
-                            None
-                        }
-                    }
-                } else {
-                    None
-                }
+        match um.remove_tracks_from_playlist_with_event(
+            &id,
+            session.user_id,
+            body.tracks_positions,
+            operation_id.as_deref(),
+        ) {
+            Ok(events) => events,
+            Err(err) => {
+                error!("Failed to atomically remove playlist tracks: {}", err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
-            Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         }
     };
 
     // Broadcast to other devices
-    if let (Some(stored_event), Some(device_id)) = (stored_event, session.device_id) {
-        let ws_msg = super::websocket::messages::ServerMessage::new(
-            super::websocket::messages::msg_types::SYNC,
-            super::websocket::messages::sync::SyncEventMessage {
-                event: stored_event,
-            },
-        );
-        connection_manager
-            .send_to_other_devices(session.user_id, device_id, ws_msg)
-            .await;
+    if let Some(device_id) = session.device_id {
+        for stored_event in stored_events {
+            let ws_msg = super::websocket::messages::ServerMessage::new(
+                super::websocket::messages::msg_types::SYNC,
+                super::websocket::messages::sync::SyncEventMessage {
+                    event: stored_event,
+                },
+            );
+            connection_manager
+                .send_to_other_devices(session.user_id, device_id, ws_msg)
+                .await;
+        }
     }
 
     StatusCode::OK.into_response()
@@ -3022,28 +2938,28 @@ async fn get_user_settings(
 
 async fn update_user_settings(
     session: Session,
+    headers: HeaderMap,
     State(user_manager): State<GuardedUserManager>,
     State(connection_manager): State<GuardedConnectionManager>,
     Json(body): Json<UpdateSettingsBody>,
 ) -> Response {
+    let operation_id = match idempotency_key(&headers) {
+        Ok(value) => value,
+        Err(status) => return status.into_response(),
+    };
     let stored_events = {
         let locked_manager = user_manager.lock().unwrap();
-        let mut events = Vec::new();
-        for setting in body.settings {
-            if let Err(err) = locked_manager.set_user_setting(session.user_id, setting.clone()) {
-                error!("Error setting user setting {:?}: {}", setting, err);
+        match locked_manager.set_user_settings_with_events(
+            session.user_id,
+            body.settings,
+            operation_id.as_deref(),
+        ) {
+            Ok(events) => events,
+            Err(err) => {
+                error!("Error atomically updating user settings: {}", err);
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
-            // Log sync event
-            let event = UserEvent::SettingChanged {
-                setting: setting.clone(),
-            };
-            match locked_manager.append_event(session.user_id, &event) {
-                Ok(stored) => events.push(stored),
-                Err(e) => warn!("Failed to log sync event: {}", e),
-            }
         }
-        events
     };
 
     // Broadcast all events to other devices
@@ -6861,6 +6777,8 @@ mod tests {
         ) -> Result<crate::user::sync_events::StoredEvent> {
             Ok(crate::user::sync_events::StoredEvent {
                 seq: 1,
+                operation_id: None,
+                operation_index: 0,
                 event: event.clone(),
                 server_timestamp: 0,
             })
