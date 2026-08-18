@@ -2670,19 +2670,24 @@ impl CatalogStore for SqliteCatalogStore {
         }
     }
 
-    fn update_track(&self, track: &Track, artist_ids: Option<&[String]>) -> Result<()> {
+    fn update_track_metadata(
+        &self,
+        track_id: &str,
+        metadata: &TrackMetadataUpdate,
+        artist_ids: Option<&[String]>,
+    ) -> Result<()> {
         let conn = self.write_conn.lock().unwrap();
         conn.execute("BEGIN IMMEDIATE", [])?;
 
         let result = (|| -> Result<()> {
             let track_rowid: i64 = match conn.query_row(
                 "SELECT rowid FROM tracks WHERE id = ?1",
-                params![&track.id],
+                params![track_id],
                 |r| r.get(0),
             ) {
                 Ok(rowid) => rowid,
                 Err(rusqlite::Error::QueryReturnedNoRows) => {
-                    anyhow::bail!("Track with id '{}' not found", track.id);
+                    anyhow::bail!("Track with id '{}' not found", track_id);
                 }
                 Err(e) => return Err(e.into()),
             };
@@ -2690,25 +2695,24 @@ impl CatalogStore for SqliteCatalogStore {
             let album_rowid: i64 = conn
                 .query_row(
                     "SELECT rowid FROM albums WHERE id = ?1",
-                    params![&track.album_id],
+                    params![&metadata.album_id],
                     |r| r.get(0),
                 )
-                .context(format!("Album '{}' not found", track.album_id))?;
+                .context(format!("Album '{}' not found", metadata.album_id))?;
 
             conn.execute(
                 "UPDATE tracks SET name = ?1, album_rowid = ?2, track_number = ?3, external_id_isrc = ?4,
-                 popularity = ?5, disc_number = ?6, duration_ms = ?7, explicit = ?8, language = ?9, audio_uri = ?10 WHERE rowid = ?11",
+                 popularity = ?5, disc_number = ?6, duration_ms = ?7, explicit = ?8, language = ?9 WHERE rowid = ?10",
                 params![
-                    &track.name,
+                    &metadata.name,
                     album_rowid,
-                    track.track_number,
-                    &track.external_id_isrc,
-                    track.popularity,
-                    track.disc_number,
-                    track.duration_ms,
-                    if track.explicit { 1 } else { 0 },
-                    &track.language,
-                    &track.audio_uri,
+                    metadata.track_number,
+                    &metadata.external_id_isrc,
+                    metadata.popularity,
+                    metadata.disc_number,
+                    metadata.duration_ms,
+                    if metadata.explicit { 1 } else { 0 },
+                    &metadata.language,
                     track_rowid,
                 ],
             )?;

@@ -163,7 +163,12 @@ impl CatalogStore for NullCatalogStore {
         anyhow::bail!("NullCatalogStore does not support write operations")
     }
 
-    fn update_track(&self, _track: &super::Track, _artist_ids: Option<&[String]>) -> Result<()> {
+    fn update_track_metadata(
+        &self,
+        _track_id: &str,
+        _metadata: &super::TrackMetadataUpdate,
+        _artist_ids: Option<&[String]>,
+    ) -> Result<()> {
         anyhow::bail!("NullCatalogStore does not support write operations")
     }
 

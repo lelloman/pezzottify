@@ -213,6 +213,23 @@ pub struct Track {
     pub availability: TrackAvailability,
 }
 
+/// User-editable track metadata.
+///
+/// Media attachment and availability are deliberately excluded and are
+/// managed together through the catalog store's media operation.
+#[derive(Clone, Debug)]
+pub struct TrackMetadataUpdate {
+    pub name: String,
+    pub album_id: String,
+    pub disc_number: i32,
+    pub track_number: i32,
+    pub duration_ms: i64,
+    pub explicit: bool,
+    pub popularity: i32,
+    pub language: Option<String>,
+    pub external_id_isrc: Option<String>,
+}
+
 // =============================================================================
 // Image Types (for lazy download from Spotify CDN)
 // =============================================================================

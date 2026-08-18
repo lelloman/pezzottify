@@ -20,5 +20,6 @@ pub use trait_def::{
     TrackEmbeddingNamespaceCoverage, MAX_ALBUM_TRACKLIST_PAGE_SIZE,
 };
 pub use validation::{
-    validate_album, validate_album_metadata, validate_artist, validate_track, ValidationError,
+    validate_album, validate_album_metadata, validate_artist, validate_track,
+    validate_track_metadata, ValidationError,
 };

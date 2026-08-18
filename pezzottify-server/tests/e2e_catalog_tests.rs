@@ -236,6 +236,62 @@ async fn test_get_track_returns_correct_data() {
 }
 
 #[tokio::test]
+async fn test_updating_all_track_metadata_preserves_playable_media() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated_admin(server.base_url.clone()).await;
+
+    let response = client.get_track(TRACK_1_ID).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let track_before: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(track_before["audio_uri"], "audio/test_track_001.ogg");
+    assert_eq!(track_before["availability"], "available");
+
+    let response = client
+        .client
+        .put(format!(
+            "{}/v1/content/track/{}",
+            server.base_url, TRACK_1_ID
+        ))
+        .json(&serde_json::json!({
+            "name": "Updated Track Title",
+            "album_id": ALBUM_2_ID,
+            "artist_ids": [ARTIST_2_ID],
+            "disc_number": 2,
+            "track_number": 7,
+            "duration_ms": 123456,
+            "explicit": true,
+            "popularity": 88,
+            "language": "it",
+            "external_id_isrc": "ITABC2612345",
+            "audio_uri": null,
+            "availability": "unavailable"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = client.get_track(TRACK_1_ID).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let track_after: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(track_after["name"], "Updated Track Title");
+    assert_eq!(track_after["album_id"], ALBUM_2_ID);
+    assert_eq!(track_after["disc_number"], 2);
+    assert_eq!(track_after["track_number"], 7);
+    assert_eq!(track_after["duration_ms"], 123456);
+    assert_eq!(track_after["explicit"], true);
+    assert_eq!(track_after["popularity"], 88);
+    assert_eq!(track_after["language"], "it");
+    assert_eq!(track_after["external_id_isrc"], "ITABC2612345");
+    assert_eq!(track_after["audio_uri"], track_before["audio_uri"]);
+    assert_eq!(track_after["availability"], track_before["availability"]);
+
+    let response = client.stream_track(TRACK_1_ID).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(!response.bytes().await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn test_get_resolved_track() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
