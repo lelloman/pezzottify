@@ -19,7 +19,7 @@ use super::models::{
     AlbumMetadataSummary, ConversionReason, IngestionContextType, IngestionFile, IngestionJob,
     IngestionJobStatus, IngestionMatchSource, ReviewOption, TicketType, UploadType,
 };
-use super::store::IngestionStore;
+use super::store::{IngestionStore, JobClaimResult};
 use crate::catalog_store::CatalogStore;
 use crate::search::{HashedItemType, SearchVault};
 use anyhow::Result;
@@ -101,11 +101,30 @@ pub enum IngestionError {
     #[error("Invalid job state: expected {expected}, got {actual}")]
     InvalidState { expected: String, actual: String },
 
+    #[error("Job is already being processed: {0}")]
+    JobBusy(String),
+
+    #[error("Invalid ingestion context: {0}")]
+    InvalidContext(String),
+
     #[error("No files in upload")]
     NoFiles,
 
     #[error("Album not matched")]
     AlbumNotMatched,
+}
+
+struct JobClaimGuard {
+    store: Arc<dyn IngestionStore>,
+    job_id: String,
+}
+
+impl Drop for JobClaimGuard {
+    fn drop(&mut self) {
+        if let Err(error) = self.store.release_job_claim(&self.job_id) {
+            error!(job_id = %self.job_id, %error, "Failed to release ingestion job claim");
+        }
+    }
 }
 
 /// Album candidate with track information for scoring.
@@ -464,7 +483,15 @@ impl IngestionManager {
         data: &[u8],
         context_type: IngestionContextType,
         context_id: Option<String>,
+        allow_foreign_context: bool,
     ) -> Result<UploadResult, IngestionError> {
+        self.validate_upload_context(
+            user_id,
+            context_type,
+            context_id.as_deref(),
+            allow_foreign_context,
+        )?;
+
         let session_id = uuid::Uuid::new_v4().to_string();
         let total_size = data.len() as i64;
 
@@ -601,6 +628,87 @@ impl IngestionManager {
             job_ids,
             album_count,
         })
+    }
+
+    fn validate_upload_context(
+        &self,
+        user_id: &str,
+        context_type: IngestionContextType,
+        context_id: Option<&str>,
+        allow_foreign_context: bool,
+    ) -> Result<(), IngestionError> {
+        match context_type {
+            IngestionContextType::Spontaneous => {
+                if context_id.is_some() {
+                    return Err(IngestionError::InvalidContext(
+                        "spontaneous uploads cannot reference a context ID".to_string(),
+                    ));
+                }
+            }
+            IngestionContextType::DownloadRequest => {
+                let context_id = context_id.ok_or_else(|| {
+                    IngestionError::InvalidContext(
+                        "download request uploads require a context ID".to_string(),
+                    )
+                })?;
+                let manager = self.download_manager.as_ref().ok_or_else(|| {
+                    IngestionError::InvalidContext("download manager is not configured".to_string())
+                })?;
+                let item = manager.get_queue_item(context_id)?.ok_or_else(|| {
+                    IngestionError::InvalidContext("download request was not found".to_string())
+                })?;
+                Self::validate_download_request_owner(
+                    user_id,
+                    context_id,
+                    &item,
+                    allow_foreign_context,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_download_request_owner(
+        user_id: &str,
+        context_id: &str,
+        item: &QueueItemInfo,
+        allow_foreign_context: bool,
+    ) -> Result<(), IngestionError> {
+        if item.id != context_id {
+            return Err(IngestionError::InvalidContext(
+                "download request identity does not match the context ID".to_string(),
+            ));
+        }
+        if item.requested_by_user_id.as_deref() != Some(user_id) && !allow_foreign_context {
+            return Err(IngestionError::InvalidContext(
+                "download request belongs to another user".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn claim_job(
+        &self,
+        job_id: &str,
+        operation: &str,
+        expected: &[IngestionJobStatus],
+    ) -> Result<JobClaimGuard, IngestionError> {
+        match self.store.try_claim_job(job_id, operation, expected)? {
+            JobClaimResult::Claimed => Ok(JobClaimGuard {
+                store: Arc::clone(&self.store),
+                job_id: job_id.to_string(),
+            }),
+            JobClaimResult::NotFound => Err(IngestionError::JobNotFound(job_id.to_string())),
+            JobClaimResult::Busy => Err(IngestionError::JobBusy(job_id.to_string())),
+            JobClaimResult::InvalidState(actual) => Err(IngestionError::InvalidState {
+                expected: expected
+                    .iter()
+                    .map(IngestionJobStatus::as_str)
+                    .collect::<Vec<_>>()
+                    .join(" or "),
+                actual: actual.as_str().to_string(),
+            }),
+        }
     }
 
     /// Internal helper to create a job from a directory of audio files.
@@ -950,6 +1058,11 @@ impl IngestionManager {
 
     /// Analyze all files in a job - extract audio metadata and embedded tags.
     pub async fn analyze_job(&self, job_id: &str) -> Result<(), IngestionError> {
+        let _claim = self.claim_job(job_id, "analyze", &[IngestionJobStatus::Pending])?;
+        self.analyze_job_inner(job_id).await
+    }
+
+    async fn analyze_job_inner(&self, job_id: &str) -> Result<(), IngestionError> {
         let mut job = self
             .store
             .get_job(job_id)?
@@ -1306,6 +1419,22 @@ impl IngestionManager {
     /// known from the queue item, so we skip the search/scoring phase and directly verify
     /// the uploaded content matches the expected album.
     pub async fn process_job(&self, job_id: &str) -> Result<(), IngestionError> {
+        let _claim = self.claim_job(
+            job_id,
+            "process",
+            &[
+                IngestionJobStatus::Pending,
+                IngestionJobStatus::IdentifyingAlbum,
+                IngestionJobStatus::MappingTracks,
+                IngestionJobStatus::Converting,
+                IngestionJobStatus::AwaitingReview,
+                IngestionJobStatus::Completed,
+            ],
+        )?;
+        self.process_job_inner(job_id).await
+    }
+
+    async fn process_job_inner(&self, job_id: &str) -> Result<(), IngestionError> {
         let mut job = self
             .store
             .get_job(job_id)?
@@ -1315,12 +1444,18 @@ impl IngestionManager {
         match job.status {
             IngestionJobStatus::Pending => {
                 // First analyze, then continue
-                self.analyze_job(job_id).await?;
+                self.analyze_job_inner(job_id).await?;
                 job = self.store.get_job(job_id)?.unwrap();
             }
             IngestionJobStatus::IdentifyingAlbum => {
                 // Continue with album identification
             }
+            IngestionJobStatus::MappingTracks => {
+                self.map_tracks_inner(job_id, false).await?;
+                return self.convert_job_inner(job_id).await;
+            }
+            IngestionJobStatus::Converting => return self.convert_job_inner(job_id).await,
+            IngestionJobStatus::AwaitingReview | IngestionJobStatus::Completed => return Ok(()),
             _ => {
                 return Err(IngestionError::InvalidState {
                     expected: "PENDING or IDENTIFYING_ALBUM".to_string(),
@@ -1395,7 +1530,7 @@ impl IngestionManager {
                             .await;
                     }
 
-                    self.map_tracks(job_id, false).await?;
+                    self.map_tracks_inner(job_id, false).await?;
 
                     let job_after_map = self.store.get_job(job_id)?.unwrap();
                     if job_after_map.tracks_matched == 0 {
@@ -1411,7 +1546,7 @@ impl IngestionManager {
                         )));
                     }
 
-                    self.convert_job(job_id).await?;
+                    self.convert_job_inner(job_id).await?;
                     return Ok(());
                 }
                 TicketType::Review => {
@@ -1559,7 +1694,7 @@ impl IngestionManager {
                 }
 
                 // Continue to track mapping and conversion
-                self.map_tracks(job_id, false).await?;
+                self.map_tracks_inner(job_id, false).await?;
 
                 // Fail if no tracks could be matched
                 let job_after_map = self.store.get_job(job_id)?.unwrap();
@@ -1576,7 +1711,7 @@ impl IngestionManager {
                     )));
                 }
 
-                self.convert_job(job_id).await?;
+                self.convert_job_inner(job_id).await?;
             } else {
                 // Low confidence - request review
                 let options: Vec<ReviewOption> = scored
@@ -1871,7 +2006,7 @@ impl IngestionManager {
         );
 
         // Continue to track mapping and conversion
-        self.map_tracks(&job_id, false).await?;
+        self.map_tracks_inner(&job_id, false).await?;
 
         // Fail if no tracks could be matched
         let job_after_map = self.store.get_job(&job_id)?.unwrap();
@@ -1888,7 +2023,7 @@ impl IngestionManager {
             )));
         }
 
-        self.convert_job(&job_id).await?;
+        self.convert_job_inner(&job_id).await?;
 
         Ok(())
     }
@@ -2141,6 +2276,15 @@ impl IngestionManager {
     /// If `skip_duration_review` is true, duration mismatches will not create a review
     /// (used when called from resolve_review to avoid infinite loops).
     pub async fn map_tracks(
+        &self,
+        job_id: &str,
+        skip_duration_review: bool,
+    ) -> Result<(), IngestionError> {
+        let _claim = self.claim_job(job_id, "map_tracks", &[IngestionJobStatus::MappingTracks])?;
+        self.map_tracks_inner(job_id, skip_duration_review).await
+    }
+
+    async fn map_tracks_inner(
         &self,
         job_id: &str,
         skip_duration_review: bool,
@@ -2439,11 +2583,26 @@ impl IngestionManager {
 
     /// Convert all matched files to OGG Vorbis.
     pub async fn convert_job(&self, job_id: &str) -> Result<(), IngestionError> {
+        let _claim = self.claim_job(
+            job_id,
+            "convert",
+            &[
+                IngestionJobStatus::Converting,
+                IngestionJobStatus::Completed,
+            ],
+        )?;
+        self.convert_job_inner(job_id).await
+    }
+
+    async fn convert_job_inner(&self, job_id: &str) -> Result<(), IngestionError> {
         let mut job = self
             .store
             .get_job(job_id)?
             .ok_or_else(|| IngestionError::JobNotFound(job_id.to_string()))?;
 
+        if job.status == IngestionJobStatus::Completed {
+            return Ok(());
+        }
         if job.status != IngestionJobStatus::Converting {
             return Err(IngestionError::InvalidState {
                 expected: "CONVERTING".to_string(),
@@ -2884,6 +3043,11 @@ impl IngestionManager {
         reviewer_user_id: &str,
         selected_option: &str,
     ) -> Result<(), IngestionError> {
+        let _claim = self.claim_job(
+            job_id,
+            "resolve_review",
+            &[IngestionJobStatus::AwaitingReview],
+        )?;
         let mut job = self
             .store
             .get_job(job_id)?
@@ -2914,7 +3078,7 @@ impl IngestionManager {
 
             // Continue to track mapping and conversion
             // Skip duration review since user already approved this album
-            self.map_tracks(job_id, true).await?;
+            self.map_tracks_inner(job_id, true).await?;
 
             // Fail if no tracks could be matched
             let job_after_map = self.store.get_job(job_id)?.unwrap();
@@ -2931,7 +3095,7 @@ impl IngestionManager {
                 )));
             }
 
-            self.convert_job(job_id).await?;
+            self.convert_job_inner(job_id).await?;
         } else if selected_option == "no_match" {
             self.fail_job_with_cleanup(&mut job, "Album not in catalog")
                 .await?;
@@ -2945,7 +3109,7 @@ impl IngestionManager {
                 job_id
             );
 
-            self.convert_job(job_id).await?;
+            self.convert_job_inner(job_id).await?;
         } else if selected_option == "convert_low_bitrate" {
             // User approved converting low bitrate files
             let mut files = self.store.get_files_for_job(job_id)?;
@@ -2969,7 +3133,7 @@ impl IngestionManager {
             );
 
             // Continue processing
-            self.process_job(job_id).await?;
+            self.process_job_inner(job_id).await?;
         } else if selected_option == "retry" {
             job.status = IngestionJobStatus::IdentifyingAlbum;
             self.store.update_job(&job)?;
@@ -2984,6 +3148,14 @@ impl IngestionManager {
         limit: usize,
     ) -> Result<Vec<super::models::ReviewQueueItem>, IngestionError> {
         Ok(self.store.get_pending_reviews(limit)?)
+    }
+
+    pub fn get_pending_reviews_for_user(
+        &self,
+        user_id: &str,
+        limit: usize,
+    ) -> Result<Vec<super::models::ReviewQueueItem>, IngestionError> {
+        Ok(self.store.get_pending_reviews_by_user(user_id, limit)?)
     }
 
     /// Delete a job and its associated files.
@@ -3141,6 +3313,46 @@ mod tests {
         assert_eq!(config.bitrate_tolerance, 50);
         assert_eq!(config.max_iterations, 20);
         assert!((config.auto_match_threshold - 0.85).abs() < 0.001);
+    }
+
+    fn queue_item(id: &str, owner: Option<&str>) -> QueueItemInfo {
+        QueueItemInfo {
+            id: id.to_string(),
+            content_id: "album".to_string(),
+            content_name: None,
+            artist_name: None,
+            requested_by_user_id: owner.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn download_request_context_requires_matching_owner_and_id() {
+        let item = queue_item("request-1", Some("42"));
+        assert!(
+            IngestionManager::validate_download_request_owner("42", "request-1", &item, false)
+                .is_ok()
+        );
+
+        assert!(
+            IngestionManager::validate_download_request_owner("7", "request-1", &item, false)
+                .is_err()
+        );
+        assert!(IngestionManager::validate_download_request_owner(
+            "42",
+            "different-request",
+            &item,
+            true
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn server_admin_may_use_foreign_download_request_context() {
+        let item = queue_item("request-1", Some("42"));
+        assert!(
+            IngestionManager::validate_download_request_owner("7", "request-1", &item, true)
+                .is_ok()
+        );
     }
 
     #[test]

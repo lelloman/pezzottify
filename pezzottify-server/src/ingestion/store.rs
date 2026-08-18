@@ -17,6 +17,14 @@ use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JobClaimResult {
+    Claimed,
+    NotFound,
+    InvalidState(IngestionJobStatus),
+    Busy,
+}
+
 /// Trait for ingestion storage operations.
 pub trait IngestionStore: Send + Sync {
     // ==================== Job Operations ====================
@@ -29,6 +37,17 @@ pub trait IngestionStore: Send + Sync {
 
     /// Update a job.
     fn update_job(&self, job: &IngestionJob) -> Result<()>;
+
+    /// Atomically validate a job state and acquire its exclusive operation claim.
+    fn try_claim_job(
+        &self,
+        id: &str,
+        operation: &str,
+        expected: &[IngestionJobStatus],
+    ) -> Result<JobClaimResult>;
+
+    /// Release an exclusive operation claim.
+    fn release_job_claim(&self, id: &str) -> Result<()>;
 
     /// Delete a job and all associated data.
     fn delete_job(&self, id: &str) -> Result<()>;
@@ -84,6 +103,13 @@ pub trait IngestionStore: Send + Sync {
 
     /// Get pending review items.
     fn get_pending_reviews(&self, limit: usize) -> Result<Vec<ReviewQueueItem>>;
+
+    /// Get pending reviews belonging to one user.
+    fn get_pending_reviews_by_user(
+        &self,
+        user_id: &str,
+        limit: usize,
+    ) -> Result<Vec<ReviewQueueItem>>;
 
     /// Resolve a review item.
     fn resolve_review(&self, job_id: &str, user_id: &str, selected_option: &str) -> Result<()>;
@@ -311,6 +337,58 @@ impl IngestionStore for SqliteIngestionStore {
                 job.completed_at,
                 job.workflow_state,
             ],
+        )?;
+        Ok(())
+    }
+
+    fn try_claim_job(
+        &self,
+        id: &str,
+        operation: &str,
+        expected: &[IngestionJobStatus],
+    ) -> Result<JobClaimResult> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let status = tx
+            .query_row(
+                "SELECT status FROM ingestion_jobs WHERE id = ?1",
+                params![id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        let Some(status) = status else {
+            return Ok(JobClaimResult::NotFound);
+        };
+        let already_claimed = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM ingestion_job_claims WHERE job_id = ?1)",
+            params![id],
+            |row| row.get::<_, bool>(0),
+        )?;
+        if already_claimed {
+            return Ok(JobClaimResult::Busy);
+        }
+        let status = IngestionJobStatus::parse(&status).unwrap_or(IngestionJobStatus::Pending);
+        if !expected.contains(&status) {
+            return Ok(JobClaimResult::InvalidState(status));
+        }
+
+        let inserted = tx.execute(
+            "INSERT OR IGNORE INTO ingestion_job_claims (job_id, operation, claimed_at) VALUES (?1, ?2, ?3)",
+            params![id, operation, chrono::Utc::now().timestamp_millis()],
+        )?;
+        tx.commit()?;
+        Ok(if inserted == 1 {
+            JobClaimResult::Claimed
+        } else {
+            JobClaimResult::Busy
+        })
+    }
+
+    fn release_job_claim(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "DELETE FROM ingestion_job_claims WHERE job_id = ?1",
+            params![id],
         )?;
         Ok(())
     }
@@ -615,6 +693,40 @@ impl IngestionStore for SqliteIngestionStore {
         Ok(items)
     }
 
+    fn get_pending_reviews_by_user(
+        &self,
+        user_id: &str,
+        limit: usize,
+    ) -> Result<Vec<ReviewQueueItem>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT r.id, r.job_id, r.question, r.options, r.created_at,
+                   r.resolved_at, r.resolved_by_user_id, r.selected_option
+            FROM ingestion_review_queue r
+            JOIN ingestion_jobs j ON j.id = r.job_id
+            WHERE r.resolved_at IS NULL AND j.user_id = ?1
+            ORDER BY r.created_at ASC
+            LIMIT ?2
+            "#,
+        )?;
+        let items = stmt
+            .query_map(params![user_id, limit as i64], |row| {
+                Ok(ReviewQueueItem {
+                    id: row.get(0)?,
+                    job_id: row.get(1)?,
+                    question: row.get(2)?,
+                    options: row.get(3)?,
+                    created_at: row.get(4)?,
+                    resolved_at: row.get(5)?,
+                    resolved_by_user_id: row.get(6)?,
+                    selected_option: row.get(7)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(items)
+    }
+
     fn resolve_review(&self, job_id: &str, user_id: &str, selected_option: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -793,6 +905,49 @@ mod tests {
         let item = store.get_review_item("job1").unwrap().unwrap();
         assert!(item.resolved_at.is_some());
         assert_eq!(item.selected_option, Some("album:abc".to_string()));
+    }
+
+    #[test]
+    fn pending_reviews_are_scoped_to_job_owner() {
+        let store = SqliteIngestionStore::in_memory().unwrap();
+        for (job_id, user_id) in [("job1", "user1"), ("job2", "user2")] {
+            let mut job = IngestionJob::new(job_id, user_id, "album.zip", 100, 1);
+            job.status = IngestionJobStatus::AwaitingReview;
+            store.create_job(&job).unwrap();
+            store.create_review_item(job_id, "Review?", "[]").unwrap();
+        }
+
+        let reviews = store.get_pending_reviews_by_user("user1", 10).unwrap();
+        assert_eq!(reviews.len(), 1);
+        assert_eq!(reviews[0].job_id, "job1");
+    }
+
+    #[test]
+    fn job_claim_is_exclusive_and_checks_expected_state() {
+        let store = SqliteIngestionStore::in_memory().unwrap();
+        let job = IngestionJob::new("job1", "user1", "album.zip", 100, 1);
+        store.create_job(&job).unwrap();
+
+        assert_eq!(
+            store
+                .try_claim_job("job1", "process", &[IngestionJobStatus::Pending])
+                .unwrap(),
+            JobClaimResult::Claimed
+        );
+        assert_eq!(
+            store
+                .try_claim_job("job1", "convert", &[IngestionJobStatus::Pending])
+                .unwrap(),
+            JobClaimResult::Busy
+        );
+
+        store.release_job_claim("job1").unwrap();
+        assert_eq!(
+            store
+                .try_claim_job("job1", "convert", &[IngestionJobStatus::Converting])
+                .unwrap(),
+            JobClaimResult::InvalidState(IngestionJobStatus::Pending)
+        );
     }
 
     #[test]

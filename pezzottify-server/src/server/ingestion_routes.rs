@@ -17,7 +17,8 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
 use crate::ingestion::{
-    IngestionContextType, IngestionFile, IngestionJob, IngestionManager, ReviewQueueItem,
+    IngestionContextType, IngestionError, IngestionFile, IngestionJob, IngestionManager,
+    ReviewQueueItem,
 };
 use crate::server::session::Session;
 use crate::server::state::{OptionalIngestionManager, ServerState};
@@ -135,6 +136,56 @@ fn get_ingestion_manager(
     ))
 }
 
+#[derive(Debug, Clone, Copy)]
+enum IngestionJobAction {
+    View,
+    Process,
+    Convert,
+    ResolveReview,
+    Delete,
+}
+
+/// Central authorization policy for all ingestion job reads and mutations.
+/// Owners need EditCatalog; cross-user access requires the explicit ServerAdmin permission.
+fn can_access_ingestion_job(
+    session: &Session,
+    job: &IngestionJob,
+    action: IngestionJobAction,
+) -> bool {
+    let actor = session.user_id.to_string();
+    if job.user_id == actor {
+        return session.has_permission(Permission::EditCatalog);
+    }
+    if session.has_permission(Permission::ServerAdmin) {
+        info!(
+            actor_user_id = %actor,
+            owner_user_id = %job.user_id,
+            job_id = %job.id,
+            ?action,
+            "Server administrator accessed another user's ingestion job"
+        );
+        return true;
+    }
+    false
+}
+
+fn authorize_job(
+    session: &Session,
+    manager: &IngestionManager,
+    job_id: &str,
+    action: IngestionJobAction,
+) -> Result<IngestionJob, StatusCode> {
+    match manager.get_job(job_id) {
+        Ok(Some(job)) if can_access_ingestion_job(session, &job, action) => Ok(job),
+        Ok(Some(_)) => Err(StatusCode::FORBIDDEN),
+        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Err(error) => {
+            warn!(%error, %job_id, "Failed to load ingestion job for authorization");
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
 // =============================================================================
 // User Routes
 // =============================================================================
@@ -145,7 +196,9 @@ async fn upload_file(
     State(im): State<OptionalIngestionManager>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    if !session.has_permission(Permission::EditCatalog) {
+    if !session.has_permission(Permission::EditCatalog)
+        && !session.has_permission(Permission::ServerAdmin)
+    {
         return StatusCode::FORBIDDEN.into_response();
     }
 
@@ -236,7 +289,14 @@ async fn upload_file(
     );
 
     match manager
-        .process_upload(&user_id, &filename, &data, context_type, context_id)
+        .process_upload(
+            &user_id,
+            &filename,
+            &data,
+            context_type,
+            context_id,
+            session.has_permission(Permission::ServerAdmin),
+        )
         .await
     {
         Ok(result) => {
@@ -274,8 +334,13 @@ async fn upload_file(
         }
         Err(e) => {
             warn!("Failed to create ingestion job: {}", e);
+            let status = if matches!(e, IngestionError::InvalidContext(_)) {
+                StatusCode::BAD_REQUEST
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                status,
                 Json(ErrorResponse {
                     error: e.to_string(),
                 }),
@@ -291,29 +356,14 @@ async fn get_job(
     State(im): State<OptionalIngestionManager>,
     Path(job_id): Path<String>,
 ) -> impl IntoResponse {
-    if !session.has_permission(Permission::EditCatalog) {
-        return StatusCode::FORBIDDEN.into_response();
-    }
-
     let manager = match get_ingestion_manager(&im) {
         Ok(m) => m,
         Err(e) => return e.into_response(),
     };
 
-    match manager.get_job(&job_id) {
-        Ok(Some(job)) => {
-            // Only allow users to see their own jobs (unless admin)
-            let user_id_str = session.user_id.to_string();
-            if job.user_id != user_id_str && !session.has_permission(Permission::ViewAnalytics) {
-                return StatusCode::FORBIDDEN.into_response();
-            }
-            Json(JobStatusResponse { job }).into_response()
-        }
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(e) => {
-            warn!("Failed to get job {}: {}", job_id, e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get job").into_response()
-        }
+    match authorize_job(&session, manager, &job_id, IngestionJobAction::View) {
+        Ok(job) => Json(JobStatusResponse { job }).into_response(),
+        Err(status) => status.into_response(),
     }
 }
 
@@ -323,30 +373,15 @@ async fn get_job_details(
     State(im): State<OptionalIngestionManager>,
     Path(job_id): Path<String>,
 ) -> impl IntoResponse {
-    if !session.has_permission(Permission::EditCatalog) {
-        return StatusCode::FORBIDDEN.into_response();
-    }
-
     let manager = match get_ingestion_manager(&im) {
         Ok(m) => m,
         Err(e) => return e.into_response(),
     };
 
     // Get the job
-    let job = match manager.get_job(&job_id) {
-        Ok(Some(job)) => {
-            // Only allow users to see their own jobs (unless admin)
-            let user_id_str = session.user_id.to_string();
-            if job.user_id != user_id_str && !session.has_permission(Permission::ViewAnalytics) {
-                return StatusCode::FORBIDDEN.into_response();
-            }
-            job
-        }
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(e) => {
-            warn!("Failed to get job {}: {}", job_id, e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get job").into_response();
-        }
+    let job = match authorize_job(&session, manager, &job_id, IngestionJobAction::View) {
+        Ok(job) => job,
+        Err(status) => return status.into_response(),
     };
 
     // Get files for the job
@@ -395,7 +430,9 @@ async fn get_my_jobs(
     State(im): State<OptionalIngestionManager>,
     Query(pagination): Query<PaginationQuery>,
 ) -> impl IntoResponse {
-    if !session.has_permission(Permission::EditCatalog) {
+    if !session.has_permission(Permission::EditCatalog)
+        && !session.has_permission(Permission::ServerAdmin)
+    {
         return StatusCode::FORBIDDEN.into_response();
     }
 
@@ -421,14 +458,14 @@ async fn process_job(
     State(im): State<OptionalIngestionManager>,
     Path(job_id): Path<String>,
 ) -> impl IntoResponse {
-    if !session.has_permission(Permission::EditCatalog) {
-        return StatusCode::FORBIDDEN.into_response();
-    }
-
     let manager = match get_ingestion_manager(&im) {
         Ok(m) => m,
         Err(e) => return e.into_response(),
     };
+
+    if let Err(status) = authorize_job(&session, manager, &job_id, IngestionJobAction::Process) {
+        return status.into_response();
+    }
 
     match manager.process_job(&job_id).await {
         Ok(()) => {
@@ -461,14 +498,14 @@ async fn convert_job(
     State(im): State<OptionalIngestionManager>,
     Path(job_id): Path<String>,
 ) -> impl IntoResponse {
-    if !session.has_permission(Permission::EditCatalog) {
-        return StatusCode::FORBIDDEN.into_response();
-    }
-
     let manager = match get_ingestion_manager(&im) {
         Ok(m) => m,
         Err(e) => return e.into_response(),
     };
+
+    if let Err(status) = authorize_job(&session, manager, &job_id, IngestionJobAction::Convert) {
+        return status.into_response();
+    }
 
     match manager.convert_job(&job_id).await {
         Ok(()) => {
@@ -505,7 +542,9 @@ async fn get_pending_reviews(
     State(im): State<OptionalIngestionManager>,
     Query(pagination): Query<PaginationQuery>,
 ) -> impl IntoResponse {
-    if !session.has_permission(Permission::EditCatalog) {
+    if !session.has_permission(Permission::EditCatalog)
+        && !session.has_permission(Permission::ServerAdmin)
+    {
         return StatusCode::FORBIDDEN.into_response();
     }
 
@@ -514,7 +553,12 @@ async fn get_pending_reviews(
         Err(e) => return e.into_response(),
     };
 
-    match manager.get_pending_reviews(pagination.limit) {
+    let reviews = if session.has_permission(Permission::ServerAdmin) {
+        manager.get_pending_reviews(pagination.limit)
+    } else {
+        manager.get_pending_reviews_for_user(&session.user_id.to_string(), pagination.limit)
+    };
+    match reviews {
         Ok(items) => Json(ReviewQueueResponse { items }).into_response(),
         Err(e) => {
             warn!("Failed to get pending reviews: {}", e);
@@ -530,14 +574,19 @@ async fn resolve_review(
     Path(job_id): Path<String>,
     Json(body): Json<ResolveReviewBody>,
 ) -> impl IntoResponse {
-    if !session.has_permission(Permission::EditCatalog) {
-        return StatusCode::FORBIDDEN.into_response();
-    }
-
     let manager = match get_ingestion_manager(&im) {
         Ok(m) => m,
         Err(e) => return e.into_response(),
     };
+
+    if let Err(status) = authorize_job(
+        &session,
+        manager,
+        &job_id,
+        IngestionJobAction::ResolveReview,
+    ) {
+        return status.into_response();
+    }
 
     let reviewer_id = session.user_id.to_string();
 
@@ -583,7 +632,7 @@ async fn admin_list_jobs(
     State(im): State<OptionalIngestionManager>,
     Query(pagination): Query<PaginationQuery>,
 ) -> impl IntoResponse {
-    if !session.has_permission(Permission::ViewAnalytics) {
+    if !session.has_permission(Permission::ServerAdmin) {
         return StatusCode::FORBIDDEN.into_response();
     }
 
@@ -607,28 +656,13 @@ async fn delete_job(
     State(im): State<OptionalIngestionManager>,
     Path(job_id): Path<String>,
 ) -> impl IntoResponse {
-    if !session.has_permission(Permission::EditCatalog) {
-        return StatusCode::FORBIDDEN.into_response();
-    }
-
     let manager = match get_ingestion_manager(&im) {
         Ok(m) => m,
         Err(e) => return e.into_response(),
     };
 
-    // Check job ownership (unless admin)
-    match manager.get_job(&job_id) {
-        Ok(Some(job)) => {
-            let user_id_str = session.user_id.to_string();
-            if job.user_id != user_id_str && !session.has_permission(Permission::ViewAnalytics) {
-                return StatusCode::FORBIDDEN.into_response();
-            }
-        }
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(e) => {
-            warn!("Failed to get job {}: {}", job_id, e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get job").into_response();
-        }
+    if let Err(status) = authorize_job(&session, manager, &job_id, IngestionJobAction::Delete) {
+        return status.into_response();
     }
 
     match manager.delete_job(&job_id).await {
@@ -666,7 +700,7 @@ async fn delete_job(
 /// - GET /reviews - Get pending reviews
 /// - POST /review/:job_id/resolve - Resolve a review
 ///
-/// Admin routes (require ViewAnalytics/EditCatalog):
+/// Admin routes (require ServerAdmin):
 /// - GET /admin/jobs - List all jobs
 /// - DELETE /admin/job/:id - Delete a job
 pub fn ingestion_routes() -> Router<ServerState> {
@@ -696,4 +730,67 @@ pub fn ingestion_routes() -> Router<ServerState> {
     user_routes
         .merge(review_routes)
         .nest("/admin", admin_routes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn session(user_id: usize, permissions: Vec<Permission>) -> Session {
+        Session {
+            user_id,
+            token: "test".to_string(),
+            permissions,
+            device_id: None,
+            device_type: None,
+        }
+    }
+
+    #[test]
+    fn owner_with_edit_catalog_can_access_job() {
+        let session = session(42, vec![Permission::EditCatalog]);
+        let job = IngestionJob::new("job", "42", "album.zip", 1, 1);
+
+        assert!(can_access_ingestion_job(
+            &session,
+            &job,
+            IngestionJobAction::Process
+        ));
+    }
+
+    #[test]
+    fn edit_catalog_does_not_grant_cross_user_access() {
+        let session = session(42, vec![Permission::EditCatalog]);
+        let job = IngestionJob::new("job", "7", "album.zip", 1, 1);
+
+        assert!(!can_access_ingestion_job(
+            &session,
+            &job,
+            IngestionJobAction::ResolveReview
+        ));
+    }
+
+    #[test]
+    fn server_admin_grants_audited_cross_user_access() {
+        let session = session(42, vec![Permission::ServerAdmin]);
+        let job = IngestionJob::new("job", "7", "album.zip", 1, 1);
+
+        assert!(can_access_ingestion_job(
+            &session,
+            &job,
+            IngestionJobAction::Delete
+        ));
+    }
+
+    #[test]
+    fn owner_without_edit_catalog_cannot_access_job() {
+        let session = session(42, vec![]);
+        let job = IngestionJob::new("job", "42", "album.zip", 1, 1);
+
+        assert!(!can_access_ingestion_job(
+            &session,
+            &job,
+            IngestionJobAction::View
+        ));
+    }
 }

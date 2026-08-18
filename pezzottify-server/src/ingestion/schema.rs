@@ -123,6 +123,15 @@ CREATE TABLE IF NOT EXISTS ingestion_review_queue (
     FOREIGN KEY (job_id) REFERENCES ingestion_jobs(id) ON DELETE CASCADE
 );
 
+-- Exclusive, process-lifetime claims prevent overlapping manual and automatic
+-- processing of the same job. Claims are removed when an operation finishes.
+CREATE TABLE IF NOT EXISTS ingestion_job_claims (
+    job_id TEXT PRIMARY KEY,
+    operation TEXT NOT NULL,
+    claimed_at INTEGER NOT NULL,
+    FOREIGN KEY (job_id) REFERENCES ingestion_jobs(id) ON DELETE CASCADE
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_ingestion_jobs_status ON ingestion_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_ingestion_jobs_user ON ingestion_jobs(user_id);
