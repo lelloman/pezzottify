@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::notifications::Notification;
 use crate::user::permissions::Permission;
 use crate::user::settings::UserSetting;
-use crate::user::user_models::LikedContentType;
+use crate::user::user_models::{LikedContentType, UserPlaylist};
 
 // =============================================================================
 // Download Status Types (for sync events)
@@ -188,9 +188,32 @@ impl UserEvent {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StoredEvent {
     pub seq: i64,
+    /// Stable client-supplied identifier for an idempotent mutation batch.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub operation_id: Option<String>,
+    /// Event position within a mutation batch.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub operation_index: i32,
     #[serde(flatten)]
     pub event: UserEvent,
     pub server_timestamp: i64,
+}
+
+fn is_zero(value: &i32) -> bool {
+    *value == 0
+}
+
+/// A full user-sync snapshot read from one consistent database transaction.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct UserSyncSnapshot {
+    pub seq: i64,
+    pub liked_albums: Vec<String>,
+    pub liked_artists: Vec<String>,
+    pub liked_tracks: Vec<String>,
+    pub settings: Vec<UserSetting>,
+    pub playlists: Vec<UserPlaylist>,
+    pub permissions: Vec<Permission>,
+    pub notifications: Vec<Notification>,
 }
 
 #[cfg(test)]
@@ -344,6 +367,8 @@ mod tests {
     fn test_stored_event_serialization() {
         let stored = StoredEvent {
             seq: 42,
+            operation_id: None,
+            operation_index: 0,
             event: UserEvent::ContentLiked {
                 content_type: LikedContentType::Artist,
                 content_id: "artist_789".to_string(),

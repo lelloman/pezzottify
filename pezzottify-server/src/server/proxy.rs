@@ -1030,6 +1030,8 @@ mod tests {
         ) -> anyhow::Result<crate::user::sync_events::StoredEvent> {
             Ok(crate::user::sync_events::StoredEvent {
                 seq: 1,
+                operation_id: None,
+                operation_index: 0,
                 event: event.clone(),
                 server_timestamp: 0,
             })
@@ -1774,6 +1776,8 @@ mod tests {
         ) -> anyhow::Result<crate::user::sync_events::StoredEvent> {
             Ok(crate::user::sync_events::StoredEvent {
                 seq: 1,
+                operation_id: None,
+                operation_index: 0,
                 event: event.clone(),
                 server_timestamp: 0,
             })

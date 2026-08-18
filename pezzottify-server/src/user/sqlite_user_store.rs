@@ -17,7 +17,7 @@ use crate::user::user_models::{
 use crate::user::user_store::{UserBandwidthStore, UserListeningStore, UserSettingsStore};
 use crate::user::*;
 use anyhow::{bail, Context, Result};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use std::collections::HashMap;
 use std::{
     path::{Path, PathBuf},
@@ -633,6 +633,53 @@ const USER_EVENTS_TABLE_V_9: Table = Table {
     indices: &[("idx_user_events_user_seq", "user_id, seq")],
 };
 
+/// V 14
+/// Adds stable operation identifiers for idempotent mutation batches.
+const USER_EVENTS_TABLE_V_14: Table = Table {
+    name: "user_events",
+    columns: &[
+        sqlite_column!(
+            "seq",
+            &SqlType::Integer,
+            is_primary_key = true,
+            is_unique = true
+        ),
+        sqlite_column!(
+            "user_id",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "user",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        sqlite_column!("event_type", &SqlType::Text, non_null = true),
+        sqlite_column!("payload", &SqlType::Text, non_null = true),
+        sqlite_column!(
+            "server_timestamp",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+        sqlite_column!("operation_id", &SqlType::Text),
+        sqlite_column!(
+            "operation_index",
+            &SqlType::Integer,
+            non_null = true,
+            default_value = Some("0")
+        ),
+    ],
+    unique_constraints: &[&["user_id", "operation_id", "operation_index"]],
+    indices: &[
+        ("idx_user_events_user_seq", "user_id, seq"),
+        (
+            "idx_user_events_operation",
+            "user_id, operation_id, operation_index",
+        ),
+    ],
+};
+
 /// V 11
 /// User notifications table - stores notifications for each user
 const USER_NOTIFICATIONS_TABLE_V_11: Table = Table {
@@ -1028,6 +1075,41 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             Ok(())
         }),
     },
+    // V14: Add idempotency metadata to user sync events.
+    VersionedSchema {
+        version: 14,
+        tables: &[
+            USER_TABLE_V_12,
+            LIKED_CONTENT_TABLE_V_2,
+            AUTH_TOKEN_TABLE_V_8,
+            USER_PASSWORD_CREDENTIALS_V_0,
+            USER_PLAYLIST_TABLE_V_3,
+            USER_PLAYLIST_TRACKS_TABLE_V_3,
+            USER_ROLE_TABLE_V_4,
+            USER_EXTRA_PERMISSION_TABLE_V_4,
+            BANDWIDTH_USAGE_TABLE_V_5,
+            LISTENING_EVENTS_TABLE_V_6,
+            USER_SETTINGS_TABLE_V_7,
+            DEVICE_TABLE_V_8,
+            USER_EVENTS_TABLE_V_14,
+            USER_NOTIFICATIONS_TABLE_V_11,
+            DEVICE_SHARE_POLICY_TABLE_V_13,
+            DEVICE_SHARE_RULE_TABLE_V_13,
+        ],
+        migration: Some(|conn: &Connection| {
+            conn.execute("ALTER TABLE user_events ADD COLUMN operation_id TEXT", [])?;
+            conn.execute(
+                "ALTER TABLE user_events ADD COLUMN operation_index INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
+            conn.execute(
+                "CREATE UNIQUE INDEX idx_user_events_operation
+                 ON user_events(user_id, operation_id, operation_index)",
+                [],
+            )?;
+            Ok(())
+        }),
+    },
 ];
 
 /// A random A-z0-9 string
@@ -1153,6 +1235,78 @@ impl SqliteUserStore {
     // Sync Event Log Methods
     // ========================================================================
 
+    fn append_event_tx(
+        tx: &Transaction<'_>,
+        user_id: usize,
+        event: &crate::user::sync_events::UserEvent,
+        operation_id: Option<&str>,
+        operation_index: i32,
+    ) -> Result<crate::user::sync_events::StoredEvent> {
+        let payload = serde_json::to_string(event)?;
+        tx.execute(
+            "INSERT INTO user_events
+             (user_id, event_type, payload, operation_id, operation_index)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                user_id,
+                event.event_type(),
+                payload,
+                operation_id,
+                operation_index
+            ],
+        )?;
+
+        let seq = tx.last_insert_rowid();
+        let server_timestamp = tx.query_row(
+            "SELECT server_timestamp FROM user_events WHERE seq = ?1",
+            params![seq],
+            |row| row.get(0),
+        )?;
+        Ok(crate::user::sync_events::StoredEvent {
+            seq,
+            operation_id: operation_id.map(str::to_owned),
+            operation_index,
+            event: event.clone(),
+            server_timestamp,
+        })
+    }
+
+    fn get_operation_events_tx(
+        tx: &Transaction<'_>,
+        user_id: usize,
+        operation_id: Option<&str>,
+    ) -> Result<Vec<crate::user::sync_events::StoredEvent>> {
+        let Some(operation_id) = operation_id else {
+            return Ok(Vec::new());
+        };
+        let mut stmt = tx.prepare(
+            "SELECT seq, payload, server_timestamp, operation_id, operation_index
+             FROM user_events
+             WHERE user_id = ?1 AND operation_id = ?2
+             ORDER BY operation_index ASC",
+        )?;
+        let events = stmt
+            .query_map(params![user_id, operation_id], |row| {
+                let payload: String = row.get(1)?;
+                let event = serde_json::from_str(&payload).map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        1,
+                        rusqlite::types::Type::Text,
+                        Box::new(error),
+                    )
+                })?;
+                Ok(crate::user::sync_events::StoredEvent {
+                    seq: row.get(0)?,
+                    event,
+                    server_timestamp: row.get(2)?,
+                    operation_id: row.get(3)?,
+                    operation_index: row.get(4)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(events)
+    }
+
     /// Append an event to the user's event log.
     /// Returns the stored event with sequence number and server timestamp.
     pub fn append_event(
@@ -1161,30 +1315,13 @@ impl SqliteUserStore {
         event: &crate::user::sync_events::UserEvent,
     ) -> Result<crate::user::sync_events::StoredEvent> {
         let start = Instant::now();
-        let conn = self.conn.lock().unwrap();
-        let payload = serde_json::to_string(event)?;
-        let event_type = event.event_type();
-
-        conn.execute(
-            "INSERT INTO user_events (user_id, event_type, payload) VALUES (?1, ?2, ?3)",
-            params![user_id, event_type, payload],
-        )?;
-
-        let seq = conn.last_insert_rowid();
-
-        // Fetch the server_timestamp that was set by the database
-        let server_timestamp: i64 = conn.query_row(
-            "SELECT server_timestamp FROM user_events WHERE seq = ?1",
-            params![seq],
-            |row| row.get(0),
-        )?;
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let stored = Self::append_event_tx(&tx, user_id, event, None, 0)?;
+        tx.commit()?;
 
         record_db_query("append_event", start.elapsed());
-        Ok(crate::user::sync_events::StoredEvent {
-            seq,
-            event: event.clone(),
-            server_timestamp,
-        })
+        Ok(stored)
     }
 
     /// Get events since a given sequence number.
@@ -1197,7 +1334,7 @@ impl SqliteUserStore {
         let start = Instant::now();
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT seq, payload, server_timestamp
+            "SELECT seq, payload, server_timestamp, operation_id, operation_index
              FROM user_events
              WHERE user_id = ?1 AND seq > ?2
              ORDER BY seq ASC",
@@ -1218,6 +1355,8 @@ impl SqliteUserStore {
                     })?;
                 Ok(crate::user::sync_events::StoredEvent {
                     seq,
+                    operation_id: row.get(3)?,
+                    operation_index: row.get(4)?,
                     event,
                     server_timestamp,
                 })
@@ -3291,6 +3430,459 @@ impl user_store::UserEventStore for SqliteUserStore {
     fn prune_events_older_than(&self, before_timestamp: i64) -> Result<u64> {
         SqliteUserStore::prune_events_older_than(self, before_timestamp)
     }
+
+    fn set_liked_content_with_event(
+        &self,
+        user_id: usize,
+        content_id: &str,
+        content_type: LikedContentType,
+        liked: bool,
+        operation_id: Option<&str>,
+    ) -> Result<crate::user::sync_events::StoredEvent> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let event = if liked {
+            crate::user::sync_events::UserEvent::ContentLiked {
+                content_type,
+                content_id: content_id.to_owned(),
+            }
+        } else {
+            crate::user::sync_events::UserEvent::ContentUnliked {
+                content_type,
+                content_id: content_id.to_owned(),
+            }
+        };
+        if let Some(existing) = Self::get_operation_events_tx(&tx, user_id, operation_id)?
+            .into_iter()
+            .next()
+        {
+            if existing.event != event {
+                bail!("Operation id was already used for a different mutation");
+            }
+            tx.commit()?;
+            return Ok(existing);
+        }
+
+        if liked {
+            tx.execute(
+                "INSERT OR IGNORE INTO liked_content (user_id, content_id, content_type)
+                 VALUES (?1, ?2, ?3)",
+                params![user_id, content_id, content_type.as_int()],
+            )?;
+        } else {
+            tx.execute(
+                "DELETE FROM liked_content WHERE user_id = ?1 AND content_id = ?2",
+                params![user_id, content_id],
+            )?;
+        }
+        let stored = Self::append_event_tx(&tx, user_id, &event, operation_id, 0)?;
+        tx.commit()?;
+        Ok(stored)
+    }
+
+    fn create_playlist_with_event(
+        &self,
+        user_id: usize,
+        playlist_name: &str,
+        creator_id: usize,
+        track_ids: Vec<String>,
+        operation_id: Option<&str>,
+    ) -> Result<(String, crate::user::sync_events::StoredEvent)> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        if let Some(existing) = Self::get_operation_events_tx(&tx, user_id, operation_id)?
+            .into_iter()
+            .next()
+        {
+            if let crate::user::sync_events::UserEvent::PlaylistCreated { playlist_id, .. } =
+                &existing.event
+            {
+                if !matches!(
+                    &existing.event,
+                    crate::user::sync_events::UserEvent::PlaylistCreated { name, .. }
+                        if name == playlist_name
+                ) {
+                    bail!("Operation id was already used for a different mutation");
+                }
+                let playlist_id = playlist_id.clone();
+                tx.commit()?;
+                return Ok((playlist_id, existing));
+            }
+            bail!("Operation id was already used for a different mutation");
+        }
+
+        let mut playlist_id = random_string(16);
+        while tx.query_row(
+            "SELECT COUNT(*) FROM user_playlist WHERE id = ?1",
+            params![playlist_id],
+            |row| row.get::<_, i64>(0),
+        )? > 0
+        {
+            playlist_id = random_string(16);
+        }
+        tx.execute(
+            "INSERT INTO user_playlist (id, user_id, name, creator_id) VALUES (?1, ?2, ?3, ?4)",
+            params![&playlist_id, user_id, playlist_name, creator_id],
+        )?;
+        for (position, track_id) in track_ids.iter().enumerate() {
+            tx.execute(
+                "INSERT INTO user_playlist_tracks (playlist_id, track_id, position)
+                 VALUES (?1, ?2, ?3)",
+                params![&playlist_id, track_id, position as i32],
+            )?;
+        }
+        let event = crate::user::sync_events::UserEvent::PlaylistCreated {
+            playlist_id: playlist_id.clone(),
+            name: playlist_name.to_owned(),
+        };
+        let stored = Self::append_event_tx(&tx, user_id, &event, operation_id, 0)?;
+        tx.commit()?;
+        Ok((playlist_id, stored))
+    }
+
+    fn update_playlist_with_events(
+        &self,
+        playlist_id: &str,
+        user_id: usize,
+        playlist_name: Option<String>,
+        track_ids: Option<Vec<String>>,
+        operation_id: Option<&str>,
+    ) -> Result<Vec<crate::user::sync_events::StoredEvent>> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let existing = Self::get_operation_events_tx(&tx, user_id, operation_id)?;
+        if !existing.is_empty() {
+            let expected: Vec<_> = playlist_name
+                .iter()
+                .map(
+                    |name| crate::user::sync_events::UserEvent::PlaylistRenamed {
+                        playlist_id: playlist_id.to_owned(),
+                        name: name.clone(),
+                    },
+                )
+                .chain(track_ids.iter().map(|tracks| {
+                    crate::user::sync_events::UserEvent::PlaylistTracksUpdated {
+                        playlist_id: playlist_id.to_owned(),
+                        track_ids: tracks.clone(),
+                    }
+                }))
+                .collect();
+            if existing
+                .iter()
+                .map(|event| &event.event)
+                .ne(expected.iter())
+            {
+                bail!("Operation id was already used for a different mutation");
+            }
+            tx.commit()?;
+            return Ok(existing);
+        }
+        let owner: usize = tx.query_row(
+            "SELECT user_id FROM user_playlist WHERE id = ?1",
+            params![playlist_id],
+            |row| row.get(0),
+        )?;
+        if owner != user_id {
+            bail!("User does not own the playlist");
+        }
+
+        let mut events = Vec::new();
+        if let Some(name) = playlist_name {
+            tx.execute(
+                "UPDATE user_playlist SET name = ?1 WHERE id = ?2",
+                params![&name, playlist_id],
+            )?;
+            let event = crate::user::sync_events::UserEvent::PlaylistRenamed {
+                playlist_id: playlist_id.to_owned(),
+                name,
+            };
+            events.push(Self::append_event_tx(
+                &tx,
+                user_id,
+                &event,
+                operation_id,
+                events.len() as i32,
+            )?);
+        }
+        if let Some(track_ids) = track_ids {
+            tx.execute(
+                "DELETE FROM user_playlist_tracks WHERE playlist_id = ?1",
+                params![playlist_id],
+            )?;
+            for (position, track_id) in track_ids.iter().enumerate() {
+                tx.execute(
+                    "INSERT INTO user_playlist_tracks (playlist_id, track_id, position)
+                     VALUES (?1, ?2, ?3)",
+                    params![playlist_id, track_id, position as i32],
+                )?;
+            }
+            let event = crate::user::sync_events::UserEvent::PlaylistTracksUpdated {
+                playlist_id: playlist_id.to_owned(),
+                track_ids,
+            };
+            events.push(Self::append_event_tx(
+                &tx,
+                user_id,
+                &event,
+                operation_id,
+                events.len() as i32,
+            )?);
+        }
+        tx.commit()?;
+        Ok(events)
+    }
+
+    fn delete_playlist_with_event(
+        &self,
+        playlist_id: &str,
+        user_id: usize,
+        operation_id: Option<&str>,
+    ) -> Result<crate::user::sync_events::StoredEvent> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        if let Some(existing) = Self::get_operation_events_tx(&tx, user_id, operation_id)?
+            .into_iter()
+            .next()
+        {
+            if !matches!(
+                &existing.event,
+                crate::user::sync_events::UserEvent::PlaylistDeleted { playlist_id: id }
+                    if id == playlist_id
+            ) {
+                bail!("Operation id was already used for a different mutation");
+            }
+            tx.commit()?;
+            return Ok(existing);
+        }
+        let changed = tx.execute(
+            "DELETE FROM user_playlist WHERE id = ?1 AND user_id = ?2",
+            params![playlist_id, user_id],
+        )?;
+        if changed == 0 {
+            bail!("Playlist not found");
+        }
+        let event = crate::user::sync_events::UserEvent::PlaylistDeleted {
+            playlist_id: playlist_id.to_owned(),
+        };
+        let stored = Self::append_event_tx(&tx, user_id, &event, operation_id, 0)?;
+        tx.commit()?;
+        Ok(stored)
+    }
+
+    fn set_settings_with_events(
+        &self,
+        user_id: usize,
+        settings: Vec<UserSetting>,
+        operation_id: Option<&str>,
+    ) -> Result<Vec<crate::user::sync_events::StoredEvent>> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let existing = Self::get_operation_events_tx(&tx, user_id, operation_id)?;
+        if !existing.is_empty() {
+            let expected: Vec<_> = settings
+                .iter()
+                .cloned()
+                .map(|setting| crate::user::sync_events::UserEvent::SettingChanged { setting })
+                .collect();
+            if existing
+                .iter()
+                .map(|event| &event.event)
+                .ne(expected.iter())
+            {
+                bail!("Operation id was already used for a different mutation");
+            }
+            tx.commit()?;
+            return Ok(existing);
+        }
+        let mut events = Vec::with_capacity(settings.len());
+        for setting in settings {
+            tx.execute(
+                "INSERT INTO user_settings (user_id, setting_key, setting_value, updated)
+                 VALUES (?1, ?2, ?3, (cast(strftime('%s','now') as int)))
+                 ON CONFLICT(user_id, setting_key) DO UPDATE SET
+                    setting_value = excluded.setting_value, updated = excluded.updated",
+                params![user_id, setting.key(), setting.value_to_string()],
+            )?;
+            let event = crate::user::sync_events::UserEvent::SettingChanged { setting };
+            events.push(Self::append_event_tx(
+                &tx,
+                user_id,
+                &event,
+                operation_id,
+                events.len() as i32,
+            )?);
+        }
+        tx.commit()?;
+        Ok(events)
+    }
+
+    fn get_sync_snapshot(
+        &self,
+        user_id: usize,
+    ) -> Result<crate::user::sync_events::UserSyncSnapshot> {
+        use std::collections::HashSet;
+
+        fn liked(
+            tx: &Transaction<'_>,
+            user_id: usize,
+            content_type: LikedContentType,
+        ) -> Result<Vec<String>> {
+            let mut stmt = tx.prepare(
+                "SELECT content_id FROM liked_content
+                 WHERE user_id = ?1 AND content_type = ?2",
+            )?;
+            let result = stmt
+                .query_map(params![user_id, content_type.as_int()], |row| row.get(0))?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(result)
+        }
+
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let seq = tx.query_row(
+            "SELECT COALESCE(MAX(seq), 0) FROM user_events WHERE user_id = ?1",
+            params![user_id],
+            |row| row.get(0),
+        )?;
+        let liked_albums = liked(&tx, user_id, LikedContentType::Album)?;
+        let liked_artists = liked(&tx, user_id, LikedContentType::Artist)?;
+        let liked_tracks = liked(&tx, user_id, LikedContentType::Track)?;
+
+        let settings = {
+            let mut stmt = tx.prepare(
+                "SELECT setting_key, setting_value FROM user_settings WHERE user_id = ?1",
+            )?;
+            let result = stmt
+                .query_map(params![user_id], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?
+                .filter_map(|row| row.ok())
+                .filter_map(|(key, value)| UserSetting::from_key_value(&key, &value).ok())
+                .collect();
+            result
+        };
+
+        let playlists = {
+            let mut stmt = tx.prepare(
+                "SELECT p.id, p.user_id, u.handle, p.name, p.created
+                 FROM user_playlist p
+                 JOIN user u ON u.id = p.creator_id
+                 WHERE p.user_id = ?1",
+            )?;
+            let rows = stmt
+                .query_map(params![user_id], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, usize>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, i64>(4)?,
+                    ))
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            let mut playlists = Vec::with_capacity(rows.len());
+            for (id, owner_id, creator, name, created) in rows {
+                let mut tracks_stmt = tx.prepare(
+                    "SELECT track_id FROM user_playlist_tracks
+                     WHERE playlist_id = ?1 ORDER BY position ASC",
+                )?;
+                let tracks = tracks_stmt
+                    .query_map(params![&id], |row| row.get(0))?
+                    .collect::<Result<Vec<_>, _>>()?;
+                playlists.push(UserPlaylist {
+                    id,
+                    user_id: owner_id,
+                    creator,
+                    name,
+                    created: system_time_from_column_result(created),
+                    tracks,
+                });
+            }
+            playlists
+        };
+
+        let mut permissions = HashSet::new();
+        let roles: Option<String> = tx
+            .query_row(
+                "SELECT role FROM user_role WHERE user_id = ?1",
+                params![user_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(roles) = roles {
+            for role in roles
+                .split(',')
+                .filter_map(|role| UserRole::from_str(role.trim()))
+            {
+                permissions.extend(role.permissions().iter().copied());
+            }
+        }
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)?
+            .as_secs() as i64;
+        {
+            let mut stmt = tx.prepare(
+                "SELECT permission FROM user_extra_permission
+                 WHERE user_id = ?1 AND start_time <= ?2
+                   AND (end_time IS NULL OR end_time >= ?2)
+                   AND (countdown IS NULL OR countdown > 0)",
+            )?;
+            for value in stmt
+                .query_map(params![user_id, now], |row| row.get::<_, i32>(0))?
+                .filter_map(|value| value.ok())
+            {
+                if let Some(permission) = Permission::from_int(value) {
+                    permissions.insert(permission);
+                }
+            }
+        }
+
+        let notifications = {
+            let mut stmt = tx.prepare(
+                "SELECT id, notification_type, title, body, data, read_at, created_at
+                 FROM user_notifications WHERE user_id = ?1
+                 ORDER BY created_at DESC, rowid DESC",
+            )?;
+            let raw = stmt
+                .query_map(params![user_id], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, String>(4)?,
+                        row.get::<_, Option<i64>>(5)?,
+                        row.get::<_, i64>(6)?,
+                    ))
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            raw.into_iter()
+                .map(|(id, kind, title, body, data, read_at, created_at)| {
+                    Ok(crate::notifications::Notification {
+                        id,
+                        notification_type: serde_json::from_str(&kind)?,
+                        title,
+                        body,
+                        data: serde_json::from_str(&data)?,
+                        read_at,
+                        created_at,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?
+        };
+
+        tx.commit()?;
+        Ok(crate::user::sync_events::UserSyncSnapshot {
+            seq,
+            liked_albums,
+            liked_artists,
+            liked_tracks,
+            settings,
+            playlists,
+            permissions: permissions.into_iter().collect(),
+            notifications,
+        })
+    }
 }
 
 impl crate::notifications::NotificationStore for SqliteUserStore {
@@ -3634,7 +4226,10 @@ mod tests {
             let db_version: i64 = conn
                 .query_row("PRAGMA user_version;", [], |row| row.get(0))
                 .unwrap();
-            assert_eq!(db_version, BASE_DB_VERSION as i64 + 13);
+            assert_eq!(
+                db_version,
+                BASE_DB_VERSION as i64 + VERSIONED_SCHEMAS.last().unwrap().version as i64
+            );
 
             // Verify new tables exist
             let user_role_table_exists: i64 = conn
@@ -3783,7 +4378,10 @@ mod tests {
             let db_version: i64 = conn
                 .query_row("PRAGMA user_version;", [], |row| row.get(0))
                 .unwrap();
-            assert_eq!(db_version, BASE_DB_VERSION as i64 + 13);
+            assert_eq!(
+                db_version,
+                BASE_DB_VERSION as i64 + VERSIONED_SCHEMAS.last().unwrap().version as i64
+            );
 
             // Verify device table exists
             let device_table_exists: i64 = conn
@@ -3868,6 +4466,40 @@ mod tests {
         let device = store.get_device(device_id).unwrap().unwrap();
         assert_eq!(device.device_uuid, "post-migration-device");
         assert_eq!(device.device_type, DeviceType::Android);
+    }
+
+    #[test]
+    fn test_migration_v13_to_v14_adds_event_idempotency_columns() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test_migration_v13_v14.db");
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            VERSIONED_SCHEMAS[13].create(&conn).unwrap();
+            conn.execute("INSERT INTO user (handle) VALUES ('migration-user')", [])
+                .unwrap();
+            conn.execute(
+                "INSERT INTO user_events (user_id, event_type, payload)
+                 VALUES (1, 'content_liked', '{\"type\":\"content_liked\",\"payload\":{\"content_type\":\"track\",\"content_id\":\"old-track\"}}')",
+                [],
+            )
+            .unwrap();
+        }
+
+        let store = SqliteUserStore::new(&db_path, &crate::backup::DbRegistry::new()).unwrap();
+        let old_events = store.get_events_since(1, 0).unwrap();
+        assert_eq!(old_events.len(), 1);
+        assert_eq!(old_events[0].operation_id, None);
+
+        let event = store
+            .set_liked_content_with_event(
+                1,
+                "new-track",
+                LikedContentType::Track,
+                true,
+                Some("migration-operation"),
+            )
+            .unwrap();
+        assert_eq!(event.operation_id.as_deref(), Some("migration-operation"));
     }
 
     #[test]
@@ -6304,5 +6936,135 @@ mod tests {
         // (foreign key cascade delete should have removed notifications)
         let notifications = store.get_user_notifications(user_id).unwrap();
         assert!(notifications.is_empty());
+    }
+
+    #[test]
+    fn atomic_like_rolls_back_when_event_insert_fails() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("atomic_like_user").unwrap();
+        store
+            .conn
+            .lock()
+            .unwrap()
+            .execute_batch(
+                "CREATE TRIGGER fail_user_event BEFORE INSERT ON user_events
+                 BEGIN SELECT RAISE(FAIL, 'injected event failure'); END;",
+            )
+            .unwrap();
+
+        let result = store.set_liked_content_with_event(
+            user_id,
+            "track-1",
+            LikedContentType::Track,
+            true,
+            Some("failed-like"),
+        );
+
+        assert!(result.is_err());
+        assert_eq!(
+            store
+                .get_user_liked_content(user_id, LikedContentType::Track)
+                .unwrap(),
+            Vec::<String>::new()
+        );
+        assert_eq!(store.get_current_seq(user_id).unwrap(), 0);
+    }
+
+    #[test]
+    fn settings_batch_rolls_back_all_values_and_events_on_failure() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("atomic_settings_user").unwrap();
+        store
+            .conn
+            .lock()
+            .unwrap()
+            .execute_batch(
+                "CREATE TRIGGER fail_second_user_event BEFORE INSERT ON user_events
+                 WHEN NEW.operation_index = 1
+                 BEGIN SELECT RAISE(FAIL, 'injected second event failure'); END;",
+            )
+            .unwrap();
+
+        let result = store.set_settings_with_events(
+            user_id,
+            vec![
+                UserSetting::NotifyWhatsNew(true),
+                UserSetting::SmartContinuationEnabled(true),
+            ],
+            Some("failed-settings"),
+        );
+
+        assert!(result.is_err());
+        assert!(store.get_all_user_settings(user_id).unwrap().is_empty());
+        assert_eq!(store.get_current_seq(user_id).unwrap(), 0);
+    }
+
+    #[test]
+    fn mutation_operation_ids_are_idempotent() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("idempotent_user").unwrap();
+        let first = store
+            .set_liked_content_with_event(
+                user_id,
+                "album-1",
+                LikedContentType::Album,
+                true,
+                Some("like-operation-1"),
+            )
+            .unwrap();
+        let replay = store
+            .set_liked_content_with_event(
+                user_id,
+                "album-1",
+                LikedContentType::Album,
+                true,
+                Some("like-operation-1"),
+            )
+            .unwrap();
+
+        assert_eq!(replay, first);
+        assert_eq!(store.get_current_seq(user_id).unwrap(), first.seq);
+        assert_eq!(
+            store
+                .get_user_liked_content(user_id, LikedContentType::Album)
+                .unwrap(),
+            vec!["album-1".to_string()]
+        );
+    }
+
+    #[test]
+    fn sync_snapshot_sequence_and_state_are_consistent_during_writes() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("snapshot_user").unwrap();
+        let store = Arc::new(store);
+        let finished = Arc::new(AtomicBool::new(false));
+        let writer_store = store.clone();
+        let writer_finished = finished.clone();
+        let writer = std::thread::spawn(move || {
+            for index in 1..=200 {
+                writer_store
+                    .set_liked_content_with_event(
+                        user_id,
+                        "track-1",
+                        LikedContentType::Track,
+                        index % 2 == 1,
+                        Some(&format!("snapshot-operation-{index}")),
+                    )
+                    .unwrap();
+            }
+            writer_finished.store(true, Ordering::Release);
+        });
+
+        while !finished.load(Ordering::Acquire) {
+            let snapshot = store.get_sync_snapshot(user_id).unwrap();
+            let liked = snapshot.liked_tracks.iter().any(|id| id == "track-1");
+            assert_eq!(liked, snapshot.seq % 2 == 1);
+        }
+        writer.join().unwrap();
+        let snapshot = store.get_sync_snapshot(user_id).unwrap();
+        assert_eq!(snapshot.seq, 200);
+        assert!(snapshot.liked_tracks.is_empty());
     }
 }
