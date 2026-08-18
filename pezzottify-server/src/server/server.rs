@@ -1565,6 +1565,25 @@ struct CreateTrackRequest {
     external_id_isrc: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct UpdateTrackMetadataRequest {
+    name: String,
+    album_id: String,
+    artist_ids: Option<Vec<String>>,
+    #[serde(default = "default_disc")]
+    disc_number: i32,
+    #[serde(default = "default_track")]
+    track_number: i32,
+    #[serde(default)]
+    duration_ms: i64,
+    #[serde(default)]
+    explicit: bool,
+    #[serde(default = "default_popularity")]
+    popularity: i32,
+    language: Option<String>,
+    external_id_isrc: Option<String>,
+}
+
 fn default_disc() -> i32 {
     1
 }
@@ -1782,12 +1801,11 @@ async fn update_track(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
     Path(id): Path<String>,
-    Json(data): Json<CreateTrackRequest>,
+    Json(data): Json<UpdateTrackMetadataRequest>,
 ) -> Response {
-    use crate::catalog_store::{validate_track, Track, TrackAvailability};
+    use crate::catalog_store::{validate_track_metadata, TrackMetadataUpdate};
 
-    let track = Track {
-        id,
+    let metadata = TrackMetadataUpdate {
         name: data.name,
         album_id: data.album_id,
         disc_number: data.disc_number,
@@ -1797,21 +1815,13 @@ async fn update_track(
         popularity: data.popularity,
         language: data.language,
         external_id_isrc: data.external_id_isrc,
-        audio_uri: None,
-        availability: TrackAvailability::default(),
     };
 
-    if let Err(e) = validate_track(&track) {
+    if let Err(e) = validate_track_metadata(&id, &metadata) {
         return (StatusCode::BAD_REQUEST, e.to_string()).into_response();
     }
 
-    let artist_ids = if data.artist_ids.is_empty() {
-        None
-    } else {
-        Some(data.artist_ids.as_slice())
-    };
-
-    match catalog_store.update_track(&track, artist_ids) {
+    match catalog_store.update_track_metadata(&id, &metadata, data.artist_ids.as_deref()) {
         Ok(()) => StatusCode::OK.into_response(),
         Err(e) => {
             let msg = e.to_string();

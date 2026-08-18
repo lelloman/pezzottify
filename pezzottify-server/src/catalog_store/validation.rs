@@ -3,7 +3,7 @@
 //! Provides validation functions to ensure data integrity before
 //! inserting or updating entities in the catalog store.
 
-use super::models::{Album, AlbumMetadataUpdate, Artist, Track};
+use super::models::{Album, AlbumMetadataUpdate, Artist, Track, TrackMetadataUpdate};
 use std::fmt;
 
 /// Validation error types
@@ -122,6 +122,38 @@ pub fn validate_track(track: &Track) -> ValidationResult<()> {
     Ok(())
 }
 
+/// Validate a track metadata update (without foreign key checks).
+pub fn validate_track_metadata(id: &str, metadata: &TrackMetadataUpdate) -> ValidationResult<()> {
+    if id.trim().is_empty() {
+        return Err(ValidationError::EmptyField { field: "id" });
+    }
+    if metadata.name.trim().is_empty() {
+        return Err(ValidationError::EmptyField { field: "name" });
+    }
+    if metadata.album_id.trim().is_empty() {
+        return Err(ValidationError::EmptyField { field: "album_id" });
+    }
+    if metadata.disc_number < 1 {
+        return Err(ValidationError::NonPositiveValue {
+            field: "disc_number",
+            value: metadata.disc_number,
+        });
+    }
+    if metadata.track_number < 1 {
+        return Err(ValidationError::NonPositiveValue {
+            field: "track_number",
+            value: metadata.track_number,
+        });
+    }
+    if metadata.duration_ms < 0 {
+        return Err(ValidationError::NegativeValue {
+            field: "duration_ms",
+            value: metadata.duration_ms,
+        });
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -181,6 +213,20 @@ mod tests {
         }
     }
 
+    fn make_valid_track_metadata() -> TrackMetadataUpdate {
+        TrackMetadataUpdate {
+            name: "Updated Track".to_string(),
+            album_id: "album-1".to_string(),
+            disc_number: 1,
+            track_number: 2,
+            duration_ms: 180_000,
+            explicit: false,
+            popularity: 50,
+            language: None,
+            external_id_isrc: None,
+        }
+    }
+
     #[test]
     fn test_validate_artist_valid() {
         let artist = make_valid_artist();
@@ -234,6 +280,25 @@ mod tests {
     fn test_validate_track_valid() {
         let track = make_valid_track();
         assert!(validate_track(&track).is_ok());
+    }
+
+    #[test]
+    fn test_validate_track_metadata_valid() {
+        assert!(validate_track_metadata("track-1", &make_valid_track_metadata()).is_ok());
+    }
+
+    #[test]
+    fn test_validate_track_metadata_rejects_invalid_operational_values() {
+        let mut metadata = make_valid_track_metadata();
+        metadata.disc_number = 0;
+        let err = validate_track_metadata("track-1", &metadata).unwrap_err();
+        assert!(matches!(
+            err,
+            ValidationError::NonPositiveValue {
+                field: "disc_number",
+                ..
+            }
+        ));
     }
 
     #[test]

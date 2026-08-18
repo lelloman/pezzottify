@@ -290,8 +290,13 @@ pub trait CatalogStore: Send + Sync {
     /// Create a new track. Returns error if ID already exists or album doesn't exist.
     fn create_track(&self, track: &super::Track, artist_ids: &[String]) -> Result<()>;
 
-    /// Update an existing track. Returns error if not found.
-    fn update_track(&self, track: &super::Track, artist_ids: Option<&[String]>) -> Result<()>;
+    /// Update user-editable metadata for an existing track. Returns error if not found.
+    fn update_track_metadata(
+        &self,
+        track_id: &str,
+        metadata: &super::TrackMetadataUpdate,
+        artist_ids: Option<&[String]>,
+    ) -> Result<()>;
 
     /// Delete a track by ID. Returns true if deleted, false if not found.
     fn delete_track(&self, id: &str) -> Result<bool>;
