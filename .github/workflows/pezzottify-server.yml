@@ -5,11 +5,33 @@ on:
     paths:
       - 'pezzottify-server/**'
       - '.github/workflows/pezzottify-server.yml'
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  audit:
+    name: RustSec dependency audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pezzottify-server
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Audit locked dependencies
+        run: cargo audit
+
   check:
     name: Check, Lint & Test
     runs-on: ubuntu-latest

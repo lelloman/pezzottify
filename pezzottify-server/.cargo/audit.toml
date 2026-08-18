@@ -1,0 +1,39 @@
+# RustSec advisories must be fixed by upgrading or replacing the dependency.
+#
+# An exception may be added only as a specific RUSTSEC ID with an adjacent
+# comment containing all three fields:
+#   owner: <team or person>
+#   rationale: <why the advisory cannot affect this deployment>
+#   expires: <YYYY-MM-DD, no more than 90 days away>
+# Expired exceptions must fail review and must not be renewed without re-evaluation.
+[advisories]
+ignore = [
+    # owner: backend maintainers
+    # rationale: protobuf is used by prometheus for metric encoding only; the
+    # vulnerable untrusted-message parsing API is not used. Prometheus 0.13
+    # requires protobuf 2.x, so this needs an upstream-compatible migration.
+    # expires: 2026-11-15
+    "RUSTSEC-2024-0437",
+
+    # owner: backend maintainers
+    # rationale: rsa is pulled in by openidconnect for public-key signature
+    # verification. Pezzottify performs no RSA private-key operations, which are
+    # the timing-sensitive operation described by this no-fix advisory.
+    # expires: 2026-11-15
+    "RUSTSEC-2023-0071",
+
+    # owner: backend maintainers
+    # rationale: rkyv is an optional rust_decimal dependency recorded in the
+    # lockfile, but its feature is not enabled in the resolved build graph and
+    # Pezzottify does not deserialize rkyv archives.
+    # expires: 2026-11-15
+    "RUSTSEC-2026-0235",
+]
+
+[database]
+fetch = true
+stale = false
+
+[yanked]
+enabled = true
+update_index = true
