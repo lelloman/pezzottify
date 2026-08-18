@@ -1533,6 +1533,13 @@ mod tests {
             fn get_track_audio_path(&self, _track_id: &str) -> Option<PathBuf> {
                 None
             }
+
+            fn open_track_audio_file(
+                &self,
+                _track_id: &str,
+            ) -> anyhow::Result<Option<(std::fs::File, PathBuf)>> {
+                Ok(None)
+            }
             fn get_track_album_id(&self, _track_id: &str) -> Option<String> {
                 None
             }

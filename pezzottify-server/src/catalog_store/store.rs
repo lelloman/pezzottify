@@ -17,11 +17,110 @@ use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
 use rusqlite::{params, params_from_iter, types::Value, Connection, OptionalExtension};
 use std::collections::HashMap;
+use std::ffi::CString;
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tracing::info;
+
+/// Validate the catalog representation of a media path. Catalog paths are URI-like,
+/// relative identifiers; accepting platform-specific separators would make a catalog
+/// safe on one host and unsafe after moving it to another.
+fn normalized_media_identifier(identifier: &str) -> Result<PathBuf> {
+    if identifier.is_empty()
+        || identifier.starts_with('/')
+        || identifier.contains('\\')
+        || identifier.contains('\0')
+    {
+        anyhow::bail!("media identifier must be a non-empty relative path");
+    }
+
+    let mut normalized = PathBuf::new();
+    for component in identifier.split('/') {
+        if component.is_empty() || component == "." || component == ".." {
+            anyhow::bail!("media identifier contains a non-normal component");
+        }
+        normalized.push(component);
+    }
+
+    if normalized.is_absolute()
+        || normalized
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        anyhow::bail!("media identifier is not a normalized relative path");
+    }
+    Ok(normalized)
+}
+
+#[cfg(any(not(unix), test))]
+fn resolve_existing_media_path(media_root: &Path, identifier: &str) -> Result<PathBuf> {
+    let relative = normalized_media_identifier(identifier)?;
+    let canonical_root = media_root
+        .canonicalize()
+        .with_context(|| format!("failed to resolve media root {}", media_root.display()))?;
+    let canonical_path = media_root
+        .join(relative)
+        .canonicalize()
+        .with_context(|| format!("failed to resolve media identifier {identifier:?}"))?;
+    if !canonical_path.starts_with(&canonical_root) {
+        anyhow::bail!("media identifier resolves outside the configured media root");
+    }
+    if !canonical_path.is_file() {
+        anyhow::bail!("media identifier does not resolve to a regular file");
+    }
+    Ok(canonical_path)
+}
+
+#[cfg(unix)]
+fn open_media_file_beneath(media_root: &Path, identifier: &str) -> Result<(File, PathBuf)> {
+    use std::os::fd::{AsRawFd, FromRawFd};
+    use std::os::unix::ffi::OsStrExt;
+
+    let relative = normalized_media_identifier(identifier)?;
+    let components = relative.components().collect::<Vec<_>>();
+    let mut directory = File::open(media_root)
+        .with_context(|| format!("failed to open media root {}", media_root.display()))?;
+
+    for (index, component) in components.iter().enumerate() {
+        let std::path::Component::Normal(name) = component else {
+            anyhow::bail!("media identifier contains a non-normal component");
+        };
+        let name = CString::new(name.as_bytes()).context("media identifier contains NUL")?;
+        let is_last = index + 1 == components.len();
+        let flags = libc::O_RDONLY
+            | libc::O_CLOEXEC
+            | libc::O_NOFOLLOW
+            | libc::O_NONBLOCK
+            | if is_last { 0 } else { libc::O_DIRECTORY };
+        // SAFETY: directory is a live directory fd, name is NUL-terminated, and a
+        // successful fd is immediately owned by File. O_NOFOLLOW is applied at every level.
+        let fd = unsafe { libc::openat(directory.as_raw_fd(), name.as_ptr(), flags) };
+        if fd < 0 {
+            return Err(std::io::Error::last_os_error())
+                .with_context(|| format!("failed to safely open media identifier {identifier:?}"));
+        }
+        // SAFETY: openat returned a new owned descriptor on success.
+        let opened = unsafe { File::from_raw_fd(fd) };
+        if is_last {
+            if !opened.metadata()?.is_file() {
+                anyhow::bail!("media identifier does not resolve to a regular file");
+            }
+            return Ok((opened, media_root.join(relative)));
+        }
+        directory = opened;
+    }
+
+    anyhow::bail!("media identifier must not be empty")
+}
+
+#[cfg(not(unix))]
+fn open_media_file_beneath(media_root: &Path, identifier: &str) -> Result<(File, PathBuf)> {
+    let path = resolve_existing_media_path(media_root, identifier)?;
+    Ok((File::open(&path)?, path))
+}
 
 /// SQLite-backed catalog store for Spotify metadata.
 #[derive(Clone)]
@@ -242,13 +341,8 @@ impl SqliteCatalogStore {
     /// when called from within methods that already hold a connection.
     fn availability_from_audio_uri(&self, audio_uri: &Option<String>) -> TrackAvailability {
         match audio_uri {
-            Some(uri) if !uri.is_empty() => {
-                let path = self.media_base_path.join(uri);
-                if path.exists() {
-                    TrackAvailability::Available
-                } else {
-                    TrackAvailability::Unavailable
-                }
+            Some(uri) if open_media_file_beneath(&self.media_base_path, uri).is_ok() => {
+                TrackAvailability::Available
             }
             _ => TrackAvailability::Unavailable,
         }
@@ -1490,7 +1584,29 @@ impl CatalogStore for SqliteCatalogStore {
             .ok()
             .flatten();
 
-        audio_uri.map(|uri| self.media_base_path.join(uri))
+        audio_uri.and_then(|uri| {
+            open_media_file_beneath(&self.media_base_path, &uri)
+                .ok()
+                .map(|(_, path)| path)
+        })
+    }
+
+    fn open_track_audio_file(&self, track_id: &str) -> Result<Option<(File, PathBuf)>> {
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+        let audio_uri: Option<String> = conn
+            .query_row(
+                "SELECT audio_uri FROM tracks WHERE id = ?1",
+                params![track_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten();
+        drop(conn);
+
+        audio_uri
+            .map(|uri| open_media_file_beneath(&self.media_base_path, &uri))
+            .transpose()
     }
 
     fn get_track_album_id(&self, track_id: &str) -> Option<String> {
@@ -1587,7 +1703,7 @@ impl CatalogStore for SqliteCatalogStore {
 
                     let computed_available = match audio_uri {
                         Some(uri)
-                            if !uri.is_empty() && self.media_base_path.join(&uri).exists() =>
+                            if open_media_file_beneath(&self.media_base_path, &uri).is_ok() =>
                         {
                             1
                         }
@@ -2792,6 +2908,11 @@ impl CatalogStore for SqliteCatalogStore {
     }
 
     fn set_track_audio_uri(&self, track_id: &str, audio_uri: &str) -> Result<()> {
+        normalized_media_identifier(audio_uri)?;
+        // The setter marks the track available, so require the referenced file to exist
+        // beneath the configured root at the time the catalog is updated.
+        open_media_file_beneath(&self.media_base_path, audio_uri)?;
+
         let conn = self.write_conn.lock().unwrap();
         let rows_affected = conn.execute(
             "UPDATE tracks SET audio_uri = ?1, track_available = 1 WHERE id = ?2",
@@ -3912,6 +4033,132 @@ mod tests {
             params![track_id],
         )
         .unwrap();
+    }
+
+    #[test]
+    fn media_identifiers_require_normalized_relative_paths() {
+        for valid in [
+            "audio/ab/cd/track.ogg",
+            "audio/café/音楽.ogg",
+            "audio/．．/fullwidth-dots-are-literal.ogg",
+            "audio/%2e%2e/literal.ogg",
+        ] {
+            assert_eq!(
+                normalized_media_identifier(valid).unwrap(),
+                PathBuf::from(valid),
+                "valid identifier: {valid}"
+            );
+        }
+
+        for invalid in [
+            "",
+            "/etc/passwd",
+            "../outside.ogg",
+            "audio/../outside.ogg",
+            "./audio.ogg",
+            "audio/./track.ogg",
+            "audio//track.ogg",
+            "audio/",
+            "audio\\track.ogg",
+            "C:\\Windows\\system.ini",
+            "audio/\0track.ogg",
+        ] {
+            assert!(
+                normalized_media_identifier(invalid).is_err(),
+                "invalid identifier: {invalid:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn media_path_resolution_rejects_absolute_traversal_and_symlink_escape() {
+        let root = tempfile::TempDir::new().unwrap();
+        let outside = tempfile::TempDir::new().unwrap();
+        std::fs::create_dir_all(root.path().join("audio/café")).unwrap();
+        std::fs::write(root.path().join("audio/café/音楽.ogg"), b"inside").unwrap();
+        std::fs::write(outside.path().join("secret.ogg"), b"outside").unwrap();
+
+        let resolved = resolve_existing_media_path(root.path(), "audio/café/音楽.ogg").unwrap();
+        assert!(resolved.starts_with(root.path().canonicalize().unwrap()));
+        assert!(resolve_existing_media_path(root.path(), "../secret.ogg").is_err());
+        assert!(resolve_existing_media_path(
+            root.path(),
+            outside.path().join("secret.ogg").to_str().unwrap()
+        )
+        .is_err());
+
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(
+                outside.path().join("secret.ogg"),
+                root.path().join("audio/escape.ogg"),
+            )
+            .unwrap();
+            assert!(resolve_existing_media_path(root.path(), "audio/escape.ogg").is_err());
+            assert!(open_media_file_beneath(root.path(), "audio/escape.ogg").is_err());
+
+            std::os::unix::fs::symlink(outside.path(), root.path().join("linked-directory"))
+                .unwrap();
+            assert!(
+                resolve_existing_media_path(root.path(), "linked-directory/secret.ogg").is_err()
+            );
+            assert!(open_media_file_beneath(root.path(), "linked-directory/secret.ogg").is_err());
+        }
+    }
+
+    #[test]
+    fn safe_media_open_reads_regular_file_beneath_root() {
+        use std::io::Read;
+
+        let root = tempfile::TempDir::new().unwrap();
+        std::fs::create_dir_all(root.path().join("audio/subdir")).unwrap();
+        std::fs::write(root.path().join("audio/subdir/track.ogg"), b"audio bytes").unwrap();
+
+        let (mut file, path) =
+            open_media_file_beneath(root.path(), "audio/subdir/track.ogg").unwrap();
+        let mut contents = Vec::new();
+        file.read_to_end(&mut contents).unwrap();
+        assert_eq!(contents, b"audio bytes");
+        assert_eq!(path, root.path().join("audio/subdir/track.ogg"));
+    }
+
+    #[test]
+    fn catalog_rejects_unsafe_or_missing_audio_uri_at_write_boundary() {
+        let (store, temp_dir) = create_test_store();
+        seed_available_track(&store, "track-safe-path", None, false);
+        std::fs::create_dir_all(temp_dir.path().join("audio")).unwrap();
+        std::fs::write(temp_dir.path().join("audio/track.ogg"), b"audio").unwrap();
+
+        assert!(store
+            .set_track_audio_uri("track-safe-path", "audio/track.ogg")
+            .is_ok());
+        assert!(store
+            .set_track_audio_uri("track-safe-path", "../outside.ogg")
+            .is_err());
+        assert!(store
+            .set_track_audio_uri("track-safe-path", "/etc/passwd")
+            .is_err());
+        assert!(store
+            .set_track_audio_uri("track-safe-path", "audio/missing.ogg")
+            .is_err());
+    }
+
+    #[test]
+    fn imported_unsafe_audio_uri_is_never_exposed_as_a_file_path() {
+        let (store, temp_dir) = create_test_store();
+        let outside = tempfile::TempDir::new().unwrap();
+        std::fs::write(outside.path().join("secret.ogg"), b"secret").unwrap();
+        let traversal = format!(
+            "../{}/secret.ogg",
+            outside.path().file_name().unwrap().to_string_lossy()
+        );
+        seed_available_track(&store, "imported-unsafe", Some(&traversal), true);
+
+        assert!(store.get_track_audio_path("imported-unsafe").is_none());
+        assert!(store.open_track_audio_file("imported-unsafe").is_err());
+
+        // Ensure the test setup really points at an existing file outside the root.
+        assert!(temp_dir.path().join(&traversal).exists());
     }
 
     #[tokio::test]
