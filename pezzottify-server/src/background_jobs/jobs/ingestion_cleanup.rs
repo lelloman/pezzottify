@@ -280,6 +280,17 @@ mod tests {
         fn update_job(&self, _job: &crate::ingestion::IngestionJob) -> anyhow::Result<()> {
             unimplemented!()
         }
+        fn try_claim_job(
+            &self,
+            _id: &str,
+            _operation: &str,
+            _expected: &[crate::ingestion::IngestionJobStatus],
+        ) -> anyhow::Result<crate::ingestion::JobClaimResult> {
+            unimplemented!()
+        }
+        fn release_job_claim(&self, _id: &str) -> anyhow::Result<()> {
+            unimplemented!()
+        }
         fn delete_job(&self, _id: &str) -> anyhow::Result<()> {
             unimplemented!()
         }
@@ -347,6 +358,13 @@ mod tests {
         }
         fn get_pending_reviews(
             &self,
+            _limit: usize,
+        ) -> anyhow::Result<Vec<crate::ingestion::ReviewQueueItem>> {
+            unimplemented!()
+        }
+        fn get_pending_reviews_by_user(
+            &self,
+            _user_id: &str,
             _limit: usize,
         ) -> anyhow::Result<Vec<crate::ingestion::ReviewQueueItem>> {
             unimplemented!()

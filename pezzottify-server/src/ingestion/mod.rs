@@ -34,5 +34,5 @@ pub use models::{
 };
 pub use notifier::IngestionNotifier;
 pub use schema::{INGESTION_SCHEMA_SQL, INGESTION_SCHEMA_VERSION};
-pub use store::{IngestionStore, SqliteIngestionStore};
+pub use store::{IngestionStore, JobClaimResult, SqliteIngestionStore};
 pub use tools::create_ingestion_tools;
