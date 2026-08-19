@@ -529,6 +529,17 @@ struct CreateArtistRequest {
     popularity: i32,
 }
 
+#[derive(Debug, Deserialize)]
+struct UpdateArtistMetadataRequest {
+    name: String,
+    #[serde(default)]
+    genres: Vec<String>,
+    #[serde(default)]
+    followers_total: i64,
+    #[serde(default = "default_popularity")]
+    popularity: i32,
+}
+
 fn default_popularity() -> i32 {
     50
 }
@@ -641,7 +652,7 @@ async fn update_artist(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
     Path(id): Path<String>,
-    Json(data): Json<CreateArtistRequest>,
+    Json(data): Json<UpdateArtistMetadataRequest>,
 ) -> Response {
     use crate::catalog_store::{validate_artist, Artist};
 
@@ -1135,4 +1146,3 @@ async fn get_catalog_stats_snapshot(
         }
     }
 }
-
