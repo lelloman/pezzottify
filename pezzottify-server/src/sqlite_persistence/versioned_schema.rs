@@ -236,7 +236,7 @@ impl VersionedSchema {
                 if actual_column.name != expected_column.name {
                     bail!(
                         "Table {} Column name mismatch: expected {}, got {}",
-                        &table.name,
+                        table.name,
                         expected_column.name,
                         actual_column.name
                     );
@@ -244,7 +244,7 @@ impl VersionedSchema {
                 if actual_column.sql_type != expected_column.sql_type {
                     bail!(
                         "Table {} Column {} type mismatch: expected {:?}, got {:?}",
-                        &table.name,
+                        table.name,
                         expected_column.name,
                         expected_column.sql_type,
                         actual_column.sql_type
@@ -253,7 +253,7 @@ impl VersionedSchema {
                 if actual_column.non_null != expected_column.non_null {
                     bail!(
                         "Table {} Column {} non-null mismatch: expected {}, got {}",
-                        &table.name,
+                        table.name,
                         expected_column.name,
                         expected_column.non_null,
                         actual_column.non_null
@@ -271,7 +271,7 @@ impl VersionedSchema {
                 {
                     bail!(
                         "Table {} Column {} default value mismatch: expected {:?}, got {:?}",
-                        &table.name,
+                        table.name,
                         expected_column.name,
                         expected_column.default_value,
                         actual_column.default_value
@@ -280,7 +280,7 @@ impl VersionedSchema {
                 if actual_column.is_primary_key != expected_column.is_primary_key {
                     bail!(
                         "Table {} Column {} primary key mismatch: expected {}, got {}",
-                        &table.name,
+                        table.name,
                         expected_column.name,
                         expected_column.is_primary_key,
                         actual_column.is_primary_key
