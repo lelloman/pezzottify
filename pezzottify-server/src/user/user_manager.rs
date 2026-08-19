@@ -113,9 +113,21 @@ impl UserManager {
         credentials: &UserAuthCredentials,
         device_id: usize,
     ) -> Result<AuthToken> {
+        self.generate_auth_token_for_user(credentials.user_id, Some(device_id))
+    }
+
+    /// Creates a local opaque application session for an already authenticated user.
+    ///
+    /// OIDC callbacks use this after validating the provider response so subsequent
+    /// requests can be revoked locally and do not need to carry the provider ID token.
+    pub fn generate_auth_token_for_user(
+        &mut self,
+        user_id: usize,
+        device_id: Option<usize>,
+    ) -> Result<AuthToken> {
         let token = AuthToken {
-            user_id: credentials.user_id,
-            device_id: Some(device_id),
+            user_id,
+            device_id,
             value: AuthTokenValue::generate(),
             created: SystemTime::now(),
             last_used: None,
@@ -1196,6 +1208,29 @@ mod tests {
         let catalog_store: Arc<dyn CatalogStore> = Arc::new(NullCatalogStore);
         let manager = UserManager::new(catalog_store, user_store);
         (manager, temp_dir)
+    }
+
+    #[test]
+    fn opaque_session_for_authenticated_user_is_persisted_and_revocable() {
+        let (mut manager, _temp_dir) = create_test_manager();
+        let user_id = manager.add_user("oidc-user").unwrap();
+
+        let session = manager.generate_auth_token_for_user(user_id, None).unwrap();
+
+        assert_eq!(session.user_id, user_id);
+        assert_eq!(session.device_id, None);
+        assert_eq!(session.value.0.len(), 64);
+        assert_eq!(
+            manager
+                .get_auth_token(&session.value)
+                .unwrap()
+                .unwrap()
+                .user_id,
+            user_id
+        );
+
+        manager.delete_auth_token(&user_id, &session.value).unwrap();
+        assert!(manager.get_auth_token(&session.value).unwrap().is_none());
     }
 
     /// Test that UserManager can be safely shared across multiple threads
