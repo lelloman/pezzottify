@@ -5273,7 +5273,6 @@ pub async fn make_app(
     let auth_routes = route_builder::auth_routes(&state);
     let route_limits = route_builder::RouteLimits::new();
     let write_rate_limit = route_limits.write.clone();
-    let user_content_read_rate_limit = route_limits.user_content_read.clone();
 
     let mut content_routes =
         route_builder::content_read_routes(&state, config.content_cache_age_sec, &route_limits);
@@ -5281,107 +5280,12 @@ pub async fn make_app(
     let liked_content_routes = route_builder::liked_content_routes(&state, &route_limits);
     let playlist_routes = route_builder::playlist_routes(&state, &route_limits);
 
-    // Listening stats routes (requires AccessCatalog permission)
-    let analytics_device_rate_limit = route_limits.analytics_device.clone();
-    let listening_stats_write_routes: Router = Router::new()
-        .route("/listening", post(post_listening_event))
-        .route("/impression", post(post_impression))
-        .layer(GovernorLayer::new(analytics_device_rate_limit))
-        .layer(GovernorLayer::new(write_rate_limit.clone()))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_access_catalog,
-        ))
-        .with_state(state.clone());
-    let listening_stats_read_routes: Router = Router::new()
-        .route("/listening/summary", get(get_user_listening_summary))
-        .route("/listening/history", get(get_user_listening_history))
-        .route("/listening/events", get(get_user_listening_events))
-        .layer(GovernorLayer::new(user_content_read_rate_limit.clone()))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_access_catalog,
-        ))
-        .with_state(state.clone());
-    let listening_stats_routes = listening_stats_read_routes.merge(listening_stats_write_routes);
-
-    // User settings routes (requires AccessCatalog permission)
-    let settings_routes: Router = Router::new()
-        .route("/settings", get(get_user_settings))
-        .route("/settings", put(update_user_settings))
-        .layer(GovernorLayer::new(write_rate_limit.clone()))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_access_catalog,
-        ))
-        .with_state(state.clone());
-
-    // Device share policy routes (requires AccessCatalog permission)
-    let device_read_routes: Router = Router::new()
-        .route("/devices", get(get_user_devices))
-        .layer(GovernorLayer::new(user_content_read_rate_limit.clone()))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_access_catalog,
-        ))
-        .with_state(state.clone());
-
-    let device_write_routes: Router = Router::new()
-        .route(
-            "/devices/{device_id}/share_policy",
-            put(put_device_share_policy),
-        )
-        .layer(GovernorLayer::new(write_rate_limit.clone()))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_access_catalog,
-        ))
-        .with_state(state.clone());
-
-    let device_routes = device_read_routes.merge(device_write_routes);
-
-    // Notifications routes (requires AccessCatalog permission)
-    let notifications_routes: Router = Router::new()
-        .route("/notifications/{id}/read", post(mark_notification_read))
-        .layer(GovernorLayer::new(write_rate_limit.clone()))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_access_catalog,
-        ))
-        .with_state(state.clone());
-
-    // Bug report route (requires ReportBug permission)
-    // Body limit raised to accommodate logs (up to 1MB) plus other fields
-    let bug_report_routes: Router = Router::new()
-        .route("/bug-report", post(submit_bug_report))
-        .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
-        .layer(GovernorLayer::new(write_rate_limit.clone()))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_report_bug,
-        ))
-        .with_state(state.clone());
-
+    let user_support_routes = route_builder::user_support_routes(&state, &route_limits);
     let user_routes = liked_content_routes
         .merge(playlist_routes)
-        .merge(listening_stats_routes)
-        .merge(settings_routes)
-        .merge(device_routes)
-        .merge(notifications_routes)
-        .merge(bug_report_routes);
+        .merge(user_support_routes);
 
-    // Sync routes (requires AccessCatalog permission)
-    // Rate limiting: uses content read limit since these are read operations
-    let sync_routes: Router = Router::new()
-        .route("/state", get(get_sync_state))
-        .route("/events", get(get_sync_events))
-        .route("/catalog", get(get_catalog_sync))
-        .layer(GovernorLayer::new(user_content_read_rate_limit.clone()))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_access_catalog,
-        ))
-        .with_state(state.clone());
+    let sync_routes = route_builder::sync_routes(&state, &route_limits);
 
     // Catalog editing routes (requires EditCatalog permission)
     let catalog_edit_routes: Router = Router::new()
