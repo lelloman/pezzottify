@@ -415,6 +415,79 @@ pub(super) fn admin_routes(state: &ServerState, limits: &RouteLimits) -> Router 
         .merge(search)
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(super) fn assemble_app(
+    state: &ServerState,
+    config: &ServerConfig,
+    auth_routes: Router,
+    content_routes: Router,
+    user_routes: Router,
+    admin_routes: Router,
+    sync_routes: Router,
+) -> Router {
+    let download_routes = super::super::download_routes()
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_request_content,
+        ))
+        .with_state(state.clone());
+
+    let ingestion_routes = super::super::ingestion_routes()
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_edit_catalog,
+        ))
+        .with_state(state.clone());
+
+    let home_router = match config.frontend_dir_path.as_ref() {
+        Some(frontend_path) => {
+            let index_path = std::path::Path::new(frontend_path).join("index.html");
+            let static_files_service = ServeDir::new(frontend_path)
+                .append_index_html_on_directories(true)
+                .fallback(ServeFile::new(index_path));
+            Router::new().fallback_service(static_files_service)
+        }
+        None => Router::new()
+            .route("/", get(home))
+            .with_state(state.clone()),
+    };
+
+    let ws_routes = Router::new()
+        .route("/ws", get(super::super::websocket::ws_handler))
+        .with_state(state.clone());
+    let mcp_routes = Router::new()
+        .route("/mcp", get(crate::mcp::handler::mcp_handler))
+        .with_state(state.clone());
+
+    let api_routes = Router::new()
+        .nest("/v1/auth", auth_routes)
+        .nest("/v1/content", content_routes)
+        .nest("/v1/user", user_routes)
+        .nest("/v1/admin", admin_routes)
+        .nest("/v1/sync", sync_routes)
+        .nest("/v1/download", download_routes)
+        .nest("/v1/ingestion", ingestion_routes)
+        .nest("/v1", ws_routes)
+        .nest("/v1", mcp_routes);
+
+    let mut app = home_router.merge(api_routes);
+
+    #[cfg(feature = "slowdown")]
+    {
+        app = app.layer(middleware::from_fn(slowdown_request));
+    }
+
+    let global_rate_limit = user_limit(GLOBAL_PER_MINUTE);
+    app = app.layer(GovernorLayer::new(global_rate_limit));
+    app = app.layer(middleware::from_fn_with_state(
+        state.clone(),
+        extract_user_id_for_rate_limit,
+    ));
+    app = app.layer(middleware::from_fn_with_state(state.clone(), require_csrf));
+    app = app.layer(middleware::from_fn_with_state(state.clone(), log_requests));
+    app.layer(middleware::from_fn(http_api_no_store))
+}
+
 pub(super) fn auth_routes(state: &ServerState) -> Router {
     // Login attempts are protected by a short burst bucket and a slower sustained
     // bucket. Peer IP is used directly: forwarded headers are intentionally ignored

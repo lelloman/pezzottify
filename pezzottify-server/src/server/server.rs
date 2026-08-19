@@ -5291,91 +5291,15 @@ pub async fn make_app(
 
     let admin_routes = route_builder::admin_routes(&state, &route_limits);
 
-    // Download manager routes - require RequestContent permission for user routes
-    let download_routes: Router = super::download_routes()
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_request_content,
-        ))
-        .with_state(state.clone());
-
-    // Ingestion routes - require EditCatalog permission
-    // Note: permission checks are also done inside each route handler
-    let ingestion_routes: Router = super::ingestion_routes()
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_edit_catalog,
-        ))
-        .with_state(state.clone());
-
-    let home_router: Router = match config.frontend_dir_path {
-        Some(ref frontend_path) => {
-            let index_path = std::path::Path::new(frontend_path).join("index.html");
-            let static_files_service = ServeDir::new(frontend_path)
-                .append_index_html_on_directories(true)
-                .fallback(ServeFile::new(index_path));
-            Router::new().fallback_service(static_files_service)
-        }
-        None => Router::new()
-            .route("/", get(home))
-            .with_state(state.clone()),
-    };
-
-    // WebSocket route - requires authentication (Session extractor will validate)
-    let ws_routes: Router = Router::new()
-        .route("/ws", get(super::websocket::ws_handler))
-        .with_state(state.clone());
-
-    // MCP WebSocket route - requires authentication (Session extractor will validate)
-    let mcp_routes: Router = Router::new()
-        .route("/mcp", get(crate::mcp::handler::mcp_handler))
-        .with_state(state.clone());
-
-    let api_routes: Router = Router::new()
-        .nest("/v1/auth", auth_routes)
-        .nest("/v1/content", content_routes)
-        .nest("/v1/user", user_routes)
-        .nest("/v1/admin", admin_routes)
-        .nest("/v1/sync", sync_routes)
-        .nest("/v1/download", download_routes)
-        .nest("/v1/ingestion", ingestion_routes)
-        .nest("/v1", ws_routes)
-        .nest("/v1", mcp_routes);
-
-    let mut app: Router = home_router.merge(api_routes);
-
-    #[cfg(feature = "slowdown")]
-    {
-        app = app.layer(middleware::from_fn(slowdown_request));
-    }
-
-    // Apply global rate limit to entire app (5000 req/min = 1 token per 12ms)
-    let global_rate_limit = Arc::new(
-        GovernorConfigBuilder::default()
-            .per_millisecond(60000_u64.saturating_div(u64::from(GLOBAL_PER_MINUTE)))
-            .burst_size(GLOBAL_PER_MINUTE)
-            .key_extractor(UserOrIpKeyExtractor)
-            .finish()
-            .unwrap(),
-    );
-
-    app = app.layer(GovernorLayer::new(global_rate_limit));
-
-    // Extract user ID from session for rate limiting (must run before rate limiters)
-    app = app.layer(middleware::from_fn_with_state(
-        state.clone(),
-        extract_user_id_for_rate_limit,
-    ));
-
-    app = app.layer(middleware::from_fn_with_state(state.clone(), require_csrf));
-
-    app = app.layer(middleware::from_fn_with_state(state.clone(), log_requests));
-
-    // Keep the API cache-safe even when outer authentication/CSRF/rate-limit
-    // middleware returns early. Explicit route policies take precedence.
-    app = app.layer(middleware::from_fn(http_api_no_store));
-
-    Ok(app)
+    Ok(route_builder::assemble_app(
+        &state,
+        &config,
+        auth_routes,
+        content_routes,
+        user_routes,
+        admin_routes,
+        sync_routes,
+    ))
 }
 
 /// Interval between stale batch checks (10 minutes in seconds)
