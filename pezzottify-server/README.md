@@ -48,6 +48,9 @@ The pezzottify server is the backend component of Pezzottify that provides:
 
   - `SqliteCatalogStore`: Main store implementation with CRUD operations
   - `CatalogStore` trait: Abstract interface for catalog access
+  - `store.rs`: Schema, migrations, and the concrete store type
+  - `sqlite_queries.rs`: Concrete SQLite query implementation
+  - `sqlite_catalog_adapter.rs`: `CatalogStore` trait adapter
   - Validation for write operations (foreign keys, duplicates)
   - Transactional writes with `BEGIN IMMEDIATE`
 
@@ -58,9 +61,16 @@ The pezzottify server is the backend component of Pezzottify that provides:
   - `permissions.rs`: Role-based permissions (Admin, Regular)
   - `auth.rs`: Token-based authentication with RSA signing
   - `device.rs`: Device tracking and management
+  - `sqlite_*.rs`: Persistence split by core users, auth, bandwidth, listening,
+    settings, devices, sync events, and notifications
 
 - **`server/`**: Axum-based HTTP server
 
+  - `route_builder.rs`: Domain route composition, authorization boundaries, and rate limits
+  - `authorization.rs`: Named reusable permission policies
+  - `handlers_*.rs`: HTTP translation grouped by auth, catalog, library, account,
+    synchronization, and administrative domains
+  - `bootstrap.rs`: Runtime dependency wiring and server startup
   - `session.rs`: Session management via HTTP-only cookies
   - `stream_track.rs`: Audio streaming with range request support
   - `search.rs`: Search API routes
@@ -75,7 +85,15 @@ The pezzottify server is the backend component of Pezzottify that provides:
 
   - `DownloadManager`: Main facade for download operations
   - `DownloadQueueStore`: SQLite-backed queue persistence (download_queue.db)
+  - `queue_store.rs`, `sqlite_queue.rs`, and `sqlite_queue_adapter.rs`: Queue
+    schema/interface, SQLite setup, and persistence implementation
   - `AuditLogger`: Comprehensive audit trail for all operations
+
+- **`ingestion/`**: Album-first ingestion workflow
+
+  - `manager.rs`: Shared workflow state and types
+  - Workflow phases are isolated in `upload.rs`, `fingerprint_workflow.rs`,
+    `analysis.rs`, `processing.rs`, `mapping.rs`, `conversion.rs`, and `reviews.rs`
 
 - **`background_jobs/`**: Scheduled background task system
 
@@ -98,6 +116,20 @@ The pezzottify server is the backend component of Pezzottify that provides:
 
 - **`sqlite_persistence/`**: Database schema management
   - `versioned_schema.rs`: Schema migrations with version tracking
+
+### Backend Boundary Rules
+
+- Route composition owns URL mounting, rate limits, and named authorization policies.
+- HTTP handlers parse and validate transport DTOs, invoke a manager/store use case, and
+  translate typed results into HTTP responses.
+- Create and update request DTOs are distinct. Resource identity for updates comes from
+  the URL path, not from a create payload reused as an update command.
+- A mutation and its synchronization event must use one atomic persistence command.
+  `UserManager` exposes these use cases; SQLite implements the transaction itself.
+- Persistence files are grouped by responsibility, while their public store types and
+  trait paths remain stable for callers.
+- Unit-test modules live in companion `*_tests.rs` files. Cross-domain behavior is
+  protected by active E2E suites under `tests/`.
 
 ### Key Types
 
