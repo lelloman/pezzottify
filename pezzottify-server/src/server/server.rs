@@ -5271,89 +5271,12 @@ pub async fn make_app(
     }
 
     let auth_routes = route_builder::auth_routes(&state);
+    let route_limits = route_builder::RouteLimits::new();
+    let write_rate_limit = route_limits.write.clone();
+    let user_content_read_rate_limit = route_limits.user_content_read.clone();
 
-    // Separate stream routes for different rate limiting (200 req/min = 1 token per 300ms)
-    let stream_rate_limit = Arc::new(
-        GovernorConfigBuilder::default()
-            .per_millisecond(60000_u64.saturating_div(u64::from(STREAM_PER_MINUTE)))
-            .burst_size(STREAM_PER_MINUTE)
-            .key_extractor(UserOrIpKeyExtractor)
-            .finish()
-            .unwrap(),
-    );
-
-    let stream_routes: Router = Router::new()
-        .route("/stream/{id}", get(stream_track))
-        .layer(GovernorLayer::new(stream_rate_limit))
-        .with_state(state.clone());
-
-    // Content read routes (album, artist, track, image) (2000 req/min = 1 token per 30ms)
-    let content_read_rate_limit = Arc::new(
-        GovernorConfigBuilder::default()
-            .per_millisecond(60000_u64.saturating_div(u64::from(CONTENT_READ_PER_MINUTE)))
-            .burst_size(CONTENT_READ_PER_MINUTE)
-            .key_extractor(UserOrIpKeyExtractor)
-            .finish()
-            .unwrap(),
-    );
-
-    let cacheable_catalog_routes: Router<ServerState> = Router::new()
-        .route("/album/{id}", get(get_album))
-        .route("/album/{id}/resolved", get(get_resolved_album))
-        .route("/artist/{id}", get(get_artist))
-        .route("/artist/{id}/discography", get(get_artist_discography))
-        .route("/track/{id}", get(get_track))
-        .route("/track/{id}/resolved", get(get_resolved_track))
-        .route("/image/{id}", get(get_image))
-        .route("/catalog/stats", get(get_catalog_stats_snapshot))
-        .route("/genres", get(get_genres))
-        .route("/genre/{name}/tracks", get(get_genre_tracks))
-        .layer(middleware::from_fn_with_state(
-            config.content_cache_age_sec,
-            http_cache,
-        ));
-
-    let content_read_routes: Router = Router::new()
-        .route("/whatsnew", get(get_whats_new))
-        .route("/popular", get(get_popular_content))
-        .route("/featured/albums", get(get_featured_albums))
-        .route("/batch", post(post_batch_content))
-        .route("/genre/{name}/radio", get(get_genre_radio))
-        .merge(cacheable_catalog_routes)
-        .merge(show_public_routes())
-        .merge(embeddings::read_routes())
-        .merge(recommendation_routes())
-        .layer(GovernorLayer::new(content_read_rate_limit.clone()))
-        .with_state(state.clone());
-
-    // Merge content routes and apply common middleware
-    let mut content_routes: Router =
-        stream_routes
-            .merge(content_read_routes)
-            .route_layer(middleware::from_fn_with_state(
-                state.clone(),
-                require_access_catalog,
-            ));
-
-    // Write rate limiting for user content modifications (60 req/min = 1 token per 1000ms)
-    let write_rate_limit = Arc::new(
-        GovernorConfigBuilder::default()
-            .per_millisecond(60000_u64.saturating_div(u64::from(WRITE_PER_MINUTE)))
-            .burst_size(WRITE_PER_MINUTE)
-            .key_extractor(UserOrIpKeyExtractor)
-            .finish()
-            .unwrap(),
-    );
-
-    // Create a separate rate limit config for user content reads (same as general content reads)
-    let user_content_read_rate_limit = Arc::new(
-        GovernorConfigBuilder::default()
-            .per_millisecond(60000_u64.saturating_div(u64::from(CONTENT_READ_PER_MINUTE)))
-            .burst_size(CONTENT_READ_PER_MINUTE)
-            .key_extractor(UserOrIpKeyExtractor)
-            .finish()
-            .unwrap(),
-    );
+    let mut content_routes =
+        route_builder::content_read_routes(&state, config.content_cache_age_sec, &route_limits);
 
     // Liked content READ routes (higher limit)
     // Route pattern: /liked/{content_type} - returns list of liked content IDs
@@ -5413,29 +5336,8 @@ pub async fn make_app(
 
     let playlist_routes = playlist_read_routes.merge(playlist_write_routes);
 
-    // Apply search rate limiting to search routes (100 req/min = 1 token per 600ms)
-    let search_routes = make_search_routes(state.clone());
-    let search_rate_limit = Arc::new(
-        GovernorConfigBuilder::default()
-            .per_millisecond(60000_u64.saturating_div(u64::from(SEARCH_PER_MINUTE)))
-            .burst_size(SEARCH_PER_MINUTE)
-            .key_extractor(UserOrIpKeyExtractor)
-            .finish()
-            .unwrap(),
-    );
-
-    let rate_limited_search_routes = search_routes.layer(GovernorLayer::new(search_rate_limit));
-    content_routes = content_routes.merge(rate_limited_search_routes);
-
     // Listening stats routes (requires AccessCatalog permission)
-    let analytics_device_rate_limit = Arc::new(
-        GovernorConfigBuilder::default()
-            .per_millisecond(60000_u64.saturating_div(u64::from(ANALYTICS_PER_DEVICE_PER_MINUTE)))
-            .burst_size(ANALYTICS_PER_DEVICE_PER_MINUTE)
-            .key_extractor(AnalyticsDeviceKeyExtractor)
-            .finish()
-            .unwrap(),
-    );
+    let analytics_device_rate_limit = route_limits.analytics_device.clone();
     let listening_stats_write_routes: Router = Router::new()
         .route("/listening", post(post_listening_event))
         .route("/impression", post(post_impression))

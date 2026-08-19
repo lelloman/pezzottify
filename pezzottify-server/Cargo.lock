@@ -2371,6 +2371,7 @@ dependencies = [
  "crossterm",
  "ctrlc",
  "futures",
+ "governor",
  "http",
  "hyper",
  "indicatif",
