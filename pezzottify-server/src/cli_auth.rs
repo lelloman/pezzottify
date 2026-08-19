@@ -390,13 +390,9 @@ fn execute_command(
                                 if let Some(ref last_used) = token.last_used {
                                     print_key_value("    Last Used", &format_timestamp(last_used));
                                 }
-                                // Show truncated token value for security
-                                let token_preview = if token.value.0.len() > 16 {
-                                    format!("{}...", &token.value.0[..16])
-                                } else {
-                                    token.value.0.clone()
-                                };
-                                print_key_value("    Token", &token_preview);
+                                // The store returns a short, non-secret diagnostic ID;
+                                // raw bearer credentials are never persisted or listed.
+                                print_key_value("    Token ID", &token.value.0);
                             }
                         }
 

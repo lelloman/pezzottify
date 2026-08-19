@@ -30,6 +30,7 @@ use tracing::{debug, info};
 use super::auth::PezzottifyHasher;
 use rand::{rng, Rng};
 use rand_distr::Alphanumeric;
+use sha2::{Digest, Sha256};
 
 /// V 0
 const USER_TABLE_V_0: Table = Table {
@@ -756,6 +757,52 @@ const AUTH_TOKEN_TABLE_V_8: Table = Table {
     ],
 };
 
+/// V15 stores only one-way token digests. Upgrading intentionally drops all
+/// pre-V15 sessions so plaintext credentials are rotated rather than preserved.
+const AUTH_TOKEN_TABLE_V_15: Table = Table {
+    name: "auth_token",
+    columns: &[
+        sqlite_column!(
+            "user_id",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "user",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        sqlite_column!(
+            "token_hash",
+            &SqlType::Text,
+            non_null = true,
+            is_unique = true
+        ),
+        sqlite_column!("token_id", &SqlType::Text, non_null = true),
+        sqlite_column!(
+            "created",
+            &SqlType::Integer,
+            default_value = Some(DEFAULT_TIMESTAMP)
+        ),
+        sqlite_column!("last_used", &SqlType::Integer),
+        sqlite_column!(
+            "device_id",
+            &SqlType::Integer,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "device",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+    ],
+    unique_constraints: &[],
+    indices: &[
+        ("idx_auth_token_hash", "token_hash"),
+        ("idx_auth_token_user", "user_id"),
+        ("idx_auth_token_device", "device_id"),
+    ],
+};
+
 pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
     VersionedSchema {
         version: 0,
@@ -1107,6 +1154,34 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
                  ON user_events(user_id, operation_id, operation_index)",
                 [],
             )?;
+            Ok(())
+        }),
+    },
+    // V15: Replace plaintext bearer credentials with SHA-256 digests. Existing
+    // sessions are deliberately revoked during migration.
+    VersionedSchema {
+        version: 15,
+        tables: &[
+            USER_TABLE_V_12,
+            LIKED_CONTENT_TABLE_V_2,
+            AUTH_TOKEN_TABLE_V_15,
+            USER_PASSWORD_CREDENTIALS_V_0,
+            USER_PLAYLIST_TABLE_V_3,
+            USER_PLAYLIST_TRACKS_TABLE_V_3,
+            USER_ROLE_TABLE_V_4,
+            USER_EXTRA_PERMISSION_TABLE_V_4,
+            BANDWIDTH_USAGE_TABLE_V_5,
+            LISTENING_EVENTS_TABLE_V_6,
+            USER_SETTINGS_TABLE_V_7,
+            DEVICE_TABLE_V_8,
+            USER_EVENTS_TABLE_V_14,
+            USER_NOTIFICATIONS_TABLE_V_11,
+            DEVICE_SHARE_POLICY_TABLE_V_13,
+            DEVICE_SHARE_RULE_TABLE_V_13,
+        ],
+        migration: Some(|conn: &Connection| {
+            conn.execute("DROP TABLE auth_token", [])?;
+            AUTH_TOKEN_TABLE_V_15.create(conn)?;
             Ok(())
         }),
     },
@@ -2102,27 +2177,82 @@ fn system_time_from_column_result(value: i64) -> SystemTime {
     SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(value as u64)
 }
 
+const AUTH_TOKEN_ABSOLUTE_TTL_SECS: i64 = 30 * 24 * 60 * 60;
+const AUTH_TOKEN_IDLE_TTL_SECS: i64 = 7 * 24 * 60 * 60;
+const AUTH_TOKEN_ID_HEX_LEN: usize = 12;
+
+fn auth_token_digest(value: &AuthTokenValue) -> String {
+    let digest = Sha256::digest(value.0.as_bytes());
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn auth_token_identifier(digest: &str) -> &str {
+    &digest[..AUTH_TOKEN_ID_HEX_LEN]
+}
+
+fn unix_timestamp_now() -> Result<i64> {
+    Ok(SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .context("System clock is before the Unix epoch")?
+        .as_secs() as i64)
+}
+
+fn auth_token_is_expired(created: i64, last_used: Option<i64>, now: i64) -> bool {
+    let absolute_cutoff = now.saturating_sub(AUTH_TOKEN_ABSOLUTE_TTL_SECS);
+    let idle_cutoff = now.saturating_sub(AUTH_TOKEN_IDLE_TTL_SECS);
+    created <= absolute_cutoff || last_used.unwrap_or(created) <= idle_cutoff
+}
+
+fn delete_expired_auth_tokens(conn: &Connection, now: i64) -> Result<usize> {
+    let absolute_cutoff = now.saturating_sub(AUTH_TOKEN_ABSOLUTE_TTL_SECS);
+    let idle_cutoff = now.saturating_sub(AUTH_TOKEN_IDLE_TTL_SECS);
+    Ok(conn.execute(
+        "DELETE FROM auth_token
+         WHERE created <= ?1 OR COALESCE(last_used, created) <= ?2",
+        params![absolute_cutoff, idle_cutoff],
+    )?)
+}
+
 impl UserAuthTokenStore for SqliteUserStore {
     fn get_user_auth_token(&self, value: &AuthTokenValue) -> Result<Option<AuthToken>> {
         let start = Instant::now();
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT user_id, value, created, last_used, device_id FROM auth_token WHERE value = ?1",
-        )?;
-        let result = match stmt.query_row(params![value.0], |row| {
-            Ok(AuthToken {
-                user_id: row.get(0)?,
-                device_id: row.get(4)?,
-                value: AuthTokenValue(row.get(1)?),
-                created: system_time_from_column_result(row.get(2)?),
-                last_used: row
-                    .get::<usize, Option<i64>>(3)?
-                    .map(system_time_from_column_result),
-            })
-        }) {
-            Ok(token) => Ok(Some(token)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(e.into()),
+        let digest = auth_token_digest(value);
+        let row = conn
+            .query_row(
+                "SELECT user_id, created, last_used, device_id
+                 FROM auth_token WHERE token_hash = ?1",
+                params![digest],
+                |row| {
+                    Ok((
+                        row.get::<_, usize>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, Option<i64>>(2)?,
+                        row.get::<_, Option<usize>>(3)?,
+                    ))
+                },
+            )
+            .optional()?;
+
+        let result = match row {
+            Some((user_id, created, last_used, device_id)) => {
+                if auth_token_is_expired(created, last_used, unix_timestamp_now()?) {
+                    conn.execute(
+                        "DELETE FROM auth_token WHERE token_hash = ?1",
+                        params![digest],
+                    )?;
+                    Ok(None)
+                } else {
+                    Ok(Some(AuthToken {
+                        user_id,
+                        device_id,
+                        value: value.clone(),
+                        created: system_time_from_column_result(created),
+                        last_used: last_used.map(system_time_from_column_result),
+                    }))
+                }
+            }
+            None => Ok(None),
         };
         record_db_query("get_user_auth_token", start.elapsed());
         result
@@ -2132,18 +2262,19 @@ impl UserAuthTokenStore for SqliteUserStore {
         let mut conn = self.conn.lock().unwrap();
         let tx = conn.transaction()?;
 
-        // Get the token data before deleting
+        let digest = auth_token_digest(token);
+        // Get the token data before deleting.
         let auth_token = match tx
-            .prepare("SELECT user_id, value, created, last_used, device_id FROM auth_token WHERE value = ?1")
+            .prepare("SELECT user_id, created, last_used, device_id FROM auth_token WHERE token_hash = ?1")
             .and_then(|mut stmt| {
-                stmt.query_row(params![token.0], |row| {
+                stmt.query_row(params![digest], |row| {
                     Ok(AuthToken {
                         user_id: row.get(0)?,
-                        device_id: row.get(4)?,
-                        value: AuthTokenValue(row.get(1)?),
-                        created: system_time_from_column_result(row.get(2)?),
+                        device_id: row.get(3)?,
+                        value: token.clone(),
+                        created: system_time_from_column_result(row.get(1)?),
                         last_used: row
-                            .get::<usize, Option<i64>>(3)?
+                            .get::<usize, Option<i64>>(2)?
                             .map(system_time_from_column_result),
                     })
                 })
@@ -2154,7 +2285,10 @@ impl UserAuthTokenStore for SqliteUserStore {
             };
 
         // Delete the token
-        tx.execute("DELETE FROM auth_token WHERE value = ?1", params![token.0])?;
+        tx.execute(
+            "DELETE FROM auth_token WHERE token_hash = ?1",
+            params![digest],
+        )?;
 
         tx.commit()?;
         Ok(Some(auth_token))
@@ -2162,13 +2296,11 @@ impl UserAuthTokenStore for SqliteUserStore {
 
     fn update_user_auth_token_last_used_timestamp(&self, token: &AuthTokenValue) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let now = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let now = unix_timestamp_now()?;
+        let digest = auth_token_digest(token);
         conn.execute(
-            "UPDATE auth_token SET last_used = ?1 WHERE value = ?2",
-            params![now, token.0],
+            "UPDATE auth_token SET last_used = ?1 WHERE token_hash = ?2",
+            params![now, digest],
         )?;
         Ok(())
     }
@@ -2181,10 +2313,13 @@ impl UserAuthTokenStore for SqliteUserStore {
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
+        let digest = auth_token_digest(&token.value);
+        let token_id = auth_token_identifier(&digest);
 
         conn.execute(
-            "INSERT INTO auth_token (user_id, value, created, device_id) VALUES (?1, ?2, ?3, ?4)",
-            params![token.user_id, token.value.0, created, token.device_id],
+            "INSERT INTO auth_token (user_id, token_hash, token_id, created, device_id)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![token.user_id, digest, token_id, created, token.device_id],
         )?;
         record_db_query("add_user_auth_token", start.elapsed());
         Ok(())
@@ -2192,8 +2327,10 @@ impl UserAuthTokenStore for SqliteUserStore {
 
     fn get_all_user_auth_tokens(&self, user_handle: &str) -> Result<Vec<AuthToken>> {
         let conn = self.conn.lock().unwrap();
+        delete_expired_auth_tokens(&conn, unix_timestamp_now()?)?;
         let mut stmt = conn.prepare(
-            "SELECT user_id, value, created, last_used, device_id FROM auth_token WHERE user_id = (SELECT id FROM user WHERE handle = ?1)",
+            "SELECT user_id, token_id, created, last_used, device_id
+             FROM auth_token WHERE user_id = (SELECT id FROM user WHERE handle = ?1)",
         )?;
         let rows = stmt
             .query_map(params![user_handle], |row| {
@@ -2214,10 +2351,8 @@ impl UserAuthTokenStore for SqliteUserStore {
 
     fn prune_unused_auth_tokens(&self, unused_for_days: u64) -> Result<usize> {
         let conn = self.conn.lock().unwrap();
-        let now = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let now = unix_timestamp_now()?;
+        let expired = delete_expired_auth_tokens(&conn, now)?;
         let cutoff_secs = now - (unused_for_days * 24 * 60 * 60) as i64;
 
         // Delete tokens that have never been used and are older than the cutoff
@@ -2227,7 +2362,7 @@ impl UserAuthTokenStore for SqliteUserStore {
             params![cutoff_secs],
         )?;
 
-        Ok(deleted)
+        Ok(expired + deleted)
     }
 }
 
@@ -4503,6 +4638,48 @@ mod tests {
     }
 
     #[test]
+    fn test_migration_v14_to_v15_rotates_plaintext_tokens() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test_migration_v14_v15.db");
+        let old_token = "plaintext-session-that-must-be-revoked";
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            VERSIONED_SCHEMAS[14].create(&conn).unwrap();
+            conn.execute("INSERT INTO user (handle) VALUES ('migration-user')", [])
+                .unwrap();
+            conn.execute(
+                "INSERT INTO auth_token (user_id, value, created) VALUES (1, ?1, ?2)",
+                params![old_token, unix_timestamp_now().unwrap()],
+            )
+            .unwrap();
+        }
+
+        let store = SqliteUserStore::new(&db_path, &crate::backup::DbRegistry::new()).unwrap();
+
+        assert!(store
+            .get_user_auth_token(&AuthTokenValue(old_token.to_string()))
+            .unwrap()
+            .is_none());
+        let conn = store.conn.lock().unwrap();
+        let columns: Vec<String> = conn
+            .prepare("PRAGMA table_info(auth_token)")
+            .unwrap()
+            .query_map([], |row| row.get(1))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert!(!columns.iter().any(|column| column == "value"));
+        assert!(columns.iter().any(|column| column == "token_hash"));
+        assert!(columns.iter().any(|column| column == "token_id"));
+        assert_eq!(
+            conn.query_row("SELECT COUNT(*) FROM auth_token", [], |row| row
+                .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+    }
+
+    #[test]
     fn test_add_single_role() {
         let (store, _temp_dir) = create_tmp_store();
         let user_id = store.create_user("test_user").unwrap();
@@ -4720,6 +4897,135 @@ mod tests {
     }
 
     #[test]
+    fn auth_token_storage_contains_digest_and_non_secret_id_only() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+        let token = AuthToken {
+            user_id,
+            device_id: None,
+            value: AuthTokenValue::generate(),
+            created: SystemTime::now(),
+            last_used: None,
+        };
+
+        store.add_user_auth_token(token.clone()).unwrap();
+
+        let digest = auth_token_digest(&token.value);
+        let conn = store.conn.lock().unwrap();
+        let (stored_hash, stored_id): (String, String) = conn
+            .query_row("SELECT token_hash, token_id FROM auth_token", [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(stored_hash, digest);
+        assert_eq!(stored_id, auth_token_identifier(&digest));
+        assert_ne!(stored_hash, token.value.0);
+        assert_ne!(stored_id, token.value.0);
+        drop(conn);
+
+        let listed = store.get_all_user_auth_tokens("test_user").unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].value.0, auth_token_identifier(&digest));
+        assert_ne!(listed[0].value, token.value);
+    }
+
+    #[test]
+    fn auth_token_lookup_enforces_absolute_expiry_and_deletes_row() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+        let token = AuthToken {
+            user_id,
+            device_id: None,
+            value: AuthTokenValue::generate(),
+            created: SystemTime::now(),
+            last_used: None,
+        };
+        store.add_user_auth_token(token.clone()).unwrap();
+
+        let now = unix_timestamp_now().unwrap();
+        let conn = store.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE auth_token SET created = ?1, last_used = ?2 WHERE token_hash = ?3",
+            params![
+                now - AUTH_TOKEN_ABSOLUTE_TTL_SECS - 1,
+                now,
+                auth_token_digest(&token.value)
+            ],
+        )
+        .unwrap();
+        drop(conn);
+
+        assert!(store.get_user_auth_token(&token.value).unwrap().is_none());
+        let conn = store.conn.lock().unwrap();
+        assert_eq!(
+            conn.query_row("SELECT COUNT(*) FROM auth_token", [], |row| row
+                .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn auth_token_lookup_enforces_idle_expiry_and_deletes_row() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+        let token = AuthToken {
+            user_id,
+            device_id: None,
+            value: AuthTokenValue::generate(),
+            created: SystemTime::now(),
+            last_used: None,
+        };
+        store.add_user_auth_token(token.clone()).unwrap();
+
+        let now = unix_timestamp_now().unwrap();
+        let conn = store.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE auth_token SET last_used = ?1 WHERE token_hash = ?2",
+            params![
+                now - AUTH_TOKEN_IDLE_TTL_SECS - 1,
+                auth_token_digest(&token.value)
+            ],
+        )
+        .unwrap();
+        drop(conn);
+
+        assert!(store.get_user_auth_token(&token.value).unwrap().is_none());
+        let conn = store.conn.lock().unwrap();
+        assert_eq!(
+            conn.query_row("SELECT COUNT(*) FROM auth_token", [], |row| row
+                .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn auth_token_expiry_boundaries_are_inclusive() {
+        let now = 10 * AUTH_TOKEN_ABSOLUTE_TTL_SECS;
+        assert!(!auth_token_is_expired(
+            now - AUTH_TOKEN_ABSOLUTE_TTL_SECS + 1,
+            Some(now),
+            now
+        ));
+        assert!(auth_token_is_expired(
+            now - AUTH_TOKEN_ABSOLUTE_TTL_SECS,
+            Some(now),
+            now
+        ));
+        assert!(!auth_token_is_expired(
+            now,
+            Some(now - AUTH_TOKEN_IDLE_TTL_SECS + 1),
+            now
+        ));
+        assert!(auth_token_is_expired(
+            now,
+            Some(now - AUTH_TOKEN_IDLE_TTL_SECS),
+            now
+        ));
+    }
+
+    #[test]
     fn test_prune_unused_auth_tokens() {
         let (store, _temp_dir) = create_tmp_store();
         let user_id = store.create_user("test_user").unwrap();
@@ -4734,16 +5040,17 @@ mod tests {
         };
         store.add_user_auth_token(old_token.clone()).unwrap();
 
-        // Manually set the created timestamp to 10 days ago
+        // Keep this inside the authoritative 7-day idle lifetime so lookup still
+        // succeeds, then exercise a stricter caller-requested 5-day prune window.
         let conn = store.conn.lock().unwrap();
-        let ten_days_ago = SystemTime::now()
+        let six_days_ago = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_secs()
-            - (10 * 24 * 60 * 60);
+            - (6 * 24 * 60 * 60);
         conn.execute(
-            "UPDATE auth_token SET created = ?1 WHERE value = ?2",
-            params![ten_days_ago as i64, old_token.value.0],
+            "UPDATE auth_token SET created = ?1 WHERE token_hash = ?2",
+            params![six_days_ago as i64, auth_token_digest(&old_token.value)],
         )
         .unwrap();
         drop(conn);
@@ -4768,8 +5075,8 @@ mod tests {
             .unwrap()
             .is_some());
 
-        // Prune tokens older than 7 days
-        let pruned = store.prune_unused_auth_tokens(7).unwrap();
+        // Prune tokens older than 5 days
+        let pruned = store.prune_unused_auth_tokens(5).unwrap();
         assert_eq!(pruned, 1);
 
         // Verify old token is gone and recent token remains
@@ -4806,8 +5113,8 @@ mod tests {
             .as_secs()
             - (10 * 24 * 60 * 60);
         conn.execute(
-            "UPDATE auth_token SET created = ?1 WHERE value = ?2",
-            params![ten_days_ago as i64, token.value.0],
+            "UPDATE auth_token SET created = ?1 WHERE token_hash = ?2",
+            params![ten_days_ago as i64, auth_token_digest(&token.value)],
         )
         .unwrap();
         drop(conn);
