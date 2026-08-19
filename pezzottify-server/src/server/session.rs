@@ -74,14 +74,14 @@ async fn try_oidc_session(token: &str, ctx: &ServerState) -> Option<Session> {
     let oidc_client = ctx.oidc_client.as_ref()?;
 
     // Try to validate as OIDC ID token
-    let claims = match oidc_client.validate_id_token(token) {
+    let claims = match oidc_client.validate_id_token(token).await {
         Ok(claims) => {
             debug!("Validated OIDC ID token for subject={}", claims.subject);
             claims
         }
         Err(e) => {
             // Not a valid OIDC token - this is expected for legacy sessions
-            warn!("Token is not a valid OIDC ID token: {}", e);
+            debug!("Token is not a valid OIDC ID token: {}", e);
             return None;
         }
     };
@@ -352,7 +352,7 @@ async fn extract_session_from_request_parts(
         return Some(session);
     }
 
-    warn!("Token validation failed for both OIDC and legacy auth");
+    debug!("Token validation failed for both OIDC and legacy auth");
     None
 }
 

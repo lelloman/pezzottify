@@ -3456,6 +3456,71 @@ async fn oidc_callback(
         }
     };
 
+    // Exchange the provider credential for a local opaque session. This keeps ID
+    // tokens out of browser cookies and makes logout/revocation authoritative here.
+    let session_token = {
+        let mut locked_manager = user_manager.lock().unwrap();
+        let device_id = stored_state.device_id.as_deref().and_then(|device_uuid| {
+            match locked_manager.get_device_by_uuid(device_uuid) {
+                Ok(Some(device)) => {
+                    if let Err(error) =
+                        locked_manager.associate_device_with_user(device.id, user_id)
+                    {
+                        debug!(
+                            "Could not associate OIDC device {} with user {}: {}",
+                            device.id, user_id, error
+                        );
+                    }
+                    Some(device.id)
+                }
+                Ok(None) => {
+                    let device_type = stored_state.device_type.as_deref().unwrap_or("web");
+                    let registration = DeviceRegistration::validate_and_sanitize(
+                        device_uuid,
+                        device_type,
+                        Some(device_uuid),
+                        stored_state.device_name.as_deref(),
+                    )
+                    .map_err(|error| {
+                        debug!("Ignoring invalid OIDC device information: {error}");
+                        error
+                    })
+                    .ok()?;
+                    match locked_manager.register_or_update_device(&registration) {
+                        Ok(device_id) => {
+                            if let Err(error) =
+                                locked_manager.associate_device_with_user(device_id, user_id)
+                            {
+                                debug!(
+                                    "Could not associate OIDC device {} with user {}: {}",
+                                    device_id, user_id, error
+                                );
+                            }
+                            Some(device_id)
+                        }
+                        Err(error) => {
+                            debug!("Could not register OIDC device: {error}");
+                            None
+                        }
+                    }
+                }
+                Err(error) => {
+                    debug!("Could not look up OIDC device: {error}");
+                    None
+                }
+            }
+        });
+
+        match locked_manager.generate_auth_token_for_user(user_id, device_id) {
+            Ok(token) => token.value.0,
+            Err(error) => {
+                error!("Failed to create local OIDC session: {error}");
+                super::metrics::record_login_attempt("error", start.elapsed());
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        }
+    };
+
     super::metrics::record_login_attempt("success", start.elapsed());
     info!("OIDC login successful for user_id={}", user_id);
 
@@ -3465,7 +3530,7 @@ async fn oidc_callback(
         .header(axum::http::header::LOCATION, "/")
         .body(Body::empty())
         .unwrap();
-    append_session_cookies(&mut response, auth_result.id_token, None, &config);
+    append_session_cookies(&mut response, session_token, None, &config);
     response
 }
 

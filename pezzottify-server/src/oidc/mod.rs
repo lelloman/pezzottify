@@ -9,13 +9,15 @@
 use anyhow::{anyhow, Context, Result};
 use openidconnect::core::{CoreAuthenticationFlow, CoreIdTokenClaims, CoreProviderMetadata};
 use openidconnect::{
-    AuthorizationCode, ClientId, ClientSecret, CsrfToken, IssuerUrl, Nonce, OAuth2TokenResponse,
-    PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope, TokenResponse,
+    AuthorizationCode, ClientId, ClientSecret, CsrfToken, IssuerUrl, Nonce, PkceCodeChallenge,
+    PkceCodeVerifier, RedirectUrl, Scope, TokenResponse,
 };
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use tokio::sync::RwLock;
-use tracing::{debug, info};
+use std::sync::{Mutex, RwLock};
+use std::time::{Duration, Instant};
+use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
+use tracing::{debug, info, warn};
 
 use crate::config::OidcConfig;
 
@@ -63,19 +65,35 @@ pub struct AuthResult {
     pub email: Option<String>,
     /// User's preferred username (if available)
     pub preferred_username: Option<String>,
-    /// The raw access token
-    pub access_token: String,
-    /// The raw ID token (serialized)
-    pub id_token: String,
 }
 
 /// OIDC client wrapper
 pub struct OidcClient {
-    provider_metadata: CoreProviderMetadata,
+    issuer_url: IssuerUrl,
+    provider_metadata: RwLock<CoreProviderMetadata>,
+    metadata_refreshed_at: Mutex<Instant>,
+    metadata_refresh_attempted_at: Mutex<Option<Instant>>,
+    metadata_refresh_guard: AsyncMutex<()>,
     client_id: ClientId,
     client_secret: Option<ClientSecret>,
     redirect_url: RedirectUrl,
     scopes: Vec<String>,
+}
+
+const JWKS_CACHE_TTL: Duration = Duration::from_secs(15 * 60);
+const JWKS_REFRESH_RETRY_INTERVAL: Duration = Duration::from_secs(30);
+
+#[derive(Clone, Copy)]
+enum MetadataRefreshReason {
+    CacheExpired,
+    TokenValidationFailed,
+}
+
+fn metadata_refresh_due(age: Duration, reason: MetadataRefreshReason) -> bool {
+    match reason {
+        MetadataRefreshReason::CacheExpired => age >= JWKS_CACHE_TTL,
+        MetadataRefreshReason::TokenValidationFailed => age >= JWKS_REFRESH_RETRY_INTERVAL,
+    }
 }
 
 impl OidcClient {
@@ -92,7 +110,7 @@ impl OidcClient {
         let http = http_client()?;
 
         // Discover the provider's metadata (endpoints, keys, etc.)
-        let provider_metadata = CoreProviderMetadata::discover_async(issuer_url, &http)
+        let provider_metadata = CoreProviderMetadata::discover_async(issuer_url.clone(), &http)
             .await
             .context("Failed to discover OIDC provider metadata")?;
 
@@ -104,12 +122,78 @@ impl OidcClient {
         info!("OIDC client initialized successfully");
 
         Ok(Self {
-            provider_metadata,
+            issuer_url,
+            provider_metadata: RwLock::new(provider_metadata),
+            metadata_refreshed_at: Mutex::new(Instant::now()),
+            metadata_refresh_attempted_at: Mutex::new(None),
+            metadata_refresh_guard: AsyncMutex::new(()),
             client_id,
             client_secret,
             redirect_url,
             scopes: config.scopes,
         })
+    }
+
+    fn provider_metadata(&self) -> CoreProviderMetadata {
+        self.provider_metadata
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
+    fn metadata_age(&self) -> Duration {
+        self.metadata_refreshed_at
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .elapsed()
+    }
+
+    fn refresh_due(&self, reason: MetadataRefreshReason) -> bool {
+        if matches!(reason, MetadataRefreshReason::CacheExpired)
+            && !metadata_refresh_due(self.metadata_age(), reason)
+        {
+            return false;
+        }
+
+        self.metadata_refresh_attempted_at
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .map(|attempted_at| attempted_at.elapsed() >= JWKS_REFRESH_RETRY_INTERVAL)
+            .unwrap_or(true)
+    }
+
+    async fn refresh_metadata(&self, reason: MetadataRefreshReason) -> Result<bool> {
+        if !self.refresh_due(reason) {
+            return Ok(false);
+        }
+
+        // Serialize refreshes and re-check after acquiring the guard so a burst of
+        // requests following a key rotation results in one discovery request.
+        let _guard = self.metadata_refresh_guard.lock().await;
+        if !self.refresh_due(reason) {
+            return Ok(false);
+        }
+
+        *self
+            .metadata_refresh_attempted_at
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Instant::now());
+
+        let http = http_client()?;
+        let metadata = CoreProviderMetadata::discover_async(self.issuer_url.clone(), &http)
+            .await
+            .context("Failed to refresh OIDC provider metadata and signing keys")?;
+
+        *self
+            .provider_metadata
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = metadata;
+        *self
+            .metadata_refreshed_at
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Instant::now();
+        info!("Refreshed OIDC provider metadata and signing keys");
+        Ok(true)
     }
 
     /// Generate an authorization URL for the OIDC flow
@@ -120,7 +204,7 @@ impl OidcClient {
         use openidconnect::core::CoreClient;
 
         let client = CoreClient::from_provider_metadata(
-            self.provider_metadata.clone(),
+            self.provider_metadata(),
             self.client_id.clone(),
             self.client_secret.clone(),
         )
@@ -199,8 +283,15 @@ impl OidcClient {
             return Err(anyhow!("Authorization state expired"));
         }
 
+        if let Err(error) = self
+            .refresh_metadata(MetadataRefreshReason::CacheExpired)
+            .await
+        {
+            warn!("Could not refresh expired OIDC metadata cache: {error}");
+        }
+
         let client = CoreClient::from_provider_metadata(
-            self.provider_metadata.clone(),
+            self.provider_metadata(),
             self.client_id.clone(),
             self.client_secret.clone(),
         )
@@ -227,9 +318,35 @@ impl OidcClient {
         // Verify the ID token
         let nonce = Nonce::new(stored_state.nonce.clone());
         let id_token_verifier = client.id_token_verifier();
-        let claims: &CoreIdTokenClaims = id_token
-            .claims(&id_token_verifier, &nonce)
-            .map_err(|e| anyhow!("Failed to verify ID token: {}", e))?;
+        let signing_key_missing = id_token.signing_key(&id_token_verifier).is_err();
+        let claims_result = id_token.claims(&id_token_verifier, &nonce);
+        let claims: &CoreIdTokenClaims = match claims_result {
+            Ok(claims) => claims,
+            Err(first_error) => {
+                if !signing_key_missing {
+                    return Err(anyhow!("Failed to verify ID token: {first_error}"));
+                }
+                let refreshed = self
+                    .refresh_metadata(MetadataRefreshReason::TokenValidationFailed)
+                    .await
+                    .unwrap_or_else(|refresh_error| {
+                        warn!("Could not refresh OIDC signing keys after validation failed: {refresh_error}");
+                        false
+                    });
+                if !refreshed {
+                    return Err(anyhow!("Failed to verify ID token: {first_error}"));
+                }
+                let refreshed_client = CoreClient::from_provider_metadata(
+                    self.provider_metadata(),
+                    self.client_id.clone(),
+                    self.client_secret.clone(),
+                );
+                let refreshed_verifier = refreshed_client.id_token_verifier();
+                id_token
+                    .claims(&refreshed_verifier, &nonce)
+                    .map_err(|e| anyhow!("Failed to verify ID token after key refresh: {e}"))?
+            }
+        };
 
         // Extract user information from claims
         let subject = claims.subject().to_string();
@@ -242,8 +359,6 @@ impl OidcClient {
             subject,
             email,
             preferred_username,
-            access_token: token_response.access_token().secret().clone(),
-            id_token: id_token.to_string(),
         })
     }
 
@@ -264,30 +379,63 @@ impl OidcClient {
     /// This is used for session validation - validates the JWT signature
     /// using the provider's JWKS and extracts the user identifier.
     ///
-    /// Note: This skips nonce validation since we're validating a stored session token,
-    /// not a fresh token from the auth callback.
-    pub fn validate_id_token(&self, id_token_str: &str) -> Result<IdTokenClaims> {
+    /// Note: This compatibility path skips nonce validation because it accepts an
+    /// already-issued bearer token, not the fresh token handled by the callback.
+    pub async fn validate_id_token(&self, id_token_str: &str) -> Result<IdTokenClaims> {
         use openidconnect::core::{CoreClient, CoreIdToken};
 
         // Parse the ID token
         let id_token: CoreIdToken = CoreIdToken::from_str(id_token_str)
             .map_err(|e| anyhow!("Failed to parse ID token: {}", e))?;
 
+        if let Err(error) = self
+            .refresh_metadata(MetadataRefreshReason::CacheExpired)
+            .await
+        {
+            warn!("Could not refresh expired OIDC metadata cache: {error}");
+        }
+
         // Create client for verification
         let client = CoreClient::from_provider_metadata(
-            self.provider_metadata.clone(),
+            self.provider_metadata(),
             self.client_id.clone(),
             self.client_secret.clone(),
         );
 
         // Get the verifier (skips nonce validation for session tokens)
         let verifier = client.id_token_verifier();
+        let signing_key_missing = id_token.signing_key(&verifier).is_err();
 
         // Verify the token signature and claims (without nonce)
         // We use an empty nonce which causes nonce validation to be skipped
-        let claims = id_token
-            .claims(&verifier, |_: Option<&Nonce>| Ok(()))
-            .map_err(|e| anyhow!("Failed to verify ID token: {}", e))?;
+        let claims_result = id_token.claims(&verifier, |_: Option<&Nonce>| Ok(()));
+        let claims = match claims_result {
+            Ok(claims) => claims,
+            Err(first_error) => {
+                if !signing_key_missing {
+                    return Err(anyhow!("Failed to verify ID token: {first_error}"));
+                }
+                let refreshed = self
+                    .refresh_metadata(MetadataRefreshReason::TokenValidationFailed)
+                    .await
+                    .unwrap_or_else(|refresh_error| {
+                        warn!("Could not refresh OIDC signing keys after validation failed: {refresh_error}");
+                        false
+                    });
+                if !refreshed {
+                    return Err(anyhow!("Failed to verify ID token: {first_error}"));
+                }
+                let refreshed_client = CoreClient::from_provider_metadata(
+                    self.provider_metadata(),
+                    self.client_id.clone(),
+                    self.client_secret.clone(),
+                );
+                let refreshed_verifier = refreshed_client.id_token_verifier();
+                id_token
+                    .claims(&refreshed_verifier, |_: Option<&Nonce>| Ok(()))
+                    .map_err(|e| anyhow!("Failed to verify ID token after key refresh: {e}"))?
+            }
+        };
 
         let subject = claims.subject().to_string();
         let email = claims.email().map(|e| e.to_string());
@@ -389,13 +537,13 @@ pub struct IdTokenClaims {
 /// Thread-safe storage for auth states (in-memory for simplicity)
 /// In production, consider using Redis or a similar store for distributed deployments
 pub struct AuthStateStore {
-    states: RwLock<std::collections::HashMap<String, AuthState>>,
+    states: AsyncRwLock<std::collections::HashMap<String, AuthState>>,
 }
 
 impl AuthStateStore {
     pub fn new() -> Self {
         Self {
-            states: RwLock::new(std::collections::HashMap::new()),
+            states: AsyncRwLock::new(std::collections::HashMap::new()),
         }
     }
 
@@ -429,6 +577,30 @@ impl Default for AuthStateStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn metadata_cache_refreshes_at_ttl_boundary() {
+        assert!(!metadata_refresh_due(
+            JWKS_CACHE_TTL - Duration::from_secs(1),
+            MetadataRefreshReason::CacheExpired
+        ));
+        assert!(metadata_refresh_due(
+            JWKS_CACHE_TTL,
+            MetadataRefreshReason::CacheExpired
+        ));
+    }
+
+    #[test]
+    fn validation_failure_refresh_is_rate_limited() {
+        assert!(!metadata_refresh_due(
+            JWKS_REFRESH_RETRY_INTERVAL - Duration::from_secs(1),
+            MetadataRefreshReason::TokenValidationFailed
+        ));
+        assert!(metadata_refresh_due(
+            JWKS_REFRESH_RETRY_INTERVAL,
+            MetadataRefreshReason::TokenValidationFailed
+        ));
+    }
 
     #[test]
     fn test_auth_state_store() {
