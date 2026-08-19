@@ -18,7 +18,7 @@ use crate::user::user_store::{UserBandwidthStore, UserListeningStore, UserSettin
 use crate::user::*;
 use anyhow::{bail, Context, Result};
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::{
     path::{Path, PathBuf},
     str::FromStr,
@@ -3577,6 +3577,156 @@ impl user_store::UserEventStore for SqliteUserStore {
         SqliteUserStore::prune_events_older_than(self, before_timestamp)
     }
 
+    fn set_user_role_with_event(
+        &self,
+        user_id: usize,
+        role: UserRole,
+        enabled: bool,
+    ) -> Result<crate::user::sync_events::StoredEvent> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let existing: Option<String> = tx
+            .query_row(
+                &format!(
+                    "SELECT role FROM {} WHERE user_id = ?1",
+                    USER_ROLE_TABLE_V_4.name
+                ),
+                params![user_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let mut roles: Vec<UserRole> = existing
+            .as_deref()
+            .unwrap_or_default()
+            .split(',')
+            .filter_map(|value| UserRole::from_str(value.trim()))
+            .collect();
+
+        if enabled && !roles.contains(&role) {
+            roles.push(role);
+        } else if !enabled {
+            roles.retain(|existing| existing != &role);
+        }
+
+        if roles.is_empty() {
+            tx.execute(
+                &format!(
+                    "DELETE FROM {} WHERE user_id = ?1",
+                    USER_ROLE_TABLE_V_4.name
+                ),
+                params![user_id],
+            )?;
+        } else {
+            let roles = roles
+                .iter()
+                .map(|role| role.as_str())
+                .collect::<Vec<_>>()
+                .join(",");
+            if existing.is_some() {
+                tx.execute(
+                    &format!(
+                        "UPDATE {} SET role = ?1 WHERE user_id = ?2",
+                        USER_ROLE_TABLE_V_4.name
+                    ),
+                    params![roles, user_id],
+                )?;
+            } else {
+                tx.execute(
+                    &format!(
+                        "INSERT INTO {} (user_id, role) VALUES (?1, ?2)",
+                        USER_ROLE_TABLE_V_4.name
+                    ),
+                    params![user_id, roles],
+                )?;
+            }
+        }
+
+        let event = UserEvent::PermissionsReset {
+            permissions: resolve_permissions(&tx, user_id)?,
+        };
+        let stored = Self::append_event_tx(&tx, user_id, &event, None, 0)?;
+        tx.commit()?;
+        Ok(stored)
+    }
+
+    fn add_extra_permission_with_event(
+        &self,
+        user_id: usize,
+        grant: PermissionGrant,
+    ) -> Result<(usize, crate::user::sync_events::StoredEvent)> {
+        let PermissionGrant::Extra {
+            start_time,
+            end_time,
+            permission,
+            countdown,
+        } = grant
+        else {
+            bail!("Cannot add ByRole grant as extra permission");
+        };
+
+        let start_time = start_time.duration_since(SystemTime::UNIX_EPOCH)?.as_secs() as i64;
+        let end_time = end_time
+            .map(|value| value.duration_since(SystemTime::UNIX_EPOCH))
+            .transpose()?
+            .map(|duration| duration.as_secs() as i64);
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        tx.execute(
+            &format!(
+                "INSERT INTO {} (user_id, permission, start_time, end_time, countdown)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                USER_EXTRA_PERMISSION_TABLE_V_4.name
+            ),
+            params![
+                user_id,
+                permission.as_int(),
+                start_time,
+                end_time,
+                countdown.map(|value| value as i64)
+            ],
+        )?;
+        let permission_id = tx.last_insert_rowid() as usize;
+        let event = UserEvent::PermissionGranted { permission };
+        let stored = Self::append_event_tx(&tx, user_id, &event, None, 0)?;
+        tx.commit()?;
+        Ok((permission_id, stored))
+    }
+
+    fn remove_extra_permission_with_event(
+        &self,
+        permission_id: usize,
+    ) -> Result<Option<(usize, Permission, crate::user::sync_events::StoredEvent)>> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let existing: Option<(usize, i32)> = tx
+            .query_row(
+                &format!(
+                    "SELECT user_id, permission FROM {} WHERE id = ?1",
+                    USER_EXTRA_PERMISSION_TABLE_V_4.name
+                ),
+                params![permission_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        let Some((user_id, permission)) = existing else {
+            tx.commit()?;
+            return Ok(None);
+        };
+        let permission = Permission::from_int(permission)
+            .ok_or_else(|| anyhow::anyhow!("Invalid permission int: {permission}"))?;
+        tx.execute(
+            &format!(
+                "DELETE FROM {} WHERE id = ?1",
+                USER_EXTRA_PERMISSION_TABLE_V_4.name
+            ),
+            params![permission_id],
+        )?;
+        let event = UserEvent::PermissionRevoked { permission };
+        let stored = Self::append_event_tx(&tx, user_id, &event, None, 0)?;
+        tx.commit()?;
+        Ok(Some((user_id, permission, stored)))
+    }
+
     fn set_liked_content_with_event(
         &self,
         user_id: usize,
@@ -4034,6 +4184,47 @@ impl user_store::UserEventStore for SqliteUserStore {
             notifications,
         })
     }
+}
+
+fn resolve_permissions(conn: &Connection, user_id: usize) -> Result<Vec<Permission>> {
+    let mut permissions = HashSet::new();
+    let roles: Option<String> = conn
+        .query_row(
+            &format!(
+                "SELECT role FROM {} WHERE user_id = ?1",
+                USER_ROLE_TABLE_V_4.name
+            ),
+            params![user_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if let Some(roles) = roles {
+        for role in roles
+            .split(',')
+            .filter_map(|value| UserRole::from_str(value.trim()))
+        {
+            permissions.extend(role.permissions().iter().copied());
+        }
+    }
+
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)?
+        .as_secs() as i64;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT permission FROM {} WHERE user_id = ?1 AND start_time <= ?2
+         AND (end_time IS NULL OR end_time >= ?2)
+         AND (countdown IS NULL OR countdown > 0)",
+        USER_EXTRA_PERMISSION_TABLE_V_4.name
+    ))?;
+    for value in stmt
+        .query_map(params![user_id, now], |row| row.get::<_, i32>(0))?
+        .filter_map(|value| value.ok())
+    {
+        if let Some(permission) = Permission::from_int(value) {
+            permissions.insert(permission);
+        }
+    }
+    Ok(permissions.into_iter().collect())
 }
 
 impl crate::notifications::NotificationStore for SqliteUserStore {
@@ -7343,6 +7534,92 @@ mod tests {
                 .unwrap(),
             Vec::<String>::new()
         );
+        assert_eq!(store.get_current_seq(user_id).unwrap(), 0);
+    }
+
+    #[test]
+    fn atomic_role_change_rolls_back_when_event_insert_fails() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("atomic_role_user").unwrap();
+        store
+            .conn
+            .lock()
+            .unwrap()
+            .execute_batch(
+                "CREATE TRIGGER fail_user_event BEFORE INSERT ON user_events
+                 BEGIN SELECT RAISE(FAIL, 'injected event failure'); END;",
+            )
+            .unwrap();
+
+        let result = store.set_user_role_with_event(user_id, UserRole::Admin, true);
+
+        assert!(result.is_err());
+        assert!(store.get_user_roles(user_id).unwrap().is_empty());
+        assert_eq!(store.get_current_seq(user_id).unwrap(), 0);
+    }
+
+    #[test]
+    fn atomic_extra_permission_changes_roll_back_when_event_insert_fails() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("atomic_permission_user").unwrap();
+        let grant = PermissionGrant::Extra {
+            start_time: SystemTime::now(),
+            end_time: None,
+            permission: Permission::ServerAdmin,
+            countdown: None,
+        };
+        store
+            .conn
+            .lock()
+            .unwrap()
+            .execute_batch(
+                "CREATE TRIGGER fail_user_event BEFORE INSERT ON user_events
+                 BEGIN SELECT RAISE(FAIL, 'injected event failure'); END;",
+            )
+            .unwrap();
+
+        assert!(store
+            .add_extra_permission_with_event(user_id, grant)
+            .is_err());
+        assert_eq!(
+            store.resolve_user_permissions(user_id).unwrap(),
+            Vec::<Permission>::new()
+        );
+
+        store
+            .conn
+            .lock()
+            .unwrap()
+            .execute_batch("DROP TRIGGER fail_user_event;")
+            .unwrap();
+        let permission_id = store
+            .add_user_extra_permission(
+                user_id,
+                PermissionGrant::Extra {
+                    start_time: SystemTime::now(),
+                    end_time: None,
+                    permission: Permission::ServerAdmin,
+                    countdown: None,
+                },
+            )
+            .unwrap();
+        store
+            .conn
+            .lock()
+            .unwrap()
+            .execute_batch(
+                "CREATE TRIGGER fail_user_event BEFORE INSERT ON user_events
+                 BEGIN SELECT RAISE(FAIL, 'injected event failure'); END;",
+            )
+            .unwrap();
+
+        assert!(store
+            .remove_extra_permission_with_event(permission_id)
+            .is_err());
+        assert!(store
+            .resolve_user_permissions(user_id)
+            .unwrap()
+            .contains(&Permission::ServerAdmin));
         assert_eq!(store.get_current_seq(user_id).unwrap(), 0);
     }
 

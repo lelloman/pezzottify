@@ -4370,26 +4370,11 @@ async fn admin_add_user_role(
             }
         };
 
-        if let Err(err) = manager.add_user_role(user_id, role) {
-            error!("Error adding user role: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-
-        // Get new permissions and emit PermissionsReset event
-        let permissions = match manager.get_user_permissions(user_id) {
-            Ok(perms) => perms,
-            Err(err) => {
-                error!("Error getting user permissions after role change: {}", err);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        };
-
-        let event = UserEvent::PermissionsReset { permissions };
-        let stored_event = match manager.append_event(user_id, &event) {
+        let stored_event = match manager.set_user_role_with_event(user_id, role, true) {
             Ok(stored) => stored,
-            Err(e) => {
-                warn!("Failed to log sync event for permission change: {}", e);
-                return StatusCode::CREATED.into_response();
+            Err(err) => {
+                error!("Error atomically adding user role: {}", err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
         };
 
@@ -4430,26 +4415,11 @@ async fn admin_remove_user_role(
             }
         };
 
-        if let Err(err) = manager.remove_user_role(user_id, role) {
-            error!("Error removing user role: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-
-        // Get new permissions and emit PermissionsReset event
-        let permissions = match manager.get_user_permissions(user_id) {
-            Ok(perms) => perms,
-            Err(err) => {
-                error!("Error getting user permissions after role change: {}", err);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        };
-
-        let event = UserEvent::PermissionsReset { permissions };
-        let stored_event = match manager.append_event(user_id, &event) {
+        let stored_event = match manager.set_user_role_with_event(user_id, role, false) {
             Ok(stored) => stored,
-            Err(e) => {
-                warn!("Failed to log sync event for permission change: {}", e);
-                return StatusCode::OK.into_response();
+            Err(err) => {
+                error!("Error atomically removing user role: {}", err);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
         };
 
@@ -4546,27 +4516,14 @@ async fn admin_add_user_extra_permission(
             countdown: body.countdown,
         };
 
-        let permission_id = match manager.add_user_extra_permission(user_id, grant) {
-            Ok(id) => id,
-            Err(err) => {
-                error!("Error adding extra permission: {}", err);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        };
-
-        // Emit PermissionGranted event
-        let event = UserEvent::PermissionGranted { permission };
-        let stored_event = match manager.append_event(user_id, &event) {
-            Ok(stored) => stored,
-            Err(e) => {
-                warn!("Failed to log sync event for permission grant: {}", e);
-                return (
-                    StatusCode::CREATED,
-                    Json(AddExtraPermissionResponse { permission_id }),
-                )
-                    .into_response();
-            }
-        };
+        let (permission_id, stored_event) =
+            match manager.add_extra_permission_with_event(user_id, grant) {
+                Ok(result) => result,
+                Err(err) => {
+                    error!("Error atomically adding extra permission: {}", err);
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            };
 
         (user_id, permission_id, stored_event)
     };
@@ -4593,28 +4550,14 @@ async fn admin_remove_extra_permission(
     State(connection_manager): State<GuardedConnectionManager>,
     Path(permission_id): Path<usize>,
 ) -> Response {
-    let (user_id, permission) = {
+    let (user_id, stored_event) = {
         let manager = user_manager.lock().unwrap();
-        match manager.remove_user_extra_permission(permission_id) {
-            Ok(Some((user_id, permission))) => (user_id, permission),
+        match manager.remove_extra_permission_with_event(permission_id) {
+            Ok(Some((user_id, _permission, stored_event))) => (user_id, stored_event),
             Ok(None) => return StatusCode::NOT_FOUND.into_response(),
             Err(err) => {
-                error!("Error removing extra permission: {}", err);
+                error!("Error atomically removing extra permission: {}", err);
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        }
-    };
-
-    // Emit sync event for the permission revocation
-    let event = UserEvent::PermissionRevoked { permission };
-    let stored_event = {
-        let manager = user_manager.lock().unwrap();
-        match manager.append_event(user_id, &event) {
-            Ok(event) => event,
-            Err(err) => {
-                error!("Error appending permission revoked event: {}", err);
-                // Permission was removed but sync failed - still return success
-                return StatusCode::OK.into_response();
             }
         }
     };
