@@ -2673,51 +2673,55 @@ impl UserListeningStore for SqliteUserStore {
         //   This prevents double-counting when clients retry or update sessions
         let (id, created) = if let Some(ref session_id) = event.session_id {
             // Check if session exists and whether it was already finalized
-            let existing: Option<(usize, bool)> = conn
+            let existing: Option<(usize, usize, bool, String, u64)> = conn
                 .query_row(
                     &format!(
-                        "SELECT user_id, ended_at IS NOT NULL FROM {} WHERE session_id = ?1",
+                        "SELECT id, user_id, ended_at IS NOT NULL, track_id, started_at
+                         FROM {} WHERE session_id = ?1",
                         LISTENING_EVENTS_TABLE_V_6.name
                     ),
                     params![session_id],
                     |row| {
-                        let user_id: i64 = row.get(0)?;
-                        let was_finalized: bool = row.get(1)?;
-                        Ok((user_id as usize, was_finalized))
+                        Ok((
+                            row.get::<_, i64>(0)? as usize,
+                            row.get::<_, i64>(1)? as usize,
+                            row.get(2)?,
+                            row.get(3)?,
+                            row.get::<_, i64>(4)? as u64,
+                        ))
                     },
                 )
                 .optional()?;
 
             match existing {
-                Some((existing_uid, _)) if existing_uid != event.user_id => {
+                Some((id, existing_uid, _, _, _)) if existing_uid != event.user_id => {
                     // Session belongs to a different user - ignore this event
-                    // Return the existing session's info without modifying it
-                    let id: usize = conn.query_row(
-                        &format!(
-                            "SELECT id FROM {} WHERE session_id = ?1",
-                            LISTENING_EVENTS_TABLE_V_6.name
-                        ),
-                        params![session_id],
-                        |row| row.get::<_, i64>(0).map(|id| id as usize),
-                    )?;
                     record_db_query("record_listening_event", start.elapsed());
                     return Ok((id, false));
                 }
-                Some((_, was_already_finalized)) => {
-                    // Same user updating existing session - allow replace
+                Some((id, _, true, _, _)) => {
+                    // Finalized events are immutable. Retries are idempotent and cannot
+                    // rewrite trusted aggregate inputs.
+                    (id, false)
+                }
+                Some((id, _, false, existing_track_id, existing_started_at))
+                    if existing_track_id != event.track_id
+                        || existing_started_at != event.started_at =>
+                {
+                    // An idempotency key cannot be repurposed for another playback.
+                    (id, false)
+                }
+                Some((id, _, false, _, _)) => {
+                    // Same user updating an in-progress session. Keep the stable row ID.
                     conn.execute(
                         &format!(
-                            "INSERT OR REPLACE INTO {} (user_id, track_id, session_id, started_at, ended_at,
-                             duration_seconds, track_duration_seconds, completed, seek_count, pause_count,
-                             playback_context, client_type, date)
-                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                            "UPDATE {} SET ended_at = ?1, duration_seconds = ?2,
+                             track_duration_seconds = ?3, completed = ?4, seek_count = ?5,
+                             pause_count = ?6, playback_context = ?7, client_type = ?8, date = ?9
+                             WHERE id = ?10",
                             LISTENING_EVENTS_TABLE_V_6.name
                         ),
                         params![
-                            event.user_id,
-                            event.track_id,
-                            session_id,
-                            event.started_at as i64,
                             event.ended_at.map(|t| t as i64),
                             event.duration_seconds as i64,
                             event.track_duration_seconds as i64,
@@ -2727,11 +2731,10 @@ impl UserListeningStore for SqliteUserStore {
                             event.playback_context,
                             event.client_type,
                             event.date as i64,
+                            id as i64,
                         ],
                     )?;
-                    let id = conn.last_insert_rowid() as usize;
-                    // created = true only if this update finalizes a previously non-finalized session
-                    let created = !was_already_finalized && event.ended_at.is_some();
+                    let created = event.ended_at.is_some();
                     (id, created)
                 }
                 None => {
@@ -2870,7 +2873,8 @@ impl UserListeningStore for SqliteUserStore {
                     COALESCE(SUM(duration_seconds), 0) as total_duration_seconds,
                     COALESCE(SUM(completed), 0) as completed_plays,
                     COUNT(DISTINCT track_id) as unique_tracks
-                 FROM {} WHERE user_id = ?1 AND date >= ?2 AND date <= ?3",
+                 FROM {} WHERE user_id = ?1 AND date >= ?2 AND date <= ?3
+                 AND ended_at IS NOT NULL",
                 LISTENING_EVENTS_TABLE_V_6.name
             ),
             params![user_id, start_date, end_date],
@@ -2903,7 +2907,7 @@ impl UserListeningStore for SqliteUserStore {
                 MAX(started_at) as last_played_at,
                 COUNT(*) as play_count,
                 SUM(duration_seconds) as total_duration_seconds
-             FROM {} WHERE user_id = ?1
+             FROM {} WHERE user_id = ?1 AND ended_at IS NOT NULL
              GROUP BY track_id
              ORDER BY last_played_at DESC
              LIMIT ?2",
@@ -2941,7 +2945,8 @@ impl UserListeningStore for SqliteUserStore {
                     COALESCE(SUM(duration_seconds), 0) as total_duration_seconds,
                     COALESCE(SUM(completed), 0) as completed_count,
                     COUNT(DISTINCT user_id) as unique_listeners
-                 FROM {} WHERE track_id = ?1 AND date >= ?2 AND date <= ?3",
+                 FROM {} WHERE track_id = ?1 AND date >= ?2 AND date <= ?3
+                 AND ended_at IS NOT NULL",
                 LISTENING_EVENTS_TABLE_V_6.name
             ),
             params![track_id, start_date, end_date],
@@ -2976,7 +2981,7 @@ impl UserListeningStore for SqliteUserStore {
                 COALESCE(SUM(completed), 0) as completed_plays,
                 COUNT(DISTINCT user_id) as unique_users,
                 COUNT(DISTINCT track_id) as unique_tracks
-             FROM {} WHERE date >= ?1 AND date <= ?2
+             FROM {} WHERE date >= ?1 AND date <= ?2 AND ended_at IS NOT NULL
              GROUP BY date
              ORDER BY date DESC",
             LISTENING_EVENTS_TABLE_V_6.name
@@ -3015,7 +3020,7 @@ impl UserListeningStore for SqliteUserStore {
                 COALESCE(SUM(duration_seconds), 0) as total_duration_seconds,
                 COALESCE(SUM(completed), 0) as completed_count,
                 COUNT(DISTINCT user_id) as unique_listeners
-             FROM {} WHERE date >= ?1 AND date <= ?2
+             FROM {} WHERE date >= ?1 AND date <= ?2 AND ended_at IS NOT NULL
              GROUP BY track_id
              ORDER BY play_count DESC
              LIMIT ?3",
@@ -3048,7 +3053,7 @@ impl UserListeningStore for SqliteUserStore {
 
         let mut stmt = conn.prepare(&format!(
             "SELECT track_id, COUNT(*) as play_count
-             FROM {} WHERE date >= ?1 AND date <= ?2
+             FROM {} WHERE date >= ?1 AND date <= ?2 AND ended_at IS NOT NULL
              GROUP BY track_id",
             LISTENING_EVENTS_TABLE_V_6.name
         ))?;
@@ -5400,10 +5405,16 @@ mod tests {
         event.duration_seconds = 300;
         event.ended_at = Some(1732982700);
         let (id2, created2) = store.record_listening_event(event.clone()).unwrap();
-        // INSERT OR REPLACE creates a new row (old one deleted), so id may differ
-        assert!(id2 > 0);
+        assert_eq!(id2, id1);
         // Now created2 is true because ended_at is Some (finalized)
         assert!(created2);
+
+        // A retry cannot rewrite an event after it has contributed to aggregates.
+        event.duration_seconds = 42;
+        event.ended_at = None;
+        let (id3, created3) = store.record_listening_event(event).unwrap();
+        assert_eq!(id3, id1);
+        assert!(!created3);
 
         // Verify the data was updated
         let events = store
@@ -5412,6 +5423,31 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].duration_seconds, 300);
         assert!(events[0].ended_at.is_some());
+    }
+
+    #[test]
+    fn test_listening_session_cannot_switch_tracks() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        let mut event = create_test_listening_event(user_id, "tra_original", 20241201);
+        event.session_id = Some("stable-session-id".to_string());
+        event.ended_at = None;
+        let (id, created) = store.record_listening_event(event.clone()).unwrap();
+        assert!(!created);
+
+        event.track_id = "tra_replacement".to_string();
+        event.ended_at = Some(1732982700);
+        let (retry_id, retry_created) = store.record_listening_event(event).unwrap();
+        assert_eq!(retry_id, id);
+        assert!(!retry_created);
+
+        let events = store
+            .get_user_listening_events(user_id, 20241201, 20241201, None, None)
+            .unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].track_id, "tra_original");
+        assert!(events[0].ended_at.is_none());
     }
 
     #[test]
@@ -5489,9 +5525,15 @@ mod tests {
         event3.duration_seconds = 180;
         event3.completed = true;
 
+        // Raw progress events remain queryable but cannot affect trusted aggregates.
+        let mut progress = create_test_listening_event(user_id, "tra_unfinished", 20241201);
+        progress.ended_at = None;
+        progress.duration_seconds = 999;
+
         store.record_listening_event(event1).unwrap();
         store.record_listening_event(event2).unwrap();
         store.record_listening_event(event3).unwrap();
+        store.record_listening_event(progress).unwrap();
 
         let summary = store
             .get_user_listening_summary(user_id, 20241201, 20241201)

@@ -56,9 +56,10 @@ use super::slowdown_request;
 use super::{
     embeddings, extract_login_account_for_rate_limit, extract_user_id_for_rate_limit, http_cache,
     log_requests, make_search_admin_routes, make_search_routes, recommendation_routes, state::*,
-    IpKeyExtractor, LoginAccountKeyExtractor, RequestsLoggingLevel, ServerConfig,
-    UserOrIpKeyExtractor, CONTENT_READ_PER_MINUTE, GLOBAL_PER_MINUTE, LOGIN_PER_MINUTE,
-    LOGIN_SUSTAINED_REPLENISH_MILLIS, SEARCH_PER_MINUTE, STREAM_PER_MINUTE, WRITE_PER_MINUTE,
+    AnalyticsDeviceKeyExtractor, IpKeyExtractor, LoginAccountKeyExtractor, RequestsLoggingLevel,
+    ServerConfig, UserOrIpKeyExtractor, ANALYTICS_PER_DEVICE_PER_MINUTE, CONTENT_READ_PER_MINUTE,
+    GLOBAL_PER_MINUTE, LOGIN_PER_MINUTE, LOGIN_SUSTAINED_REPLENISH_MILLIS, SEARCH_PER_MINUTE,
+    STREAM_PER_MINUTE, WRITE_PER_MINUTE,
 };
 use crate::server::session::Session;
 use crate::server::session_cookie::{
@@ -2705,16 +2706,47 @@ fn attach_track_enrichment(
 async fn post_listening_event(
     session: Session,
     State(user_manager): State<GuardedUserManager>,
+    State(catalog_store): State<GuardedCatalogStore>,
     Json(body): Json<ListeningEventRequest>,
 ) -> Response {
     use std::time::SystemTime;
 
-    // Calculate date in YYYYMMDD format
     let now_secs = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    let started_at = body.started_at.unwrap_or(now_secs);
+
+    if body.track_id.is_empty() || body.track_id.len() > 128 {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    let track = match catalog_store.get_track(&body.track_id) {
+        Ok(Some(track)) => track,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(error) => {
+            error!("Failed to resolve listening-event track: {error}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+    let authoritative_duration = match authoritative_track_duration_seconds(track.duration_ms) {
+        Some(duration) => duration,
+        None => {
+            error!(
+                "Catalog track has an invalid duration: track_id={}",
+                track.id
+            );
+            return StatusCode::UNPROCESSABLE_ENTITY.into_response();
+        }
+    };
+    let validated = match validate_listening_event(&body, authoritative_duration, now_secs) {
+        Ok(validated) => validated,
+        Err(reason) => {
+            debug!("Rejected implausible listening event: {reason}");
+            return StatusCode::BAD_REQUEST.into_response();
+        }
+    };
+
+    // Calculate date in YYYYMMDD format from the bounded start timestamp.
+    let started_at = validated.started_at;
     let date = {
         let datetime =
             chrono::DateTime::from_timestamp(started_at as i64, 0).unwrap_or_else(chrono::Utc::now);
@@ -2725,12 +2757,9 @@ async fn post_listening_event(
             .unwrap_or(0)
     };
 
-    // Calculate completion (>90% = complete)
-    let completed = body.duration_seconds as f64 / body.track_duration_seconds as f64 >= 0.90;
-
     // Capture values for metrics before moving into event
     let client_type_for_metrics = body.client_type.clone();
-    let duration_for_metrics = body.duration_seconds;
+    let duration_for_metrics = validated.duration_seconds;
 
     let event = crate::user::ListeningEvent {
         id: None,
@@ -2738,10 +2767,10 @@ async fn post_listening_event(
         track_id: body.track_id,
         session_id: body.session_id,
         started_at,
-        ended_at: body.ended_at,
-        duration_seconds: body.duration_seconds,
-        track_duration_seconds: body.track_duration_seconds,
-        completed,
+        ended_at: validated.ended_at,
+        duration_seconds: validated.duration_seconds,
+        track_duration_seconds: authoritative_duration,
+        completed: validated.completed,
         seek_count: body.seek_count.unwrap_or(0),
         pause_count: body.pause_count.unwrap_or(0),
         playback_context: body.playback_context,
@@ -2755,7 +2784,7 @@ async fn post_listening_event(
             if created {
                 super::metrics::record_listening_event(
                     client_type_for_metrics.as_deref(),
-                    completed,
+                    validated.completed,
                     duration_for_metrics,
                 );
             }
@@ -2848,7 +2877,9 @@ struct ImpressionBody {
 /// Records that a user viewed an artist, album, or track page.
 /// This data is used for popularity scoring.
 async fn post_impression(
+    session: Session,
     State(search_vault): State<super::state::GuardedSearchVault>,
+    State(catalog_store): State<GuardedCatalogStore>,
     Json(body): Json<ImpressionBody>,
 ) -> StatusCode {
     // Parse item type
@@ -2860,16 +2891,39 @@ async fn post_impression(
     };
 
     // Validate item_id is not empty
-    if body.item_id.is_empty() {
+    if body.item_id.is_empty() || body.item_id.len() > 128 {
         return StatusCode::BAD_REQUEST;
+    }
+
+    let exists = match item_type {
+        crate::search::HashedItemType::Artist => catalog_store.get_artist_json(&body.item_id),
+        crate::search::HashedItemType::Album => catalog_store.get_album_json(&body.item_id),
+        crate::search::HashedItemType::Track => catalog_store.get_track_json(&body.item_id),
+    };
+    match exists {
+        Ok(Some(_)) => {}
+        Ok(None) => return StatusCode::NOT_FOUND,
+        Err(error) => {
+            error!("Failed to validate impression catalog entity: {error}");
+            return StatusCode::INTERNAL_SERVER_ERROR;
+        }
     }
 
     // Record the impression in a blocking task to avoid blocking the async runtime
     // while waiting for the write_conn mutex (which may be held by long-running index operations)
     let item_id = body.item_id;
-    tokio::task::spawn_blocking(move || {
-        search_vault.record_impression(&item_id, item_type);
-    });
+    let source = crate::search::ImpressionSource {
+        user_id: session.user_id,
+        device_id: session.device_id,
+    };
+    let recorded = tokio::task::spawn_blocking(move || {
+        search_vault.record_impression(&item_id, item_type, source);
+    })
+    .await;
+    if let Err(error) = recorded {
+        error!("Failed to execute impression recording task: {error}");
+        return StatusCode::INTERNAL_SERVER_ERROR;
+    }
 
     StatusCode::NO_CONTENT
 }
@@ -4179,6 +4233,110 @@ struct ListeningEventRequest {
     pub pause_count: Option<u32>,
     pub playback_context: Option<String>,
     pub client_type: Option<String>,
+}
+
+const MAX_TRACK_DURATION_SECONDS: u32 = 24 * 60 * 60;
+const MAX_EVENT_AGE_SECONDS: u64 = 30 * 24 * 60 * 60;
+const MAX_FUTURE_CLOCK_SKEW_SECONDS: u64 = 5 * 60;
+const MIN_FINALIZED_LISTEN_SECONDS: u32 = 5;
+const MAX_PLAYBACK_COUNTER: u32 = 1_000;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ValidatedListeningEvent {
+    started_at: u64,
+    ended_at: Option<u64>,
+    duration_seconds: u32,
+    completed: bool,
+}
+
+fn authoritative_track_duration_seconds(duration_ms: i64) -> Option<u32> {
+    if duration_ms <= 0 {
+        return None;
+    }
+    let seconds = duration_ms.checked_add(999)?.checked_div(1_000)?;
+    let seconds = u32::try_from(seconds).ok()?;
+    (seconds <= MAX_TRACK_DURATION_SECONDS).then_some(seconds)
+}
+
+fn valid_telemetry_label(value: Option<&str>, max_len: usize) -> bool {
+    value.is_none_or(|value| {
+        !value.is_empty()
+            && value.len() <= max_len
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b':'))
+    })
+}
+
+fn validate_listening_event(
+    body: &ListeningEventRequest,
+    authoritative_duration: u32,
+    now: u64,
+) -> Result<ValidatedListeningEvent, &'static str> {
+    if authoritative_duration == 0 || authoritative_duration > MAX_TRACK_DURATION_SECONDS {
+        return Err("invalid authoritative track duration");
+    }
+    if body.track_duration_seconds == 0 {
+        return Err("client track duration must be positive");
+    }
+    let duration_tolerance = authoritative_duration.saturating_div(5).max(2);
+    if body.track_duration_seconds.abs_diff(authoritative_duration) > duration_tolerance {
+        return Err("client track duration differs implausibly from catalog");
+    }
+    if body.duration_seconds > authoritative_duration.saturating_add(10) {
+        return Err("listening duration exceeds track duration");
+    }
+    if body.seek_count.unwrap_or(0) > MAX_PLAYBACK_COUNTER
+        || body.pause_count.unwrap_or(0) > MAX_PLAYBACK_COUNTER
+    {
+        return Err("playback counter is implausible");
+    }
+    if !valid_telemetry_label(body.playback_context.as_deref(), 64)
+        || !valid_telemetry_label(body.client_type.as_deref(), 32)
+    {
+        return Err("invalid telemetry label");
+    }
+    if !valid_telemetry_label(body.session_id.as_deref(), 128)
+        || body
+            .session_id
+            .as_deref()
+            .is_some_and(|session_id| session_id.len() < 8)
+    {
+        return Err("invalid session identifier");
+    }
+
+    let started_at = body.started_at.unwrap_or(now);
+    if started_at > now.saturating_add(MAX_FUTURE_CLOCK_SKEW_SECONDS)
+        || started_at < now.saturating_sub(MAX_EVENT_AGE_SECONDS)
+    {
+        return Err("start timestamp is outside the accepted window");
+    }
+
+    if let Some(ended_at) = body.ended_at {
+        if body.session_id.is_none() {
+            return Err("finalized events require a session identifier");
+        }
+        if body.duration_seconds < MIN_FINALIZED_LISTEN_SECONDS {
+            return Err("finalized listen is shorter than the minimum");
+        }
+        if ended_at < started_at || ended_at > now.saturating_add(MAX_FUTURE_CLOCK_SKEW_SECONDS) {
+            return Err("end timestamp is invalid");
+        }
+        let wall_seconds = ended_at.saturating_sub(started_at);
+        if u64::from(body.duration_seconds) > wall_seconds.saturating_mul(2).saturating_add(10) {
+            return Err("listening duration is implausible for elapsed time");
+        }
+    }
+
+    let duration_seconds = body.duration_seconds.min(authoritative_duration);
+    let completed = body.ended_at.is_some()
+        && u64::from(duration_seconds) * 100 >= u64::from(authoritative_duration) * 90;
+    Ok(ValidatedListeningEvent {
+        started_at,
+        ended_at: body.ended_at,
+        duration_seconds,
+        completed,
+    })
 }
 
 #[derive(Serialize)]
@@ -5660,18 +5818,35 @@ pub async fn make_app(
     content_routes = content_routes.merge(rate_limited_search_routes);
 
     // Listening stats routes (requires AccessCatalog permission)
-    let listening_stats_routes: Router = Router::new()
+    let analytics_device_rate_limit = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_millisecond(60000_u64.saturating_div(u64::from(ANALYTICS_PER_DEVICE_PER_MINUTE)))
+            .burst_size(ANALYTICS_PER_DEVICE_PER_MINUTE)
+            .key_extractor(AnalyticsDeviceKeyExtractor)
+            .finish()
+            .unwrap(),
+    );
+    let listening_stats_write_routes: Router = Router::new()
         .route("/listening", post(post_listening_event))
-        .route("/listening/summary", get(get_user_listening_summary))
-        .route("/listening/history", get(get_user_listening_history))
-        .route("/listening/events", get(get_user_listening_events))
         .route("/impression", post(post_impression))
+        .layer(GovernorLayer::new(analytics_device_rate_limit))
         .layer(GovernorLayer::new(write_rate_limit.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_access_catalog,
         ))
         .with_state(state.clone());
+    let listening_stats_read_routes: Router = Router::new()
+        .route("/listening/summary", get(get_user_listening_summary))
+        .route("/listening/history", get(get_user_listening_history))
+        .route("/listening/events", get(get_user_listening_events))
+        .layer(GovernorLayer::new(user_content_read_rate_limit.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_access_catalog,
+        ))
+        .with_state(state.clone());
+    let listening_stats_routes = listening_stats_read_routes.merge(listening_stats_write_routes);
 
     // User settings routes (requires AccessCatalog permission)
     let settings_routes: Router = Router::new()
@@ -6141,6 +6316,60 @@ mod tests {
     use std::sync::RwLock;
     use tower::ServiceExt; // for `call`, `oneshot`, and `ready
 
+    fn valid_listening_request() -> ListeningEventRequest {
+        ListeningEventRequest {
+            track_id: "track-1".to_string(),
+            session_id: Some("session-123".to_string()),
+            started_at: Some(780),
+            ended_at: Some(1_000),
+            duration_seconds: 220,
+            track_duration_seconds: 200,
+            seek_count: Some(1),
+            pause_count: Some(1),
+            playback_context: Some("album".to_string()),
+            client_type: Some("android".to_string()),
+        }
+    }
+
+    #[test]
+    fn listening_validation_uses_authoritative_duration() {
+        assert_eq!(authoritative_track_duration_seconds(240_001), Some(241));
+        assert_eq!(authoritative_track_duration_seconds(0), None);
+
+        let validated = validate_listening_event(&valid_listening_request(), 240, 1_000).unwrap();
+        assert_eq!(validated.duration_seconds, 220);
+        assert!(validated.completed);
+    }
+
+    #[test]
+    fn listening_validation_rejects_zero_missing_id_and_implausible_values() {
+        let mut request = valid_listening_request();
+        request.track_duration_seconds = 0;
+        assert!(validate_listening_event(&request, 240, 1_000).is_err());
+
+        let mut request = valid_listening_request();
+        request.session_id = None;
+        assert!(validate_listening_event(&request, 240, 1_000).is_err());
+
+        let mut request = valid_listening_request();
+        request.duration_seconds = 251;
+        assert!(validate_listening_event(&request, 240, 1_000).is_err());
+
+        let mut request = valid_listening_request();
+        request.started_at = Some(1);
+        assert!(validate_listening_event(&request, 240, MAX_EVENT_AGE_SECONDS + 2).is_err());
+    }
+
+    #[test]
+    fn listening_json_rejects_negative_fractional_and_non_finite_numbers() {
+        for invalid_duration in ["-1", "1.5", "NaN", "1e999"] {
+            let json = format!(
+                r#"{{"track_id":"track-1","duration_seconds":{invalid_duration},"track_duration_seconds":240}}"#
+            );
+            assert!(serde_json::from_str::<ListeningEventRequest>(&json).is_err());
+        }
+    }
+
     /// Mock search vault for testing - returns empty results
     struct MockSearchVault;
 
@@ -6176,7 +6405,14 @@ mod tests {
             }
         }
 
-        fn record_impression(&self, _item_id: &str, _item_type: HashedItemType) {}
+        fn record_impression(
+            &self,
+            _item_id: &str,
+            _item_type: HashedItemType,
+            _source: crate::search::ImpressionSource,
+        ) -> bool {
+            false
+        }
 
         fn get_impression_totals(
             &self,

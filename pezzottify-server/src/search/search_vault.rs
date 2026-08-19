@@ -9,6 +9,12 @@ pub enum HashedItemType {
     Album,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct ImpressionSource {
+    pub user_id: usize,
+    pub device_id: Option<usize>,
+}
+
 #[derive(Debug, Clone, Eq, Serialize)]
 pub struct SearchResult {
     pub item_type: HashedItemType,
@@ -143,9 +149,14 @@ pub trait SearchVault: Send + Sync {
     /// Get statistics about the search index.
     fn get_stats(&self) -> SearchVaultStats;
 
-    /// Record an impression (page view) for an item.
-    /// Increments today's impression count for the given item.
-    fn record_impression(&self, item_id: &str, item_type: HashedItemType);
+    /// Record an impression after applying source-level idempotency and budgets.
+    /// Returns true only when the event contributes to trusted aggregates.
+    fn record_impression(
+        &self,
+        item_id: &str,
+        item_type: HashedItemType,
+        source: ImpressionSource,
+    ) -> bool;
 
     /// Get total impressions for all items within a date range.
     /// Returns a map of (item_id, item_type) -> total impression count.
@@ -261,7 +272,14 @@ impl SearchVault for NoopSearchVault {
         }
     }
 
-    fn record_impression(&self, _item_id: &str, _item_type: HashedItemType) {}
+    fn record_impression(
+        &self,
+        _item_id: &str,
+        _item_type: HashedItemType,
+        _source: ImpressionSource,
+    ) -> bool {
+        false
+    }
 
     fn get_impression_totals(
         &self,
@@ -327,8 +345,13 @@ impl<T: SearchVault + ?Sized> SearchVault for std::sync::Arc<T> {
         (**self).get_stats()
     }
 
-    fn record_impression(&self, item_id: &str, item_type: HashedItemType) {
-        (**self).record_impression(item_id, item_type)
+    fn record_impression(
+        &self,
+        item_id: &str,
+        item_type: HashedItemType,
+        source: ImpressionSource,
+    ) -> bool {
+        (**self).record_impression(item_id, item_type, source)
     }
 
     fn get_impression_totals(
