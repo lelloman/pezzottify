@@ -12,6 +12,7 @@ use super::trait_def::{
     AlbumTrackRef, AlbumTracklist, CatalogStore, SearchableContentType, SearchableItem,
     MAX_ALBUM_TRACKLIST_PAGE_SIZE,
 };
+use super::CatalogMutationError;
 use crate::sqlite_persistence::BASE_DB_VERSION;
 use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
@@ -2377,7 +2378,11 @@ impl CatalogStore for SqliteCatalogStore {
                 |r| r.get(0),
             )?;
             if exists {
-                anyhow::bail!("Artist with id '{}' already exists", artist.id);
+                return Err(CatalogMutationError::AlreadyExists {
+                    entity: "Artist",
+                    id: artist.id.clone(),
+                }
+                .into());
             }
 
             conn.execute(
@@ -2429,7 +2434,11 @@ impl CatalogStore for SqliteCatalogStore {
             ) {
                 Ok(rowid) => rowid,
                 Err(rusqlite::Error::QueryReturnedNoRows) => {
-                    anyhow::bail!("Artist with id '{}' not found", artist.id);
+                    return Err(CatalogMutationError::NotFound {
+                        entity: "Artist",
+                        id: artist.id.clone(),
+                    }
+                    .into());
                 }
                 Err(e) => return Err(e.into()),
             };
@@ -2535,7 +2544,11 @@ impl CatalogStore for SqliteCatalogStore {
                 |r| r.get(0),
             )?;
             if exists {
-                anyhow::bail!("Album with id '{}' already exists", album.id);
+                return Err(CatalogMutationError::AlreadyExists {
+                    entity: "Album",
+                    id: album.id.clone(),
+                }
+                .into());
             }
 
             conn.execute(
@@ -2548,8 +2561,8 @@ impl CatalogStore for SqliteCatalogStore {
                     &album.external_id_upc,
                     album.label.as_deref().unwrap_or(""),
                     album.popularity,
-                    &album.release_date,
-                    &album.release_date_precision,
+                    album.release_date.as_deref().unwrap_or(""),
+                    album.release_date_precision.as_deref().unwrap_or(""),
                     album.album_availability.to_db_str(),
                 ],
             )?;
@@ -2561,13 +2574,21 @@ impl CatalogStore for SqliteCatalogStore {
             )?;
 
             for (idx, artist_id) in artist_ids.iter().enumerate() {
-                let artist_rowid: i64 = conn
-                    .query_row(
-                        "SELECT rowid FROM artists WHERE id = ?1",
-                        params![artist_id],
-                        |r| r.get(0),
-                    )
-                    .context(format!("Artist '{}' not found", artist_id))?;
+                let artist_rowid: i64 = match conn.query_row(
+                    "SELECT rowid FROM artists WHERE id = ?1",
+                    params![artist_id],
+                    |r| r.get(0),
+                ) {
+                    Ok(rowid) => rowid,
+                    Err(rusqlite::Error::QueryReturnedNoRows) => {
+                        return Err(CatalogMutationError::InvalidReference {
+                            entity: "Artist",
+                            id: artist_id.clone(),
+                        }
+                        .into());
+                    }
+                    Err(error) => return Err(error.into()),
+                };
 
                 conn.execute(
                     "INSERT INTO artist_albums (artist_rowid, album_rowid, is_appears_on, is_implicit_appears_on, index_in_album)
@@ -2607,7 +2628,11 @@ impl CatalogStore for SqliteCatalogStore {
             ) {
                 Ok(rowid) => rowid,
                 Err(rusqlite::Error::QueryReturnedNoRows) => {
-                    anyhow::bail!("Album with id '{}' not found", album_id);
+                    return Err(CatalogMutationError::NotFound {
+                        entity: "Album",
+                        id: album_id.to_owned(),
+                    }
+                    .into());
                 }
                 Err(e) => return Err(e.into()),
             };
@@ -2621,8 +2646,8 @@ impl CatalogStore for SqliteCatalogStore {
                     &metadata.external_id_upc,
                     metadata.label.as_deref().unwrap_or(""),
                     metadata.popularity,
-                    &metadata.release_date,
-                    &metadata.release_date_precision,
+                    metadata.release_date.as_deref().unwrap_or(""),
+                    metadata.release_date_precision.as_deref().unwrap_or(""),
                     album_rowid,
                 ],
             )?;
@@ -2634,13 +2659,21 @@ impl CatalogStore for SqliteCatalogStore {
                 )?;
 
                 for (idx, artist_id) in artist_ids.iter().enumerate() {
-                    let artist_rowid: i64 = conn
-                        .query_row(
-                            "SELECT rowid FROM artists WHERE id = ?1",
-                            params![artist_id],
-                            |r| r.get(0),
-                        )
-                        .context(format!("Artist '{}' not found", artist_id))?;
+                    let artist_rowid: i64 = match conn.query_row(
+                        "SELECT rowid FROM artists WHERE id = ?1",
+                        params![artist_id],
+                        |r| r.get(0),
+                    ) {
+                        Ok(rowid) => rowid,
+                        Err(rusqlite::Error::QueryReturnedNoRows) => {
+                            return Err(CatalogMutationError::InvalidReference {
+                                entity: "Artist",
+                                id: artist_id.clone(),
+                            }
+                            .into());
+                        }
+                        Err(error) => return Err(error.into()),
+                    };
 
                     conn.execute(
                         "INSERT INTO artist_albums (artist_rowid, album_rowid, is_appears_on, is_implicit_appears_on, index_in_album)
@@ -2722,16 +2755,28 @@ impl CatalogStore for SqliteCatalogStore {
                 |r| r.get(0),
             )?;
             if exists {
-                anyhow::bail!("Track with id '{}' already exists", track.id);
+                return Err(CatalogMutationError::AlreadyExists {
+                    entity: "Track",
+                    id: track.id.clone(),
+                }
+                .into());
             }
 
-            let album_rowid: i64 = conn
-                .query_row(
-                    "SELECT rowid FROM albums WHERE id = ?1",
-                    params![&track.album_id],
-                    |r| r.get(0),
-                )
-                .context(format!("Album '{}' not found", track.album_id))?;
+            let album_rowid: i64 = match conn.query_row(
+                "SELECT rowid FROM albums WHERE id = ?1",
+                params![&track.album_id],
+                |r| r.get(0),
+            ) {
+                Ok(rowid) => rowid,
+                Err(rusqlite::Error::QueryReturnedNoRows) => {
+                    return Err(CatalogMutationError::InvalidReference {
+                        entity: "Album",
+                        id: track.album_id.clone(),
+                    }
+                    .into());
+                }
+                Err(error) => return Err(error.into()),
+            };
 
             conn.execute(
                 "INSERT INTO tracks (id, name, album_rowid, track_number, external_id_isrc, popularity,
@@ -2758,13 +2803,21 @@ impl CatalogStore for SqliteCatalogStore {
             )?;
 
             for artist_id in artist_ids {
-                let artist_rowid: i64 = conn
-                    .query_row(
-                        "SELECT rowid FROM artists WHERE id = ?1",
-                        params![artist_id],
-                        |r| r.get(0),
-                    )
-                    .context(format!("Artist '{}' not found", artist_id))?;
+                let artist_rowid: i64 = match conn.query_row(
+                    "SELECT rowid FROM artists WHERE id = ?1",
+                    params![artist_id],
+                    |r| r.get(0),
+                ) {
+                    Ok(rowid) => rowid,
+                    Err(rusqlite::Error::QueryReturnedNoRows) => {
+                        return Err(CatalogMutationError::InvalidReference {
+                            entity: "Artist",
+                            id: artist_id.clone(),
+                        }
+                        .into());
+                    }
+                    Err(error) => return Err(error.into()),
+                };
 
                 conn.execute(
                     "INSERT INTO track_artists (track_rowid, artist_rowid, role) VALUES (?1, ?2, 0)",
@@ -2803,18 +2856,30 @@ impl CatalogStore for SqliteCatalogStore {
             ) {
                 Ok(rowid) => rowid,
                 Err(rusqlite::Error::QueryReturnedNoRows) => {
-                    anyhow::bail!("Track with id '{}' not found", track_id);
+                    return Err(CatalogMutationError::NotFound {
+                        entity: "Track",
+                        id: track_id.to_owned(),
+                    }
+                    .into());
                 }
                 Err(e) => return Err(e.into()),
             };
 
-            let album_rowid: i64 = conn
-                .query_row(
-                    "SELECT rowid FROM albums WHERE id = ?1",
-                    params![&metadata.album_id],
-                    |r| r.get(0),
-                )
-                .context(format!("Album '{}' not found", metadata.album_id))?;
+            let album_rowid: i64 = match conn.query_row(
+                "SELECT rowid FROM albums WHERE id = ?1",
+                params![&metadata.album_id],
+                |r| r.get(0),
+            ) {
+                Ok(rowid) => rowid,
+                Err(rusqlite::Error::QueryReturnedNoRows) => {
+                    return Err(CatalogMutationError::InvalidReference {
+                        entity: "Album",
+                        id: metadata.album_id.clone(),
+                    }
+                    .into());
+                }
+                Err(error) => return Err(error.into()),
+            };
 
             conn.execute(
                 "UPDATE tracks SET name = ?1, album_rowid = ?2, track_number = ?3, external_id_isrc = ?4,
@@ -2840,13 +2905,21 @@ impl CatalogStore for SqliteCatalogStore {
                 )?;
 
                 for artist_id in artist_ids {
-                    let artist_rowid: i64 = conn
-                        .query_row(
-                            "SELECT rowid FROM artists WHERE id = ?1",
-                            params![artist_id],
-                            |r| r.get(0),
-                        )
-                        .context(format!("Artist '{}' not found", artist_id))?;
+                    let artist_rowid: i64 = match conn.query_row(
+                        "SELECT rowid FROM artists WHERE id = ?1",
+                        params![artist_id],
+                        |r| r.get(0),
+                    ) {
+                        Ok(rowid) => rowid,
+                        Err(rusqlite::Error::QueryReturnedNoRows) => {
+                            return Err(CatalogMutationError::InvalidReference {
+                                entity: "Artist",
+                                id: artist_id.clone(),
+                            }
+                            .into());
+                        }
+                        Err(error) => return Err(error.into()),
+                    };
 
                     conn.execute(
                         "INSERT INTO track_artists (track_rowid, artist_rowid, role) VALUES (?1, ?2, 0)",
@@ -3646,6 +3719,36 @@ mod tests {
         )
         .unwrap();
         (store, temp_dir)
+    }
+
+    #[test]
+    fn catalog_mutations_return_typed_expected_errors() {
+        let (store, _temp_dir) = create_test_store();
+        let album = Album {
+            id: "album".to_owned(),
+            name: "Album".to_owned(),
+            album_type: AlbumType::Album,
+            label: None,
+            release_date: Some("2026".to_owned()),
+            release_date_precision: Some("year".to_owned()),
+            external_id_upc: None,
+            popularity: 0,
+            album_availability: AlbumAvailability::Missing,
+        };
+
+        let error = store
+            .create_album(&album, &["missing-artist".to_owned()])
+            .unwrap_err();
+        assert!(
+            matches!(
+                error.downcast_ref::<CatalogMutationError>(),
+                Some(CatalogMutationError::InvalidReference {
+                    entity: "Artist",
+                    id,
+                }) if id == "missing-artist"
+            ),
+            "unexpected error: {error:?}"
+        );
     }
 
     #[test]

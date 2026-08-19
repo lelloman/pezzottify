@@ -3,6 +3,7 @@
 pub mod auth;
 pub mod device;
 pub mod permissions;
+mod service_error;
 pub mod settings;
 mod sqlite_user_store;
 pub mod sync_events;
@@ -12,6 +13,7 @@ mod user_store;
 
 pub use auth::{AuthToken, AuthTokenValue, UserAuthCredentials, UsernamePasswordCredentials};
 pub use permissions::{Permission, PermissionGrant, UserRole};
+pub use service_error::{ServiceResult, UserServiceError};
 pub use settings::UserSetting;
 pub use sqlite_user_store::SqliteUserStore;
 pub use sync_events::{StoredEvent, UserEvent};

@@ -10,8 +10,8 @@ use super::{
         ListeningSummary, PopularAlbum, PopularArtist, PopularContent, TrackListeningStats,
         UserListeningHistoryEntry,
     },
-    AuthToken, AuthTokenValue, FullUserStore, UserAuthCredentials, UserPlaylist,
-    UsernamePasswordCredentials,
+    AuthToken, AuthTokenValue, FullUserStore, ServiceResult, UserAuthCredentials, UserPlaylist,
+    UserServiceError, UsernamePasswordCredentials,
 };
 use anyhow::{bail, Context, Result};
 use std::{
@@ -22,6 +22,19 @@ use std::{
 
 const MAX_PLAYLIST_SIZE: usize = 300;
 const POPULAR_CONTENT_CACHE_TTL_SECS: u64 = 24 * 60 * 60; // 24 hours
+
+fn playlist_store_error(error: anyhow::Error) -> UserServiceError {
+    if error
+        .downcast_ref::<rusqlite::Error>()
+        .is_some_and(|error| matches!(error, rusqlite::Error::QueryReturnedNoRows))
+    {
+        return UserServiceError::playlist_not_found();
+    }
+    match error.downcast::<UserServiceError>() {
+        Ok(error) => error,
+        Err(error) => UserServiceError::Internal(error),
+    }
+}
 
 /// Cached popular content with computation timestamp
 struct CachedPopularContent {
@@ -361,20 +374,15 @@ impl UserManager {
         creator_id: usize,
         track_ids: Vec<String>,
         operation_id: Option<&str>,
-    ) -> Result<(String, super::sync_events::StoredEvent)> {
+    ) -> ServiceResult<(String, super::sync_events::StoredEvent)> {
         if track_ids.len() > MAX_PLAYLIST_SIZE {
-            bail!(
-                "Playlist size exceeds maximum limit of {} songs.",
-                MAX_PLAYLIST_SIZE
-            );
+            return Err(UserServiceError::Validation(format!(
+                "Playlist size exceeds maximum limit of {MAX_PLAYLIST_SIZE} songs"
+            )));
         }
-        self.user_store.create_playlist_with_event(
-            user_id,
-            playlist_name,
-            creator_id,
-            track_ids,
-            operation_id,
-        )
+        self.user_store
+            .create_playlist_with_event(user_id, playlist_name, creator_id, track_ids, operation_id)
+            .map_err(playlist_store_error)
     }
 
     pub fn update_user_playlist(
@@ -404,23 +412,24 @@ impl UserManager {
         playlist_name: Option<String>,
         track_ids: Option<Vec<String>>,
         operation_id: Option<&str>,
-    ) -> Result<Vec<super::sync_events::StoredEvent>> {
+    ) -> ServiceResult<Vec<super::sync_events::StoredEvent>> {
         if track_ids
             .as_ref()
             .is_some_and(|tracks| tracks.len() > MAX_PLAYLIST_SIZE)
         {
-            bail!(
-                "Playlist size exceeds maximum limit of {} songs.",
-                MAX_PLAYLIST_SIZE
-            );
+            return Err(UserServiceError::Validation(format!(
+                "Playlist size exceeds maximum limit of {MAX_PLAYLIST_SIZE} songs"
+            )));
         }
-        self.user_store.update_playlist_with_events(
-            playlist_id,
-            user_id,
-            playlist_name,
-            track_ids,
-            operation_id,
-        )
+        self.user_store
+            .update_playlist_with_events(
+                playlist_id,
+                user_id,
+                playlist_name,
+                track_ids,
+                operation_id,
+            )
+            .map_err(playlist_store_error)
     }
 
     pub fn delete_user_playlist_with_event(
@@ -428,17 +437,24 @@ impl UserManager {
         playlist_id: &str,
         user_id: usize,
         operation_id: Option<&str>,
-    ) -> Result<super::sync_events::StoredEvent> {
+    ) -> ServiceResult<super::sync_events::StoredEvent> {
         self.user_store
             .delete_playlist_with_event(playlist_id, user_id, operation_id)
+            .map_err(playlist_store_error)
     }
 
     pub fn delete_user_playlist(&self, playlist_id: &str, user_id: usize) -> Result<()> {
         self.user_store.delete_user_playlist(playlist_id, user_id)
     }
 
-    pub fn get_user_playlist(&self, playlist_id: &str, user_id: usize) -> Result<UserPlaylist> {
-        self.user_store.get_user_playlist(playlist_id, user_id)
+    pub fn get_user_playlist(
+        &self,
+        playlist_id: &str,
+        user_id: usize,
+    ) -> ServiceResult<UserPlaylist> {
+        self.user_store
+            .get_user_playlist(playlist_id, user_id)
+            .map_err(playlist_store_error)
     }
 
     pub fn get_user_playlists(&self, user_id: usize) -> Result<Vec<String>> {
@@ -486,14 +502,21 @@ impl UserManager {
         user_id: usize,
         track_ids: Vec<String>,
         operation_id: Option<&str>,
-    ) -> Result<Vec<super::sync_events::StoredEvent>> {
-        let playlist = self.user_store.get_user_playlist(playlist_id, user_id)?;
+    ) -> ServiceResult<Vec<super::sync_events::StoredEvent>> {
+        let playlist = self
+            .user_store
+            .get_user_playlist(playlist_id, user_id)
+            .map_err(playlist_store_error)?;
         if playlist.tracks.len() + track_ids.len() > MAX_PLAYLIST_SIZE {
-            bail!("Adding tracks would exceed maximum playlist size");
+            return Err(UserServiceError::Validation(
+                "Adding tracks would exceed maximum playlist size".to_owned(),
+            ));
         }
         for track_id in &track_ids {
             if !matches!(self.catalog_store.get_track_json(track_id), Ok(Some(_))) {
-                bail!("Track with id {} does not exist.", track_id);
+                return Err(UserServiceError::Validation(format!(
+                    "Track with id {track_id} does not exist"
+                )));
             }
         }
         let mut new_tracks = playlist.tracks;
@@ -538,8 +561,11 @@ impl UserManager {
         user_id: usize,
         tracks_positions: Vec<usize>,
         operation_id: Option<&str>,
-    ) -> Result<Vec<super::sync_events::StoredEvent>> {
-        let playlist = self.user_store.get_user_playlist(playlist_id, user_id)?;
+    ) -> ServiceResult<Vec<super::sync_events::StoredEvent>> {
+        let playlist = self
+            .user_store
+            .get_user_playlist(playlist_id, user_id)
+            .map_err(playlist_store_error)?;
         let tracks = playlist
             .tracks
             .into_iter()

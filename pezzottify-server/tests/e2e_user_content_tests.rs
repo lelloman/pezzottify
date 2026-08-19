@@ -234,6 +234,29 @@ async fn test_delete_playlist() {
 }
 
 #[tokio::test]
+async fn test_delete_missing_playlist_returns_stable_error_without_sync_event() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    let response = client.delete_playlist("missing-playlist").await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let header_request_id = response.headers()["x-request-id"]
+        .to_str()
+        .unwrap()
+        .to_owned();
+    let body: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(body["code"], "playlist_not_found");
+    assert_eq!(body["message"], "Playlist not found");
+    assert_eq!(body["request_id"], header_request_id);
+
+    let response = client.get_sync_events(0).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(body["current_seq"], 0);
+    assert!(body["events"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn test_add_tracks_to_playlist() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -315,4 +338,6 @@ async fn test_get_nonexistent_playlist() {
 
     let response = client.get_playlist("nonexistent-playlist-id").await;
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let body: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(body["code"], "playlist_not_found");
 }

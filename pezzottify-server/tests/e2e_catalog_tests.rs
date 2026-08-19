@@ -62,6 +62,60 @@ async fn test_http_metrics_use_bounded_route_templates() {
         .all(|path| !path.contains("attacker-controlled-id")));
 }
 
+#[tokio::test]
+async fn test_catalog_conflict_has_stable_error_contract() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated_admin(server.base_url.clone()).await;
+
+    let response = client
+        .client
+        .post(format!("{}/v1/content/artist", server.base_url))
+        .json(&serde_json::json!({
+            "id": ARTIST_1_ID,
+            "name": "Duplicate Artist"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let header_request_id = response.headers()["x-request-id"]
+        .to_str()
+        .unwrap()
+        .to_owned();
+    let body: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(body["code"], "catalog_item_exists");
+    assert_eq!(body["request_id"], header_request_id);
+}
+
+#[tokio::test]
+async fn test_catalog_missing_reference_is_a_bad_request() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated_admin(server.base_url.clone()).await;
+
+    let response = client
+        .client
+        .post(format!("{}/v1/content/album", server.base_url))
+        .json(&serde_json::json!({
+            "id": "album-with-missing-artist",
+            "name": "Invalid Album",
+            "release_date": "2026",
+            "release_date_precision": "year",
+            "artist_ids": ["missing-artist"]
+        }))
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let body: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(status, StatusCode::BAD_REQUEST, "response body: {body}");
+    assert_eq!(body["code"], "invalid_catalog_reference");
+    assert_eq!(
+        body["message"],
+        "Referenced Artist 'missing-artist' not found"
+    );
+    assert!(body["request_id"].as_str().is_some_and(|id| !id.is_empty()));
+}
+
 // =============================================================================
 // Artist Tests
 // =============================================================================

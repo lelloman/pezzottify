@@ -4,6 +4,7 @@
 //! from the Spotify metadata database.
 
 mod models;
+mod mutation_error;
 mod null_store;
 mod schema;
 mod store;
@@ -11,6 +12,7 @@ mod trait_def;
 mod validation;
 
 pub use models::*;
+pub use mutation_error::CatalogMutationError;
 pub use null_store::NullCatalogStore;
 pub use schema::CATALOG_VERSIONED_SCHEMAS;
 pub use store::SqliteCatalogStore;
