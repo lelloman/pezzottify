@@ -246,7 +246,7 @@ impl UserManager {
                     Ok(())
                 } else {
                     let _ = self.user_store.add_user_auth_token(removed.clone());
-                    bail!("Tried to delete auth token {}, but the authenticated user {} was not the owner {} of the token.", token_value.0, user_id, &removed.user_id)
+                    bail!("Tried to delete auth token {}, but the authenticated user {} was not the owner {} of the token.", token_value.0, user_id, removed.user_id)
                 }
             }
             None => bail!("Did not found auth token {}", token_value.0),
