@@ -27,7 +27,8 @@ mod server;
 
 // Public API - this is what tests import
 pub use client::TestClient;
-pub use server::TestServer;
+#[allow(unused_imports)]
+pub use server::{TestServer, TestServerBuilder};
 
 // Re-export constants for test convenience
 #[allow(unused_imports)]
