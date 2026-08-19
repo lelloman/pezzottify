@@ -14,7 +14,8 @@
 
 use super::levenshtein::Vocabulary;
 use super::{
-    HashedItemType, IndexState, SearchIndexItem, SearchResult, SearchVault, SearchVaultStats,
+    HashedItemType, ImpressionSource, IndexState, SearchIndexItem, SearchResult, SearchVault,
+    SearchVaultStats,
 };
 use crate::catalog_store::{CatalogStore, SearchableContentType};
 use anyhow::Result;
@@ -33,6 +34,9 @@ const UPSERT_SUB_BATCH_SIZE: usize = 10;
 
 /// Sleep duration between sub-batches to yield to concurrent writers
 const UPSERT_SUB_BATCH_YIELD_MS: u64 = 10;
+
+const IMPRESSION_USER_DAILY_BUDGET: i64 = 500;
+const IMPRESSION_DEVICE_DAILY_BUDGET: i64 = 200;
 
 /// FTS5 search vault with Levenshtein-based typo correction.
 ///
@@ -484,6 +488,19 @@ impl Fts5LevenshteinSearchVault {
             );
             CREATE INDEX IF NOT EXISTS idx_impressions_date ON item_impressions(date);
             CREATE INDEX IF NOT EXISTS idx_impressions_item ON item_impressions(item_id, item_type);
+
+            CREATE TABLE IF NOT EXISTS item_impression_events (
+                user_id INTEGER NOT NULL,
+                device_id INTEGER NOT NULL,
+                item_id TEXT NOT NULL,
+                item_type TEXT NOT NULL,
+                date INTEGER NOT NULL,
+                PRIMARY KEY (user_id, device_id, item_id, item_type, date)
+            );
+            CREATE INDEX IF NOT EXISTS idx_impression_events_user_date
+                ON item_impression_events(user_id, date);
+            CREATE INDEX IF NOT EXISTS idx_impression_events_device_date
+                ON item_impression_events(user_id, device_id, date);
         "#,
         )?;
 
@@ -896,28 +913,78 @@ impl Fts5LevenshteinSearchVault {
         }
     }
 
-    /// Record an impression (page view) for an item.
-    /// Increments today's impression count for the given item.
-    pub fn record_impression(&self, item_id: &str, item_type: HashedItemType) {
-        let conn = self.write_conn.lock().unwrap();
+    /// Record a validated impression with daily per-user/per-device budgets and
+    /// one contribution per source/entity/day.
+    pub fn record_impression(
+        &self,
+        item_id: &str,
+        item_type: HashedItemType,
+        source: ImpressionSource,
+    ) -> bool {
+        let mut conn = self.write_conn.lock().unwrap();
         let today = chrono::Utc::now()
             .format("%Y%m%d")
             .to_string()
             .parse::<i64>()
             .unwrap_or(0);
         let type_str = Self::item_type_to_str(&item_type);
+        let device_id = source.device_id.map(|id| id as i64).unwrap_or(-1);
+        let transaction = match conn.transaction() {
+            Ok(transaction) => transaction,
+            Err(error) => {
+                warn!("Failed to start impression transaction: {error}");
+                return false;
+            }
+        };
+        let result = (|| -> rusqlite::Result<bool> {
+            let user_count: i64 = transaction.query_row(
+                "SELECT COUNT(*) FROM item_impression_events WHERE user_id = ?1 AND date = ?2",
+                rusqlite::params![source.user_id as i64, today],
+                |row| row.get(0),
+            )?;
+            let device_count: i64 = transaction.query_row(
+                "SELECT COUNT(*) FROM item_impression_events
+                 WHERE user_id = ?1 AND device_id = ?2 AND date = ?3",
+                rusqlite::params![source.user_id as i64, device_id, today],
+                |row| row.get(0),
+            )?;
+            if user_count >= IMPRESSION_USER_DAILY_BUDGET
+                || device_count >= IMPRESSION_DEVICE_DAILY_BUDGET
+            {
+                return Ok(false);
+            }
 
-        if let Err(e) = conn.execute(
-            "INSERT INTO item_impressions (item_id, item_type, date, impression_count)
-             VALUES (?, ?, ?, 1)
-             ON CONFLICT(item_id, item_type, date)
-             DO UPDATE SET impression_count = impression_count + 1",
-            rusqlite::params![item_id, type_str, today],
-        ) {
-            warn!(
-                "Failed to record impression for {}/{}: {}",
-                item_id, type_str, e
-            );
+            let inserted = transaction.execute(
+                "INSERT OR IGNORE INTO item_impression_events
+                 (user_id, device_id, item_id, item_type, date) VALUES (?1, ?2, ?3, ?4, ?5)",
+                rusqlite::params![source.user_id as i64, device_id, item_id, type_str, today],
+            )?;
+            if inserted == 0 {
+                return Ok(false);
+            }
+            transaction.execute(
+                "INSERT INTO item_impressions (item_id, item_type, date, impression_count)
+                 VALUES (?1, ?2, ?3, 1)
+                 ON CONFLICT(item_id, item_type, date)
+                 DO UPDATE SET impression_count = impression_count + 1",
+                rusqlite::params![item_id, type_str, today],
+            )?;
+            Ok(true)
+        })();
+
+        match result {
+            Ok(recorded) => {
+                if let Err(error) = transaction.commit() {
+                    warn!("Failed to commit impression transaction: {error}");
+                    false
+                } else {
+                    recorded
+                }
+            }
+            Err(error) => {
+                warn!("Failed to record impression: {error}");
+                false
+            }
         }
     }
 
@@ -970,8 +1037,15 @@ impl Fts5LevenshteinSearchVault {
     /// Deletes records older than the specified date (in YYYYMMDD format).
     pub fn prune_impressions(&self, before_date: i64) -> usize {
         let conn = self.write_conn.lock().unwrap();
+        let event_result = conn.execute(
+            "DELETE FROM item_impression_events WHERE date < ?",
+            [before_date],
+        );
         match conn.execute("DELETE FROM item_impressions WHERE date < ?", [before_date]) {
             Ok(count) => {
+                if let Err(error) = event_result {
+                    warn!("Failed to prune impression source records: {error}");
+                }
                 if count > 0 {
                     info!("Pruned {} old impression records", count);
                 }
@@ -1386,8 +1460,13 @@ impl SearchVault for Fts5LevenshteinSearchVault {
         }
     }
 
-    fn record_impression(&self, item_id: &str, item_type: HashedItemType) {
-        Fts5LevenshteinSearchVault::record_impression(self, item_id, item_type)
+    fn record_impression(
+        &self,
+        item_id: &str,
+        item_type: HashedItemType,
+        source: ImpressionSource,
+    ) -> bool {
+        Fts5LevenshteinSearchVault::record_impression(self, item_id, item_type, source)
     }
 
     fn get_impression_totals(
@@ -2280,10 +2359,18 @@ mod tests {
             Fts5LevenshteinSearchVault::new_lazy(&db_path, &crate::backup::DbRegistry::new())
                 .unwrap();
 
-        // Record impressions
-        vault.record_impression("artist1", HashedItemType::Artist);
-        vault.record_impression("artist1", HashedItemType::Artist);
-        vault.record_impression("album1", HashedItemType::Album);
+        let first_device = ImpressionSource {
+            user_id: 1,
+            device_id: Some(10),
+        };
+        let second_device = ImpressionSource {
+            user_id: 1,
+            device_id: Some(11),
+        };
+        assert!(vault.record_impression("artist1", HashedItemType::Artist, first_device));
+        assert!(!vault.record_impression("artist1", HashedItemType::Artist, first_device));
+        assert!(vault.record_impression("artist1", HashedItemType::Artist, second_device));
+        assert!(vault.record_impression("album1", HashedItemType::Album, first_device));
 
         // Verify they were recorded
         let conn = Connection::open(&db_path).unwrap();
@@ -2304,6 +2391,65 @@ mod tests {
             )
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_impression_daily_budgets() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+        let vault =
+            Fts5LevenshteinSearchVault::new_lazy(&db_path, &crate::backup::DbRegistry::new())
+                .unwrap();
+        let today = chrono::Utc::now()
+            .format("%Y%m%d")
+            .to_string()
+            .parse::<i64>()
+            .unwrap();
+
+        {
+            let mut conn = vault.write_conn.lock().unwrap();
+            let transaction = conn.transaction().unwrap();
+            for index in 0..IMPRESSION_DEVICE_DAILY_BUDGET {
+                transaction
+                    .execute(
+                        "INSERT INTO item_impression_events
+                         (user_id, device_id, item_id, item_type, date)
+                         VALUES (1, 10, ?1, 'track', ?2)",
+                        rusqlite::params![format!("device-item-{index}"), today],
+                    )
+                    .unwrap();
+            }
+            for index in 0..IMPRESSION_USER_DAILY_BUDGET {
+                let device_id = 20 + index / IMPRESSION_DEVICE_DAILY_BUDGET;
+                transaction
+                    .execute(
+                        "INSERT INTO item_impression_events
+                         (user_id, device_id, item_id, item_type, date)
+                         VALUES (2, ?1, ?2, 'track', ?3)",
+                        rusqlite::params![device_id, format!("user-item-{index}"), today],
+                    )
+                    .unwrap();
+            }
+            transaction.commit().unwrap();
+        }
+
+        assert!(!vault.record_impression(
+            "over-device-budget",
+            HashedItemType::Track,
+            ImpressionSource {
+                user_id: 1,
+                device_id: Some(10),
+            },
+        ));
+        assert!(!vault.record_impression(
+            "over-user-budget",
+            HashedItemType::Track,
+            ImpressionSource {
+                user_id: 2,
+                device_id: Some(99),
+            },
+        ));
+        assert!(vault.get_impression_totals(today).is_empty());
     }
 
     #[test]

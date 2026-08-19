@@ -43,6 +43,10 @@ pub const STREAM_PER_MINUTE: u32 = 200;
 /// Write operations per minute per user (playlists, likes)
 pub const WRITE_PER_MINUTE: u32 = 60;
 
+/// Analytics events per minute per device. The existing write limiter separately
+/// enforces the per-user budget for the same routes.
+pub const ANALYTICS_PER_DEVICE_PER_MINUTE: u32 = 30;
+
 // ============================================================================
 // Rate Limit Constants (per hour)
 // ============================================================================
@@ -147,6 +151,31 @@ impl KeyExtractor for UserOrIpKeyExtractor {
     }
 }
 
+#[derive(Clone)]
+pub struct AnalyticsDeviceKeyExtractor;
+
+#[derive(Clone, Copy)]
+struct AnalyticsRateLimitIdentity {
+    user_id: usize,
+    device_id: Option<usize>,
+}
+
+impl KeyExtractor for AnalyticsDeviceKeyExtractor {
+    type Key = String;
+
+    fn extract<T>(&self, req: &Request<T>) -> Result<Self::Key, GovernorError> {
+        req.extensions()
+            .get::<AnalyticsRateLimitIdentity>()
+            .map(|identity| match identity.device_id {
+                Some(device_id) => {
+                    format!("user:{}:device:{}", identity.user_id, device_id)
+                }
+                None => format!("user:{}:device:none", identity.user_id),
+            })
+            .ok_or(GovernorError::UnableToExtractKey)
+    }
+}
+
 // ============================================================================
 // Error Handler
 // ============================================================================
@@ -202,6 +231,10 @@ pub async fn extract_user_id_for_rate_limit(
 ) -> impl IntoResponse {
     if let Some(session) = session {
         request.extensions_mut().insert(session.user_id);
+        request.extensions_mut().insert(AnalyticsRateLimitIdentity {
+            user_id: session.user_id,
+            device_id: session.device_id,
+        });
     }
     next.run(request).await
 }
@@ -467,6 +500,18 @@ mod tests {
         let result = extractor.extract(&request);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "user:42");
+    }
+
+    #[test]
+    fn analytics_key_is_scoped_to_user_and_device() {
+        let extractor = AnalyticsDeviceKeyExtractor;
+        let mut request = create_test_request();
+        request.extensions_mut().insert(AnalyticsRateLimitIdentity {
+            user_id: 42,
+            device_id: Some(7),
+        });
+
+        assert_eq!(extractor.extract(&request).unwrap(), "user:42:device:7");
     }
 
     #[test]

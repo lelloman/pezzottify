@@ -5,7 +5,7 @@
 
 mod common;
 
-use common::{TestClient, TestServer, TEST_USER, TRACK_1_ID, TRACK_2_ID, TRACK_3_ID};
+use common::{TestClient, TestServer, ARTIST_1_ID, TEST_USER, TRACK_1_ID, TRACK_2_ID, TRACK_3_ID};
 use reqwest::StatusCode;
 
 // =============================================================================
@@ -17,14 +17,13 @@ async fn test_record_listening_event_minimal() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
 
-    // Record a listening event with minimal fields (no ended_at = not finalized)
+    // The helper supplies the required idempotency key and bounded timestamps.
     let response = client.post_listening_event(TRACK_1_ID, 180, 200).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let body: serde_json::Value = response.json().await.unwrap();
     assert!(body["id"].as_u64().unwrap() > 0);
-    // created=false because ended_at is not set (event not finalized, won't count in metrics)
-    assert!(!body["created"].as_bool().unwrap());
+    assert!(body["created"].as_bool().unwrap());
 }
 
 #[tokio::test]
@@ -32,13 +31,17 @@ async fn test_record_listening_event_full() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
 
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
     // Record a listening event with all fields
     let response = client
         .post_listening_event_full(
             TRACK_1_ID,
             Some("test-session-uuid"),
-            Some(1732982400),
-            Some(1732982580),
+            Some(now - 180),
+            Some(now),
             180,
             200,
             Some(2),
@@ -130,6 +133,31 @@ async fn test_record_listening_event_requires_auth() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
+#[tokio::test]
+async fn test_impression_requires_an_existing_catalog_entity() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    assert_eq!(
+        client.post_impression("artist", ARTIST_1_ID).await.status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        client
+            .post_impression("track", "missing-track")
+            .await
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        client
+            .post_impression("unsupported", ARTIST_1_ID)
+            .await
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+}
+
 // =============================================================================
 // User Endpoint Tests - GET /v1/user/listening/summary
 // =============================================================================
@@ -155,19 +183,19 @@ async fn test_get_listening_summary_with_events() {
     let client = TestClient::authenticated(server.base_url.clone()).await;
 
     // Record some listening events
-    // Complete listen (190/200 = 95% > 90%)
-    client.post_listening_event(TRACK_1_ID, 190, 200).await;
-    // Incomplete listen (50/200 = 25% < 90%)
+    // Complete listen according to the catalog duration (230/240 > 90%).
+    client.post_listening_event(TRACK_1_ID, 230, 240).await;
+    // Incomplete listen (50/180 < 90%).
     client.post_listening_event(TRACK_2_ID, 50, 200).await;
     // Another complete listen of same track
-    client.post_listening_event(TRACK_1_ID, 185, 200).await;
+    client.post_listening_event(TRACK_1_ID, 225, 240).await;
 
     let response = client.get_listening_summary(None, None).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let body: serde_json::Value = response.json().await.unwrap();
     assert_eq!(body["total_plays"].as_u64().unwrap(), 3);
-    assert_eq!(body["total_duration_seconds"].as_u64().unwrap(), 425); // 190 + 50 + 185
+    assert_eq!(body["total_duration_seconds"].as_u64().unwrap(), 505); // 230 + 50 + 225
     assert_eq!(body["completed_plays"].as_u64().unwrap(), 2);
     assert_eq!(body["unique_tracks"].as_u64().unwrap(), 2);
 }
@@ -428,8 +456,8 @@ async fn test_admin_track_stats_with_data() {
 
     // Create listening data
     let user_client = TestClient::authenticated(server.base_url.clone()).await;
-    user_client.post_listening_event(TRACK_1_ID, 190, 200).await; // Complete
-    user_client.post_listening_event(TRACK_1_ID, 50, 200).await; // Incomplete
+    user_client.post_listening_event(TRACK_1_ID, 230, 240).await; // Complete
+    user_client.post_listening_event(TRACK_1_ID, 50, 240).await; // Incomplete
 
     // Query as admin
     let admin_client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -441,7 +469,7 @@ async fn test_admin_track_stats_with_data() {
     let body: serde_json::Value = response.json().await.unwrap();
     assert_eq!(body["track_id"].as_str().unwrap(), TRACK_1_ID);
     assert_eq!(body["play_count"].as_u64().unwrap(), 2);
-    assert_eq!(body["total_duration_seconds"].as_u64().unwrap(), 240); // 190 + 50
+    assert_eq!(body["total_duration_seconds"].as_u64().unwrap(), 280); // 230 + 50
     assert_eq!(body["completed_count"].as_u64().unwrap(), 1);
     assert_eq!(body["unique_listeners"].as_u64().unwrap(), 1);
 }

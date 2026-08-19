@@ -9,9 +9,14 @@ use super::constants::*;
 use reqwest::Response;
 use serde_json::json;
 use std::{
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
     time::Duration,
 };
+
+static LISTENING_SESSION_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 /// reqwest client that mirrors the browser's CSRF interceptor for unsafe methods.
 pub struct TestHttpClient {
@@ -526,10 +531,21 @@ impl TestClient {
         duration_seconds: u32,
         track_duration_seconds: u32,
     ) -> Response {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let session_id = format!(
+            "test-listen-{}",
+            LISTENING_SESSION_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+        );
         self.client
             .post(format!("{}/v1/user/listening", self.base_url))
             .json(&serde_json::json!({
                 "track_id": track_id,
+                "session_id": session_id,
+                "started_at": now.saturating_sub(u64::from(duration_seconds)),
+                "ended_at": now,
                 "duration_seconds": duration_seconds,
                 "track_duration_seconds": track_duration_seconds
             }))
@@ -585,6 +601,19 @@ impl TestClient {
             .send()
             .await
             .expect("Post listening event full request failed")
+    }
+
+    /// POST /v1/user/impression
+    pub async fn post_impression(&self, item_type: &str, item_id: &str) -> Response {
+        self.client
+            .post(format!("{}/v1/user/impression", self.base_url))
+            .json(&serde_json::json!({
+                "item_type": item_type,
+                "item_id": item_id
+            }))
+            .send()
+            .await
+            .expect("Post impression request failed")
     }
 
     /// GET /v1/user/listening/summary

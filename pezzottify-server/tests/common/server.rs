@@ -55,7 +55,14 @@ impl SearchVault for MockSearchVault {
         }
     }
 
-    fn record_impression(&self, _item_id: &str, _item_type: HashedItemType) {}
+    fn record_impression(
+        &self,
+        _item_id: &str,
+        _item_type: HashedItemType,
+        _source: pezzottify_server::search::ImpressionSource,
+    ) -> bool {
+        false
+    }
 
     fn get_impression_totals(
         &self,
