@@ -17,6 +17,35 @@ use std::time::Duration;
 use tempfile::TempDir;
 use tokio::net::TcpListener;
 
+#[derive(Clone, Debug, Default)]
+pub struct TestServerBuilder {
+    download_manager_enabled: bool,
+    ingestion_enabled: bool,
+    disable_password_auth: bool,
+}
+
+#[allow(dead_code)] // Each integration-test crate uses a different subset of builder options.
+impl TestServerBuilder {
+    pub fn with_download_manager(mut self) -> Self {
+        self.download_manager_enabled = true;
+        self
+    }
+
+    pub fn with_ingestion(mut self) -> Self {
+        self.ingestion_enabled = true;
+        self
+    }
+
+    pub fn with_password_auth_disabled(mut self) -> Self {
+        self.disable_password_auth = true;
+        self
+    }
+
+    pub async fn spawn(self) -> TestServer {
+        TestServer::spawn_with(self).await
+    }
+}
+
 /// Mock search vault for testing - returns empty results
 struct MockSearchVault;
 
@@ -104,6 +133,11 @@ pub struct TestServer {
 }
 
 impl TestServer {
+    #[allow(dead_code)] // Used by configurable integration-test crates.
+    pub fn builder() -> TestServerBuilder {
+        TestServerBuilder::default()
+    }
+
     /// Spawns a new test server on a random port
     ///
     /// This function:
@@ -122,6 +156,10 @@ impl TestServer {
     /// - Server fails to start
     /// - Server doesn't become ready within timeout
     pub async fn spawn() -> Self {
+        Self::builder().spawn().await
+    }
+
+    async fn spawn_with(options: TestServerBuilder) -> Self {
         // Create temporary test resources
         let (temp_catalog_dir, catalog_db_path, media_path) =
             create_test_catalog().expect("Failed to create test catalog");
@@ -162,20 +200,29 @@ impl TestServer {
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
 
         // Build the app
+        let download_manager = pezzottify_server::config::DownloadManagerSettings {
+            enabled: options.download_manager_enabled,
+            ..Default::default()
+        };
+        let ingestion = pezzottify_server::config::IngestionSettings {
+            enabled: options.ingestion_enabled,
+            ..Default::default()
+        };
+
         let config = ServerConfig {
             port,
             requests_logging_level: RequestsLoggingLevel::None,
             content_cache_age_sec: 0, // Disable caching in tests
             frontend_dir_path: None,
-            disable_password_auth: false,
+            disable_password_auth: options.disable_password_auth,
             secure_session_cookies: false,
             session_cookie_max_age_secs: 7 * 24 * 60 * 60,
             streaming_search: pezzottify_server::config::StreamingSearchSettings::default(),
-            download_manager: pezzottify_server::config::DownloadManagerSettings::default(),
+            download_manager,
             db_dir: temp_db_dir.path().to_path_buf(),
             media_path: media_path.clone(),
             agent: pezzottify_server::config::AgentSettings::default(),
-            ingestion: pezzottify_server::config::IngestionSettings::default(),
+            ingestion,
             shows: pezzottify_server::config::ShowsSettings::default(),
             audio_embeddings: None,
         };
