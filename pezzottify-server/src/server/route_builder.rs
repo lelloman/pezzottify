@@ -253,6 +253,168 @@ pub(super) fn sync_routes(state: &ServerState, limits: &RouteLimits) -> Router {
         .with_state(state.clone())
 }
 
+pub(super) fn catalog_write_routes(state: &ServerState, limits: &RouteLimits) -> Router {
+    Router::new()
+        .route("/artist", post(create_artist))
+        .route("/artist/{id}", put(update_artist))
+        .route("/artist/{id}", delete(delete_artist))
+        .route("/album", post(create_album))
+        .route("/album/{id}", put(update_album))
+        .route("/album/{id}", delete(delete_album))
+        .route("/track", post(create_track))
+        .route("/track/{id}", put(update_track))
+        .route("/track/{id}", delete(delete_track))
+        .route("/image", post(create_image))
+        .route("/image/{id}", put(update_image))
+        .route("/image/{id}", delete(delete_image))
+        .merge(embeddings::write_routes())
+        .merge(show_admin_routes())
+        .layer(GovernorLayer::new(limits.write.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_edit_catalog,
+        ))
+        .with_state(state.clone())
+}
+
+pub(super) fn admin_routes(state: &ServerState, limits: &RouteLimits) -> Router {
+    let operations: Router = Router::new()
+        .route("/reboot", post(reboot_server))
+        .route("/backup/prepare", post(admin_prepare_backup))
+        .route("/storage", get(admin_get_storage_report))
+        .route("/jobs", get(admin_list_jobs))
+        .route("/jobs/audit", get(admin_get_job_audit_log))
+        .route("/jobs/{job_id}", get(admin_get_job))
+        .route("/jobs/{job_id}/trigger", post(admin_trigger_job))
+        .route("/jobs/{job_id}/cancel", post(admin_cancel_job))
+        .route("/jobs/{job_id}/history", get(admin_get_job_history))
+        .route("/jobs/{job_id}/audit", get(admin_get_job_audit_log_by_job))
+        .route(
+            "/embeddings/coverage",
+            get(admin_get_audio_embedding_coverage),
+        )
+        .route("/bug-reports", get(admin_list_bug_reports))
+        .route("/bug-report/{id}", get(admin_get_bug_report))
+        .route("/bug-report/{id}", delete(admin_delete_bug_report))
+        .layer(GovernorLayer::new(limits.write.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_server_admin,
+        ))
+        .with_state(state.clone());
+
+    let users: Router = Router::new()
+        .route("/users", get(admin_get_users))
+        .route("/users", post(admin_create_user))
+        .route("/users/{user_handle}", delete(admin_delete_user))
+        .route("/users/{user_handle}/roles", get(admin_get_user_roles))
+        .route("/users/{user_handle}/roles", post(admin_add_user_role))
+        .route(
+            "/users/{user_handle}/roles/{role}",
+            delete(admin_remove_user_role),
+        )
+        .route(
+            "/users/{user_handle}/permissions",
+            get(admin_get_user_permissions),
+        )
+        .route(
+            "/users/{user_handle}/permissions",
+            post(admin_add_user_extra_permission),
+        )
+        .route(
+            "/permissions/{permission_id}",
+            delete(admin_remove_extra_permission),
+        )
+        .route(
+            "/users/{user_handle}/credentials",
+            get(admin_get_user_credentials_status),
+        )
+        .route(
+            "/users/{user_handle}/password",
+            put(admin_set_user_password),
+        )
+        .route(
+            "/users/{user_handle}/password",
+            delete(admin_delete_user_password),
+        )
+        .route("/bandwidth/summary", get(admin_get_bandwidth_summary))
+        .route("/bandwidth/usage", get(admin_get_bandwidth_usage))
+        .route(
+            "/bandwidth/users/{user_handle}/summary",
+            get(admin_get_user_bandwidth_summary),
+        )
+        .route(
+            "/bandwidth/users/{user_handle}/usage",
+            get(admin_get_user_bandwidth_usage),
+        )
+        .layer(GovernorLayer::new(limits.write.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_manage_permissions,
+        ))
+        .with_state(state.clone());
+
+    let analytics: Router = Router::new()
+        .route("/listening/daily", get(admin_get_daily_listening_stats))
+        .route("/listening/top-tracks", get(admin_get_top_tracks))
+        .route(
+            "/listening/track/{track_id}",
+            get(admin_get_track_listening_stats),
+        )
+        .route(
+            "/listening/users/{user_handle}/summary",
+            get(admin_get_user_listening_summary),
+        )
+        .route("/online-users", get(admin_get_online_users))
+        .route("/playback/sessions", get(admin_get_playback_sessions))
+        .layer(GovernorLayer::new(limits.write.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_view_analytics,
+        ))
+        .with_state(state.clone());
+
+    let changelog: Router = Router::new()
+        .route("/changelog/batch", post(admin_create_changelog_batch))
+        .route("/changelog/batches", get(admin_list_changelog_batches))
+        .route(
+            "/changelog/batch/{batch_id}",
+            get(admin_get_changelog_batch),
+        )
+        .route(
+            "/changelog/batch/{batch_id}/close",
+            post(admin_close_changelog_batch),
+        )
+        .route(
+            "/changelog/batch/{batch_id}",
+            delete(admin_delete_changelog_batch),
+        )
+        .route(
+            "/changelog/batch/{batch_id}/changes",
+            get(admin_get_changelog_batch_changes),
+        )
+        .route(
+            "/changelog/entity/{entity_type}/{entity_id}",
+            get(admin_get_changelog_entity_history),
+        )
+        .layer(GovernorLayer::new(limits.write.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_edit_catalog,
+        ))
+        .with_state(state.clone());
+
+    let search = make_search_admin_routes(state.clone()).route_layer(
+        middleware::from_fn_with_state(state.clone(), require_server_admin),
+    );
+
+    operations
+        .merge(users)
+        .merge(analytics)
+        .merge(changelog)
+        .merge(search)
+}
+
 pub(super) fn auth_routes(state: &ServerState) -> Router {
     // Login attempts are protected by a short burst bucket and a slower sustained
     // bucket. Peer IP is used directly: forwarded headers are intentionally ignored
