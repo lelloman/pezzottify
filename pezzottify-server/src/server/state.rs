@@ -64,8 +64,10 @@ pub struct ServerState {
     pub db_registry: GuardedDbRegistry,
 }
 
-unsafe impl Send for ServerState {}
-unsafe impl Sync for ServerState {}
+// Keep thread-safety checked by the compiler as fields are added to ServerState.
+const _: () = assert_send_sync::<ServerState>();
+
+const fn assert_send_sync<T: Send + Sync>() {}
 
 impl FromRef<ServerState> for GuardedCatalogStore {
     fn from_ref(input: &ServerState) -> Self {
