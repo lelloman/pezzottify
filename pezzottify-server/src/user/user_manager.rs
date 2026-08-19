@@ -612,6 +612,33 @@ impl UserManager {
         self.user_store.remove_user_extra_permission(permission_id)
     }
 
+    pub fn set_user_role_with_event(
+        &self,
+        user_id: usize,
+        role: UserRole,
+        enabled: bool,
+    ) -> Result<super::sync_events::StoredEvent> {
+        self.user_store
+            .set_user_role_with_event(user_id, role, enabled)
+    }
+
+    pub fn add_extra_permission_with_event(
+        &self,
+        user_id: usize,
+        grant: PermissionGrant,
+    ) -> Result<(usize, super::sync_events::StoredEvent)> {
+        self.user_store
+            .add_extra_permission_with_event(user_id, grant)
+    }
+
+    pub fn remove_extra_permission_with_event(
+        &self,
+        permission_id: usize,
+    ) -> Result<Option<(usize, Permission, super::sync_events::StoredEvent)>> {
+        self.user_store
+            .remove_extra_permission_with_event(permission_id)
+    }
+
     pub fn prune_unused_auth_tokens(&self, unused_for_days: u64) -> Result<usize> {
         self.user_store.prune_unused_auth_tokens(unused_for_days)
     }

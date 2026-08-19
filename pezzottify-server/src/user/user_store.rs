@@ -435,6 +435,36 @@ pub trait UserEventStore: Send + Sync {
         anyhow::bail!("Atomic user sync mutations are not supported")
     }
 
+    /// Atomically change a role and append the resulting permission snapshot event.
+    fn set_user_role_with_event(
+        &self,
+        user_id: usize,
+        role: UserRole,
+        enabled: bool,
+    ) -> Result<StoredEvent> {
+        let _ = (user_id, role, enabled);
+        anyhow::bail!("Atomic permission mutations are not supported")
+    }
+
+    /// Atomically add an extra permission and append its grant event.
+    fn add_extra_permission_with_event(
+        &self,
+        user_id: usize,
+        grant: PermissionGrant,
+    ) -> Result<(usize, StoredEvent)> {
+        let _ = (user_id, grant);
+        anyhow::bail!("Atomic permission mutations are not supported")
+    }
+
+    /// Atomically remove an extra permission and append its revocation event.
+    fn remove_extra_permission_with_event(
+        &self,
+        permission_id: usize,
+    ) -> Result<Option<(usize, Permission, StoredEvent)>> {
+        let _ = permission_id;
+        anyhow::bail!("Atomic permission mutations are not supported")
+    }
+
     /// Read all full-sync state and its sequence in one consistent transaction.
     fn get_sync_snapshot(&self, user_id: usize) -> Result<UserSyncSnapshot> {
         let _ = user_id;
