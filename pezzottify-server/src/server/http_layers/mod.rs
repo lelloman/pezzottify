@@ -5,7 +5,7 @@ mod random_slowdown;
 mod rate_limit;
 mod requests_logging;
 
-pub use http_cache::http_cache;
+pub use http_cache::{http_api_no_store, http_cache, http_no_store};
 #[cfg(feature = "slowdown")]
 pub use random_slowdown::slowdown_request;
 pub use rate_limit::{

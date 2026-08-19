@@ -54,12 +54,12 @@ use tower_governor::GovernorLayer;
 #[cfg(feature = "slowdown")]
 use super::slowdown_request;
 use super::{
-    embeddings, extract_login_account_for_rate_limit, extract_user_id_for_rate_limit, http_cache,
-    log_requests, make_search_admin_routes, make_search_routes, recommendation_routes, state::*,
-    AnalyticsDeviceKeyExtractor, IpKeyExtractor, LoginAccountKeyExtractor, RequestsLoggingLevel,
-    ServerConfig, UserOrIpKeyExtractor, ANALYTICS_PER_DEVICE_PER_MINUTE, CONTENT_READ_PER_MINUTE,
-    GLOBAL_PER_MINUTE, LOGIN_PER_MINUTE, LOGIN_SUSTAINED_REPLENISH_MILLIS, SEARCH_PER_MINUTE,
-    STREAM_PER_MINUTE, WRITE_PER_MINUTE,
+    embeddings, extract_login_account_for_rate_limit, extract_user_id_for_rate_limit,
+    http_api_no_store, http_cache, log_requests, make_search_admin_routes, make_search_routes,
+    recommendation_routes, state::*, AnalyticsDeviceKeyExtractor, IpKeyExtractor,
+    LoginAccountKeyExtractor, RequestsLoggingLevel, ServerConfig, UserOrIpKeyExtractor,
+    ANALYTICS_PER_DEVICE_PER_MINUTE, CONTENT_READ_PER_MINUTE, GLOBAL_PER_MINUTE, LOGIN_PER_MINUTE,
+    LOGIN_SUSTAINED_REPLENISH_MILLIS, SEARCH_PER_MINUTE, STREAM_PER_MINUTE, WRITE_PER_MINUTE,
 };
 use crate::server::session::Session;
 use crate::server::session_cookie::{
@@ -5691,7 +5691,7 @@ pub async fn make_app(
             .unwrap(),
     );
 
-    let content_read_routes: Router = Router::new()
+    let cacheable_catalog_routes: Router<ServerState> = Router::new()
         .route("/album/{id}", get(get_album))
         .route("/album/{id}/resolved", get(get_resolved_album))
         .route("/artist/{id}", get(get_artist))
@@ -5699,14 +5699,21 @@ pub async fn make_app(
         .route("/track/{id}", get(get_track))
         .route("/track/{id}/resolved", get(get_resolved_track))
         .route("/image/{id}", get(get_image))
+        .route("/catalog/stats", get(get_catalog_stats_snapshot))
+        .route("/genres", get(get_genres))
+        .route("/genre/{name}/tracks", get(get_genre_tracks))
+        .layer(middleware::from_fn_with_state(
+            config.content_cache_age_sec,
+            http_cache,
+        ));
+
+    let content_read_routes: Router = Router::new()
         .route("/whatsnew", get(get_whats_new))
         .route("/popular", get(get_popular_content))
         .route("/featured/albums", get(get_featured_albums))
-        .route("/catalog/stats", get(get_catalog_stats_snapshot))
         .route("/batch", post(post_batch_content))
-        .route("/genres", get(get_genres))
-        .route("/genre/{name}/tracks", get(get_genre_tracks))
         .route("/genre/{name}/radio", get(get_genre_radio))
+        .merge(cacheable_catalog_routes)
         .merge(show_public_routes())
         .merge(embeddings::read_routes())
         .merge(recommendation_routes())
@@ -5714,16 +5721,13 @@ pub async fn make_app(
         .with_state(state.clone());
 
     // Merge content routes and apply common middleware
-    let mut content_routes: Router = stream_routes
-        .merge(content_read_routes)
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_access_catalog,
-        ))
-        .layer(middleware::from_fn_with_state(
-            config.content_cache_age_sec,
-            http_cache,
-        ));
+    let mut content_routes: Router =
+        stream_routes
+            .merge(content_read_routes)
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                require_access_catalog,
+            ));
 
     // Write rate limiting for user content modifications (60 req/min = 1 token per 1000ms)
     let write_rate_limit = Arc::new(
@@ -6138,7 +6142,7 @@ pub async fn make_app(
         .route("/mcp", get(crate::mcp::handler::mcp_handler))
         .with_state(state.clone());
 
-    let mut app: Router = home_router
+    let api_routes: Router = Router::new()
         .nest("/v1/auth", auth_routes)
         .nest("/v1/content", content_routes)
         .nest("/v1/user", user_routes)
@@ -6148,6 +6152,8 @@ pub async fn make_app(
         .nest("/v1/ingestion", ingestion_routes)
         .nest("/v1", ws_routes)
         .nest("/v1", mcp_routes);
+
+    let mut app: Router = home_router.merge(api_routes);
 
     #[cfg(feature = "slowdown")]
     {
@@ -6175,6 +6181,10 @@ pub async fn make_app(
     app = app.layer(middleware::from_fn_with_state(state.clone(), require_csrf));
 
     app = app.layer(middleware::from_fn_with_state(state.clone(), log_requests));
+
+    // Keep the API cache-safe even when outer authentication/CSRF/rate-limit
+    // middleware returns early. Explicit route policies take precedence.
+    app = app.layer(middleware::from_fn(http_api_no_store));
 
     Ok(app)
 }

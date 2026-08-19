@@ -19,10 +19,12 @@ async fn test_like_and_unlike_track() {
     // Like a track
     let response = client.add_liked_content("track", TRACK_1_ID).await;
     assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["cache-control"], "no-store");
 
     // Verify it appears in liked tracks
     let response = client.get_liked_content("track").await;
     assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["cache-control"], "no-store");
     let liked: Vec<String> = response.json().await.unwrap();
     assert!(liked.contains(&TRACK_1_ID.to_string()));
 

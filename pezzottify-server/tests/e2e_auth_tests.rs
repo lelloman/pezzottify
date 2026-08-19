@@ -14,6 +14,7 @@ async fn test_login_sets_consistent_session_and_csrf_cookie_policy() {
 
     let response = client.login(TEST_USER, TEST_PASS).await;
     assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(response.headers()["cache-control"], "no-store");
 
     let cookies: Vec<_> = response
         .headers()
