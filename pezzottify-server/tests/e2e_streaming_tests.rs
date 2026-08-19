@@ -15,6 +15,7 @@ async fn test_stream_track_returns_audio_data() {
     let response = client.stream_track(TRACK_1_ID).await;
 
     assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["cache-control"], "no-store");
     assert_eq!(response.headers().get("accept-ranges").unwrap(), "bytes");
     assert!(
         response.headers().get("content-range").is_none(),
@@ -109,6 +110,7 @@ async fn test_stream_track_with_range_request() {
         .await;
 
     assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+    assert_eq!(response.headers()["cache-control"], "no-store");
 
     // Verify content-range header is present
     assert_eq!(

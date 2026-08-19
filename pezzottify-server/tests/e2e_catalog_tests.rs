@@ -229,6 +229,10 @@ async fn test_get_track_returns_correct_data() {
     let response = client.get_track(TRACK_1_ID).await;
 
     assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["cache-control"], "private, max-age=0");
+    let vary = response.headers()["vary"].to_str().unwrap();
+    assert!(vary.contains("Cookie"));
+    assert!(vary.contains("Authorization"));
 
     let track: serde_json::Value = response.json().await.unwrap();
     assert_eq!(track["id"], TRACK_1_ID);
@@ -328,6 +332,7 @@ async fn test_get_nonexistent_track_returns_404() {
     let response = client.get_track("nonexistent-track").await;
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    assert_eq!(response.headers()["cache-control"], "no-store");
 }
 
 #[tokio::test]
@@ -398,6 +403,7 @@ async fn test_batch_content_returns_multiple_items() {
         .await;
 
     assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["cache-control"], "no-store");
 
     let body: serde_json::Value = response.json().await.unwrap();
 
