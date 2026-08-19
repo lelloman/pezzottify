@@ -411,6 +411,9 @@ pub trait UserEventStore: Send + Sync {
     }
 
     /// Atomically delete a playlist and append its sync event.
+    ///
+    /// Deletion is intentionally non-idempotent: a missing or foreign playlist
+    /// returns `UserServiceError::NotFound`, and no sync event is appended.
     fn delete_playlist_with_event(
         &self,
         playlist_id: &str,

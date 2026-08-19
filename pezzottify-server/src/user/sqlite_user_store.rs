@@ -1742,17 +1742,20 @@ impl UserStore for SqliteUserStore {
         let mut conn = self.conn.lock().unwrap();
         let tx = conn.transaction()?;
 
-        let playlist_user_id = tx.query_row(
-            &format!(
-                "SELECT user_id FROM {} WHERE id = ?1",
-                USER_PLAYLIST_TABLE_V_3.name
-            ),
-            params![playlist_id],
-            |row| row.get::<usize, usize>(0),
-        )?;
+        let playlist_user_id = tx
+            .query_row(
+                &format!(
+                    "SELECT user_id FROM {} WHERE id = ?1",
+                    USER_PLAYLIST_TABLE_V_3.name
+                ),
+                params![playlist_id],
+                |row| row.get::<usize, usize>(0),
+            )
+            .optional()?
+            .ok_or_else(super::UserServiceError::playlist_not_found)?;
         debug!("update_user_playlist({playlist_id}) found user_id: {playlist_user_id}",);
         if user_id != playlist_user_id {
-            bail!("User does not own the playlist");
+            return Err(super::UserServiceError::playlist_not_found().into());
         }
 
         if let Some(playlist_name) = playlist_name {
@@ -1793,13 +1796,16 @@ impl UserStore for SqliteUserStore {
 
     fn delete_user_playlist(&self, playlist_id: &str, user_id: usize) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute(
+        let changed = conn.execute(
             &format!(
                 "DELETE FROM {} WHERE id = ?1 AND user_id = ?2",
                 USER_PLAYLIST_TABLE_V_3.name
             ),
             params![playlist_id, user_id],
         )?;
+        if changed == 0 {
+            return Err(super::UserServiceError::playlist_not_found().into());
+        }
         Ok(())
     }
 
@@ -3642,13 +3648,13 @@ impl user_store::UserEventStore for SqliteUserStore {
                     crate::user::sync_events::UserEvent::PlaylistCreated { name, .. }
                         if name == playlist_name
                 ) {
-                    bail!("Operation id was already used for a different mutation");
+                    return Err(super::UserServiceError::operation_conflict().into());
                 }
                 let playlist_id = playlist_id.clone();
                 tx.commit()?;
                 return Ok((playlist_id, existing));
             }
-            bail!("Operation id was already used for a different mutation");
+            return Err(super::UserServiceError::operation_conflict().into());
         }
 
         let mut playlist_id = random_string(16);
@@ -3712,18 +3718,23 @@ impl user_store::UserEventStore for SqliteUserStore {
                 .map(|event| &event.event)
                 .ne(expected.iter())
             {
-                bail!("Operation id was already used for a different mutation");
+                return Err(super::UserServiceError::operation_conflict().into());
             }
             tx.commit()?;
             return Ok(existing);
         }
-        let owner: usize = tx.query_row(
-            "SELECT user_id FROM user_playlist WHERE id = ?1",
-            params![playlist_id],
-            |row| row.get(0),
-        )?;
+        let owner: Option<usize> = tx
+            .query_row(
+                "SELECT user_id FROM user_playlist WHERE id = ?1",
+                params![playlist_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let Some(owner) = owner else {
+            return Err(super::UserServiceError::playlist_not_found().into());
+        };
         if owner != user_id {
-            bail!("User does not own the playlist");
+            return Err(super::UserServiceError::playlist_not_found().into());
         }
 
         let mut events = Vec::new();
@@ -3789,7 +3800,7 @@ impl user_store::UserEventStore for SqliteUserStore {
                 crate::user::sync_events::UserEvent::PlaylistDeleted { playlist_id: id }
                     if id == playlist_id
             ) {
-                bail!("Operation id was already used for a different mutation");
+                return Err(super::UserServiceError::operation_conflict().into());
             }
             tx.commit()?;
             return Ok(existing);
@@ -3799,7 +3810,7 @@ impl user_store::UserEventStore for SqliteUserStore {
             params![playlist_id, user_id],
         )?;
         if changed == 0 {
-            bail!("Playlist not found");
+            return Err(super::UserServiceError::playlist_not_found().into());
         }
         let event = crate::user::sync_events::UserEvent::PlaylistDeleted {
             playlist_id: playlist_id.to_owned(),
@@ -6459,6 +6470,22 @@ mod tests {
 
         let seq = store.get_min_seq(user_id).unwrap();
         assert!(seq.is_none());
+    }
+
+    #[test]
+    fn deleting_missing_playlist_does_not_append_sync_event() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+
+        let error = store
+            .delete_playlist_with_event("missing-playlist", user_id, Some("delete-missing"))
+            .unwrap_err();
+        assert!(matches!(
+            error.downcast_ref::<super::UserServiceError>(),
+            Some(super::UserServiceError::NotFound(_))
+        ));
+        assert_eq!(store.get_current_seq(user_id).unwrap(), 0);
+        assert!(store.get_events_since(user_id, 0).unwrap().is_empty());
     }
 
     #[test]

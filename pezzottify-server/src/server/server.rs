@@ -51,6 +51,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use tower_governor::GovernorLayer;
 
+use super::api_error::ApiError;
 #[cfg(feature = "slowdown")]
 use super::slowdown_request;
 use super::{
@@ -930,13 +931,11 @@ async fn get_artist(
             ))
             .into_response()
         }
-        Ok(Ok(None)) => StatusCode::NOT_FOUND.into_response(),
-        Ok(Err(err)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Internal server error".to_string(),
-        )
-            .into_response(),
+        Ok(Ok(None)) => {
+            ApiError::not_found("catalog_item_not_found", "Artist not found").into_response()
+        }
+        Ok(Err(err)) => ApiError::internal("Failed to load artist", err).into_response(),
+        Err(err) => ApiError::internal("Artist read task failed", err).into_response(),
     }
 }
 
@@ -963,13 +962,11 @@ async fn get_album(
             &enrichment_store,
         ))
         .into_response(),
-        Ok(Ok(None)) => StatusCode::NOT_FOUND.into_response(),
-        Ok(Err(err)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Internal server error".to_string(),
-        )
-            .into_response(),
+        Ok(Ok(None)) => {
+            ApiError::not_found("catalog_item_not_found", "Album not found").into_response()
+        }
+        Ok(Err(err)) => ApiError::internal("Failed to load album", err).into_response(),
+        Err(err) => ApiError::internal("Album read task failed", err).into_response(),
     }
 }
 
@@ -996,13 +993,11 @@ async fn get_resolved_album(
             &enrichment_store,
         ))
         .into_response(),
-        Ok(Ok(None)) => StatusCode::NOT_FOUND.into_response(),
-        Ok(Err(err)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Internal server error".to_string(),
-        )
-            .into_response(),
+        Ok(Ok(None)) => {
+            ApiError::not_found("catalog_item_not_found", "Album not found").into_response()
+        }
+        Ok(Err(err)) => ApiError::internal("Failed to load resolved album", err).into_response(),
+        Err(err) => ApiError::internal("Resolved album read task failed", err).into_response(),
     }
 }
 
@@ -1035,13 +1030,13 @@ async fn get_artist_discography(
     .await
     {
         Ok(Ok(Some(discography))) => Json(discography).into_response(),
-        Ok(Ok(None)) => StatusCode::NOT_FOUND.into_response(),
-        Ok(Err(err)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Internal server error".to_string(),
-        )
-            .into_response(),
+        Ok(Ok(None)) => {
+            ApiError::not_found("catalog_item_not_found", "Artist not found").into_response()
+        }
+        Ok(Err(err)) => {
+            ApiError::internal("Failed to load artist discography", err).into_response()
+        }
+        Err(err) => ApiError::internal("Artist discography task failed", err).into_response(),
     }
 }
 
@@ -1057,15 +1052,8 @@ async fn get_genres(
 
     match tokio::task::spawn_blocking(move || catalog_store.get_genres_with_counts()).await {
         Ok(Ok(genres)) => Json(genres).into_response(),
-        Ok(Err(err)) => {
-            error!("Error getting genres: {}", err);
-            (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response()
-        }
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Internal server error".to_string(),
-        )
-            .into_response(),
+        Ok(Err(err)) => ApiError::internal("Failed to load genres", err).into_response(),
+        Err(err) => ApiError::internal("Genre read task failed", err).into_response(),
     }
 }
 
@@ -1086,15 +1074,8 @@ async fn get_genre_tracks(
     .await
     {
         Ok(Ok(result)) => Json(result).into_response(),
-        Ok(Err(err)) => {
-            error!("Error getting genre tracks: {}", err);
-            (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response()
-        }
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Internal server error".to_string(),
-        )
-            .into_response(),
+        Ok(Err(err)) => ApiError::internal("Failed to load genre tracks", err).into_response(),
+        Err(err) => ApiError::internal("Genre tracks task failed", err).into_response(),
     }
 }
 
@@ -1114,15 +1095,8 @@ async fn get_genre_radio(
     .await
     {
         Ok(Ok(track_ids)) => Json(track_ids).into_response(),
-        Ok(Err(err)) => {
-            error!("Error getting genre radio: {}", err);
-            (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response()
-        }
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Internal server error".to_string(),
-        )
-            .into_response(),
+        Ok(Err(err)) => ApiError::internal("Failed to build genre radio", err).into_response(),
+        Err(err) => ApiError::internal("Genre radio task failed", err).into_response(),
     }
 }
 
@@ -1149,13 +1123,11 @@ pub async fn get_track(
             &enrichment_store,
         ))
         .into_response(),
-        Ok(Ok(None)) => StatusCode::NOT_FOUND.into_response(),
-        Ok(Err(err)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Internal server error".to_string(),
-        )
-            .into_response(),
+        Ok(Ok(None)) => {
+            ApiError::not_found("catalog_item_not_found", "Track not found").into_response()
+        }
+        Ok(Err(err)) => ApiError::internal("Failed to load track", err).into_response(),
+        Err(err) => ApiError::internal("Track read task failed", err).into_response(),
     }
 }
 
@@ -1182,13 +1154,11 @@ pub async fn get_resolved_track(
             &enrichment_store,
         ))
         .into_response(),
-        Ok(Ok(None)) => StatusCode::NOT_FOUND.into_response(),
-        Ok(Err(err)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", err)).into_response(),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Internal server error".to_string(),
-        )
-            .into_response(),
+        Ok(Ok(None)) => {
+            ApiError::not_found("catalog_item_not_found", "Track not found").into_response()
+        }
+        Ok(Err(err)) => ApiError::internal("Failed to load resolved track", err).into_response(),
+        Err(err) => ApiError::internal("Resolved track read task failed", err).into_response(),
     }
 }
 
@@ -1553,19 +1523,12 @@ async fn create_artist(
     };
 
     if let Err(e) = validate_artist(&artist) {
-        return (StatusCode::BAD_REQUEST, e.to_string()).into_response();
+        return ApiError::bad_request("invalid_artist", e.to_string()).into_response();
     }
 
     match catalog_store.create_artist(&artist) {
         Ok(()) => StatusCode::CREATED.into_response(),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("already exists") {
-                (StatusCode::CONFLICT, msg).into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
-            }
-        }
+        Err(e) => ApiError::catalog_mutation(e).into_response(),
     }
 }
 
@@ -1587,19 +1550,12 @@ async fn update_artist(
     };
 
     if let Err(e) = validate_artist(&artist) {
-        return (StatusCode::BAD_REQUEST, e.to_string()).into_response();
+        return ApiError::bad_request("invalid_artist", e.to_string()).into_response();
     }
 
     match catalog_store.update_artist(&artist) {
         Ok(()) => StatusCode::OK.into_response(),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("not found") {
-                (StatusCode::NOT_FOUND, msg).into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
-            }
-        }
+        Err(e) => ApiError::catalog_mutation(e).into_response(),
     }
 }
 
@@ -1610,8 +1566,10 @@ async fn delete_artist(
 ) -> Response {
     match catalog_store.delete_artist(&id) {
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
-        Ok(false) => StatusCode::NOT_FOUND.into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Ok(false) => {
+            ApiError::not_found("catalog_item_not_found", "Artist not found").into_response()
+        }
+        Err(e) => ApiError::internal("Failed to delete artist", e).into_response(),
     }
 }
 
@@ -1635,21 +1593,12 @@ async fn create_album(
     };
 
     if let Err(e) = validate_album(&album) {
-        return (StatusCode::BAD_REQUEST, e.to_string()).into_response();
+        return ApiError::bad_request("invalid_album", e.to_string()).into_response();
     }
 
     match catalog_store.create_album(&album, &data.artist_ids) {
         Ok(()) => StatusCode::CREATED.into_response(),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("already exists") {
-                (StatusCode::CONFLICT, msg).into_response()
-            } else if msg.contains("not found") {
-                (StatusCode::BAD_REQUEST, msg).into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
-            }
-        }
+        Err(e) => ApiError::catalog_mutation(e).into_response(),
     }
 }
 
@@ -1672,19 +1621,12 @@ async fn update_album(
     };
 
     if let Err(e) = validate_album_metadata(&id, &metadata) {
-        return (StatusCode::BAD_REQUEST, e.to_string()).into_response();
+        return ApiError::bad_request("invalid_album", e.to_string()).into_response();
     }
 
     match catalog_store.update_album_metadata(&id, &metadata, data.artist_ids.as_deref()) {
         Ok(()) => StatusCode::OK.into_response(),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("not found") {
-                (StatusCode::NOT_FOUND, msg).into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
-            }
-        }
+        Err(e) => ApiError::catalog_mutation(e).into_response(),
     }
 }
 
@@ -1695,8 +1637,10 @@ async fn delete_album(
 ) -> Response {
     match catalog_store.delete_album(&id) {
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
-        Ok(false) => StatusCode::NOT_FOUND.into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Ok(false) => {
+            ApiError::not_found("catalog_item_not_found", "Album not found").into_response()
+        }
+        Err(e) => ApiError::internal("Failed to delete album", e).into_response(),
     }
 }
 
@@ -1723,21 +1667,12 @@ async fn create_track(
     };
 
     if let Err(e) = validate_track(&track) {
-        return (StatusCode::BAD_REQUEST, e.to_string()).into_response();
+        return ApiError::bad_request("invalid_track", e.to_string()).into_response();
     }
 
     match catalog_store.create_track(&track, &data.artist_ids) {
         Ok(()) => StatusCode::CREATED.into_response(),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("already exists") {
-                (StatusCode::CONFLICT, msg).into_response()
-            } else if msg.contains("not found") {
-                (StatusCode::BAD_REQUEST, msg).into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
-            }
-        }
+        Err(e) => ApiError::catalog_mutation(e).into_response(),
     }
 }
 
@@ -1762,19 +1697,12 @@ async fn update_track(
     };
 
     if let Err(e) = validate_track_metadata(&id, &metadata) {
-        return (StatusCode::BAD_REQUEST, e.to_string()).into_response();
+        return ApiError::bad_request("invalid_track", e.to_string()).into_response();
     }
 
     match catalog_store.update_track_metadata(&id, &metadata, data.artist_ids.as_deref()) {
         Ok(()) => StatusCode::OK.into_response(),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("not found") {
-                (StatusCode::NOT_FOUND, msg).into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
-            }
-        }
+        Err(e) => ApiError::catalog_mutation(e).into_response(),
     }
 }
 
@@ -1785,8 +1713,10 @@ async fn delete_track(
 ) -> Response {
     match catalog_store.delete_track(&id) {
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
-        Ok(false) => StatusCode::NOT_FOUND.into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Ok(false) => {
+            ApiError::not_found("catalog_item_not_found", "Track not found").into_response()
+        }
+        Err(e) => ApiError::internal("Failed to delete track", e).into_response(),
     }
 }
 
@@ -1898,7 +1828,7 @@ async fn get_whats_new(
     let batches = match server_store.list_whatsnew_batches(limit) {
         Ok(b) => b,
         Err(e) => {
-            return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response();
+            return ApiError::internal("Failed to load What's New batches", e).into_response();
         }
     };
 
@@ -2245,8 +2175,7 @@ async fn post_playlist(
         ) {
             Ok(result) => result,
             Err(err) => {
-                error!("Failed to atomically create playlist: {}", err);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                return ApiError::from(err).into_response();
             }
         }
     };
@@ -2291,8 +2220,7 @@ async fn put_playlist(
         ) {
             Ok(events) => events,
             Err(err) => {
-                debug!("Error updating playlist: {}", err);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                return ApiError::from(err).into_response();
             }
         }
     };
@@ -2331,8 +2259,7 @@ async fn delete_playlist(
         match um.delete_user_playlist_with_event(&id, session.user_id, operation_id.as_deref()) {
             Ok(stored) => stored,
             Err(err) => {
-                error!("Failed to atomically delete playlist: {}", err);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                return ApiError::from(err).into_response();
             }
         }
     };
@@ -2363,14 +2290,8 @@ async fn get_playlist(
         .unwrap()
         .get_user_playlist(&id, session.user_id)
     {
-        Ok(playlist) => {
-            if playlist.user_id == session.user_id {
-                Json(playlist).into_response()
-            } else {
-                StatusCode::NOT_FOUND.into_response()
-            }
-        }
-        Err(_) => StatusCode::NOT_FOUND.into_response(),
+        Ok(playlist) => Json(playlist).into_response(),
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
@@ -2396,8 +2317,7 @@ async fn add_playlist_tracks(
         ) {
             Ok(events) => events,
             Err(err) => {
-                error!("Failed to atomically add playlist tracks: {}", err);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                return ApiError::from(err).into_response();
             }
         }
     };
@@ -2442,8 +2362,7 @@ async fn remove_tracks_from_playlist(
         ) {
             Ok(events) => events,
             Err(err) => {
-                error!("Failed to atomically remove playlist tracks: {}", err);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                return ApiError::from(err).into_response();
             }
         }
     };
@@ -4478,19 +4397,25 @@ async fn admin_create_user(
 ) -> Response {
     let manager = user_manager.lock().unwrap();
 
-    // Create user (add_user validates handle is not empty and not duplicate)
+    if body.user_handle.is_empty() {
+        return ApiError::bad_request("invalid_user_handle", "User handle cannot be empty")
+            .into_response();
+    }
+    match manager.get_user_id(&body.user_handle) {
+        Ok(Some(_)) => {
+            return ApiError::conflict("user_handle_exists", "User handle already exists")
+                .into_response();
+        }
+        Ok(None) => {}
+        Err(err) => {
+            return ApiError::internal("Failed to check user handle", err).into_response();
+        }
+    }
+
     let user_id = match manager.add_user(&body.user_handle) {
         Ok(id) => id,
         Err(err) => {
-            let err_str = err.to_string();
-            if err_str.contains("already exists") {
-                return (StatusCode::CONFLICT, "User handle already exists").into_response();
-            }
-            if err_str.contains("cannot be empty") {
-                return (StatusCode::BAD_REQUEST, "User handle cannot be empty").into_response();
-            }
-            error!("Error creating user: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            return ApiError::internal("Failed to create user", err).into_response();
         }
     };
 

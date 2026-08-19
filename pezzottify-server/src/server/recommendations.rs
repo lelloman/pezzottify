@@ -17,6 +17,7 @@ use tracing::error;
 use crate::catalog_store::{CatalogStore, ResolvedTrack, TrackAvailability};
 use crate::config::AudioEmbeddingsSettings;
 
+use super::api_error::ApiError;
 use super::session::Session;
 use super::state::ServerState;
 
@@ -248,6 +249,13 @@ async fn get_radio(
     Path((entity_type, entity_id)): Path<(String, String)>,
     Query(query): Query<RadioQuery>,
 ) -> Response {
+    if !matches!(entity_type.as_str(), "track" | "album" | "artist") {
+        return ApiError::bad_request(
+            "unsupported_entity_type",
+            "Radio entity type must be track, album, or artist",
+        )
+        .into_response();
+    }
     let count = query.count.unwrap_or(50).clamp(1, 200);
     let catalog_store = Arc::clone(&state.catalog_store);
     let namespace = track_namespace(state.config.audio_embeddings.as_ref());
@@ -263,28 +271,13 @@ async fn get_radio(
             count,
         ),
         "artist" => artist_radio(catalog_store.as_ref(), &namespace, &entity_id, count),
-        _ => Err(anyhow::anyhow!(
-            "unsupported radio entity_type '{}'",
-            entity_type
-        )),
+        _ => unreachable!("entity type was validated before spawning"),
     })
     .await
     {
         Ok(Ok(track_ids)) => no_store_json(TrackIdsResponse { track_ids }),
-        Ok(Err(err)) => {
-            let status = if err.to_string().contains("unsupported radio entity_type") {
-                StatusCode::BAD_REQUEST
-            } else {
-                StatusCode::INTERNAL_SERVER_ERROR
-            };
-            error!("Error generating radio: {}", err);
-            (status, err.to_string()).into_response()
-        }
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Internal server error".to_string(),
-        )
-            .into_response(),
+        Ok(Err(err)) => ApiError::internal("Failed to generate radio", err).into_response(),
+        Err(err) => ApiError::internal("Radio worker task failed", err).into_response(),
     }
 }
 

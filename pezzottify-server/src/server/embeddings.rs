@@ -12,8 +12,8 @@ use serde_json::Value;
 
 use crate::catalog_store::{EntityEmbedding, EntityEmbeddingSearchResult, EntityEmbeddingUpsert};
 
-use super::session::Session;
 use super::state::ServerState;
+use super::{api_error::ApiError, session::Session};
 
 #[derive(Deserialize)]
 struct EmbeddingQuery {
@@ -50,24 +50,27 @@ fn default_dtype() -> String {
     "float32".to_string()
 }
 
-fn validate_entity_type(entity_type: &str) -> Result<(), (StatusCode, String)> {
+fn validate_entity_type(entity_type: &str) -> Result<(), ApiError> {
     match entity_type {
         "track" | "album" | "artist" | "playlist" | "user" => Ok(()),
-        other => Err((
-            StatusCode::BAD_REQUEST,
-            format!("unsupported entity_type '{other}'"),
+        other => Err(ApiError::bad_request(
+            "unsupported_entity_type",
+            format!("Unsupported entity type '{other}'"),
         )),
     }
 }
 
-fn validate_namespace(namespace: &str) -> Result<(), (StatusCode, String)> {
+fn validate_namespace(namespace: &str) -> Result<(), ApiError> {
     if namespace.trim().is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "namespace is required".to_string()));
+        return Err(ApiError::bad_request(
+            "invalid_namespace",
+            "Namespace is required",
+        ));
     }
     if namespace.len() > 160 {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "namespace is too long; max 160 bytes".to_string(),
+        return Err(ApiError::bad_request(
+            "invalid_namespace",
+            "Namespace is too long; maximum is 160 bytes",
         ));
     }
     Ok(())
@@ -78,13 +81,13 @@ async fn list_embeddings(
     State(state): State<ServerState>,
     Path((entity_type, entity_id)): Path<(String, String)>,
     Query(query): Query<EmbeddingQuery>,
-) -> Result<Json<Vec<EntityEmbedding>>, (StatusCode, String)> {
+) -> Result<Json<Vec<EntityEmbedding>>, ApiError> {
     validate_entity_type(&entity_type)?;
     state
         .catalog_store
         .list_entity_embeddings(&entity_type, &entity_id, query.include_vector)
         .map(Json)
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
+        .map_err(|err| ApiError::internal("Failed to list embeddings", err))
 }
 
 async fn get_embedding(
@@ -92,16 +95,19 @@ async fn get_embedding(
     State(state): State<ServerState>,
     Path((entity_type, entity_id, namespace)): Path<(String, String, String)>,
     Query(query): Query<EmbeddingQuery>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, ApiError> {
     validate_entity_type(&entity_type)?;
     validate_namespace(&namespace)?;
     match state
         .catalog_store
         .get_entity_embedding(&entity_type, &entity_id, &namespace, query.include_vector)
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
+        .map_err(|err| ApiError::internal("Failed to load embedding", err))?
     {
         Some(embedding) => Ok(Json(embedding).into_response()),
-        None => Ok(StatusCode::NOT_FOUND.into_response()),
+        None => Err(ApiError::not_found(
+            "embedding_not_found",
+            "Embedding not found",
+        )),
     }
 }
 
@@ -110,19 +116,19 @@ async fn put_embedding(
     State(state): State<ServerState>,
     Path((entity_type, entity_id, namespace)): Path<(String, String, String)>,
     Json(body): Json<UpsertEmbeddingBody>,
-) -> Result<Json<EntityEmbedding>, (StatusCode, String)> {
+) -> Result<Json<EntityEmbedding>, ApiError> {
     validate_entity_type(&entity_type)?;
     validate_namespace(&namespace)?;
     if body.vector.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "embedding vector cannot be empty".to_string(),
+        return Err(ApiError::bad_request(
+            "invalid_embedding",
+            "Embedding vector cannot be empty",
         ));
     }
     if body.dtype != "float32" {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "only dtype=float32 is currently supported".to_string(),
+        return Err(ApiError::bad_request(
+            "invalid_embedding_dtype",
+            "Only dtype=float32 is currently supported",
         ));
     }
 
@@ -139,40 +145,43 @@ async fn put_embedding(
         .catalog_store
         .upsert_entity_embedding(&embedding)
         .map(Json)
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
+        .map_err(|err| ApiError::internal("Failed to store embedding", err))
 }
 
 async fn delete_embedding(
     _session: Session,
     State(state): State<ServerState>,
     Path((entity_type, entity_id, namespace)): Path<(String, String, String)>,
-) -> Result<StatusCode, (StatusCode, String)> {
+) -> Result<StatusCode, ApiError> {
     validate_entity_type(&entity_type)?;
     validate_namespace(&namespace)?;
     let deleted = state
         .catalog_store
         .delete_entity_embedding(&entity_type, &entity_id, &namespace)
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
-    Ok(if deleted {
-        StatusCode::NO_CONTENT
+        .map_err(|err| ApiError::internal("Failed to delete embedding", err))?;
+    if deleted {
+        Ok(StatusCode::NO_CONTENT)
     } else {
-        StatusCode::NOT_FOUND
-    })
+        Err(ApiError::not_found(
+            "embedding_not_found",
+            "Embedding not found",
+        ))
+    }
 }
 
 async fn search_embeddings(
     _session: Session,
     State(state): State<ServerState>,
     Json(body): Json<SearchEmbeddingsBody>,
-) -> Result<Json<SearchEmbeddingsResponse>, (StatusCode, String)> {
+) -> Result<Json<SearchEmbeddingsResponse>, ApiError> {
     validate_namespace(&body.namespace)?;
     if let Some(entity_type) = body.entity_type.as_deref() {
         validate_entity_type(entity_type)?;
     }
     if body.vector.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "query vector cannot be empty".to_string(),
+        return Err(ApiError::bad_request(
+            "invalid_embedding",
+            "Query vector cannot be empty",
         ));
     }
     let limit = body.limit.unwrap_or(30).clamp(1, 200);
@@ -184,7 +193,7 @@ async fn search_embeddings(
             body.entity_type.as_deref(),
             limit,
         )
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+        .map_err(|err| ApiError::internal("Embedding search failed", err))?;
     Ok(Json(SearchEmbeddingsResponse {
         namespace: body.namespace,
         results,
