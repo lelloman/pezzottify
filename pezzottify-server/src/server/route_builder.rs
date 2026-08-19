@@ -161,6 +161,98 @@ pub(super) fn playlist_routes(state: &ServerState, limits: &RouteLimits) -> Rout
     read_routes.merge(write_routes)
 }
 
+pub(super) fn user_support_routes(state: &ServerState, limits: &RouteLimits) -> Router {
+    let listening_write: Router = Router::new()
+        .route("/listening", post(post_listening_event))
+        .route("/impression", post(post_impression))
+        .layer(GovernorLayer::new(limits.analytics_device.clone()))
+        .layer(GovernorLayer::new(limits.write.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_access_catalog,
+        ))
+        .with_state(state.clone());
+    let listening_read: Router = Router::new()
+        .route("/listening/summary", get(get_user_listening_summary))
+        .route("/listening/history", get(get_user_listening_history))
+        .route("/listening/events", get(get_user_listening_events))
+        .layer(GovernorLayer::new(limits.user_content_read.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_access_catalog,
+        ))
+        .with_state(state.clone());
+
+    let settings: Router = Router::new()
+        .route("/settings", get(get_user_settings))
+        .route("/settings", put(update_user_settings))
+        .layer(GovernorLayer::new(limits.write.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_access_catalog,
+        ))
+        .with_state(state.clone());
+
+    let device_read: Router = Router::new()
+        .route("/devices", get(get_user_devices))
+        .layer(GovernorLayer::new(limits.user_content_read.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_access_catalog,
+        ))
+        .with_state(state.clone());
+    let device_write: Router = Router::new()
+        .route(
+            "/devices/{device_id}/share_policy",
+            put(put_device_share_policy),
+        )
+        .layer(GovernorLayer::new(limits.write.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_access_catalog,
+        ))
+        .with_state(state.clone());
+
+    let notifications: Router = Router::new()
+        .route("/notifications/{id}/read", post(mark_notification_read))
+        .layer(GovernorLayer::new(limits.write.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_access_catalog,
+        ))
+        .with_state(state.clone());
+
+    let bug_reports: Router = Router::new()
+        .route("/bug-report", post(submit_bug_report))
+        .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
+        .layer(GovernorLayer::new(limits.write.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_report_bug,
+        ))
+        .with_state(state.clone());
+
+    listening_read
+        .merge(listening_write)
+        .merge(settings)
+        .merge(device_read.merge(device_write))
+        .merge(notifications)
+        .merge(bug_reports)
+}
+
+pub(super) fn sync_routes(state: &ServerState, limits: &RouteLimits) -> Router {
+    Router::new()
+        .route("/state", get(get_sync_state))
+        .route("/events", get(get_sync_events))
+        .route("/catalog", get(get_catalog_sync))
+        .layer(GovernorLayer::new(limits.user_content_read.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_access_catalog,
+        ))
+        .with_state(state.clone())
+}
+
 pub(super) fn auth_routes(state: &ServerState) -> Router {
     // Login attempts are protected by a short burst bucket and a slower sustained
     // bucket. Peer IP is used directly: forwarded headers are intentionally ignored
