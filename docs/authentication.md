@@ -12,7 +12,14 @@ and ID tokens are not placed in the browser cookie.
 
 This makes `POST /v1/auth/logout` server-side authoritative: it deletes the local session before
 expiring the browser cookies. The normal device and unused-session cleanup mechanisms apply to
-OIDC-created sessions as well.
+OIDC-created sessions as well. Session lookup also enforces a 30-day absolute lifetime and a
+7-day idle lifetime; expired rows are deleted immediately rather than waiting for background
+cleanup.
+
+Only `SHA-256(session_token)` is stored in the user database. A 12-character prefix of that
+digest is retained as a non-secret diagnostic identifier for administrative listings. Database
+migration v15 deliberately deletes older plaintext session rows, so upgrading to that version
+requires every signed-in client to authenticate again.
 
 OIDC discovery metadata and signing keys are cached for 15 minutes. The cache is refreshed when
 it expires and once immediately when token validation cannot find a matching signing key.
