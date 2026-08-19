@@ -1,4 +1,5 @@
 mod api_error;
+mod authorization;
 pub mod config;
 mod download_routes;
 mod embeddings;
