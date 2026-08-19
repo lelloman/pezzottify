@@ -105,6 +105,62 @@ pub(super) fn content_read_routes(
     protected_content.merge(search_routes)
 }
 
+pub(super) fn liked_content_routes(state: &ServerState, limits: &RouteLimits) -> Router {
+    let read_routes: Router = Router::new()
+        .route("/liked/{content_type}", get(get_user_liked_content))
+        .layer(GovernorLayer::new(limits.user_content_read.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_like_content,
+        ))
+        .with_state(state.clone());
+
+    let write_routes: Router = Router::new()
+        .route(
+            "/liked/{content_type}/{content_id}",
+            post(add_user_liked_content),
+        )
+        .route(
+            "/liked/{content_type}/{content_id}",
+            delete(delete_user_liked_content),
+        )
+        .layer(GovernorLayer::new(limits.write.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_like_content,
+        ))
+        .with_state(state.clone());
+
+    read_routes.merge(write_routes)
+}
+
+pub(super) fn playlist_routes(state: &ServerState, limits: &RouteLimits) -> Router {
+    let read_routes: Router = Router::new()
+        .route("/playlist/{id}", get(get_playlist))
+        .route("/playlists", get(get_user_playlists))
+        .layer(GovernorLayer::new(limits.user_content_read.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_own_playlists,
+        ))
+        .with_state(state.clone());
+
+    let write_routes: Router = Router::new()
+        .route("/playlist", post(post_playlist))
+        .route("/playlist/{id}", put(put_playlist))
+        .route("/playlist/{id}", delete(delete_playlist))
+        .route("/playlist/{id}/add", put(add_playlist_tracks))
+        .route("/playlist/{id}/remove", put(remove_tracks_from_playlist))
+        .layer(GovernorLayer::new(limits.write.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_own_playlists,
+        ))
+        .with_state(state.clone());
+
+    read_routes.merge(write_routes)
+}
+
 pub(super) fn auth_routes(state: &ServerState) -> Router {
     // Login attempts are protected by a short burst bucket and a slower sustained
     // bucket. Peer IP is used directly: forwarded headers are intentionally ignored

@@ -5278,63 +5278,8 @@ pub async fn make_app(
     let mut content_routes =
         route_builder::content_read_routes(&state, config.content_cache_age_sec, &route_limits);
 
-    // Liked content READ routes (higher limit)
-    // Route pattern: /liked/{content_type} - returns list of liked content IDs
-    let liked_content_read_routes: Router = Router::new()
-        .route("/liked/{content_type}", get(get_user_liked_content))
-        .layer(GovernorLayer::new(user_content_read_rate_limit.clone()))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_like_content,
-        ))
-        .with_state(state.clone());
-
-    // Liked content WRITE routes (stricter limit)
-    // Route pattern: /liked/{content_type}/{content_id}
-    let liked_content_write_routes: Router = Router::new()
-        .route(
-            "/liked/{content_type}/{content_id}",
-            post(add_user_liked_content),
-        )
-        .route(
-            "/liked/{content_type}/{content_id}",
-            delete(delete_user_liked_content),
-        )
-        .layer(GovernorLayer::new(write_rate_limit.clone()))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_like_content,
-        ))
-        .with_state(state.clone());
-
-    let liked_content_routes = liked_content_read_routes.merge(liked_content_write_routes);
-
-    // Playlist READ routes (higher limit)
-    let playlist_read_routes: Router = Router::new()
-        .route("/playlist/{id}", get(get_playlist))
-        .route("/playlists", get(get_user_playlists))
-        .layer(GovernorLayer::new(user_content_read_rate_limit.clone()))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_own_playlists,
-        ))
-        .with_state(state.clone());
-
-    // Playlist WRITE routes (stricter limit)
-    let playlist_write_routes: Router = Router::new()
-        .route("/playlist", post(post_playlist))
-        .route("/playlist/{id}", put(put_playlist))
-        .route("/playlist/{id}", delete(delete_playlist))
-        .route("/playlist/{id}/add", put(add_playlist_tracks))
-        .route("/playlist/{id}/remove", put(remove_tracks_from_playlist))
-        .layer(GovernorLayer::new(write_rate_limit.clone()))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_own_playlists,
-        ))
-        .with_state(state.clone());
-
-    let playlist_routes = playlist_read_routes.merge(playlist_write_routes);
+    let liked_content_routes = route_builder::liked_content_routes(&state, &route_limits);
+    let playlist_routes = route_builder::playlist_routes(&state, &route_limits);
 
     // Listening stats routes (requires AccessCatalog permission)
     let analytics_device_rate_limit = route_limits.analytics_device.clone();
