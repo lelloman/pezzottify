@@ -18,6 +18,24 @@ mod tests {
     }
 
     #[test]
+    fn float_vector_blob_round_trip_and_length_validation() {
+        let vector = [0.0, -1.25, f32::MIN_POSITIVE, f32::MAX, f32::NAN];
+        let encoded = SqliteCatalogStore::encode_f32_vector(&vector);
+        let decoded = SqliteCatalogStore::decode_f32_vector(&encoded).unwrap();
+
+        assert_eq!(decoded.len(), vector.len());
+        for (actual, expected) in decoded.iter().zip(vector) {
+            assert_eq!(actual.to_bits(), expected.to_bits());
+        }
+
+        let error = SqliteCatalogStore::decode_f32_vector(&encoded[..encoded.len() - 1])
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("invalid float32 vector blob length"));
+    }
+
+    #[test]
     fn catalog_mutations_return_typed_expected_errors() {
         let (store, _temp_dir) = create_test_store();
         let album = Album {
