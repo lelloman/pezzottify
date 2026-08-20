@@ -16,6 +16,10 @@ pub struct FileConfig {
     /// Disable only for local development served over plain HTTP.
     pub secure_session_cookies: Option<bool>,
     pub session_cookie_max_age_secs: Option<u64>,
+    /// Password-login attempts allowed per peer IP/account in the burst bucket.
+    pub login_rate_limit_per_minute: Option<u32>,
+    /// Password-login attempts allowed per peer IP/account in the sustained bucket.
+    pub login_rate_limit_per_hour: Option<u32>,
     pub downloader_url: Option<String>,
     pub downloader_timeout_sec: Option<u64>,
     pub event_retention_days: Option<u64>,

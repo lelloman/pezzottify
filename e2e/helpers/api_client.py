@@ -19,6 +19,14 @@ class CatalogApiClient:
             self._session = aiohttp.ClientSession(cookie_jar=jar)
         return self._session
 
+    def _csrf_headers(self) -> dict[str, str]:
+        """Return the double-submit token required for cookie-authenticated writes."""
+        if self._session is None:
+            return {}
+        cookies = self._session.cookie_jar.filter_cookies(self.base_url)
+        csrf_cookie = cookies.get("csrf_token")
+        return {"x-csrf-token": csrf_cookie.value} if csrf_cookie else {}
+
     async def login(
         self, handle: str, password: str, device_uuid: str | None = None
     ) -> dict:
@@ -41,6 +49,7 @@ class CatalogApiClient:
         session = await self._ensure_session()
         async with session.post(
             f"{self.base_url}/v1/user/liked/{content_type}/{content_id}",
+            headers=self._csrf_headers(),
         ) as resp:
             resp.raise_for_status()
 
@@ -48,6 +57,7 @@ class CatalogApiClient:
         session = await self._ensure_session()
         async with session.delete(
             f"{self.base_url}/v1/user/liked/{content_type}/{content_id}",
+            headers=self._csrf_headers(),
         ) as resp:
             resp.raise_for_status()
 
@@ -66,6 +76,7 @@ class CatalogApiClient:
         async with session.post(
             f"{self.base_url}/v1/user/playlist",
             json={"name": name, "track_ids": track_ids or []},
+            headers=self._csrf_headers(),
         ) as resp:
             resp.raise_for_status()
             return await resp.json(content_type=None)
@@ -74,6 +85,7 @@ class CatalogApiClient:
         session = await self._ensure_session()
         async with session.delete(
             f"{self.base_url}/v1/user/playlist/{playlist_id}",
+            headers=self._csrf_headers(),
         ) as resp:
             resp.raise_for_status()
 
@@ -143,6 +155,7 @@ class CatalogApiClient:
         async with session.post(
             f"{self.base_url}/v1/content/search",
             json={"query": query},
+            headers=self._csrf_headers(),
         ) as resp:
             resp.raise_for_status()
             return await resp.json(content_type=None)

@@ -574,6 +574,8 @@ async fn main() -> Result<()> {
             app_config.frontend_dir_path.clone(),
             app_config.secure_session_cookies,
             app_config.session_cookie_max_age_secs,
+            app_config.login_rate_limit_per_minute,
+            app_config.login_rate_limit_per_hour,
             Some(scheduler_handle),
             server_store,
             oidc_config,
