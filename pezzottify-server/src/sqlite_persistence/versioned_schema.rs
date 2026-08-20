@@ -435,6 +435,73 @@ pub const BASE_DB_VERSION: usize = 99999;
 mod tests {
     use super::*;
 
+    const TEST_PARENT_TABLE: Table = Table {
+        name: "test_parent",
+        columns: &[Column {
+            name: "id",
+            sql_type: &SqlType::Integer,
+            is_primary_key: true,
+            non_null: false,
+            is_unique: false,
+            default_value: None,
+            foreign_key: None,
+        }],
+        indices: &[],
+        unique_constraints: &[],
+    };
+
+    const TEST_PARENT_FOREIGN_KEY: ForeignKey = ForeignKey {
+        foreign_table: "test_parent",
+        foreign_column: "id",
+        on_delete: ForeignKeyOnChange::Cascade,
+    };
+
+    const TEST_CHILD_TABLE: Table = Table {
+        name: "test_child",
+        columns: &[
+            Column {
+                name: "id",
+                sql_type: &SqlType::Integer,
+                is_primary_key: true,
+                non_null: false,
+                is_unique: false,
+                default_value: None,
+                foreign_key: None,
+            },
+            Column {
+                name: "parent_id",
+                sql_type: &SqlType::Integer,
+                is_primary_key: false,
+                non_null: true,
+                is_unique: false,
+                default_value: None,
+                foreign_key: Some(&TEST_PARENT_FOREIGN_KEY),
+            },
+        ],
+        indices: &[],
+        unique_constraints: &[],
+    };
+
+    #[test]
+    fn create_enables_and_enforces_foreign_keys() {
+        let conn = Connection::open_in_memory().unwrap();
+        let schema = VersionedSchema {
+            version: 1,
+            tables: &[TEST_PARENT_TABLE, TEST_CHILD_TABLE],
+            migration: None,
+        };
+
+        schema.create(&conn).unwrap();
+
+        let foreign_keys: i64 = conn
+            .pragma_query_value(None, "foreign_keys", |row| row.get(0))
+            .unwrap();
+        assert_eq!(foreign_keys, 1);
+        assert!(conn
+            .execute("INSERT INTO test_child (id, parent_id) VALUES (1, 999)", [],)
+            .is_err());
+    }
+
     const TEST_TABLE_WITH_INDEX: Table = Table {
         name: "test_table",
         columns: &[
