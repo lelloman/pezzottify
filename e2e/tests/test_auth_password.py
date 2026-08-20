@@ -2,6 +2,8 @@
 
 import pytest
 
+from helpers.api_client import CatalogApiClient
+from helpers.async_runner import run_async
 from helpers.constants import ADMIN_PASS, ADMIN_USER, TEST_PASS, TEST_USER
 
 
@@ -55,3 +57,28 @@ class TestPasswordLogin:
         web.page.goto("/")
         web.page.wait_for_url(lambda url: "/login" in str(url), timeout=10000)
         assert "/login" in web.page.url
+
+    def test_logout_revokes_only_the_selected_device_session(self, config):
+        """Concurrent device sessions remain independent when one logs out."""
+
+        async def exercise_sessions():
+            first = CatalogApiClient(config.server_url)
+            second = CatalogApiClient(config.server_url)
+            try:
+                await first.login(
+                    TEST_USER, TEST_PASS, device_uuid="e2e-auth-device-first"
+                )
+                await second.login(
+                    TEST_USER, TEST_PASS, device_uuid="e2e-auth-device-second"
+                )
+
+                assert await first.session_status() == 200
+                assert await second.session_status() == 200
+                assert await first.logout() == 200
+                assert await first.session_status() == 401
+                assert await second.session_status() == 200
+            finally:
+                await first.close()
+                await second.close()
+
+        run_async(exercise_sessions())

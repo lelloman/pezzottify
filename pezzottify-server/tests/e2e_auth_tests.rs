@@ -317,3 +317,48 @@ async fn test_different_devices_for_same_user() {
     let response = client2.get_artist(ARTIST_1_ID).await;
     assert_eq!(response.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn concurrent_logins_create_independent_revocable_sessions() {
+    let server = TestServer::spawn().await;
+    let mut login_tasks = Vec::new();
+
+    // Stay below the product's per-user device cap while still exercising
+    // overlapping credential, device, token, and permission operations.
+    for index in 0..4 {
+        let base_url = server.base_url.clone();
+        login_tasks.push(tokio::spawn(async move {
+            let client = TestClient::new(base_url);
+            let response = client
+                .login_with_device(
+                    TEST_USER,
+                    TEST_PASS,
+                    &format!("concurrent-auth-device-{index}"),
+                )
+                .await;
+            assert_eq!(response.status(), StatusCode::CREATED);
+            client
+        }));
+    }
+
+    let mut clients = Vec::new();
+    for task in login_tasks {
+        clients.push(task.await.unwrap());
+    }
+
+    for client in &clients {
+        let response = client.get_session().await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["user_handle"], TEST_USER);
+    }
+
+    assert_eq!(clients[0].logout().await.status(), StatusCode::OK);
+    assert_eq!(
+        clients[0].get_session().await.status(),
+        StatusCode::UNAUTHORIZED
+    );
+    for client in &clients[1..] {
+        assert_eq!(client.get_session().await.status(), StatusCode::OK);
+    }
+}

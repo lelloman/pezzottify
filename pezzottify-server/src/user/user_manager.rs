@@ -1289,6 +1289,56 @@ mod tests {
     }
 
     #[test]
+    fn password_session_lifecycle_preserves_device_owner_and_permissions() {
+        let (manager, _temp_dir) = create_test_manager();
+        let handle = "password-user".to_owned();
+        let user_id = manager.add_user(&handle).unwrap();
+        manager
+            .create_password_credentials(&handle, "correct horse battery staple".to_owned())
+            .unwrap();
+        manager.add_user_role(user_id, UserRole::Regular).unwrap();
+
+        let registration = DeviceRegistration::validate_and_sanitize(
+            "password-device-1",
+            "web",
+            Some("Password test browser"),
+            Some("test-os"),
+        )
+        .unwrap();
+        let device_id = manager.register_or_update_device(&registration).unwrap();
+        manager
+            .associate_device_with_user(device_id, user_id)
+            .unwrap();
+
+        let credentials = manager.get_user_credentials(&handle).unwrap().unwrap();
+        let session = manager
+            .generate_auth_token(&credentials, device_id)
+            .unwrap();
+        let persisted = manager.get_auth_token(&session.value).unwrap().unwrap();
+
+        assert_eq!(persisted.user_id, user_id);
+        assert_eq!(persisted.device_id, Some(device_id));
+        assert_eq!(
+            manager.get_device(device_id).unwrap().unwrap().user_id,
+            Some(user_id)
+        );
+        let permissions = manager.get_user_permissions(user_id).unwrap();
+        assert_eq!(permissions.len(), UserRole::Regular.permissions().len());
+        assert!(UserRole::Regular
+            .permissions()
+            .iter()
+            .all(|permission| permissions.contains(permission)));
+
+        manager.delete_auth_token(&user_id, &session.value).unwrap();
+        assert!(manager.get_auth_token(&session.value).unwrap().is_none());
+        assert_eq!(
+            manager.get_device(device_id).unwrap().unwrap().user_id,
+            Some(user_id),
+            "logging out must revoke only the session, not the device association"
+        );
+    }
+
+    #[test]
     fn missing_catalog_track_does_not_mutate_playlist_or_append_event() {
         let (manager, _temp_dir) = create_test_manager();
         let user_id = manager.add_user("playlist-owner").unwrap();
