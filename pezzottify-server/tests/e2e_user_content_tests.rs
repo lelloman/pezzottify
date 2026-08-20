@@ -91,6 +91,30 @@ async fn test_like_multiple_tracks() {
 }
 
 #[tokio::test]
+async fn concurrent_user_writes_are_all_committed_and_visible() {
+    let server = TestServer::spawn().await;
+    let first = TestClient::authenticated_with_device(server.base_url.clone(), "writer-1").await;
+    let second = TestClient::authenticated_with_device(server.base_url.clone(), "writer-2").await;
+    let third = TestClient::authenticated_with_device(server.base_url.clone(), "writer-3").await;
+
+    let (first_response, second_response, third_response) = tokio::join!(
+        first.add_liked_content("track", TRACK_1_ID),
+        second.add_liked_content("track", TRACK_2_ID),
+        third.add_liked_content("track", TRACK_3_ID),
+    );
+    assert_eq!(first_response.status(), StatusCode::OK);
+    assert_eq!(second_response.status(), StatusCode::OK);
+    assert_eq!(third_response.status(), StatusCode::OK);
+
+    let response = first.get_liked_content("track").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let liked: Vec<String> = response.json().await.unwrap();
+    assert!(liked.contains(&TRACK_1_ID.to_string()));
+    assert!(liked.contains(&TRACK_2_ID.to_string()));
+    assert!(liked.contains(&TRACK_3_ID.to_string()));
+}
+
+#[tokio::test]
 async fn test_get_liked_content_invalid_type() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;

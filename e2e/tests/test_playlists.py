@@ -1,5 +1,7 @@
 """Tests for playlist CRUD operations."""
 
+import asyncio
+
 import pytest
 
 from helpers.api_client import CatalogApiClient
@@ -48,6 +50,26 @@ class TestPlaylistApi:
                 playlist_ids = await api.get_playlists()
                 assert playlist_id not in playlist_ids
             finally:
+                await api.close()
+
+        run_async(_test())
+
+    def test_concurrent_creates_are_all_committed(self, config):
+        async def _test():
+            api = CatalogApiClient(config.server_url)
+            playlist_ids = []
+            try:
+                await api.login(TEST_USER, TEST_PASS, device_uuid="playlist-concurrent")
+                playlist_ids = await asyncio.gather(
+                    *(api.create_playlist(f"Concurrent Playlist {i}") for i in range(8))
+                )
+                stored_ids = await api.get_playlists()
+                assert len(set(playlist_ids)) == len(playlist_ids)
+                assert set(playlist_ids).issubset(set(stored_ids))
+            finally:
+                await asyncio.gather(
+                    *(api.delete_playlist(playlist_id) for playlist_id in playlist_ids)
+                )
                 await api.close()
 
         run_async(_test())

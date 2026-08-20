@@ -561,7 +561,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_concurrent_reads_no_blocking() {
+    async fn cloned_catalog_store_handles_concurrent_reads_consistently() {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let store = SqliteCatalogStore::new(
             temp_dir.path().join("test.db"),
@@ -577,7 +577,9 @@ mod tests {
                     let store = store.clone();
                     async move {
                         for _ in 0..100 {
-                            let _ = store.get_artists_count();
+                            assert_eq!(store.get_artists_count(), 0);
+                            assert_eq!(store.get_albums_count(), 0);
+                            assert_eq!(store.get_tracks_count(), 0);
                         }
                     }
                 })

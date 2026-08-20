@@ -3301,4 +3301,44 @@ mod tests {
         assert_eq!(snapshot.seq, 200);
         assert!(snapshot.liked_tracks.is_empty());
     }
+
+    #[test]
+    fn cloned_store_serializes_concurrent_writes_without_losing_updates() {
+        const WRITERS: usize = 32;
+
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("concurrent_store_user").unwrap();
+        let barrier = Arc::new(std::sync::Barrier::new(WRITERS));
+
+        let writers: Vec<_> = (0..WRITERS)
+            .map(|index| {
+                let store = store.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    store
+                        .set_user_liked_content(
+                            user_id,
+                            &format!("track-{index}"),
+                            LikedContentType::Track,
+                            true,
+                        )
+                        .unwrap();
+                })
+            })
+            .collect();
+
+        for writer in writers {
+            writer.join().unwrap();
+        }
+
+        let mut liked = store
+            .get_user_liked_content(user_id, LikedContentType::Track)
+            .unwrap();
+        liked.sort();
+        assert_eq!(liked.len(), WRITERS);
+        for index in 0..WRITERS {
+            assert!(liked.contains(&format!("track-{index}")));
+        }
+    }
 }
