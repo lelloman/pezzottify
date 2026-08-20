@@ -3,7 +3,7 @@ use super::models::{
 };
 use super::schema::SERVER_VERSIONED_SCHEMAS;
 use super::ServerStore;
-use crate::sqlite_persistence::BASE_DB_VERSION;
+use crate::sqlite_persistence::{configure_connection, BASE_DB_VERSION};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -24,7 +24,7 @@ impl SqliteServerStore {
         let is_new_db = !path.exists();
 
         let mut conn = Connection::open(path).context("Failed to open server database")?;
-        conn.execute("PRAGMA foreign_keys = ON;", [])?;
+        configure_connection(&conn)?;
 
         if is_new_db {
             // Fresh database - create with latest schema

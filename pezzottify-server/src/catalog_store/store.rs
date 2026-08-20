@@ -13,7 +13,7 @@ use super::trait_def::{
     MAX_ALBUM_TRACKLIST_PAGE_SIZE,
 };
 use super::CatalogMutationError;
-use crate::sqlite_persistence::BASE_DB_VERSION;
+use crate::sqlite_persistence::{configure_connection, BASE_DB_VERSION};
 use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
 use rusqlite::{params, params_from_iter, types::Value, Connection, OptionalExtension};

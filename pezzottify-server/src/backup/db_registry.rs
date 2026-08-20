@@ -1,3 +1,4 @@
+use crate::sqlite_persistence::configure_connection;
 use anyhow::Result;
 use rusqlite::Connection;
 use std::path::PathBuf;
@@ -32,6 +33,7 @@ impl DbRegistry {
     /// After this call the .db file will only be modified by explicit checkpoint operations,
     /// making it safe to copy at any time between checkpoints.
     pub fn register(&self, path: PathBuf, conn: &Connection) -> Result<()> {
+        configure_connection(conn)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "wal_autocheckpoint", 0)?;
         info!("Registered database for backup: {:?}", path);
@@ -115,6 +117,7 @@ mod tests {
             .execute("CREATE TABLE writes (value INTEGER NOT NULL)", [])
             .unwrap();
         let second_writer = Connection::open(database_path(&temp_dir)).unwrap();
+        configure_connection(&second_writer).unwrap();
 
         let transaction = first_writer.transaction().unwrap();
         transaction

@@ -96,13 +96,14 @@ impl Fts5LevenshteinSearchVault {
     pub fn new_lazy(db_path: &Path, db_registry: &crate::backup::DbRegistry) -> Result<Self> {
         // Create write connection first (handles table creation)
         let write_conn = Connection::open(db_path)?;
+        crate::sqlite_persistence::configure_connection(&write_conn)?;
         db_registry.register(db_path.to_path_buf(), &write_conn)?;
         Self::create_tables(&write_conn)?;
 
         // Create separate read connection for search queries
         // This allows searches to proceed while writes are happening
         let read_conn = Connection::open(db_path)?;
-        read_conn.pragma_update(None, "journal_mode", "WAL")?;
+        crate::sqlite_persistence::configure_connection(&read_conn)?;
 
         // Check build state
         let build_in_progress = Self::get_metadata(&write_conn, "build_in_progress")
@@ -162,12 +163,13 @@ impl Fts5LevenshteinSearchVault {
         db_registry: &crate::backup::DbRegistry,
     ) -> Result<Self> {
         let write_conn = Connection::open(db_path)?;
+        crate::sqlite_persistence::configure_connection(&write_conn)?;
         db_registry.register(db_path.to_path_buf(), &write_conn)?;
         Self::create_tables(&write_conn)?;
 
         // Create separate read connection
         let read_conn = Connection::open(db_path)?;
-        read_conn.pragma_update(None, "journal_mode", "WAL")?;
+        crate::sqlite_persistence::configure_connection(&read_conn)?;
 
         // For Spotify catalog (static), version is always 0
         let current_catalog_version: i64 = 0;

@@ -6,6 +6,12 @@ use rusqlite::Connection;
 use serde::Serialize;
 use tracing::{error, info};
 
+fn open_checkpoint_connection(path: &std::path::Path) -> rusqlite::Result<Connection> {
+    let conn = Connection::open(path)?;
+    crate::sqlite_persistence::configure_connection(&conn)?;
+    Ok(conn)
+}
+
 /// Result of a checkpoint operation on a single database.
 #[derive(Debug, Serialize)]
 pub struct DatabaseCheckpointResult {
@@ -44,7 +50,7 @@ pub fn prepare_backup(registry: &DbRegistry) -> BackupPrepareResult {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| path.to_string_lossy().to_string());
 
-        let result = match Connection::open(path) {
+        let result = match open_checkpoint_connection(path) {
             Ok(conn) => match conn.query_row("PRAGMA wal_checkpoint(TRUNCATE);", [], |row| {
                 Ok((
                     row.get::<_, i64>(0)?, // blocked (0 = success)
@@ -127,7 +133,7 @@ pub fn passive_checkpoint_all(registry: &DbRegistry) {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| path.to_string_lossy().to_string());
 
-        match Connection::open(path) {
+        match open_checkpoint_connection(path) {
             Ok(conn) => {
                 match conn.query_row("PRAGMA wal_checkpoint(PASSIVE);", [], |row| {
                     Ok((row.get::<_, i64>(1)?, row.get::<_, i64>(2)?))

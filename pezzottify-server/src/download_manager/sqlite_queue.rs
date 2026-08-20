@@ -18,7 +18,6 @@ impl SqliteDownloadQueueStore {
             )?
         } else {
             let conn = Connection::open(&db_path)?;
-            conn.execute("PRAGMA foreign_keys = ON;", [])?;
             // Create all schema versions in order (each version adds tables)
             for schema in DOWNLOAD_QUEUE_VERSIONED_SCHEMAS {
                 schema.create(&conn)?;
@@ -30,8 +29,7 @@ impl SqliteDownloadQueueStore {
             conn
         };
 
-        // Enable foreign keys
-        conn.execute("PRAGMA foreign_keys = ON;", [])?;
+        crate::sqlite_persistence::configure_connection(&conn)?;
 
         // Read the database version
         let db_version = conn
@@ -77,7 +75,7 @@ impl SqliteDownloadQueueStore {
     #[cfg(test)]
     pub fn in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
-        conn.execute("PRAGMA foreign_keys = ON;", [])?;
+        crate::sqlite_persistence::configure_connection(&conn)?;
 
         // Create all schema versions in order (each version adds tables)
         for schema in DOWNLOAD_QUEUE_VERSIONED_SCHEMAS {
@@ -253,4 +251,3 @@ impl SqliteDownloadQueueStore {
         })
     }
 }
-
