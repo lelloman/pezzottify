@@ -31,7 +31,7 @@ async fn login(
         }
     };
 
-    let mut locked_manager = user_manager.lock().unwrap();
+    let locked_manager = &user_manager;
     let credentials = match locked_manager.get_user_credentials(&body.user_handle) {
         Ok(Some(creds)) => creds,
         Ok(None) => {
@@ -128,7 +128,7 @@ async fn logout(
 ) -> Response {
     // Try to delete auth token from database (for legacy sessions)
     // For OIDC sessions, this will fail since JWT isn't stored in DB - that's OK
-    let mut locked_manager = user_manager.lock().unwrap();
+    let locked_manager = &user_manager;
     let _ = locked_manager.delete_auth_token(&session.user_id, &AuthTokenValue(session.token));
 
     // Always clear both cookies using exactly the same attributes used when setting them.
@@ -263,7 +263,7 @@ async fn oidc_callback(
 
     // Look up or provision local user by OIDC subject
     let user_id = {
-        let locked_manager = user_manager.lock().unwrap();
+        let locked_manager = &user_manager;
 
         match locked_manager.get_user_id_by_oidc_subject(&auth_result.subject) {
             Ok(Some(id)) => {
@@ -309,7 +309,7 @@ async fn oidc_callback(
     // Exchange the provider credential for a local opaque session. This keeps ID
     // tokens out of browser cookies and makes logout/revocation authoritative here.
     let session_token = {
-        let mut locked_manager = user_manager.lock().unwrap();
+        let locked_manager = &user_manager;
         let device_id = stored_state.device_id.as_deref().and_then(|device_uuid| {
             match locked_manager.get_device_by_uuid(device_uuid) {
                 Ok(Some(device)) => {
@@ -390,7 +390,7 @@ async fn get_session(
     cookie_jar: CookieJar,
     session: Session,
 ) -> Response {
-    let locked_manager = user_manager.lock().unwrap();
+    let locked_manager = &user_manager;
 
     // Get the user handle from user_id
     let user_handle = match locked_manager.get_user_handle(session.user_id) {

@@ -295,10 +295,7 @@ mod tests {
     async fn responds_forbidden_on_protected_routes() {
         let user_store: Arc<dyn FullUserStore> = Arc::new(InMemoryUserStore::default());
         let catalog_store: Arc<dyn CatalogStore> = Arc::new(NullCatalogStore);
-        let user_manager = Arc::new(std::sync::Mutex::new(crate::user::UserManager::new(
-            catalog_store.clone(),
-            user_store.clone(),
-        )));
+        let user_manager = Arc::new(crate::user::UserManager::new(user_store.clone()));
         let guarded_search_vault: crate::server::state::GuardedSearchVault =
             Arc::new(MockSearchVault);
         let server_store: Arc<dyn ServerStore> = Arc::new(MockServerStore::default());
@@ -1093,9 +1090,7 @@ mod tests {
             let (store, _temp_dir) = create_test_store();
             let user_id = store.create_user("testuser").unwrap();
 
-            let catalog_store: std::sync::Arc<dyn crate::catalog_store::CatalogStore> =
-                std::sync::Arc::new(crate::catalog_store::NullCatalogStore);
-            let user_manager = crate::user::UserManager::new(catalog_store, Arc::new(store));
+            let user_manager = crate::user::UserManager::new(Arc::new(store));
 
             let found_id = user_manager.get_user_id("testuser").unwrap();
             assert_eq!(found_id, Some(user_id));

@@ -13,7 +13,7 @@ use crate::search::{OrganicIndexer, SearchVault};
 use crate::server_store::ServerStore;
 use crate::shows::ShowStore;
 use crate::user::{FullUserStore, UserManager};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Instant;
 
 use super::websocket::{ConnectionManager, PlaybackSessionManager};
@@ -23,7 +23,7 @@ pub type GuardedCatalogStore = Arc<dyn CatalogStore>;
 /// SearchVault is internally thread-safe (uses separate read/write connections with internal Mutex).
 /// No external Mutex needed - the implementation handles concurrent access.
 pub type GuardedSearchVault = Arc<dyn SearchVault>;
-pub type GuardedUserManager = Arc<Mutex<UserManager>>;
+pub type GuardedUserManager = Arc<UserManager>;
 pub type GuardedConnectionManager = Arc<ConnectionManager>;
 pub type OptionalSchedulerHandle = Option<SchedulerHandle>;
 pub type GuardedServerStore = Arc<dyn ServerStore>;
@@ -52,7 +52,7 @@ pub struct DatabaseHandles {
     pub search_read: DbHandle<dyn SearchVault>,
     pub search_write: DbHandle<dyn SearchVault>,
     pub user_store: DbHandle<dyn FullUserStore>,
-    pub user_manager: DbHandle<Mutex<UserManager>>,
+    pub user_manager: DbHandle<UserManager>,
     pub server: DbHandle<dyn ServerStore>,
     pub shows: DbHandle<dyn ShowStore>,
     pub enrichment_read: Option<DbHandle<dyn EnrichmentStore>>,
@@ -65,7 +65,7 @@ impl DatabaseHandles {
         catalog_store: Arc<dyn CatalogStore>,
         search_vault: Arc<dyn SearchVault>,
         user_store: Arc<dyn FullUserStore>,
-        user_manager: Arc<Mutex<UserManager>>,
+        user_manager: Arc<UserManager>,
         server_store: Arc<dyn ServerStore>,
         show_store: Arc<dyn ShowStore>,
         enrichment_store: Option<Arc<dyn EnrichmentStore>>,

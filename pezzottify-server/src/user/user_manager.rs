@@ -43,15 +43,13 @@ struct CachedPopularContent {
 }
 
 pub struct UserManager {
-    catalog_store: Arc<dyn CatalogStore>,
     user_store: Arc<dyn FullUserStore>,
     popular_content_cache: Mutex<Option<CachedPopularContent>>,
 }
 
 impl UserManager {
-    pub fn new(catalog_store: Arc<dyn CatalogStore>, user_store: Arc<dyn FullUserStore>) -> Self {
+    pub fn new(user_store: Arc<dyn FullUserStore>) -> Self {
         Self {
-            catalog_store,
             user_store,
             popular_content_cache: Mutex::new(None),
         }
@@ -122,7 +120,7 @@ impl UserManager {
     }
 
     pub fn generate_auth_token(
-        &mut self,
+        &self,
         credentials: &UserAuthCredentials,
         device_id: usize,
     ) -> Result<AuthToken> {
@@ -134,7 +132,7 @@ impl UserManager {
     /// OIDC callbacks use this after validating the provider response so subsequent
     /// requests can be revoked locally and do not need to carry the provider ID token.
     pub fn generate_auth_token_for_user(
-        &mut self,
+        &self,
         user_id: usize,
         device_id: Option<usize>,
     ) -> Result<AuthToken> {
@@ -168,7 +166,7 @@ impl UserManager {
     }
 
     pub fn create_password_credentials(
-        &mut self,
+        &self,
         user_handle: &String,
         password: String,
     ) -> Result<()> {
@@ -200,7 +198,7 @@ impl UserManager {
     }
 
     pub fn update_password_credentials(
-        &mut self,
+        &self,
         user_handle: &String,
         password: String,
     ) -> Result<()> {
@@ -220,7 +218,7 @@ impl UserManager {
             .update_user_auth_credentials(credentials.clone())
     }
 
-    pub fn delete_password_credentials(&mut self, user_handle: &String) -> Result<()> {
+    pub fn delete_password_credentials(&self, user_handle: &String) -> Result<()> {
         let mut credentials = self
             .user_store
             .get_user_auth_credentials(user_handle)?
@@ -234,11 +232,7 @@ impl UserManager {
         self.user_store.get_user_auth_credentials(user_handle)
     }
 
-    pub fn delete_auth_token(
-        &mut self,
-        user_id: &usize,
-        token_value: &AuthTokenValue,
-    ) -> Result<()> {
+    pub fn delete_auth_token(&self, user_id: &usize, token_value: &AuthTokenValue) -> Result<()> {
         let removed = self.user_store.delete_user_auth_token(token_value)?;
         match removed {
             Some(removed) => {
@@ -463,6 +457,7 @@ impl UserManager {
 
     pub fn add_playlist_tracks(
         &self,
+        catalog_store: &dyn CatalogStore,
         playlist_id: &str,
         user_id: usize,
         track_ids: Vec<String>,
@@ -483,7 +478,7 @@ impl UserManager {
 
         // verify that all tracks to add exist
         for track_id in &track_ids {
-            match self.catalog_store.get_track_json(track_id) {
+            match catalog_store.get_track_json(track_id) {
                 Ok(None) | Err(_) => {
                     bail!("Track with id {} does not exist.", track_id);
                 }
@@ -498,6 +493,7 @@ impl UserManager {
 
     pub fn add_playlist_tracks_with_event(
         &self,
+        catalog_store: &dyn CatalogStore,
         playlist_id: &str,
         user_id: usize,
         track_ids: Vec<String>,
@@ -513,7 +509,7 @@ impl UserManager {
             ));
         }
         for track_id in &track_ids {
-            if !matches!(self.catalog_store.get_track_json(track_id), Ok(Some(_))) {
+            if !matches!(catalog_store.get_track_json(track_id), Ok(Some(_))) {
                 return Err(UserServiceError::Validation(format!(
                     "Track with id {track_id} does not exist"
                 )));
@@ -828,6 +824,7 @@ impl UserManager {
     /// Uses a 30-day lookback window for popularity calculation.
     pub fn get_popular_tracks_by_artist(
         &self,
+        catalog_store: &dyn CatalogStore,
         artist_id: &str,
         limit: usize,
     ) -> Result<Vec<String>> {
@@ -851,9 +848,8 @@ impl UserManager {
 
         for track_count in &all_track_counts {
             // Get track's artists from catalog
-            if let Ok(Some(track_json)) = self
-                .catalog_store
-                .get_resolved_track_json(&track_count.track_id)
+            if let Ok(Some(track_json)) =
+                catalog_store.get_resolved_track_json(&track_count.track_id)
             {
                 // Check if this artist is on the track
                 if let Some(artists) = track_json.get("artists").and_then(|a| a.as_array()) {
@@ -970,6 +966,7 @@ impl UserManager {
     /// The cache stores max results (20 albums, 20 artists) and slices to requested limits.
     pub fn get_popular_content(
         &self,
+        catalog_store: &dyn CatalogStore,
         start_date: u32,
         end_date: u32,
         albums_limit: usize,
@@ -1005,8 +1002,13 @@ impl UserManager {
         }
 
         // Cache miss or stale - compute fresh with max limits
-        let content =
-            self.compute_popular_content(start_date, end_date, MAX_ALBUMS, MAX_ARTISTS)?;
+        let content = self.compute_popular_content(
+            catalog_store,
+            start_date,
+            end_date,
+            MAX_ALBUMS,
+            MAX_ARTISTS,
+        )?;
 
         // Store in cache
         {
@@ -1046,16 +1048,19 @@ impl UserManager {
     /// with one viral hit.
     fn compute_popular_content(
         &self,
+        catalog_store: &dyn CatalogStore,
         start_date: u32,
         end_date: u32,
         albums_limit: usize,
         artists_limit: usize,
     ) -> Result<PopularContent> {
         // Compute popular albums from top tracks
-        let popular_albums = self.compute_popular_albums(start_date, end_date, albums_limit)?;
+        let popular_albums =
+            self.compute_popular_albums(catalog_store, start_date, end_date, albums_limit)?;
 
         // Compute popular artists from ALL track play counts
-        let popular_artists = self.compute_popular_artists(start_date, end_date, artists_limit)?;
+        let popular_artists =
+            self.compute_popular_artists(catalog_store, start_date, end_date, artists_limit)?;
 
         Ok(PopularContent {
             albums: popular_albums,
@@ -1066,6 +1071,7 @@ impl UserManager {
     /// Computes popular albums by aggregating play counts from top tracks.
     fn compute_popular_albums(
         &self,
+        catalog_store: &dyn CatalogStore,
         start_date: u32,
         end_date: u32,
         limit: usize,
@@ -1079,7 +1085,7 @@ impl UserManager {
         // Aggregate play counts by album
         let mut album_plays: HashMap<String, u64> = HashMap::new();
         for track_stats in &top_tracks {
-            if let Some(album_id) = self.catalog_store.get_track_album_id(&track_stats.track_id) {
+            if let Some(album_id) = catalog_store.get_track_album_id(&track_stats.track_id) {
                 *album_plays.entry(album_id).or_insert(0) += track_stats.play_count;
             }
         }
@@ -1093,8 +1099,7 @@ impl UserManager {
             .take(limit)
             .filter_map(|(album_id, play_count)| {
                 // Get resolved album JSON to get name, image, and artists
-                if let Ok(Some(album_json)) = self.catalog_store.get_resolved_album_json(&album_id)
-                {
+                if let Ok(Some(album_json)) = catalog_store.get_resolved_album_json(&album_id) {
                     let id = album_json
                         .get("album")
                         .and_then(|a| a.get("id"))
@@ -1141,6 +1146,7 @@ impl UserManager {
     /// with a single viral hit.
     fn compute_popular_artists(
         &self,
+        catalog_store: &dyn CatalogStore,
         start_date: u32,
         end_date: u32,
         limit: usize,
@@ -1154,9 +1160,8 @@ impl UserManager {
         let mut artist_plays: HashMap<String, u64> = HashMap::new();
         for track_count in &all_track_counts {
             // Get track artists from resolved track JSON
-            if let Ok(Some(track_json)) = self
-                .catalog_store
-                .get_resolved_track_json(&track_count.track_id)
+            if let Ok(Some(track_json)) =
+                catalog_store.get_resolved_track_json(&track_count.track_id)
             {
                 if let Some(artists) = track_json.get("artists").and_then(|a| a.as_array()) {
                     for track_artist in artists {
@@ -1183,9 +1188,7 @@ impl UserManager {
             .take(limit)
             .filter_map(|(artist_id, play_count)| {
                 // Get resolved artist JSON to get name and image
-                if let Ok(Some(artist_json)) =
-                    self.catalog_store.get_resolved_artist_json(&artist_id)
-                {
+                if let Ok(Some(artist_json)) = catalog_store.get_resolved_artist_json(&artist_id) {
                     let id = artist_json
                         .get("artist")
                         .and_then(|a| a.get("id"))
@@ -1258,14 +1261,13 @@ mod tests {
         let user_store = Arc::new(
             SqliteUserStore::new(&temp_file_path, &crate::backup::DbRegistry::new()).unwrap(),
         );
-        let catalog_store: Arc<dyn CatalogStore> = Arc::new(NullCatalogStore);
-        let manager = UserManager::new(catalog_store, user_store);
+        let manager = UserManager::new(user_store);
         (manager, temp_dir)
     }
 
     #[test]
     fn opaque_session_for_authenticated_user_is_persisted_and_revocable() {
-        let (mut manager, _temp_dir) = create_test_manager();
+        let (manager, _temp_dir) = create_test_manager();
         let user_id = manager.add_user("oidc-user").unwrap();
 
         let session = manager.generate_auth_token_for_user(user_id, None).unwrap();
@@ -1302,6 +1304,7 @@ mod tests {
 
         let error = manager
             .add_playlist_tracks_with_event(
+                &NullCatalogStore,
                 &playlist_id,
                 user_id,
                 vec!["missing-track".to_owned()],
@@ -1341,10 +1344,11 @@ mod tests {
         });
 
         let clone = manager.clone();
-        let content = thread::spawn(move || clone.get_popular_content(0, 0, 2, 1))
-            .join()
-            .unwrap()
-            .unwrap();
+        let content =
+            thread::spawn(move || clone.get_popular_content(&NullCatalogStore, 0, 0, 2, 1))
+                .join()
+                .unwrap()
+                .unwrap();
 
         assert_eq!(content.albums.len(), 2);
         assert_eq!(content.albums[0].id, "album-0");

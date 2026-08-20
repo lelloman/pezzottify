@@ -147,7 +147,7 @@ async fn get_sync_state(
     session: Session,
     State(user_manager): State<GuardedUserManager>,
 ) -> Response {
-    let um = user_manager.lock().unwrap();
+    let um = user_manager;
     let snapshot = match um.get_sync_snapshot(session.user_id) {
         Ok(snapshot) => snapshot,
         Err(err) => {
@@ -187,7 +187,7 @@ async fn get_sync_events(
     State(user_manager): State<GuardedUserManager>,
     Query(query): Query<SyncEventsQuery>,
 ) -> Response {
-    let um = user_manager.lock().unwrap();
+    let um = user_manager;
 
     // Get current sequence number first (needed for pruning check)
     let current_seq = match um.get_current_seq(session.user_id) {
@@ -377,7 +377,7 @@ async fn submit_bug_report(
 
     // Get user handle
     let user_handle = {
-        let um = user_manager.lock().unwrap();
+        let um = user_manager;
         match um.get_user_handle(session.user_id) {
             Ok(Some(handle)) => handle,
             Ok(None) => {
@@ -484,7 +484,7 @@ async fn mark_notification_read(
     Path(notification_id): Path<String>,
 ) -> Response {
     let (notification, stored_event) = {
-        let um = user_manager.lock().unwrap();
+        let um = user_manager;
 
         // Mark as read
         let notification = match um.mark_notification_read(&notification_id, session.user_id) {

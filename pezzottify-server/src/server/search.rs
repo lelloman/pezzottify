@@ -356,19 +356,15 @@ async fn streaming_search(
         params.search_mode,
     );
 
-    // Get the user_manager from state
-    let user_manager = server_state.user_manager.lock().unwrap();
-
     // Build the pipeline with config from server state
     let pipeline = StreamingSearchPipeline::new(
         server_state.catalog_store.as_ref(),
-        &user_manager,
+        server_state.user_manager.as_ref(),
         server_state.config.streaming_search.clone(),
     );
 
     // Execute the pipeline with search results
     let sections = pipeline.execute(&params.q, search_results);
-    drop(user_manager);
 
     // Apply availability filter if requested
     let sections = if params.exclude_unavailable {

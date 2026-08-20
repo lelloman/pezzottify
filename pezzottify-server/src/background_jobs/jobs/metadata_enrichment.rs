@@ -1955,10 +1955,7 @@ mod tests {
             )
             .unwrap(),
         );
-        let user_manager = Arc::new(std::sync::Mutex::new(crate::user::UserManager::new(
-            catalog_store.clone(),
-            user_store.clone(),
-        )));
+        let user_manager = Arc::new(crate::user::UserManager::new(user_store.clone()));
         let enrichment_store_impl = Arc::new(
             crate::enrichment_store::SqliteEnrichmentStore::new(
                 temp_dir.path().join("enrichment.db"),

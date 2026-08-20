@@ -185,10 +185,11 @@ impl<'a> StreamingSearchPipeline<'a> {
         emitted_ids: &mut HashSet<String>,
     ) {
         // Popular tracks by this artist
-        if let Ok(track_ids) = self
-            .user_manager
-            .get_popular_tracks_by_artist(artist_id, self.config.popular_tracks_limit)
-        {
+        if let Ok(track_ids) = self.user_manager.get_popular_tracks_by_artist(
+            self.catalog_store,
+            artist_id,
+            self.config.popular_tracks_limit,
+        ) {
             let mut tracks: Vec<TrackSummary> = Vec::new();
             for track_id in track_ids {
                 if let Ok(Some(resolved)) = self.catalog_store.get_resolved_track(&track_id) {

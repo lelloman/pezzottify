@@ -300,7 +300,7 @@ pub async fn log_requests(
             let date = today.year() as u32 * 10000 + today.month() * 100 + today.day();
 
             // Record to database (fire and forget - don't block the response)
-            let user_manager = state.user_manager.lock().unwrap();
+            let user_manager = state.user_manager;
             if let Err(e) =
                 user_manager.record_bandwidth_usage(uid, date, endpoint_category, response_bytes, 1)
             {

@@ -73,7 +73,7 @@ async fn users_query_handler(ctx: ToolContext, params: Value) -> ToolResult {
 }
 
 async fn list_users(ctx: &ToolContext) -> ToolResult {
-    let user_manager = ctx.user_manager.lock().unwrap();
+    let user_manager = &ctx.user_manager;
 
     let handles = user_manager
         .get_all_user_handles()
@@ -106,7 +106,7 @@ async fn list_users(ctx: &ToolContext) -> ToolResult {
 }
 
 async fn get_user(ctx: &ToolContext, handle: &str) -> ToolResult {
-    let user_manager = ctx.user_manager.lock().unwrap();
+    let user_manager = &ctx.user_manager;
 
     let user_id = user_manager
         .get_user_id(handle)
@@ -260,7 +260,7 @@ fn parse_permission(permission: &Option<String>) -> Result<Permission, McpError>
 }
 
 async fn create_user(ctx: &ToolContext, handle: &str) -> ToolResult {
-    let user_manager = ctx.user_manager.lock().unwrap();
+    let user_manager = &ctx.user_manager;
 
     let user_id = user_manager
         .add_user(handle)
@@ -278,7 +278,7 @@ async fn create_user(ctx: &ToolContext, handle: &str) -> ToolResult {
 }
 
 async fn delete_user(ctx: &ToolContext, handle: &str) -> ToolResult {
-    let user_manager = ctx.user_manager.lock().unwrap();
+    let user_manager = &ctx.user_manager;
 
     // Get user ID first
     let user_id = user_manager
@@ -305,7 +305,7 @@ async fn delete_user(ctx: &ToolContext, handle: &str) -> ToolResult {
 }
 
 async fn add_role(ctx: &ToolContext, handle: &str, role: UserRole) -> ToolResult {
-    let user_manager = ctx.user_manager.lock().unwrap();
+    let user_manager = &ctx.user_manager;
 
     let user_id = user_manager
         .get_user_id(handle)
@@ -328,7 +328,7 @@ async fn add_role(ctx: &ToolContext, handle: &str, role: UserRole) -> ToolResult
 }
 
 async fn remove_role(ctx: &ToolContext, handle: &str, role: UserRole) -> ToolResult {
-    let user_manager = ctx.user_manager.lock().unwrap();
+    let user_manager = &ctx.user_manager;
 
     let user_id = user_manager
         .get_user_id(handle)
@@ -353,7 +353,7 @@ async fn remove_role(ctx: &ToolContext, handle: &str, role: UserRole) -> ToolRes
 async fn grant_permission(ctx: &ToolContext, handle: &str, permission: Permission) -> ToolResult {
     use std::time::SystemTime;
 
-    let user_manager = ctx.user_manager.lock().unwrap();
+    let user_manager = &ctx.user_manager;
 
     let user_id = user_manager
         .get_user_id(handle)

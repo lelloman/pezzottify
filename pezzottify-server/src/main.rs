@@ -241,10 +241,9 @@ async fn main() -> Result<()> {
     )?);
 
     // Create UserManager early so it can be shared with job scheduler
-    let user_manager = Arc::new(std::sync::Mutex::new(UserManager::new(
-        catalog_store.clone() as Arc<dyn CatalogStore>,
-        user_store.clone() as Arc<dyn user::FullUserStore>,
-    )));
+    let user_manager = Arc::new(UserManager::new(
+        user_store.clone() as Arc<dyn user::FullUserStore>
+    ));
 
     // Create search vault early so it can be shared with job scheduler
     // Use lazy initialization for fast startup, then build index in background

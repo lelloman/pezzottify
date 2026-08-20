@@ -23,7 +23,7 @@ async fn add_user_liked_content(
         Err(status) => return status.into_response(),
     };
     let stored_event = {
-        let um = user_manager.lock().unwrap();
+        let um = user_manager;
         match um.set_user_liked_content_with_event(
             session.user_id,
             &content_id,
@@ -71,7 +71,7 @@ async fn delete_user_liked_content(
         Err(status) => return status.into_response(),
     };
     let stored_event = {
-        let um = user_manager.lock().unwrap();
+        let um = user_manager;
         match um.set_user_liked_content_with_event(
             session.user_id,
             &content_id,
@@ -112,7 +112,7 @@ async fn get_user_liked_content(
         return StatusCode::BAD_REQUEST.into_response();
     };
 
-    let user_manager = user_manager.lock().unwrap();
+    let user_manager = &user_manager;
     let liked_content = user_manager.get_user_liked_content(session.user_id, content_type);
     match liked_content {
         Ok(liked_content) => Json(liked_content).into_response(),
@@ -132,7 +132,7 @@ async fn post_playlist(
         Err(status) => return status.into_response(),
     };
     let (id, stored_event) = {
-        let um = user_manager.lock().unwrap();
+        let um = user_manager;
         match um.create_user_playlist_with_event(
             session.user_id,
             &body.name,
@@ -177,7 +177,7 @@ async fn put_playlist(
         Err(status) => return status.into_response(),
     };
     let stored_events = {
-        let um = user_manager.lock().unwrap();
+        let um = user_manager;
         match um.update_user_playlist_with_events(
             &id,
             session.user_id,
@@ -222,7 +222,7 @@ async fn delete_playlist(
         Err(status) => return status.into_response(),
     };
     let stored_event = {
-        let um = user_manager.lock().unwrap();
+        let um = user_manager;
         match um.delete_user_playlist_with_event(&id, session.user_id, operation_id.as_deref()) {
             Ok(stored) => stored,
             Err(err) => {
@@ -253,8 +253,6 @@ async fn get_playlist(
     Path(id): Path<String>,
 ) -> Response {
     match user_manager
-        .lock()
-        .unwrap()
         .get_user_playlist(&id, session.user_id)
     {
         Ok(playlist) => Json(playlist).into_response(),
@@ -265,6 +263,7 @@ async fn get_playlist(
 async fn add_playlist_tracks(
     session: Session,
     headers: HeaderMap,
+    State(catalog_store): State<GuardedCatalogStore>,
     State(user_manager): State<GuardedUserManager>,
     State(connection_manager): State<GuardedConnectionManager>,
     Path(id): Path<String>,
@@ -275,8 +274,9 @@ async fn add_playlist_tracks(
         Err(status) => return status.into_response(),
     };
     let stored_events = {
-        let um = user_manager.lock().unwrap();
+        let um = &user_manager;
         match um.add_playlist_tracks_with_event(
+            catalog_store.as_ref(),
             &id,
             session.user_id,
             body.tracks_ids,
@@ -320,7 +320,7 @@ async fn remove_tracks_from_playlist(
         Err(status) => return status.into_response(),
     };
     let stored_events = {
-        let um = user_manager.lock().unwrap();
+        let um = user_manager;
         match um.remove_tracks_from_playlist_with_event(
             &id,
             session.user_id,
@@ -357,8 +357,6 @@ async fn get_user_playlists(
     State(user_manager): State<GuardedUserManager>,
 ) -> Response {
     match user_manager
-        .lock()
-        .unwrap()
         .get_user_playlists(session.user_id)
     {
         Ok(playlists) => Json(playlists).into_response(),
@@ -588,4 +586,3 @@ fn attach_track_enrichment(
 }
 
 // User listening stats endpoints
-

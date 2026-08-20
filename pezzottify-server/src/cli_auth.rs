@@ -7,7 +7,6 @@ use std::{path::PathBuf, sync::Arc};
 mod cli_style;
 
 // Import from the library crate
-use pezzottify_server::catalog_store::NullCatalogStore;
 use pezzottify_server::config;
 use pezzottify_server::user::{SqliteUserStore, UserManager};
 
@@ -838,8 +837,7 @@ fn main() -> Result<()> {
 
     let db_registry = pezzottify_server::backup::DbRegistry::new();
     let user_store = SqliteUserStore::new(auth_store_file_path.clone(), &db_registry)?;
-    let catalog_store = Arc::new(NullCatalogStore);
-    let mut user_manager = UserManager::new(catalog_store, Arc::new(user_store));
+    let mut user_manager = UserManager::new(Arc::new(user_store));
 
     // Print welcome screen instead of clap help
     print_welcome(&auth_store_file_path.display().to_string());

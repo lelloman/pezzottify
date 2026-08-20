@@ -253,7 +253,7 @@ async fn admin_get_users(
     _session: Session,
     State(user_manager): State<GuardedUserManager>,
 ) -> Response {
-    let manager = user_manager.lock().unwrap();
+    let manager = &user_manager;
     match manager.get_all_user_handles() {
         Ok(handles) => {
             let mut users: Vec<UserInfo> = vec![];
@@ -290,7 +290,7 @@ async fn admin_create_user(
     State(user_manager): State<GuardedUserManager>,
     Json(body): Json<CreateUserBody>,
 ) -> Response {
-    let manager = user_manager.lock().unwrap();
+    let manager = &user_manager;
 
     if body.user_handle.is_empty() {
         return ApiError::bad_request("invalid_user_handle", "User handle cannot be empty")
@@ -329,7 +329,7 @@ async fn admin_delete_user(
     State(user_manager): State<GuardedUserManager>,
     Path(user_handle): Path<String>,
 ) -> Response {
-    let manager = user_manager.lock().unwrap();
+    let manager = &user_manager;
 
     // Get user id first
     let user_id = match manager.get_user_id(&user_handle) {
@@ -367,7 +367,7 @@ async fn admin_get_user_credentials_status(
     State(user_manager): State<GuardedUserManager>,
     Path(user_handle): Path<String>,
 ) -> Response {
-    let manager = user_manager.lock().unwrap();
+    let manager = &user_manager;
 
     match manager.get_user_credentials(&user_handle) {
         Ok(Some(creds)) => Json(UserCredentialsStatusResponse {
@@ -394,7 +394,7 @@ async fn admin_set_user_password(
     Path(user_handle): Path<String>,
     Json(body): Json<SetPasswordBody>,
 ) -> Response {
-    let mut manager = user_manager.lock().unwrap();
+    let manager = &user_manager;
 
     // Check if user exists and has password already
     let has_password = match manager.get_user_credentials(&user_handle) {
@@ -426,7 +426,7 @@ async fn admin_delete_user_password(
     State(user_manager): State<GuardedUserManager>,
     Path(user_handle): Path<String>,
 ) -> Response {
-    let mut manager = user_manager.lock().unwrap();
+    let manager = &user_manager;
 
     // Check if user exists
     match manager.get_user_credentials(&user_handle) {
@@ -452,7 +452,7 @@ async fn admin_get_user_roles(
     State(user_manager): State<GuardedUserManager>,
     Path(user_handle): Path<String>,
 ) -> Response {
-    let manager = user_manager.lock().unwrap();
+    let manager = &user_manager;
     let user_id = match manager.get_user_id(&user_handle) {
         Ok(Some(id)) => id,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
@@ -491,7 +491,7 @@ async fn admin_add_user_role(
     };
 
     let (user_id, stored_event) = {
-        let manager = user_manager.lock().unwrap();
+        let manager = &user_manager;
         let user_id = match manager.get_user_id(&user_handle) {
             Ok(Some(id)) => id,
             Ok(None) => return StatusCode::NOT_FOUND.into_response(),
@@ -536,7 +536,7 @@ async fn admin_remove_user_role(
     };
 
     let (user_id, stored_event) = {
-        let manager = user_manager.lock().unwrap();
+        let manager = &user_manager;
         let user_id = match manager.get_user_id(&user_handle) {
             Ok(Some(id)) => id,
             Ok(None) => return StatusCode::NOT_FOUND.into_response(),
@@ -574,7 +574,7 @@ async fn admin_get_user_permissions(
     State(user_manager): State<GuardedUserManager>,
     Path(user_handle): Path<String>,
 ) -> Response {
-    let manager = user_manager.lock().unwrap();
+    let manager = &user_manager;
     let user_id = match manager.get_user_id(&user_handle) {
         Ok(Some(id)) => id,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
@@ -625,7 +625,7 @@ async fn admin_add_user_extra_permission(
     };
 
     let (user_id, permission_id, stored_event) = {
-        let manager = user_manager.lock().unwrap();
+        let manager = &user_manager;
         let user_id = match manager.get_user_id(&user_handle) {
             Ok(Some(id)) => id,
             Ok(None) => return StatusCode::NOT_FOUND.into_response(),
@@ -682,7 +682,7 @@ async fn admin_remove_extra_permission(
     Path(permission_id): Path<usize>,
 ) -> Response {
     let (user_id, stored_event) = {
-        let manager = user_manager.lock().unwrap();
+        let manager = &user_manager;
         match manager.remove_extra_permission_with_event(permission_id) {
             Ok(Some((user_id, _permission, stored_event))) => (user_id, stored_event),
             Ok(None) => return StatusCode::NOT_FOUND.into_response(),
@@ -722,8 +722,6 @@ async fn admin_get_bandwidth_summary(
     Query(params): Query<BandwidthQueryParams>,
 ) -> Response {
     match user_manager
-        .lock()
-        .unwrap()
         .get_total_bandwidth_summary(params.start_date, params.end_date)
     {
         Ok(summary) => Json(summary).into_response(),
@@ -741,8 +739,6 @@ async fn admin_get_bandwidth_usage(
     Query(params): Query<BandwidthQueryParams>,
 ) -> Response {
     match user_manager
-        .lock()
-        .unwrap()
         .get_all_bandwidth_usage(params.start_date, params.end_date)
     {
         Ok(usage) => Json(usage).into_response(),
@@ -760,7 +756,7 @@ async fn admin_get_user_bandwidth_summary(
     Path(user_handle): Path<String>,
     Query(params): Query<BandwidthQueryParams>,
 ) -> Response {
-    let manager = user_manager.lock().unwrap();
+    let manager = &user_manager;
     let user_id = match manager.get_user_id(&user_handle) {
         Ok(Some(id)) => id,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
@@ -786,7 +782,7 @@ async fn admin_get_user_bandwidth_usage(
     Path(user_handle): Path<String>,
     Query(params): Query<BandwidthQueryParams>,
 ) -> Response {
-    let manager = user_manager.lock().unwrap();
+    let manager = &user_manager;
     let user_id = match manager.get_user_id(&user_handle) {
         Ok(Some(id)) => id,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
@@ -816,8 +812,6 @@ async fn admin_get_daily_listening_stats(
     let (start_date, end_date) = get_default_date_range(query.start_date, query.end_date);
 
     match user_manager
-        .lock()
-        .unwrap()
         .get_daily_listening_stats(start_date, end_date)
     {
         Ok(stats) => Json(stats).into_response(),
@@ -838,8 +832,6 @@ async fn admin_get_top_tracks(
     let limit = query.limit.unwrap_or(50).min(500);
 
     match user_manager
-        .lock()
-        .unwrap()
         .get_top_tracks(start_date, end_date, limit)
     {
         Ok(tracks) => Json(tracks).into_response(),
@@ -860,8 +852,6 @@ async fn admin_get_track_listening_stats(
     let (start_date, end_date) = get_default_date_range(query.start_date, query.end_date);
 
     match user_manager
-        .lock()
-        .unwrap()
         .get_track_listening_stats(&track_id, start_date, end_date)
     {
         Ok(stats) => Json(stats).into_response(),
@@ -879,7 +869,7 @@ async fn admin_get_user_listening_summary(
     Path(user_handle): Path<String>,
     Query(query): Query<DateRangeQuery>,
 ) -> Response {
-    let manager = user_manager.lock().unwrap();
+    let manager = &user_manager;
     let user_id = match manager.get_user_id(&user_handle) {
         Ok(Some(id)) => id,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
@@ -920,7 +910,7 @@ async fn admin_get_online_users(
     let count = user_ids.len();
 
     // Get handles for first 3 users
-    let manager = user_manager.lock().unwrap();
+    let manager = &user_manager;
     let handles: Vec<String> = user_ids
         .into_iter()
         .take(3)
@@ -939,7 +929,7 @@ async fn admin_get_playback_sessions(
 ) -> Response {
     let sessions = playback_session_manager.get_active_sessions().await;
 
-    let manager = user_manager.lock().unwrap();
+    let manager = &user_manager;
     let enriched: Vec<serde_json::Value> = sessions
         .into_iter()
         .map(|s| {
