@@ -180,6 +180,21 @@ class CatalogApiClient:
             resp.raise_for_status()
             return await resp.json(content_type=None)
 
+    async def session_status(self) -> int:
+        """Return the session endpoint status without raising for an expired session."""
+        session = await self._ensure_session()
+        async with session.get(f"{self.base_url}/v1/auth/session") as resp:
+            return resp.status
+
+    async def logout(self) -> int:
+        """Revoke the current session and return the response status."""
+        session = await self._ensure_session()
+        async with session.post(
+            f"{self.base_url}/v1/auth/logout",
+            headers=self._csrf_headers(),
+        ) as resp:
+            return resp.status
+
     async def close(self) -> None:
         if self._session and not self._session.closed:
             await self._session.close()
