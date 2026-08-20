@@ -6,9 +6,10 @@ use axum::{
 use serde::Serialize;
 use tracing::error;
 
-use crate::{catalog_store::CatalogMutationError, user::UserServiceError};
+use crate::{catalog_store::CatalogMutationError, db_executor::DbRunError, user::UserServiceError};
 
 pub const REQUEST_ID_HEADER: HeaderName = HeaderName::from_static("x-request-id");
+const RETRY_AFTER_SECONDS: &str = "1";
 
 #[derive(Debug)]
 pub struct ApiError {
@@ -16,6 +17,7 @@ pub struct ApiError {
     code: &'static str,
     message: String,
     request_id: String,
+    retry_after: Option<HeaderValue>,
 }
 
 #[derive(Debug, Serialize)]
@@ -76,7 +78,18 @@ impl ApiError {
             code,
             message: message.into(),
             request_id: uuid::Uuid::new_v4().to_string(),
+            retry_after: None,
         }
+    }
+
+    fn database_unavailable() -> Self {
+        let mut error = Self::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "database_unavailable",
+            "Database capacity is temporarily unavailable",
+        );
+        error.retry_after = Some(HeaderValue::from_static(RETRY_AFTER_SECONDS));
+        error
     }
 }
 
@@ -89,6 +102,17 @@ impl From<UserServiceError> for ApiError {
             UserServiceError::Internal(source) => {
                 Self::internal("User service operation failed", source)
             }
+        }
+    }
+}
+
+impl From<DbRunError> for ApiError {
+    fn from(error: DbRunError) -> Self {
+        match error {
+            DbRunError::QueueTimeout | DbRunError::ExecutionTimeout | DbRunError::ShuttingDown => {
+                Self::database_unavailable()
+            }
+            internal => Self::internal("Database executor operation failed", internal),
         }
     }
 }
@@ -109,6 +133,11 @@ impl IntoResponse for ApiError {
             REQUEST_ID_HEADER,
             HeaderValue::from_str(&request_id).expect("UUID is a valid header value"),
         );
+        if let Some(retry_after) = self.retry_after {
+            response
+                .headers_mut()
+                .insert(axum::http::header::RETRY_AFTER, retry_after);
+        }
         response
     }
 }
@@ -147,6 +176,52 @@ mod tests {
         assert_eq!(body["code"], "internal_error");
         assert_eq!(body["message"], "An internal error occurred");
         assert_eq!(body["request_id"], request_id);
+        assert!(!body.to_string().contains("secret_column"));
+    }
+
+    #[tokio::test]
+    async fn executor_capacity_failures_have_a_stable_retryable_contract() {
+        for error in [
+            DbRunError::QueueTimeout,
+            DbRunError::ExecutionTimeout,
+            DbRunError::ShuttingDown,
+        ] {
+            let response = ApiError::from(error).into_response();
+            assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+            assert_eq!(
+                response.headers()[axum::http::header::RETRY_AFTER],
+                RETRY_AFTER_SECONDS
+            );
+            assert!(response.headers().contains_key(REQUEST_ID_HEADER));
+
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(body["code"], "database_unavailable");
+            assert_eq!(
+                body["message"],
+                "Database capacity is temporarily unavailable"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn executor_internal_failures_remain_opaque() {
+        let response = ApiError::from(DbRunError::Store(anyhow::anyhow!(
+            "SQLITE_CONSTRAINT users.secret_column"
+        )))
+        .into_response();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(!response
+            .headers()
+            .contains_key(axum::http::header::RETRY_AFTER));
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["code"], "internal_error");
         assert!(!body.to_string().contains("secret_column"));
     }
 }
