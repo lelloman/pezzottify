@@ -3,6 +3,7 @@ use axum::extract::FromRef;
 use crate::background_jobs::SchedulerHandle;
 use crate::backup::DbRegistry;
 use crate::catalog_store::CatalogStore;
+use crate::db_executor::{DbExecutor, DbExecutorConfig, DbHandle, DbLane};
 use crate::download_manager::DownloadManager;
 use crate::enrichment_store::EnrichmentStore;
 use crate::ingestion::IngestionManager;
@@ -11,7 +12,7 @@ use crate::oidc::{AuthStateStore, OidcClient};
 use crate::search::{OrganicIndexer, SearchVault};
 use crate::server_store::ServerStore;
 use crate::shows::ShowStore;
-use crate::user::UserManager;
+use crate::user::{FullUserStore, UserManager};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -38,6 +39,61 @@ pub type OptionalEnrichmentStore = Option<Arc<dyn EnrichmentStore>>;
 pub type GuardedPlaybackSessionManager = Arc<PlaybackSessionManager>;
 pub type GuardedDbRegistry = Arc<DbRegistry>;
 
+/// Typed executor handles for stores that are present for the server lifetime.
+///
+/// Existing code continues to use the legacy fields during the incremental
+/// migration. Keeping both views backed by the same `Arc`s makes this wiring
+/// behavior-neutral while giving every later migration an explicit lane.
+#[derive(Clone)]
+pub struct DatabaseHandles {
+    pub executor: DbExecutor,
+    pub catalog_read: DbHandle<dyn CatalogStore>,
+    pub catalog_write: DbHandle<dyn CatalogStore>,
+    pub search_read: DbHandle<dyn SearchVault>,
+    pub search_write: DbHandle<dyn SearchVault>,
+    pub user_store: DbHandle<dyn FullUserStore>,
+    pub user_manager: DbHandle<Mutex<UserManager>>,
+    pub server: DbHandle<dyn ServerStore>,
+    pub shows: DbHandle<dyn ShowStore>,
+    pub enrichment_read: Option<DbHandle<dyn EnrichmentStore>>,
+    pub enrichment_write: Option<DbHandle<dyn EnrichmentStore>>,
+}
+
+impl DatabaseHandles {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        catalog_store: Arc<dyn CatalogStore>,
+        search_vault: Arc<dyn SearchVault>,
+        user_store: Arc<dyn FullUserStore>,
+        user_manager: Arc<Mutex<UserManager>>,
+        server_store: Arc<dyn ServerStore>,
+        show_store: Arc<dyn ShowStore>,
+        enrichment_store: Option<Arc<dyn EnrichmentStore>>,
+    ) -> Self {
+        let executor = DbExecutor::new(DbExecutorConfig::default());
+        Self {
+            catalog_read: DbHandle::new(
+                catalog_store.clone(),
+                executor.clone(),
+                DbLane::CatalogRead,
+            ),
+            catalog_write: DbHandle::new(catalog_store, executor.clone(), DbLane::CatalogWrite),
+            search_read: DbHandle::new(search_vault.clone(), executor.clone(), DbLane::SearchRead),
+            search_write: DbHandle::new(search_vault, executor.clone(), DbLane::SearchWrite),
+            user_store: DbHandle::new(user_store, executor.clone(), DbLane::User),
+            user_manager: DbHandle::new(user_manager, executor.clone(), DbLane::User),
+            server: DbHandle::new(server_store, executor.clone(), DbLane::Server),
+            shows: DbHandle::new(show_store, executor.clone(), DbLane::Shows),
+            enrichment_read: enrichment_store
+                .clone()
+                .map(|store| DbHandle::new(store, executor.clone(), DbLane::EnrichmentRead)),
+            enrichment_write: enrichment_store
+                .map(|store| DbHandle::new(store, executor.clone(), DbLane::EnrichmentWrite)),
+            executor,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct ServerState {
     pub config: ServerConfig,
@@ -58,6 +114,8 @@ pub struct ServerState {
     pub download_manager: OptionalDownloadManager,
     pub ingestion_manager: OptionalIngestionManager,
     pub enrichment_store: OptionalEnrichmentStore,
+    /// Priority-aware database handles used by incrementally migrated call sites.
+    pub database: DatabaseHandles,
     /// Playback session manager for multi-device playback sync
     pub playback_session_manager: GuardedPlaybackSessionManager,
     /// Database registry for backup checkpoint operations
