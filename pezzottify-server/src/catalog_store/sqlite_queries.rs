@@ -69,9 +69,11 @@ impl SqliteCatalogStore {
                 blob.len()
             ));
         }
-        Ok(blob
-            .chunks_exact(std::mem::size_of::<f32>())
-            .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+        let (chunks, remainder) = blob.as_chunks::<{ std::mem::size_of::<f32>() }>();
+        debug_assert!(remainder.is_empty());
+        Ok(chunks
+            .iter()
+            .map(|chunk| f32::from_le_bytes(*chunk))
             .collect())
     }
 
