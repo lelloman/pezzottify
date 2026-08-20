@@ -3,8 +3,8 @@
 use crate::server::metrics::record_db_query;
 use crate::sqlite_column;
 use crate::sqlite_persistence::{
-    Column, ForeignKey, ForeignKeyOnChange, SqlType, Table, VersionedSchema, BASE_DB_VERSION,
-    DEFAULT_TIMESTAMP,
+    configure_connection, Column, ForeignKey, ForeignKeyOnChange, SqlType, Table, VersionedSchema,
+    BASE_DB_VERSION, DEFAULT_TIMESTAMP,
 };
 use crate::user::device::{
     Device, DeviceRegistration, DeviceShareMode, DeviceSharePolicy, DeviceType,
@@ -1219,6 +1219,7 @@ impl SqliteUserStore {
             VERSIONED_SCHEMAS.last().unwrap().create(&conn)?;
             conn
         };
+        configure_connection(&conn)?;
 
         // Read the database version
         let db_version = conn

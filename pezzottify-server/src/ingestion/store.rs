@@ -129,8 +129,7 @@ impl SqliteIngestionStore {
         let conn = Connection::open(path)
             .with_context(|| format!("Failed to open ingestion database: {:?}", path))?;
 
-        // Enable foreign keys
-        conn.execute("PRAGMA foreign_keys = ON", [])?;
+        crate::sqlite_persistence::configure_connection(&conn)?;
 
         // Apply schema
         conn.execute_batch(INGESTION_SCHEMA_SQL)?;
@@ -150,7 +149,7 @@ impl SqliteIngestionStore {
     #[cfg(test)]
     pub fn in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
-        conn.execute("PRAGMA foreign_keys = ON", [])?;
+        crate::sqlite_persistence::configure_connection(&conn)?;
         conn.execute_batch(INGESTION_SCHEMA_SQL)?;
         super::schema::migrate_v2_to_v3(&conn)?;
         super::schema::migrate_v3_to_v4(&conn)?;

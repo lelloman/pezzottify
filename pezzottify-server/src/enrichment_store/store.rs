@@ -8,7 +8,7 @@ use super::models::{
 };
 use super::schema::{create_enrichment_v1_schema, ENRICHMENT_VERSIONED_SCHEMAS};
 use super::trait_def::EnrichmentStore;
-use crate::sqlite_persistence::BASE_DB_VERSION;
+use crate::sqlite_persistence::{configure_connection, BASE_DB_VERSION};
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
@@ -93,6 +93,7 @@ impl SqliteEnrichmentStore {
                 | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )
         .context("Failed to open enrichment database")?;
+        configure_connection(&write_conn)?;
 
         migrate_if_needed(&mut write_conn)?;
 
@@ -105,10 +106,7 @@ impl SqliteEnrichmentStore {
                 | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )
         .context("Failed to open enrichment database for reading")?;
-
-        read_conn
-            .pragma_update(None, "journal_mode", "WAL")
-            .context("Failed to set WAL mode on enrichment read connection")?;
+        configure_connection(&read_conn)?;
 
         let stats = Self::count_rows(&read_conn)?;
         info!(

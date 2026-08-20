@@ -23,7 +23,7 @@ impl SqliteShowStore {
             std::fs::create_dir_all(parent)?;
         }
         let conn = Connection::open(path).context("Failed to open shows database")?;
-        conn.execute("PRAGMA foreign_keys = ON", [])?;
+        crate::sqlite_persistence::configure_connection(&conn)?;
         Self::create_schema(&conn)?;
         db_registry.register(path.to_path_buf(), &conn)?;
         Ok(Self {

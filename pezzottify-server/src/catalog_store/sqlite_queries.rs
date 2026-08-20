@@ -21,6 +21,7 @@ impl SqliteCatalogStore {
                 | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )
         .context("Failed to open catalog database")?;
+        configure_connection(&write_conn)?;
 
         migrate_if_needed(&mut write_conn)?;
 
@@ -36,7 +37,7 @@ impl SqliteCatalogStore {
                     | rusqlite::OpenFlags::SQLITE_OPEN_URI
                     | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
             )?;
-            read_conn.pragma_update(None, "journal_mode", "WAL")?;
+            configure_connection(&read_conn)?;
             read_pool.push(Arc::new(Mutex::new(read_conn)));
         }
 
@@ -776,7 +777,6 @@ impl SqliteCatalogStore {
         // SUM(1), rather than SQLite's optimized COUNT(*), keeps the VM progress
         // handler active while the covering index is scanned. The narrow
         // availability index avoids reading the much larger table payload pages.
-        const PROGRESS_OPS: i32 = 10_000;
         const PROGRESS_DELAY: std::time::Duration = std::time::Duration::from_millis(10);
         if is_cancelled() {
             anyhow::bail!("cancelled");
@@ -788,19 +788,19 @@ impl SqliteCatalogStore {
              FROM {table} INDEXED BY {covering_index}"
         );
         let progress_is_cancelled = is_cancelled.clone();
-        conn.progress_handler(
-            PROGRESS_OPS,
-            Some(move || {
+        let result = crate::sqlite_persistence::with_progress_handler(
+            &conn,
+            crate::sqlite_persistence::CANCELLATION_PROGRESS_OPS,
+            move || {
                 if progress_is_cancelled() {
                     true
                 } else {
                     std::thread::sleep(PROGRESS_DELAY);
                     false
                 }
-            }),
+            },
+            || conn.query_row(&sql, [], |row| row.get::<_, i64>(0)),
         );
-        let result = conn.query_row(&sql, [], |row| row.get::<_, i64>(0));
-        conn.progress_handler(0, None::<fn() -> bool>);
         match result {
             Ok(count) => Ok(count),
             Err(_) if is_cancelled() => anyhow::bail!("cancelled"),
@@ -1271,4 +1271,3 @@ impl SqliteCatalogStore {
 // =============================================================================
 // CatalogStore Trait Implementation
 // =============================================================================
-
