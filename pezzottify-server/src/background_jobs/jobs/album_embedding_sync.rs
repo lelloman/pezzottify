@@ -557,7 +557,7 @@ mod tests {
     };
     use crate::server_store::SqliteServerStore;
     use crate::user::{SqliteUserStore, UserManager};
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     use tokio_util::sync::CancellationToken;
 
     #[test]
@@ -673,10 +673,7 @@ mod tests {
             Arc::new(SqliteUserStore::new(temp_dir.path().join("user.db"), &registry).unwrap());
         let server_store =
             Arc::new(SqliteServerStore::new(temp_dir.path().join("server.db"), &registry).unwrap());
-        let user_manager = Arc::new(Mutex::new(UserManager::new(
-            catalog_store.clone(),
-            user_store.clone(),
-        )));
+        let user_manager = Arc::new(UserManager::new(user_store.clone()));
         let ctx = JobContext::new(
             CancellationToken::new(),
             catalog_store.clone(),

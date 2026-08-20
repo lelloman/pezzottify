@@ -87,7 +87,7 @@ async fn try_oidc_session(token: &str, ctx: &ServerState) -> Option<Session> {
     };
 
     // Look up or provision local user by OIDC subject
-    let user_manager = ctx.user_manager.lock().unwrap();
+    let user_manager = &ctx.user_manager;
     let user_id = match user_manager.get_user_id_by_oidc_subject(&claims.subject) {
         Ok(Some(id)) => {
             debug!("Found existing user for OIDC subject={}", claims.subject);
@@ -232,7 +232,7 @@ async fn try_oidc_session(token: &str, ctx: &ServerState) -> Option<Session> {
 
 /// Try to validate the token as a legacy database auth token
 async fn try_legacy_session(token: &str, ctx: &ServerState) -> Option<Session> {
-    let user_manager = ctx.user_manager.lock().unwrap();
+    let user_manager = &ctx.user_manager;
     let auth_token_value = AuthTokenValue(token.to_string());
     let auth_token = match user_manager.get_auth_token(&auth_token_value) {
         Ok(Some(token)) => {

@@ -400,10 +400,7 @@ impl BackgroundJob for PopularContentJob {
             artists: popular_artists.clone(),
         };
 
-        ctx.user_manager
-            .lock()
-            .unwrap()
-            .set_popular_content_cache(content);
+        ctx.user_manager.set_popular_content_cache(content);
 
         info!(
             "Popular content computed and cached: {} albums, {} artists",

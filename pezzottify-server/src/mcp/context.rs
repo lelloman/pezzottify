@@ -12,8 +12,6 @@ use crate::server::ServerConfig;
 use crate::server_store::ServerStore;
 use crate::user::Permission;
 use crate::user::UserManager;
-use std::sync::Mutex;
-
 /// Context provided to tool and resource handlers during execution
 #[derive(Clone)]
 pub struct ToolContext {
@@ -27,7 +25,7 @@ pub struct ToolContext {
     pub search_vault: Arc<dyn SearchVault>,
 
     /// Access to user management
-    pub user_manager: Arc<Mutex<UserManager>>,
+    pub user_manager: Arc<UserManager>,
 
     /// Access to server store (jobs, etc.)
     pub server_store: Arc<dyn ServerStore>,

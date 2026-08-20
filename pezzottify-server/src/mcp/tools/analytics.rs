@@ -143,7 +143,7 @@ async fn get_bandwidth_stats(
     start_date: u32,
     end_date: u32,
 ) -> ToolResult {
-    let user_manager = ctx.user_manager.lock().unwrap();
+    let user_manager = &ctx.user_manager;
 
     let summary = if let Some(uid) = user_id {
         user_manager
@@ -175,7 +175,7 @@ async fn get_listening_stats(
     start_date: u32,
     end_date: u32,
 ) -> ToolResult {
-    let user_manager = ctx.user_manager.lock().unwrap();
+    let user_manager = &ctx.user_manager;
 
     // If user_id is provided, get user-specific stats
     // Otherwise, we need platform-wide stats (which would require aggregation)
@@ -219,7 +219,7 @@ async fn get_overview(
     start_date: u32,
     end_date: u32,
 ) -> ToolResult {
-    let user_manager = ctx.user_manager.lock().unwrap();
+    let user_manager = &ctx.user_manager;
 
     // Get bandwidth stats
     let bandwidth_summary = if let Some(uid) = user_id {

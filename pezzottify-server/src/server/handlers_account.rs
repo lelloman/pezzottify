@@ -73,7 +73,7 @@ async fn post_listening_event(
         date,
     };
 
-    match user_manager.lock().unwrap().record_listening_event(event) {
+    match user_manager.record_listening_event(event) {
         Ok((id, created)) => {
             // Record metrics only for newly created events
             if created {
@@ -99,7 +99,7 @@ async fn get_user_listening_summary(
 ) -> Response {
     let (start_date, end_date) = get_default_date_range(query.start_date, query.end_date);
 
-    match user_manager.lock().unwrap().get_user_listening_summary(
+    match user_manager.get_user_listening_summary(
         session.user_id,
         start_date,
         end_date,
@@ -120,8 +120,6 @@ async fn get_user_listening_history(
     let limit = query.limit.unwrap_or(50).min(500);
 
     match user_manager
-        .lock()
-        .unwrap()
         .get_user_listening_history(session.user_id, limit)
     {
         Ok(history) => Json(history).into_response(),
@@ -139,7 +137,7 @@ async fn get_user_listening_events(
 ) -> Response {
     let (start_date, end_date) = get_default_date_range(query.start_date, query.end_date);
 
-    match user_manager.lock().unwrap().get_user_listening_events(
+    match user_manager.get_user_listening_events(
         session.user_id,
         start_date,
         end_date,
@@ -273,8 +271,6 @@ async fn get_user_settings(
     State(user_manager): State<GuardedUserManager>,
 ) -> Response {
     match user_manager
-        .lock()
-        .unwrap()
         .get_all_user_settings(session.user_id)
     {
         Ok(settings) => Json(UserSettingsResponse { settings }).into_response(),
@@ -297,7 +293,7 @@ async fn update_user_settings(
         Err(status) => return status.into_response(),
     };
     let stored_events = {
-        let locked_manager = user_manager.lock().unwrap();
+        let locked_manager = &user_manager;
         match locked_manager.set_user_settings_with_events(
             session.user_id,
             body.settings,
@@ -393,8 +389,6 @@ async fn get_user_devices(
     State(user_manager): State<GuardedUserManager>,
 ) -> Response {
     let devices = match user_manager
-        .lock()
-        .unwrap()
         .get_user_devices(session.user_id)
     {
         Ok(devices) => devices,
@@ -407,8 +401,6 @@ async fn get_user_devices(
     let mut result = Vec::new();
     for device in devices {
         let policy = user_manager
-            .lock()
-            .unwrap()
             .get_device_share_policy(device.id)
             .unwrap_or_default();
         result.push(DeviceInfoResponse {
@@ -441,7 +433,7 @@ async fn put_device_share_policy(
     Path(device_id): Path<usize>,
     Json(body): Json<DeviceSharePolicyRequest>,
 ) -> Response {
-    let device = match user_manager.lock().unwrap().get_device(device_id) {
+    let device = match user_manager.get_device(device_id) {
         Ok(Some(device)) => device,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
         Err(err) => {
@@ -482,8 +474,6 @@ async fn put_device_share_policy(
     }
 
     if let Err(err) = user_manager
-        .lock()
-        .unwrap()
         .set_device_share_policy(device_id, &policy)
     {
         error!("Error setting device share policy: {}", err);

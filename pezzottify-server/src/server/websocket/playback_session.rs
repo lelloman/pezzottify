@@ -31,7 +31,7 @@ pub struct PlaybackSessionManager {
     /// Device metadata indexed by (user_id, device_id).
     devices: RwLock<HashMap<(usize, usize), DeviceMetadata>>,
     connection_manager: Arc<ConnectionManager>,
-    user_manager: Arc<Mutex<UserManager>>,
+    user_manager: Arc<UserManager>,
 }
 
 /// Metadata about a connected device.
@@ -108,10 +108,7 @@ impl From<PlaybackError> for PlaybackErrorPayload {
 
 impl PlaybackSessionManager {
     /// Create a new playback session manager.
-    pub fn new(
-        connection_manager: Arc<ConnectionManager>,
-        user_manager: Arc<Mutex<UserManager>>,
-    ) -> Self {
+    pub fn new(connection_manager: Arc<ConnectionManager>, user_manager: Arc<UserManager>) -> Self {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             devices: RwLock::new(HashMap::new()),
@@ -121,13 +118,13 @@ impl PlaybackSessionManager {
     }
 
     fn get_owner_handle(&self, user_id: usize) -> Option<String> {
-        let manager = self.user_manager.lock().unwrap();
+        let manager = &self.user_manager;
         manager.get_user_handle(user_id).ok().flatten()
     }
 
     async fn get_device_owner_id(&self, device_id: usize) -> Option<usize> {
         {
-            let manager = self.user_manager.lock().unwrap();
+            let manager = &self.user_manager;
             if let Ok(Some(device)) = manager.get_device(device_id) {
                 if let Some(user_id) = device.user_id {
                     return Some(user_id);
@@ -142,14 +139,14 @@ impl PlaybackSessionManager {
     }
 
     fn get_device_share_policy(&self, device_id: usize) -> DeviceSharePolicy {
-        let manager = self.user_manager.lock().unwrap();
+        let manager = &self.user_manager;
         manager
             .get_device_share_policy(device_id)
             .unwrap_or_default()
     }
 
     fn get_user_roles(&self, user_id: usize) -> Vec<UserRole> {
-        let manager = self.user_manager.lock().unwrap();
+        let manager = &self.user_manager;
         manager.get_user_roles(user_id).unwrap_or_default()
     }
 
@@ -890,8 +887,7 @@ mod tests {
         )
         .unwrap();
         let user_store: Arc<dyn crate::user::FullUserStore> = Arc::new(store);
-        let catalog_store: Arc<dyn crate::catalog_store::CatalogStore> = Arc::new(NullCatalogStore);
-        let user_manager = Arc::new(Mutex::new(UserManager::new(catalog_store, user_store)));
+        let user_manager = Arc::new(UserManager::new(user_store));
         let session_manager = PlaybackSessionManager::new(conn_manager.clone(), user_manager);
         (conn_manager, session_manager)
     }
@@ -900,7 +896,7 @@ mod tests {
         tempfile::TempDir,
         Arc<ConnectionManager>,
         PlaybackSessionManager,
-        Arc<Mutex<UserManager>>,
+        Arc<UserManager>,
     ) {
         let conn_manager = Arc::new(ConnectionManager::new());
         let temp_dir = tempdir().unwrap();
@@ -910,8 +906,7 @@ mod tests {
         )
         .unwrap();
         let user_store: Arc<dyn crate::user::FullUserStore> = Arc::new(store);
-        let catalog_store: Arc<dyn crate::catalog_store::CatalogStore> = Arc::new(NullCatalogStore);
-        let user_manager = Arc::new(Mutex::new(UserManager::new(catalog_store, user_store)));
+        let user_manager = Arc::new(UserManager::new(user_store));
         let session_manager =
             PlaybackSessionManager::new(conn_manager.clone(), user_manager.clone());
         (temp_dir, conn_manager, session_manager, user_manager)
@@ -947,12 +942,10 @@ mod tests {
     async fn policy_allow_everyone_allows_any_user() {
         let (_temp, _conn, manager, user_manager) = setup_with_user_manager().await;
 
-        let owner_id = user_manager.lock().unwrap().add_user("owner").unwrap();
-        let other_id = user_manager.lock().unwrap().add_user("other").unwrap();
+        let owner_id = user_manager.add_user("owner").unwrap();
+        let other_id = user_manager.add_user("other").unwrap();
 
         let device_id = user_manager
-            .lock()
-            .unwrap()
             .register_or_update_device(&crate::user::device::DeviceRegistration {
                 device_uuid: "device-uuid-allow-all".to_string(),
                 device_type: crate::user::device::DeviceType::Web,
@@ -961,14 +954,10 @@ mod tests {
             })
             .unwrap();
         user_manager
-            .lock()
-            .unwrap()
             .associate_device_with_user(device_id, owner_id)
             .unwrap();
 
         user_manager
-            .lock()
-            .unwrap()
             .set_device_share_policy(device_id, &DeviceSharePolicy::allow_everyone())
             .unwrap();
 
@@ -979,12 +968,10 @@ mod tests {
     async fn policy_deny_everyone_denies_non_owner() {
         let (_temp, _conn, manager, user_manager) = setup_with_user_manager().await;
 
-        let owner_id = user_manager.lock().unwrap().add_user("owner").unwrap();
-        let other_id = user_manager.lock().unwrap().add_user("other").unwrap();
+        let owner_id = user_manager.add_user("owner").unwrap();
+        let other_id = user_manager.add_user("other").unwrap();
 
         let device_id = user_manager
-            .lock()
-            .unwrap()
             .register_or_update_device(&crate::user::device::DeviceRegistration {
                 device_uuid: "device-uuid-deny-all".to_string(),
                 device_type: crate::user::device::DeviceType::Web,
@@ -993,14 +980,10 @@ mod tests {
             })
             .unwrap();
         user_manager
-            .lock()
-            .unwrap()
             .associate_device_with_user(device_id, owner_id)
             .unwrap();
 
         user_manager
-            .lock()
-            .unwrap()
             .set_device_share_policy(device_id, &DeviceSharePolicy::deny_everyone())
             .unwrap();
 
@@ -1012,12 +995,10 @@ mod tests {
     async fn policy_disallow_overrides_allow_user() {
         let (_temp, _conn, manager, user_manager) = setup_with_user_manager().await;
 
-        let owner_id = user_manager.lock().unwrap().add_user("owner").unwrap();
-        let other_id = user_manager.lock().unwrap().add_user("other").unwrap();
+        let owner_id = user_manager.add_user("owner").unwrap();
+        let other_id = user_manager.add_user("other").unwrap();
 
         let device_id = user_manager
-            .lock()
-            .unwrap()
             .register_or_update_device(&crate::user::device::DeviceRegistration {
                 device_uuid: "device-uuid-disallow".to_string(),
                 device_type: crate::user::device::DeviceType::Web,
@@ -1026,8 +1007,6 @@ mod tests {
             })
             .unwrap();
         user_manager
-            .lock()
-            .unwrap()
             .associate_device_with_user(device_id, owner_id)
             .unwrap();
 
@@ -1039,8 +1018,6 @@ mod tests {
         };
 
         user_manager
-            .lock()
-            .unwrap()
             .set_device_share_policy(device_id, &policy)
             .unwrap();
 
@@ -1051,17 +1028,13 @@ mod tests {
     async fn policy_allows_by_role_when_not_denied() {
         let (_temp, _conn, manager, user_manager) = setup_with_user_manager().await;
 
-        let owner_id = user_manager.lock().unwrap().add_user("owner").unwrap();
-        let other_id = user_manager.lock().unwrap().add_user("other").unwrap();
+        let owner_id = user_manager.add_user("owner").unwrap();
+        let other_id = user_manager.add_user("other").unwrap();
         user_manager
-            .lock()
-            .unwrap()
             .add_user_role(other_id, UserRole::Admin)
             .unwrap();
 
         let device_id = user_manager
-            .lock()
-            .unwrap()
             .register_or_update_device(&crate::user::device::DeviceRegistration {
                 device_uuid: "device-uuid-role".to_string(),
                 device_type: crate::user::device::DeviceType::Web,
@@ -1070,8 +1043,6 @@ mod tests {
             })
             .unwrap();
         user_manager
-            .lock()
-            .unwrap()
             .associate_device_with_user(device_id, owner_id)
             .unwrap();
 
@@ -1083,8 +1054,6 @@ mod tests {
         };
 
         user_manager
-            .lock()
-            .unwrap()
             .set_device_share_policy(device_id, &policy)
             .unwrap();
 

@@ -821,10 +821,7 @@ mod tests {
         );
 
         // Create user manager for job context
-        let user_manager = Arc::new(std::sync::Mutex::new(crate::user::UserManager::new(
-            catalog_store.clone(),
-            user_store.clone(),
-        )));
+        let user_manager = Arc::new(crate::user::UserManager::new(user_store.clone()));
 
         let job_context = JobContext::new(
             shutdown_token.child_token(),
@@ -1142,10 +1139,7 @@ mod tests {
             crate::user::SqliteUserStore::new(&user_db_path, &crate::backup::DbRegistry::new())
                 .unwrap(),
         );
-        let user_manager = Arc::new(std::sync::Mutex::new(crate::user::UserManager::new(
-            catalog_store.clone(),
-            user_store.clone(),
-        )));
+        let user_manager = Arc::new(crate::user::UserManager::new(user_store.clone()));
 
         let job_context = JobContext::new(
             shutdown_token.child_token(),
@@ -1214,10 +1208,7 @@ mod tests {
             crate::user::SqliteUserStore::new(&user_db_path, &crate::backup::DbRegistry::new())
                 .unwrap(),
         );
-        let user_manager = Arc::new(std::sync::Mutex::new(crate::user::UserManager::new(
-            catalog_store.clone(),
-            user_store.clone(),
-        )));
+        let user_manager = Arc::new(crate::user::UserManager::new(user_store.clone()));
 
         let job_context = JobContext::new(
             shutdown_token.child_token(),
@@ -1345,10 +1336,7 @@ mod tests {
             crate::user::SqliteUserStore::new(&user_db_path, &crate::backup::DbRegistry::new())
                 .unwrap(),
         );
-        let user_manager = Arc::new(std::sync::Mutex::new(crate::user::UserManager::new(
-            catalog_store.clone(),
-            user_store.clone(),
-        )));
+        let user_manager = Arc::new(crate::user::UserManager::new(user_store.clone()));
 
         let job_context = JobContext::new(
             shutdown_token.child_token(),
@@ -1444,10 +1432,7 @@ mod tests {
             crate::user::SqliteUserStore::new(&user_db_path, &crate::backup::DbRegistry::new())
                 .unwrap(),
         );
-        let user_manager = Arc::new(std::sync::Mutex::new(crate::user::UserManager::new(
-            catalog_store.clone(),
-            user_store.clone(),
-        )));
+        let user_manager = Arc::new(crate::user::UserManager::new(user_store.clone()));
 
         let job_context = JobContext::new(
             shutdown_token.child_token(),

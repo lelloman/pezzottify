@@ -1004,6 +1004,7 @@ async fn get_whats_new(
 /// Results are cached for 24 hours in UserManager.
 async fn get_popular_content(
     _session: Session,
+    State(catalog_store): State<GuardedCatalogStore>,
     State(user_manager): State<GuardedUserManager>,
     Query(query): Query<PopularContentQuery>,
 ) -> Response {
@@ -1046,7 +1047,8 @@ async fn get_popular_content(
         start_date, end_date, albums_limit, artists_limit
     );
 
-    match user_manager.lock().unwrap().get_popular_content(
+    match user_manager.get_popular_content(
+        catalog_store.as_ref(),
         start_date,
         end_date,
         albums_limit,

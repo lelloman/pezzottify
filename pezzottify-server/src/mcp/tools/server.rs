@@ -114,7 +114,7 @@ async fn get_server_stats(ctx: &ToolContext) -> ToolResult {
         tracks: ctx.catalog_store.get_tracks_count(),
     };
 
-    let user_manager = ctx.user_manager.lock().unwrap();
+    let user_manager = &ctx.user_manager;
     let total_users = user_manager
         .get_all_user_handles()
         .map(|h| h.len())

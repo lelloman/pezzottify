@@ -4,11 +4,11 @@ use crate::enrichment_store::EnrichmentStore;
 use crate::search::SearchVault;
 use crate::server_store::ServerStore;
 use crate::user::{FullUserStore, UserManager};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 /// Type alias for thread-safe UserManager access.
-pub type GuardedUserManager = Arc<Mutex<UserManager>>;
+pub type GuardedUserManager = Arc<UserManager>;
 
 /// Type alias for thread-safe SearchVault access.
 /// SearchVault is internally thread-safe (uses separate read/write connections with internal Mutex).

@@ -173,9 +173,7 @@ impl FeaturedAlbumsJob {
         let limit = self.settings.popular_seed_album_count.max(1);
 
         ctx.user_manager
-            .lock()
-            .unwrap()
-            .get_popular_content(start_date, end_date, limit, 0)
+            .get_popular_content(ctx.catalog_store.as_ref(), start_date, end_date, limit, 0)
             .map(|content| content.albums)
             .map_err(|err| {
                 JobError::ExecutionFailed(format!("Failed to load popular seed albums: {err}"))
