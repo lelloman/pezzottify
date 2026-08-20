@@ -492,34 +492,37 @@ pub(super) fn auth_routes(state: &ServerState) -> Router {
     // Login attempts are protected by a short burst bucket and a slower sustained
     // bucket. Peer IP is used directly: forwarded headers are intentionally ignored
     // unless a future deployment explicitly configures trusted proxies.
+    let per_minute = state.config.login_rate_limit_per_minute;
+    let sustained_replenish_millis =
+        3_600_000_u64.saturating_div(u64::from(state.config.login_rate_limit_per_hour));
     let login_ip_burst_limit = Arc::new(
         GovernorConfigBuilder::default()
-            .per_millisecond(60000_u64.saturating_div(u64::from(LOGIN_PER_MINUTE)))
-            .burst_size(LOGIN_PER_MINUTE)
+            .per_millisecond(60000_u64.saturating_div(u64::from(per_minute)))
+            .burst_size(per_minute)
             .key_extractor(IpKeyExtractor)
             .finish()
             .expect("valid login IP burst limiter"),
     );
     let login_ip_sustained_limit = Arc::new(
         GovernorConfigBuilder::default()
-            .per_millisecond(LOGIN_SUSTAINED_REPLENISH_MILLIS)
-            .burst_size(LOGIN_PER_MINUTE)
+            .per_millisecond(sustained_replenish_millis)
+            .burst_size(per_minute)
             .key_extractor(IpKeyExtractor)
             .finish()
             .expect("valid login IP sustained limiter"),
     );
     let login_account_burst_limit = Arc::new(
         GovernorConfigBuilder::default()
-            .per_millisecond(60000_u64.saturating_div(u64::from(LOGIN_PER_MINUTE)))
-            .burst_size(LOGIN_PER_MINUTE)
+            .per_millisecond(60000_u64.saturating_div(u64::from(per_minute)))
+            .burst_size(per_minute)
             .key_extractor(LoginAccountKeyExtractor)
             .finish()
             .expect("valid login account burst limiter"),
     );
     let login_account_sustained_limit = Arc::new(
         GovernorConfigBuilder::default()
-            .per_millisecond(LOGIN_SUSTAINED_REPLENISH_MILLIS)
-            .burst_size(LOGIN_PER_MINUTE)
+            .per_millisecond(sustained_replenish_millis)
+            .burst_size(per_minute)
             .key_extractor(LoginAccountKeyExtractor)
             .finish()
             .expect("valid login account sustained limiter"),

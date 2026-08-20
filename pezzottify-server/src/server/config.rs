@@ -20,6 +20,10 @@ pub struct ServerConfig {
     pub secure_session_cookies: bool,
     /// Browser session cookie lifetime. Server-side token expiry remains authoritative.
     pub session_cookie_max_age_secs: u64,
+    /// Password-login burst budget, independently enforced by peer IP and account.
+    pub login_rate_limit_per_minute: u32,
+    /// Password-login sustained budget, independently enforced by peer IP and account.
+    pub login_rate_limit_per_hour: u32,
     /// Configuration for the streaming search pipeline.
     pub streaming_search: StreamingSearchSettings,
     /// Download manager configuration.
@@ -48,6 +52,8 @@ impl Default for ServerConfig {
             disable_password_auth: false,
             secure_session_cookies: true,
             session_cookie_max_age_secs: 7 * 24 * 60 * 60,
+            login_rate_limit_per_minute: 10,
+            login_rate_limit_per_hour: 100,
             streaming_search: StreamingSearchSettings::default(),
             download_manager: DownloadManagerSettings::default(),
             db_dir: PathBuf::from("."),

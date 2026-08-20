@@ -102,6 +102,8 @@ pub struct AppConfig {
     pub frontend_dir_path: Option<String>,
     pub secure_session_cookies: bool,
     pub session_cookie_max_age_secs: u64,
+    pub login_rate_limit_per_minute: u32,
+    pub login_rate_limit_per_hour: u32,
     pub downloader_url: Option<String>,
     pub downloader_timeout_sec: u64,
     pub event_retention_days: u64,
@@ -168,6 +170,11 @@ impl AppConfig {
             file.session_cookie_max_age_secs.unwrap_or(7 * 24 * 60 * 60);
         if session_cookie_max_age_secs == 0 {
             bail!("session_cookie_max_age_secs must be greater than zero");
+        }
+        let login_rate_limit_per_minute = file.login_rate_limit_per_minute.unwrap_or(10);
+        let login_rate_limit_per_hour = file.login_rate_limit_per_hour.unwrap_or(100);
+        if login_rate_limit_per_minute == 0 || login_rate_limit_per_hour == 0 {
+            bail!("login rate limits must be greater than zero");
         }
 
         let downloader_url = file
@@ -559,6 +566,8 @@ impl AppConfig {
             frontend_dir_path,
             secure_session_cookies,
             session_cookie_max_age_secs,
+            login_rate_limit_per_minute,
+            login_rate_limit_per_hour,
             downloader_url,
             downloader_timeout_sec,
             event_retention_days,
@@ -1144,6 +1153,8 @@ mod tests {
         assert_eq!(config.frontend_dir_path, Some("/frontend".to_string()));
         assert!(config.secure_session_cookies);
         assert_eq!(config.session_cookie_max_age_secs, 604_800);
+        assert_eq!(config.login_rate_limit_per_minute, 10);
+        assert_eq!(config.login_rate_limit_per_hour, 100);
         assert_eq!(
             config.downloader_url,
             Some("http://downloader:3002".to_string())
@@ -1174,6 +1185,8 @@ mod tests {
             logging_level: Some("body".to_string()),
             secure_session_cookies: Some(false),
             session_cookie_max_age_secs: Some(86_400),
+            login_rate_limit_per_minute: Some(250),
+            login_rate_limit_per_hour: Some(2_000),
             ..Default::default()
         };
 
@@ -1189,6 +1202,8 @@ mod tests {
         assert_eq!(config.content_cache_age_sec, 3600);
         assert!(!config.secure_session_cookies);
         assert_eq!(config.session_cookie_max_age_secs, 86_400);
+        assert_eq!(config.login_rate_limit_per_minute, 250);
+        assert_eq!(config.login_rate_limit_per_hour, 2_000);
     }
 
     #[test]
@@ -1207,6 +1222,31 @@ mod tests {
         assert!(error
             .to_string()
             .contains("session_cookie_max_age_secs must be greater than zero"));
+    }
+
+    #[test]
+    fn test_rejects_zero_login_rate_limits() {
+        let temp_dir = make_temp_db_dir();
+        let cli = CliConfig {
+            db_dir: Some(temp_dir.path().to_path_buf()),
+            ..Default::default()
+        };
+
+        for file_config in [
+            FileConfig {
+                login_rate_limit_per_minute: Some(0),
+                ..Default::default()
+            },
+            FileConfig {
+                login_rate_limit_per_hour: Some(0),
+                ..Default::default()
+            },
+        ] {
+            let error = AppConfig::resolve(&cli, Some(file_config)).unwrap_err();
+            assert!(error
+                .to_string()
+                .contains("login rate limits must be greater than zero"));
+        }
     }
 
     #[test]

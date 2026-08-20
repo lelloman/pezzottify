@@ -62,8 +62,8 @@ use super::{
     http_api_no_store, http_cache, log_requests, make_search_admin_routes, make_search_routes,
     recommendation_routes, state::*, AnalyticsDeviceKeyExtractor, IpKeyExtractor,
     LoginAccountKeyExtractor, RequestsLoggingLevel, ServerConfig, UserOrIpKeyExtractor,
-    ANALYTICS_PER_DEVICE_PER_MINUTE, CONTENT_READ_PER_MINUTE, GLOBAL_PER_MINUTE, LOGIN_PER_MINUTE,
-    LOGIN_SUSTAINED_REPLENISH_MILLIS, SEARCH_PER_MINUTE, STREAM_PER_MINUTE, WRITE_PER_MINUTE,
+    ANALYTICS_PER_DEVICE_PER_MINUTE, CONTENT_READ_PER_MINUTE, GLOBAL_PER_MINUTE, SEARCH_PER_MINUTE,
+    STREAM_PER_MINUTE, WRITE_PER_MINUTE,
 };
 use crate::server::session::Session;
 use crate::server::session_cookie::{

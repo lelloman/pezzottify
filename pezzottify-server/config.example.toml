@@ -16,6 +16,9 @@ frontend_dir_path = "/app/web"
 secure_session_cookies = true
 # Browser cookie lifetime in seconds. Server-side token expiry remains authoritative.
 session_cookie_max_age_secs = 604800
+# Password-login attempts are limited independently by peer IP and account.
+login_rate_limit_per_minute = 10
+login_rate_limit_per_hour = 100
 
 # Downloader service URL (enables download manager when set)
 # The downloader should be on the same Docker network (pezzottify-internal)

@@ -217,6 +217,8 @@ impl TestServer {
             disable_password_auth: options.disable_password_auth,
             secure_session_cookies: false,
             session_cookie_max_age_secs: 7 * 24 * 60 * 60,
+            login_rate_limit_per_minute: 1_000,
+            login_rate_limit_per_hour: 1_000,
             streaming_search: pezzottify_server::config::StreamingSearchSettings::default(),
             download_manager,
             db_dir: temp_db_dir.path().to_path_buf(),
