@@ -1286,6 +1286,72 @@ mod tests {
         assert!(manager.get_auth_token(&session.value).unwrap().is_none());
     }
 
+    #[test]
+    fn missing_catalog_track_does_not_mutate_playlist_or_append_event() {
+        let (manager, _temp_dir) = create_test_manager();
+        let user_id = manager.add_user("playlist-owner").unwrap();
+        let (playlist_id, created_event) = manager
+            .create_user_playlist_with_event(
+                user_id,
+                "Composition contract",
+                user_id,
+                vec![],
+                Some("create-playlist"),
+            )
+            .unwrap();
+
+        let error = manager
+            .add_playlist_tracks_with_event(
+                &playlist_id,
+                user_id,
+                vec!["missing-track".to_owned()],
+                Some("add-missing-track"),
+            )
+            .unwrap_err();
+
+        assert!(matches!(error, UserServiceError::Validation(_)));
+        assert!(manager
+            .get_user_playlist(&playlist_id, user_id)
+            .unwrap()
+            .tracks
+            .is_empty());
+        assert_eq!(manager.get_current_seq(user_id).unwrap(), created_event.seq);
+    }
+
+    #[test]
+    fn popular_content_cache_is_shared_and_applies_requested_limits() {
+        let (manager, _temp_dir) = create_test_manager();
+        let manager = Arc::new(manager);
+        manager.set_popular_content_cache(PopularContent {
+            albums: (0..3)
+                .map(|index| PopularAlbum {
+                    id: format!("album-{index}"),
+                    name: format!("Album {index}"),
+                    artist_names: vec!["Artist".to_owned()],
+                    play_count: 10 - index,
+                })
+                .collect(),
+            artists: (0..3)
+                .map(|index| PopularArtist {
+                    id: format!("artist-{index}"),
+                    name: format!("Artist {index}"),
+                    play_count: 10 - index,
+                })
+                .collect(),
+        });
+
+        let clone = manager.clone();
+        let content = thread::spawn(move || clone.get_popular_content(0, 0, 2, 1))
+            .join()
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(content.albums.len(), 2);
+        assert_eq!(content.albums[0].id, "album-0");
+        assert_eq!(content.artists.len(), 1);
+        assert_eq!(content.artists[0].id, "artist-0");
+    }
+
     /// Test that UserManager can be safely shared across multiple threads
     /// and that concurrent operations on different users don't conflict.
     #[test]
