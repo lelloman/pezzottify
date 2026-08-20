@@ -1088,7 +1088,7 @@ impl ServerState {
         catalog_store: Arc<dyn CatalogStore>,
         search_vault: super::state::GuardedSearchVault,
         user_manager: GuardedUserManager,
-        _user_store: Arc<dyn FullUserStore>,
+        user_store: Arc<dyn FullUserStore>,
         scheduler_handle: Option<SchedulerHandle>,
         server_store: Arc<dyn crate::server_store::ServerStore>,
         show_store: Arc<dyn crate::shows::ShowStore>,
@@ -1120,6 +1120,16 @@ impl ServerState {
             .build()
             .expect("Failed to create HTTP client");
 
+        let database = super::state::DatabaseHandles::new(
+            catalog_store.clone(),
+            search_vault.clone(),
+            user_store,
+            user_manager.clone(),
+            server_store.clone(),
+            show_store.clone(),
+            enrichment_store.clone(),
+        );
+
         ServerState {
             config,
             start_time: Instant::now(),
@@ -1139,6 +1149,7 @@ impl ServerState {
             download_manager: None, // Will be set by make_app if download manager is enabled
             ingestion_manager: None, // Will be set by make_app if ingestion is enabled
             enrichment_store,
+            database,
             playback_session_manager,
             db_registry,
         }
