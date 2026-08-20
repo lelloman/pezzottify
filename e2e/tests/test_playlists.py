@@ -74,6 +74,32 @@ class TestPlaylistApi:
 
         run_async(_test())
 
+    def test_missing_track_add_is_atomic(self, config):
+        async def _test():
+            api = CatalogApiClient(config.server_url)
+            playlist_id = None
+            try:
+                await api.login(TEST_USER, TEST_PASS, device_uuid="playlist-invalid-track")
+                playlist_id = await api.create_playlist("Atomic Playlist")
+                before = await api.get_sync_events(0)
+
+                status, body = await api.try_add_tracks_to_playlist(
+                    playlist_id, ["missing-track"]
+                )
+
+                assert status == 400
+                assert body["code"] == "invalid_request"
+                assert (await api.get_playlist(playlist_id))["tracks"] == []
+                after = await api.get_sync_events(before["current_seq"])
+                assert after["current_seq"] == before["current_seq"]
+                assert after["events"] == []
+            finally:
+                if playlist_id is not None:
+                    await api.delete_playlist(playlist_id)
+                await api.close()
+
+        run_async(_test())
+
 
 class TestPlaylistWeb:
     """Playlist visibility in the web UI."""

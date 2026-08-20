@@ -303,6 +303,40 @@ async fn test_add_tracks_to_playlist() {
 }
 
 #[tokio::test]
+async fn missing_track_add_does_not_mutate_playlist_or_append_sync_event() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+    let response = client.create_playlist("Test", vec![]).await;
+    let playlist_id: String = response.json().await.unwrap();
+
+    let before: serde_json::Value = client.get_sync_events(0).await.json().await.unwrap();
+    let current_seq = before["current_seq"].as_i64().unwrap();
+
+    let response = client
+        .add_tracks_to_playlist(&playlist_id, vec!["missing-track"])
+        .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(body["code"], "invalid_request");
+
+    let playlist: serde_json::Value = client
+        .get_playlist(&playlist_id)
+        .await
+        .json()
+        .await
+        .unwrap();
+    assert!(playlist["tracks"].as_array().unwrap().is_empty());
+    let after: serde_json::Value = client
+        .get_sync_events(current_seq)
+        .await
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(after["current_seq"], current_seq);
+    assert!(after["events"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn test_remove_tracks_from_playlist() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;

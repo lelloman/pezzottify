@@ -107,6 +107,18 @@ class CatalogApiClient:
             resp.raise_for_status()
             return await resp.json(content_type=None)
 
+    async def try_add_tracks_to_playlist(
+        self, playlist_id: str, track_ids: list[str]
+    ) -> tuple[int, dict]:
+        """Add tracks and return the response contract without raising on errors."""
+        session = await self._ensure_session()
+        async with session.put(
+            f"{self.base_url}/v1/user/playlist/{playlist_id}/add",
+            json={"tracks_ids": track_ids},
+            headers=self._csrf_headers(),
+        ) as resp:
+            return resp.status, await resp.json(content_type=None)
+
     async def get_sync_state(self) -> dict:
         session = await self._ensure_session()
         async with session.get(
