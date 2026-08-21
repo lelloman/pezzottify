@@ -154,6 +154,16 @@ class CatalogApiClient:
             resp.raise_for_status()
             return await resp.json(content_type=None)
 
+    async def download_limits_status(self) -> int:
+        session = await self._ensure_session()
+        async with session.get(f"{self.base_url}/v1/download/limits") as resp:
+            return resp.status
+
+    async def download_admin_stats_status(self) -> int:
+        session = await self._ensure_session()
+        async with session.get(f"{self.base_url}/v1/download/admin/stats") as resp:
+            return resp.status
+
     async def create_playlist(
         self, name: str, track_ids: list[str] | None = None
     ) -> str:

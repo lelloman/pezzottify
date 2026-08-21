@@ -1185,6 +1185,18 @@ impl TestClient {
             .expect("Download admin retry request failed")
     }
 
+    /// DELETE /v1/download/admin/request/{id}
+    pub async fn download_admin_delete(&self, id: &str) -> Response {
+        self.client
+            .delete(format!(
+                "{}/v1/download/admin/request/{}",
+                self.base_url, id
+            ))
+            .send()
+            .await
+            .expect("Download admin delete request failed")
+    }
+
     /// GET /v1/download/admin/audit
     pub async fn download_admin_audit(&self) -> Response {
         self.client
