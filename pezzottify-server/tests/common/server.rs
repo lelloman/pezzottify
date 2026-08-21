@@ -176,6 +176,13 @@ impl TestServer {
                 .execute("UPDATE tracks SET track_available = 1", [])
                 .expect("Failed to mark test catalog tracks available");
         }
+        if options.download_manager_enabled {
+            let connection = rusqlite::Connection::open(&catalog_db_path)
+                .expect("Failed to reopen test catalog");
+            connection
+                .execute("UPDATE tracks SET audio_uri = NULL", [])
+                .expect("Failed to make test catalog downloadable");
+        }
         let (temp_db_dir, db_path) =
             create_test_db_with_users().expect("Failed to create test database");
 
