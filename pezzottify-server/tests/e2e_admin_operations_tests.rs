@@ -187,6 +187,7 @@ async fn catalog_sync_returns_every_high_volume_event_in_sequence() {
             .iter()
             .map(|event| event["seq"].as_i64().unwrap())
             .collect();
+        assert!(page_sequences.len() <= 500);
         assert!(page_sequences.windows(2).all(|pair| pair[0] < pair[1]));
         assert!(page_sequences.iter().all(|seq| *seq > since));
         received_sequences.extend(page_sequences);
@@ -203,11 +204,46 @@ async fn catalog_sync_returns_every_high_volume_event_in_sequence() {
         }
     }
 
-    assert!(page_count >= 1);
+    assert_eq!(page_count, 3);
     assert_eq!(received_sequences.len(), EVENT_COUNT as usize);
     assert_eq!(received_sequences.first(), Some(&(initial_seq + 1)));
     assert_eq!(received_sequences.last(), Some(&expected_final_seq));
     assert!(received_sequences
         .windows(2)
         .all(|pair| pair[1] == pair[0] + 1));
+}
+
+#[tokio::test]
+async fn catalog_sync_honors_a_smaller_requested_page_limit() {
+    let server = TestServer::spawn().await;
+    let user = TestClient::authenticated(server.base_url.clone()).await;
+
+    for index in 1..=40 {
+        server
+            .server_store
+            .append_catalog_event(
+                CatalogEventType::ArtistUpdated,
+                CatalogContentType::Artist,
+                &format!("limited-artist-{index}"),
+                Some("page_limit_test"),
+            )
+            .unwrap();
+    }
+
+    let response = user
+        .client
+        .get(format!(
+            "{}/v1/sync/catalog?since=0&limit=17",
+            server.base_url
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let page: Value = response.json().await.unwrap();
+
+    assert_eq!(page["events"].as_array().unwrap().len(), 17);
+    assert_eq!(page["current_seq"], 40);
+    assert_eq!(page["has_more"], true);
+    assert_eq!(page["next_since"], 17);
 }

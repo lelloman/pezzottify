@@ -254,6 +254,18 @@ mod tests {
         ) -> anyhow::Result<Vec<crate::server_store::CatalogEvent>> {
             Ok(vec![])
         }
+        fn get_catalog_events_page(
+            &self,
+            _since_seq: i64,
+            _limit: usize,
+        ) -> anyhow::Result<crate::server_store::CatalogEventPage> {
+            Ok(crate::server_store::CatalogEventPage {
+                events: vec![],
+                current_seq: 0,
+                has_more: false,
+                next_since: 0,
+            })
+        }
         fn get_catalog_events_current_seq(&self) -> anyhow::Result<i64> {
             Ok(0)
         }

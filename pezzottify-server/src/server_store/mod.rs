@@ -3,10 +3,11 @@ mod schema;
 mod sqlite_server_store;
 
 pub use models::{
-    BugReport, BugReportSummary, CatalogContentType, CatalogEvent, CatalogEventType, JobAuditEntry,
-    JobAuditEventType, JobRun, JobRunStatus, JobScheduleState, WhatsNewBatch,
-    BUG_REPORT_ATTACHMENT_MAX_SIZE, BUG_REPORT_DESCRIPTION_MAX_SIZE, BUG_REPORT_LOGS_MAX_SIZE,
-    BUG_REPORT_MAX_ATTACHMENTS, BUG_REPORT_TITLE_MAX_LEN, BUG_REPORT_TOTAL_MAX_SIZE,
+    BugReport, BugReportSummary, CatalogContentType, CatalogEvent, CatalogEventPage,
+    CatalogEventType, JobAuditEntry, JobAuditEventType, JobRun, JobRunStatus, JobScheduleState,
+    WhatsNewBatch, BUG_REPORT_ATTACHMENT_MAX_SIZE, BUG_REPORT_DESCRIPTION_MAX_SIZE,
+    BUG_REPORT_LOGS_MAX_SIZE, BUG_REPORT_MAX_ATTACHMENTS, BUG_REPORT_TITLE_MAX_LEN,
+    BUG_REPORT_TOTAL_MAX_SIZE,
 };
 pub use schema::SERVER_VERSIONED_SCHEMAS;
 pub use sqlite_server_store::SqliteServerStore;
@@ -76,6 +77,8 @@ pub trait ServerStore: Send + Sync {
     ) -> Result<i64>;
     /// Get catalog events since a given sequence number (exclusive).
     fn get_catalog_events_since(&self, since_seq: i64) -> Result<Vec<CatalogEvent>>;
+    /// Get a bounded page and the catalog high-water mark from one database snapshot.
+    fn get_catalog_events_page(&self, since_seq: i64, limit: usize) -> Result<CatalogEventPage>;
     /// Get the current (highest) sequence number for catalog events.
     fn get_catalog_events_current_seq(&self) -> Result<i64>;
     /// Delete catalog events older than a given timestamp (for pruning).
