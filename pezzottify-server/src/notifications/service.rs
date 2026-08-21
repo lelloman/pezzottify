@@ -3,6 +3,7 @@
 use std::sync::Arc;
 use tracing::{debug, warn};
 
+use crate::db_executor::{DbHandle, DbPriority};
 use crate::server::websocket::connection::ConnectionManager;
 use crate::server::websocket::messages::msg_types::SYNC;
 use crate::server::websocket::messages::sync::SyncEventMessage;
@@ -14,13 +15,13 @@ use super::models::{Notification, NotificationType};
 
 /// Service for creating notifications and broadcasting to connected clients
 pub struct NotificationService {
-    user_store: Arc<dyn FullUserStore>,
+    user_store: DbHandle<dyn FullUserStore>,
     connection_manager: Arc<ConnectionManager>,
 }
 
 impl NotificationService {
     pub fn new(
-        user_store: Arc<dyn FullUserStore>,
+        user_store: DbHandle<dyn FullUserStore>,
         connection_manager: Arc<ConnectionManager>,
     ) -> Self {
         Self {
@@ -38,22 +39,26 @@ impl NotificationService {
         body: Option<String>,
         data: serde_json::Value,
     ) -> anyhow::Result<Notification> {
-        // 1. Create notification in database
-        let notification =
-            self.user_store
-                .create_notification(user_id, notification_type, title, body, data)?;
+        let (notification, stored_event) = self
+            .user_store
+            .run(DbPriority::Background, move |store| {
+                let notification =
+                    store.create_notification(user_id, notification_type, title, body, data)?;
+                let event = UserEvent::NotificationCreated {
+                    notification: notification.clone(),
+                };
+                match store.append_event(user_id, &event) {
+                    Ok(event) => Ok((notification, Some(event))),
+                    Err(error) => {
+                        warn!("Failed to log notification_created event: {}", error);
+                        Ok((notification, None))
+                    }
+                }
+            })
+            .await?;
 
-        // 2. Log sync event
-        let event = UserEvent::NotificationCreated {
-            notification: notification.clone(),
-        };
-
-        let stored_event = match self.user_store.append_event(user_id, &event) {
-            Ok(e) => e,
-            Err(err) => {
-                warn!("Failed to log notification_created event: {}", err);
-                return Ok(notification);
-            }
+        let Some(stored_event) = stored_event else {
+            return Ok(notification);
         };
 
         // 3. Broadcast to all user's devices
@@ -97,7 +102,12 @@ mod tests {
             .unwrap(),
         );
         let user_id = store.create_user("notification-user").unwrap();
-        let service = NotificationService::new(store.clone(), Arc::new(ConnectionManager::new()));
+        let handle = DbHandle::new(
+            store.clone(),
+            crate::db_executor::DbExecutor::new(Default::default()),
+            crate::db_executor::DbLane::User,
+        );
+        let service = NotificationService::new(handle, Arc::new(ConnectionManager::new()));
 
         let notification = service
             .create_notification(

@@ -18,9 +18,10 @@
 //! - A background worker that processes items in batches
 
 use crate::catalog_store::CatalogStore;
+use crate::db_executor::{DbHandle, DbPriority};
 use crate::search::{HashedItemType, SearchIndexItem, SearchVault};
 use std::collections::HashSet;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
@@ -82,8 +83,8 @@ impl OrganicIndexer {
     /// * `search_vault` - The search vault to add items to
     /// * `catalog_store` - The catalog store to fetch related items from
     pub fn new(
-        search_vault: Arc<dyn SearchVault>,
-        catalog_store: Arc<dyn CatalogStore>,
+        search_vault: DbHandle<dyn SearchVault>,
+        catalog_store: DbHandle<dyn CatalogStore>,
     ) -> Arc<Self> {
         let (tx, rx) = mpsc::channel(QUEUE_CAPACITY);
 
@@ -179,13 +180,12 @@ impl OrganicIndexer {
     async fn background_worker(
         self: &Arc<Self>,
         mut rx: mpsc::Receiver<IndexTask>,
-        search_vault: Arc<dyn SearchVault>,
-        catalog_store: Arc<dyn CatalogStore>,
+        search_vault: DbHandle<dyn SearchVault>,
+        catalog_store: DbHandle<dyn CatalogStore>,
     ) {
         info!("Organic indexer background worker started");
 
-        let batch: Arc<Mutex<Vec<SearchIndexItem>>> =
-            Arc::new(Mutex::new(Vec::with_capacity(BATCH_SIZE)));
+        let mut batch = Vec::with_capacity(BATCH_SIZE);
         let indexer = Arc::clone(self);
 
         loop {
@@ -204,9 +204,8 @@ impl OrganicIndexer {
                     }
                     Err(_) => {
                         // Timeout - flush any pending batch and continue
-                        let mut batch_guard = batch.lock().unwrap();
-                        if !batch_guard.is_empty() {
-                            self.flush_batch(&search_vault, &mut batch_guard);
+                        if !batch.is_empty() {
+                            self.flush_batch(&search_vault, &mut batch).await;
                         }
                         continue;
                     }
@@ -214,39 +213,34 @@ impl OrganicIndexer {
 
             // Process the task and collect items to index
             let task_clone = task.clone();
-            let catalog_store_clone = Arc::clone(&catalog_store);
             let indexer_clone = Arc::clone(&indexer);
-            let batch_clone = Arc::clone(&batch);
 
             let task_id = format!("{}:{}", task.type_name(), task.id());
-
-            let result = tokio::task::spawn_blocking(move || {
-                let mut batch = batch_clone.lock().unwrap();
-                indexer_clone.process_task(&task_clone, &catalog_store_clone, &mut batch);
-            })
-            .await;
-
-            if let Err(e) = result {
-                error!("Task {} processing failed: {}", task_id, e);
+            let fallback = batch.clone();
+            match catalog_store
+                .run(DbPriority::Background, move |catalog_store| {
+                    let mut batch = batch;
+                    indexer_clone.process_task(&task_clone, catalog_store, &mut batch);
+                    Ok(batch)
+                })
+                .await
+            {
+                Ok(next_batch) => batch = next_batch,
+                Err(error) => {
+                    error!("Task {} processing failed: {}", task_id, error);
+                    batch = fallback;
+                }
             }
 
             // Flush batch when full
-            {
-                let batch_guard = batch.lock().unwrap();
-                if batch_guard.len() >= BATCH_SIZE {
-                    drop(batch_guard);
-                    let mut batch_guard = batch.lock().unwrap();
-                    self.flush_batch(&search_vault, &mut batch_guard);
-                }
+            if batch.len() >= BATCH_SIZE {
+                self.flush_batch(&search_vault, &mut batch).await;
             }
         }
 
         // Flush remaining items
-        {
-            let mut batch_guard = batch.lock().unwrap();
-            if !batch_guard.is_empty() {
-                self.flush_batch(&search_vault, &mut batch_guard);
-            }
+        if !batch.is_empty() {
+            self.flush_batch(&search_vault, &mut batch).await;
         }
 
         info!("Organic indexer background worker stopped");
@@ -256,7 +250,7 @@ impl OrganicIndexer {
     fn process_task(
         &self,
         task: &IndexTask,
-        catalog_store: &Arc<dyn CatalogStore>,
+        catalog_store: &dyn CatalogStore,
         batch: &mut Vec<SearchIndexItem>,
     ) {
         match task {
@@ -270,7 +264,7 @@ impl OrganicIndexer {
     fn expand_artist(
         &self,
         artist_id: &str,
-        catalog_store: &Arc<dyn CatalogStore>,
+        catalog_store: &dyn CatalogStore,
         batch: &mut Vec<SearchIndexItem>,
     ) {
         // Skip if already indexed
@@ -326,7 +320,7 @@ impl OrganicIndexer {
     fn expand_album(
         &self,
         album_id: &str,
-        catalog_store: &Arc<dyn CatalogStore>,
+        catalog_store: &dyn CatalogStore,
         batch: &mut Vec<SearchIndexItem>,
     ) {
         // Skip if already indexed
@@ -376,7 +370,7 @@ impl OrganicIndexer {
     fn expand_track(
         &self,
         track_id: &str,
-        catalog_store: &Arc<dyn CatalogStore>,
+        catalog_store: &dyn CatalogStore,
         batch: &mut Vec<SearchIndexItem>,
     ) {
         // Skip if already indexed
@@ -452,22 +446,30 @@ impl OrganicIndexer {
     }
 
     /// Flush the batch to the search vault.
-    fn flush_batch(&self, search_vault: &Arc<dyn SearchVault>, batch: &mut Vec<SearchIndexItem>) {
+    async fn flush_batch(
+        &self,
+        search_vault: &DbHandle<dyn SearchVault>,
+        batch: &mut Vec<SearchIndexItem>,
+    ) {
         if batch.is_empty() {
             return;
         }
 
-        let count = batch.len();
+        let items = std::mem::take(batch);
+        let count = items.len();
 
-        if let Err(e) = search_vault.upsert_items(batch) {
+        if let Err(e) = search_vault
+            .run(DbPriority::Background, move |vault| {
+                vault.upsert_items(&items)
+            })
+            .await
+        {
             error!("Failed to upsert {} items to search index: {}", count, e);
             // Note: Items are already marked as indexed, so we won't retry
             // This is acceptable for organic growth
         } else {
             debug!("Flushed {} items to search index", count);
         }
-
-        batch.clear();
     }
 
     /// Shutdown the background worker gracefully.

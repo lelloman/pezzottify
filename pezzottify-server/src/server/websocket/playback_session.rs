@@ -14,6 +14,7 @@ use tracing::{debug, info, warn};
 use super::connection::ConnectionManager;
 use super::messages::{msg_types, ServerMessage};
 use super::playback_messages::*;
+use crate::db_executor::{DbHandle, DbPriority};
 use crate::user::device::{DeviceShareMode, DeviceSharePolicy};
 use crate::user::permissions::UserRole;
 use crate::user::UserManager;
@@ -31,7 +32,7 @@ pub struct PlaybackSessionManager {
     /// Device metadata indexed by (user_id, device_id).
     devices: RwLock<HashMap<(usize, usize), DeviceMetadata>>,
     connection_manager: Arc<ConnectionManager>,
-    user_manager: Arc<UserManager>,
+    user_manager: DbHandle<UserManager>,
 }
 
 /// Metadata about a connected device.
@@ -108,7 +109,10 @@ impl From<PlaybackError> for PlaybackErrorPayload {
 
 impl PlaybackSessionManager {
     /// Create a new playback session manager.
-    pub fn new(connection_manager: Arc<ConnectionManager>, user_manager: Arc<UserManager>) -> Self {
+    pub fn new(
+        connection_manager: Arc<ConnectionManager>,
+        user_manager: DbHandle<UserManager>,
+    ) -> Self {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             devices: RwLock::new(HashMap::new()),
@@ -117,15 +121,25 @@ impl PlaybackSessionManager {
         }
     }
 
-    fn get_owner_handle(&self, user_id: usize) -> Option<String> {
-        let manager = &self.user_manager;
-        manager.get_user_handle(user_id).ok().flatten()
+    async fn get_owner_handle(&self, user_id: usize) -> Option<String> {
+        self.user_manager
+            .run(DbPriority::Interactive, move |manager| {
+                manager.get_user_handle(user_id)
+            })
+            .await
+            .ok()
+            .flatten()
     }
 
     async fn get_device_owner_id(&self, device_id: usize) -> Option<usize> {
         {
-            let manager = &self.user_manager;
-            if let Ok(Some(device)) = manager.get_device(device_id) {
+            let device = self
+                .user_manager
+                .run(DbPriority::Interactive, move |manager| {
+                    manager.get_device(device_id)
+                })
+                .await;
+            if let Ok(Some(device)) = device {
                 if let Some(user_id) = device.user_id {
                     return Some(user_id);
                 }
@@ -138,19 +152,7 @@ impl PlaybackSessionManager {
             .map(|(uid, _)| *uid)
     }
 
-    fn get_device_share_policy(&self, device_id: usize) -> DeviceSharePolicy {
-        let manager = &self.user_manager;
-        manager
-            .get_device_share_policy(device_id)
-            .unwrap_or_default()
-    }
-
-    fn get_user_roles(&self, user_id: usize) -> Vec<UserRole> {
-        let manager = &self.user_manager;
-        manager.get_user_roles(user_id).unwrap_or_default()
-    }
-
-    fn is_user_allowed_for_device(
+    async fn is_user_allowed_for_device(
         &self,
         owner_user_id: usize,
         device_id: usize,
@@ -160,7 +162,19 @@ impl PlaybackSessionManager {
             return true;
         }
 
-        let policy = self.get_device_share_policy(device_id);
+        let access = self
+            .user_manager
+            .run(DbPriority::Interactive, move |manager| {
+                let policy = manager
+                    .get_device_share_policy(device_id)
+                    .unwrap_or_default();
+                let roles = manager.get_user_roles(user_id).unwrap_or_default();
+                Ok((policy, roles))
+            })
+            .await;
+        let Ok((policy, roles)) = access else {
+            return false;
+        };
         match policy.mode {
             DeviceShareMode::AllowEveryone => true,
             DeviceShareMode::DenyEveryone => false,
@@ -171,7 +185,6 @@ impl PlaybackSessionManager {
                 if policy.allow_users.contains(&user_id) {
                     return true;
                 }
-                let roles = self.get_user_roles(user_id);
                 roles.iter().any(|role| policy.allow_roles.contains(role))
             }
         }
@@ -183,11 +196,17 @@ impl PlaybackSessionManager {
         device_id: usize,
     ) -> Vec<usize> {
         let connected_users = self.connection_manager.get_connected_user_ids().await;
-        connected_users
-            .into_iter()
-            .filter(|uid| *uid != owner_user_id)
-            .filter(|uid| self.is_user_allowed_for_device(owner_user_id, device_id, *uid))
-            .collect()
+        let mut allowed = Vec::new();
+        for user_id in connected_users {
+            if user_id != owner_user_id
+                && self
+                    .is_user_allowed_for_device(owner_user_id, device_id, user_id)
+                    .await
+            {
+                allowed.push(user_id);
+            }
+        }
+        allowed
     }
 
     async fn broadcast_to_authorized_users(
@@ -366,16 +385,6 @@ impl PlaybackSessionManager {
     async fn build_device_list(&self, user_id: usize) -> Vec<ConnectedDevice> {
         let own_device_ids = self.connection_manager.get_connected_devices(user_id).await;
         let all_device_ids = self.connection_manager.get_all_connected_devices().await;
-        let devices = self.devices.read().await;
-        let sessions = self.sessions.read().await;
-
-        info!(
-            "[playback] build_device_list: user={} own_devices={:?} all_devices={:?} devices_map_len={}",
-            user_id,
-            own_device_ids,
-            all_device_ids,
-            devices.len()
-        );
 
         let mut device_ids: Vec<(usize, usize)> =
             own_device_ids.into_iter().map(|id| (user_id, id)).collect();
@@ -384,15 +393,35 @@ impl PlaybackSessionManager {
             if owner_user_id == user_id {
                 continue;
             }
-            if !self.is_user_allowed_for_device(owner_user_id, id, user_id) {
+            if !self
+                .is_user_allowed_for_device(owner_user_id, id, user_id)
+                .await
+            {
                 continue;
             }
             device_ids.push((owner_user_id, id));
         }
 
-        device_ids
+        let mut resolved_devices = Vec::with_capacity(device_ids.len());
+        for (owner_user_id, id) in device_ids {
+            let owner_handle = self
+                .get_owner_handle(owner_user_id)
+                .await
+                .unwrap_or_else(|| "Unknown".to_string());
+            resolved_devices.push((owner_user_id, id, owner_handle));
+        }
+
+        let devices = self.devices.read().await;
+        let sessions = self.sessions.read().await;
+        info!(
+            "[playback] build_device_list: user={} devices_map_len={}",
+            user_id,
+            devices.len()
+        );
+
+        resolved_devices
             .into_iter()
-            .filter_map(|(owner_user_id, id)| {
+            .filter_map(|(owner_user_id, id, owner_handle)| {
                 let meta = devices.get(&(owner_user_id, id));
                 let meta =
                     meta.map(|meta| (meta.name.clone(), meta.device_type, meta.connected_at));
@@ -402,9 +431,6 @@ impl PlaybackSessionManager {
                         .get(&owner_user_id)
                         .map(|s| s.device_states.contains_key(&id))
                         .unwrap_or(false);
-                    let owner_handle = self
-                        .get_owner_handle(owner_user_id)
-                        .unwrap_or_else(|| "Unknown".to_string());
                     ConnectedDevice {
                         id,
                         name,
@@ -423,29 +449,37 @@ impl PlaybackSessionManager {
     async fn build_active_devices_for_user(&self, user_id: usize) -> Vec<DevicePlaybackInfo> {
         let sessions = self.sessions.read().await;
         let devices_guard = self.devices.read().await;
-        let mut active_devices = Vec::new();
+        let mut candidates = Vec::new();
 
         for (owner_user_id, session) in sessions.iter() {
             for (device_id, ds) in session.device_states.iter() {
-                if *owner_user_id != user_id
-                    && !self.is_user_allowed_for_device(*owner_user_id, *device_id, user_id)
-                {
-                    continue;
-                }
-
                 let name = devices_guard
                     .get(&(*owner_user_id, *device_id))
                     .map(|m| m.name.clone())
                     .unwrap_or_else(|| "Unknown".to_string());
-                active_devices.push(DevicePlaybackInfo {
-                    device_id: *device_id,
-                    device_name: name,
-                    state: ds.state.clone(),
-                    queue: ds.queue.clone(),
-                    queue_version: ds.queue_version,
-                    context: ds.queue_context.clone(),
-                });
+                candidates.push((*owner_user_id, *device_id, name, ds.clone()));
             }
+        }
+        drop(devices_guard);
+        drop(sessions);
+
+        let mut active_devices = Vec::with_capacity(candidates.len());
+        for (owner_user_id, device_id, name, ds) in candidates {
+            if owner_user_id != user_id
+                && !self
+                    .is_user_allowed_for_device(owner_user_id, device_id, user_id)
+                    .await
+            {
+                continue;
+            }
+            active_devices.push(DevicePlaybackInfo {
+                device_id,
+                device_name: name,
+                state: ds.state.clone(),
+                queue: ds.queue.clone(),
+                queue_version: ds.queue_version,
+                context: ds.queue_context.clone(),
+            });
         }
 
         active_devices
@@ -622,7 +656,9 @@ impl PlaybackSessionManager {
             .ok_or(PlaybackError::DeviceNotFound)?;
 
         if owner_user_id != user_id
-            && !self.is_user_allowed_for_device(owner_user_id, target_device_id, user_id)
+            && !self
+                .is_user_allowed_for_device(owner_user_id, target_device_id, user_id)
+                .await
         {
             return Err(PlaybackError::Forbidden);
         }
@@ -662,7 +698,9 @@ impl PlaybackSessionManager {
         };
 
         if owner_user_id != user_id
-            && !self.is_user_allowed_for_device(owner_user_id, target_id, user_id)
+            && !self
+                .is_user_allowed_for_device(owner_user_id, target_id, user_id)
+                .await
         {
             return Err(PlaybackError::Forbidden);
         }
@@ -873,6 +911,7 @@ pub struct DeviceSnapshot {
 mod tests {
     use super::*;
     use crate::catalog_store::NullCatalogStore;
+    use crate::db_executor::{DbExecutor, DbExecutorConfig, DbLane};
     use crate::user::SqliteUserStore;
     use std::sync::{Arc, Mutex};
     use tempfile::tempdir;
@@ -888,6 +927,11 @@ mod tests {
         .unwrap();
         let user_store: Arc<dyn crate::user::FullUserStore> = Arc::new(store);
         let user_manager = Arc::new(UserManager::new(user_store));
+        let user_manager = DbHandle::new(
+            user_manager,
+            DbExecutor::new(DbExecutorConfig::default()),
+            DbLane::User,
+        );
         let session_manager = PlaybackSessionManager::new(conn_manager.clone(), user_manager);
         (conn_manager, session_manager)
     }
@@ -907,8 +951,12 @@ mod tests {
         .unwrap();
         let user_store: Arc<dyn crate::user::FullUserStore> = Arc::new(store);
         let user_manager = Arc::new(UserManager::new(user_store));
-        let session_manager =
-            PlaybackSessionManager::new(conn_manager.clone(), user_manager.clone());
+        let handle = DbHandle::new(
+            user_manager.clone(),
+            DbExecutor::new(DbExecutorConfig::default()),
+            DbLane::User,
+        );
+        let session_manager = PlaybackSessionManager::new(conn_manager.clone(), handle);
         (temp_dir, conn_manager, session_manager, user_manager)
     }
 
@@ -961,7 +1009,11 @@ mod tests {
             .set_device_share_policy(device_id, &DeviceSharePolicy::allow_everyone())
             .unwrap();
 
-        assert!(manager.is_user_allowed_for_device(owner_id, device_id, other_id));
+        assert!(
+            manager
+                .is_user_allowed_for_device(owner_id, device_id, other_id)
+                .await
+        );
     }
 
     #[tokio::test]
@@ -987,8 +1039,16 @@ mod tests {
             .set_device_share_policy(device_id, &DeviceSharePolicy::deny_everyone())
             .unwrap();
 
-        assert!(!manager.is_user_allowed_for_device(owner_id, device_id, other_id));
-        assert!(manager.is_user_allowed_for_device(owner_id, device_id, owner_id));
+        assert!(
+            !manager
+                .is_user_allowed_for_device(owner_id, device_id, other_id)
+                .await
+        );
+        assert!(
+            manager
+                .is_user_allowed_for_device(owner_id, device_id, owner_id)
+                .await
+        );
     }
 
     #[tokio::test]
@@ -1021,7 +1081,11 @@ mod tests {
             .set_device_share_policy(device_id, &policy)
             .unwrap();
 
-        assert!(!manager.is_user_allowed_for_device(owner_id, device_id, other_id));
+        assert!(
+            !manager
+                .is_user_allowed_for_device(owner_id, device_id, other_id)
+                .await
+        );
     }
 
     #[tokio::test]
@@ -1057,7 +1121,11 @@ mod tests {
             .set_device_share_policy(device_id, &policy)
             .unwrap();
 
-        assert!(manager.is_user_allowed_for_device(owner_id, device_id, other_id));
+        assert!(
+            manager
+                .is_user_allowed_for_device(owner_id, device_id, other_id)
+                .await
+        );
     }
 
     fn make_stopped_state() -> PlaybackState {

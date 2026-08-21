@@ -1088,12 +1088,6 @@ impl ServerState {
         // Create connection manager
         let ws_connection_manager = Arc::new(super::websocket::ConnectionManager::new());
 
-        // Create playback session manager for multi-device sync
-        let playback_session_manager = Arc::new(super::websocket::PlaybackSessionManager::new(
-            ws_connection_manager.clone(),
-            user_manager.clone(),
-        ));
-
         // Create auth state store for OIDC flow (always created, even if OIDC is disabled)
         let auth_state_store = Arc::new(crate::oidc::AuthStateStore::new());
 
@@ -1120,6 +1114,12 @@ impl ServerState {
             db_registry.clone(),
             enrichment_store.clone(),
         );
+
+        // Create playback session manager for multi-device sync
+        let playback_session_manager = Arc::new(super::websocket::PlaybackSessionManager::new(
+            ws_connection_manager.clone(),
+            database.user_manager.clone(),
+        ));
 
         ServerState {
             config,

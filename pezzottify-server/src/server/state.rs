@@ -60,6 +60,7 @@ pub struct DatabaseHandles {
     pub ingestion: Option<DbHandle<IngestionManager>>,
     pub enrichment_read: Option<DbHandle<dyn EnrichmentStore>>,
     pub enrichment_write: Option<DbHandle<dyn EnrichmentStore>>,
+    pub mcp: DbHandle<()>,
 }
 
 impl DatabaseHandles {
@@ -96,6 +97,7 @@ impl DatabaseHandles {
                 .map(|store| DbHandle::new(store, executor.clone(), DbLane::EnrichmentRead)),
             enrichment_write: enrichment_store
                 .map(|store| DbHandle::new(store, executor.clone(), DbLane::EnrichmentWrite)),
+            mcp: DbHandle::new(Arc::new(()), executor.clone(), DbLane::Mcp),
             executor,
         }
     }

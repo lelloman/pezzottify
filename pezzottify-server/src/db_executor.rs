@@ -69,6 +69,7 @@ pub enum DbLane {
     Ingestion,
     EnrichmentRead,
     EnrichmentWrite,
+    Mcp,
     Shows,
 }
 
@@ -113,6 +114,7 @@ impl Default for DbExecutorConfig {
         lane_limits.insert(DbLane::Ingestion, 1);
         lane_limits.insert(DbLane::EnrichmentRead, 2);
         lane_limits.insert(DbLane::EnrichmentWrite, 1);
+        lane_limits.insert(DbLane::Mcp, 2);
         lane_limits.insert(DbLane::Shows, 1);
 
         Self {
