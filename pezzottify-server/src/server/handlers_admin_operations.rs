@@ -16,12 +16,16 @@ async fn reboot_server(session: Session) -> Response {
 
 async fn admin_prepare_backup(
     session: Session,
-    State(db_registry): State<super::state::GuardedDbRegistry>,
+    State(database): State<DatabaseHandles>,
 ) -> Response {
     info!("Backup prepare requested by user_id={}", session.user_id);
 
-    let result =
-        tokio::task::spawn_blocking(move || crate::backup::prepare_backup(&db_registry)).await;
+    let result = database
+        .backup
+        .run(DbPriority::Interactive, |db_registry| {
+            Ok(crate::backup::prepare_backup(db_registry))
+        })
+        .await;
 
     match result {
         Ok(backup_result) => {
@@ -32,10 +36,7 @@ async fn admin_prepare_backup(
             };
             (status, axum::Json(backup_result)).into_response()
         }
-        Err(e) => {
-            error!("Backup prepare task panicked: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 

@@ -1117,6 +1117,7 @@ impl ServerState {
             user_manager.clone(),
             server_store.clone(),
             show_store.clone(),
+            db_registry.clone(),
             enrichment_store.clone(),
         );
 

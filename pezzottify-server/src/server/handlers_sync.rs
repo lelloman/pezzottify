@@ -228,28 +228,22 @@ async fn get_sync_events(
 /// Use `since=0` to get all events (up to a reasonable limit).
 async fn get_catalog_sync(
     _session: Session, // Authentication required but not user-specific
-    State(server_store): State<GuardedServerStore>,
+    State(database): State<DatabaseHandles>,
     Query(query): Query<CatalogSyncQuery>,
 ) -> Response {
-    // Get events since the requested sequence
-    let events = match server_store.get_catalog_events_since(query.since) {
-        Ok(e) => e,
-        Err(err) => {
-            error!(
-                "Error getting catalog events since {}: {}",
-                query.since, err
-            );
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-
-    // Get current sequence number
-    let current_seq = match server_store.get_catalog_events_current_seq() {
-        Ok(seq) => seq,
-        Err(err) => {
-            error!("Error getting catalog events current seq: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+    let since = query.since;
+    let (events, current_seq) = match database
+        .server
+        .run(DbPriority::Interactive, move |store| {
+            Ok((
+                store.get_catalog_events_since(since)?,
+                store.get_catalog_events_current_seq()?,
+            ))
+        })
+        .await
+    {
+        Ok(sync) => sync,
+        Err(err) => return ApiError::from(err).into_response(),
     };
 
     Json(CatalogSyncResponse {
@@ -272,8 +266,7 @@ use crate::server_store::{
 /// POST /v1/user/bug-report - Submit a bug report
 async fn submit_bug_report(
     session: Session,
-    State(server_store): State<GuardedServerStore>,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Json(body): Json<SubmitBugReportBody>,
 ) -> Response {
     // Validate title length
@@ -359,19 +352,20 @@ async fn submit_bug_report(
     };
 
     // Get user handle
-    let user_handle = {
-        let um = user_manager;
-        match um.get_user_handle(session.user_id) {
-            Ok(Some(handle)) => handle,
-            Ok(None) => {
-                error!("User {} not found", session.user_id);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-            Err(err) => {
-                error!("Error getting user handle: {}", err);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
+    let user_id = session.user_id;
+    let user_handle = match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_user_handle(user_id)
+        })
+        .await
+    {
+        Ok(Some(handle)) => handle,
+        Ok(None) => {
+            error!("User {} not found", session.user_id);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
+        Err(err) => return ApiError::user_database(err).into_response(),
     };
 
     // Generate a unique ID
@@ -391,14 +385,19 @@ async fn submit_bug_report(
         created_at: chrono::Utc::now(),
     };
 
-    // Insert the bug report
-    if let Err(err) = server_store.insert_bug_report(&report) {
-        error!("Failed to insert bug report: {}", err);
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
+    let cleanup = match database
+        .server
+        .run(DbPriority::Interactive, move |store| {
+            store.insert_bug_report(&report)?;
+            Ok(store.cleanup_bug_reports_to_size(BUG_REPORT_TOTAL_MAX_SIZE))
+        })
+        .await
+    {
+        Ok(cleanup) => cleanup,
+        Err(err) => return ApiError::from(err).into_response(),
+    };
 
-    // Cleanup old reports if total size exceeds limit
-    match server_store.cleanup_bug_reports_to_size(BUG_REPORT_TOTAL_MAX_SIZE) {
+    match cleanup {
         Ok(deleted) if deleted > 0 => {
             info!(
                 "Cleaned up {} old bug reports to stay under size limit",
@@ -417,45 +416,50 @@ async fn submit_bug_report(
 
 /// GET /v1/admin/bug-reports - List all bug reports (admin only)
 async fn admin_list_bug_reports(
-    State(server_store): State<GuardedServerStore>,
+    State(database): State<DatabaseHandles>,
     Query(query): Query<ListBugReportsQuery>,
 ) -> Response {
-    match server_store.list_bug_reports(query.limit, query.offset) {
+    match database
+        .server
+        .run(DbPriority::Interactive, move |store| {
+            store.list_bug_reports(query.limit, query.offset)
+        })
+        .await
+    {
         Ok(reports) => Json(reports).into_response(),
-        Err(err) => {
-            error!("Failed to list bug reports: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
 /// GET /v1/admin/bug-report/{id} - Get a specific bug report (admin only)
 async fn admin_get_bug_report(
-    State(server_store): State<GuardedServerStore>,
+    State(database): State<DatabaseHandles>,
     Path(id): Path<String>,
 ) -> Response {
-    match server_store.get_bug_report(&id) {
+    match database
+        .server
+        .run(DbPriority::Interactive, move |store| store.get_bug_report(&id))
+        .await
+    {
         Ok(Some(report)) => Json(report).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Failed to get bug report: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
 /// DELETE /v1/admin/bug-report/{id} - Delete a bug report (admin only)
 async fn admin_delete_bug_report(
-    State(server_store): State<GuardedServerStore>,
+    State(database): State<DatabaseHandles>,
     Path(id): Path<String>,
 ) -> Response {
-    match server_store.delete_bug_report(&id) {
+    match database
+        .server
+        .run(DbPriority::Interactive, move |store| store.delete_bug_report(&id))
+        .await
+    {
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
         Ok(false) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Failed to delete bug report: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
