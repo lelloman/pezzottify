@@ -86,6 +86,18 @@ struct SyncEventsQuery {
 struct CatalogSyncQuery {
     #[serde(default)]
     since: i64,
+    limit: Option<usize>,
+}
+
+const CATALOG_SYNC_DEFAULT_PAGE_SIZE: usize = 500;
+const CATALOG_SYNC_MAX_PAGE_SIZE: usize = 1_000;
+
+impl CatalogSyncQuery {
+    fn effective_limit(&self) -> usize {
+        self.limit
+            .unwrap_or(CATALOG_SYNC_DEFAULT_PAGE_SIZE)
+            .clamp(1, CATALOG_SYNC_MAX_PAGE_SIZE)
+    }
 }
 
 #[derive(Serialize)]
@@ -105,11 +117,23 @@ impl CatalogSyncResponse {
             next_since: current_seq,
         }
     }
+
+    fn from_page(page: crate::server_store::CatalogEventPage) -> Self {
+        Self {
+            events: page.events,
+            current_seq: page.current_seq,
+            has_more: page.has_more,
+            next_since: page.next_since,
+        }
+    }
 }
 
 #[cfg(test)]
 mod catalog_sync_response_tests {
-    use super::CatalogSyncResponse;
+    use super::{
+        CatalogSyncQuery, CatalogSyncResponse, CATALOG_SYNC_DEFAULT_PAGE_SIZE,
+        CATALOG_SYNC_MAX_PAGE_SIZE,
+    };
 
     #[test]
     fn complete_page_advances_to_the_server_sequence() {
@@ -120,6 +144,42 @@ mod catalog_sync_response_tests {
         assert_eq!(json["current_seq"], 42);
         assert_eq!(json["has_more"], false);
         assert_eq!(json["next_since"], 42);
+    }
+
+    #[test]
+    fn catalog_page_limit_defaults_and_is_bounded() {
+        assert_eq!(
+            CatalogSyncQuery {
+                since: 0,
+                limit: None,
+            }
+            .effective_limit(),
+            CATALOG_SYNC_DEFAULT_PAGE_SIZE
+        );
+        assert_eq!(
+            CatalogSyncQuery {
+                since: 0,
+                limit: Some(17),
+            }
+            .effective_limit(),
+            17
+        );
+        assert_eq!(
+            CatalogSyncQuery {
+                since: 0,
+                limit: Some(usize::MAX),
+            }
+            .effective_limit(),
+            CATALOG_SYNC_MAX_PAGE_SIZE
+        );
+        assert_eq!(
+            CatalogSyncQuery {
+                since: 0,
+                limit: Some(0),
+            }
+            .effective_limit(),
+            1
+        );
     }
 }
 
@@ -261,21 +321,19 @@ async fn get_catalog_sync(
     Query(query): Query<CatalogSyncQuery>,
 ) -> Response {
     let since = query.since;
-    let (events, current_seq) = match database
+    let limit = query.effective_limit();
+    let page = match database
         .server
         .run(DbPriority::Interactive, move |store| {
-            Ok((
-                store.get_catalog_events_since(since)?,
-                store.get_catalog_events_current_seq()?,
-            ))
+            store.get_catalog_events_page(since, limit)
         })
         .await
     {
-        Ok(sync) => sync,
+        Ok(page) => page,
         Err(err) => return ApiError::from(err).into_response(),
     };
 
-    Json(CatalogSyncResponse::complete(events, current_seq)).into_response()
+    Json(CatalogSyncResponse::from_page(page)).into_response()
 }
 
 // ========================================================================

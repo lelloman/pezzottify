@@ -96,6 +96,15 @@ pub struct CatalogEvent {
     pub triggered_by: Option<String>,
 }
 
+/// A bounded, keyset-paginated snapshot of catalog invalidation events.
+#[derive(Debug, Clone)]
+pub struct CatalogEventPage {
+    pub events: Vec<CatalogEvent>,
+    pub current_seq: i64,
+    pub has_more: bool,
+    pub next_since: i64,
+}
+
 /// Size limits for bug report fields (in bytes)
 pub const BUG_REPORT_TITLE_MAX_LEN: usize = 200;
 pub const BUG_REPORT_DESCRIPTION_MAX_SIZE: usize = 100 * 1024; // 100KB

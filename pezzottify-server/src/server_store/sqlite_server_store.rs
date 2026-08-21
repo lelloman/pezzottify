@@ -1,5 +1,6 @@
 use super::models::{
-    CatalogContentType, CatalogEvent, CatalogEventType, JobRun, JobRunStatus, JobScheduleState,
+    CatalogContentType, CatalogEvent, CatalogEventPage, CatalogEventType, JobRun, JobRunStatus,
+    JobScheduleState,
 };
 use super::schema::SERVER_VERSIONED_SCHEMAS;
 use super::ServerStore;
@@ -635,6 +636,44 @@ impl ServerStore for SqliteServerStore {
         Ok(events)
     }
 
+    fn get_catalog_events_page(&self, since_seq: i64, limit: usize) -> Result<CatalogEventPage> {
+        let conn = self.conn.lock().unwrap();
+        let current_seq = conn
+            .query_row("SELECT MAX(seq) FROM catalog_events", [], |row| {
+                row.get::<_, Option<i64>>(0)
+            })?
+            .unwrap_or(0);
+        let page_size = limit.max(1).min(i64::MAX as usize);
+        let query_limit = page_size.saturating_add(1).min(i64::MAX as usize) as i64;
+        let mut stmt = conn.prepare(
+            "SELECT seq, event_type, content_type, content_id, timestamp, triggered_by
+             FROM catalog_events
+             WHERE seq > ?1
+             ORDER BY seq ASC
+             LIMIT ?2",
+        )?;
+        let mut events = stmt
+            .query_map(params![since_seq, query_limit], Self::row_to_catalog_event)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        let has_more = events.len() > page_size;
+        if has_more {
+            events.truncate(page_size);
+        }
+        let next_since = if has_more {
+            events.last().map_or(since_seq, |event| event.seq)
+        } else {
+            current_seq
+        };
+
+        Ok(CatalogEventPage {
+            events,
+            current_seq,
+            has_more,
+            next_since,
+        })
+    }
+
     fn get_catalog_events_current_seq(&self) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
         let seq: Option<i64> = conn
@@ -1254,6 +1293,69 @@ mod tests {
             format!("track-{EVENT_COUNT}")
         );
         assert_eq!(store.get_catalog_events_current_seq().unwrap(), EVENT_COUNT);
+    }
+
+    #[test]
+    fn test_catalog_event_pages_use_an_exclusive_keyset_cursor() {
+        use crate::server_store::{CatalogContentType, CatalogEventType};
+
+        let test = create_test_store();
+        let store = &test.store;
+        for index in 1..=5 {
+            store
+                .append_catalog_event(
+                    CatalogEventType::AlbumUpdated,
+                    CatalogContentType::Album,
+                    &format!("album-{index}"),
+                    None,
+                )
+                .unwrap();
+        }
+
+        let first = store.get_catalog_events_page(0, 2).unwrap();
+        assert_eq!(
+            first
+                .events
+                .iter()
+                .map(|event| event.seq)
+                .collect::<Vec<_>>(),
+            vec![1, 2]
+        );
+        assert_eq!(first.current_seq, 5);
+        assert!(first.has_more);
+        assert_eq!(first.next_since, 2);
+
+        let second = store.get_catalog_events_page(first.next_since, 2).unwrap();
+        assert_eq!(
+            second
+                .events
+                .iter()
+                .map(|event| event.seq)
+                .collect::<Vec<_>>(),
+            vec![3, 4]
+        );
+        assert_eq!(second.current_seq, 5);
+        assert!(second.has_more);
+        assert_eq!(second.next_since, 4);
+
+        let final_page = store.get_catalog_events_page(second.next_since, 2).unwrap();
+        assert_eq!(
+            final_page
+                .events
+                .iter()
+                .map(|event| event.seq)
+                .collect::<Vec<_>>(),
+            vec![5]
+        );
+        assert_eq!(final_page.current_seq, 5);
+        assert!(!final_page.has_more);
+        assert_eq!(final_page.next_since, 5);
+
+        let empty = store.get_catalog_events_page(5, 2).unwrap();
+        assert!(empty.events.is_empty());
+        assert_eq!(empty.current_seq, 5);
+        assert!(!empty.has_more);
+        assert_eq!(empty.next_since, 5);
     }
 
     #[test]
