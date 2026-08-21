@@ -72,6 +72,16 @@ impl ApiError {
         }
     }
 
+    pub fn user_database(error: DbRunError) -> Self {
+        match error {
+            DbRunError::Store(source) => match source.downcast::<UserServiceError>() {
+                Ok(error) => Self::from(error),
+                Err(source) => Self::internal("User database operation failed", source),
+            },
+            executor => Self::from(executor),
+        }
+    }
+
     fn new(status: StatusCode, code: &'static str, message: impl Into<String>) -> Self {
         Self {
             status,
@@ -155,6 +165,22 @@ mod tests {
         let response = ApiError::from(UserServiceError::operation_conflict()).into_response();
         assert_eq!(response.status(), StatusCode::CONFLICT);
         assert!(response.headers().contains_key(REQUEST_ID_HEADER));
+    }
+
+    #[test]
+    fn user_database_errors_preserve_domain_and_capacity_contracts() {
+        let response = ApiError::user_database(DbRunError::Store(
+            UserServiceError::playlist_not_found().into(),
+        ))
+        .into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        let response = ApiError::user_database(DbRunError::QueueTimeout).into_response();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            response.headers()[axum::http::header::RETRY_AFTER],
+            RETRY_AFTER_SECONDS
+        );
     }
 
     #[tokio::test]

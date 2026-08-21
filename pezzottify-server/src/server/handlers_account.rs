@@ -1,7 +1,6 @@
 async fn post_listening_event(
     session: Session,
-    State(user_manager): State<GuardedUserManager>,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     Json(body): Json<ListeningEventRequest>,
 ) -> Response {
     use std::time::SystemTime;
@@ -14,12 +13,19 @@ async fn post_listening_event(
     if body.track_id.is_empty() || body.track_id.len() > 128 {
         return StatusCode::BAD_REQUEST.into_response();
     }
-    let track = match catalog_store.get_track(&body.track_id) {
+    let track_id = body.track_id.clone();
+    let track = match database
+        .catalog_read
+        .run(DbPriority::Interactive, move |catalog_store| {
+            catalog_store.get_track(&track_id)
+        })
+        .await
+    {
         Ok(Some(track)) => track,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
         Err(error) => {
             error!("Failed to resolve listening-event track: {error}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            return ApiError::from(error).into_response();
         }
     };
     let authoritative_duration = match authoritative_track_duration_seconds(track.duration_ms) {
@@ -73,7 +79,13 @@ async fn post_listening_event(
         date,
     };
 
-    match user_manager.record_listening_event(event) {
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.record_listening_event(event)
+        })
+        .await
+    {
         Ok((id, created)) => {
             // Record metrics only for newly created events
             if created {
@@ -85,70 +97,73 @@ async fn post_listening_event(
             }
             Json(ListeningEventResponse { id, created }).into_response()
         }
-        Err(err) => {
-            error!("Error recording listening event: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(error) => ApiError::user_database(error).into_response(),
     }
 }
 
 async fn get_user_listening_summary(
     session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Query(query): Query<DateRangeQuery>,
 ) -> Response {
     let (start_date, end_date) = get_default_date_range(query.start_date, query.end_date);
 
-    match user_manager.get_user_listening_summary(
-        session.user_id,
-        start_date,
-        end_date,
-    ) {
+    let user_id = session.user_id;
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_user_listening_summary(user_id, start_date, end_date)
+        })
+        .await
+    {
         Ok(summary) => Json(summary).into_response(),
-        Err(err) => {
-            error!("Error getting listening summary: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(error) => ApiError::user_database(error).into_response(),
     }
 }
 
 async fn get_user_listening_history(
     session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Query(query): Query<ListeningHistoryQuery>,
 ) -> Response {
     let limit = query.limit.unwrap_or(50).min(500);
 
-    match user_manager
-        .get_user_listening_history(session.user_id, limit)
+    let user_id = session.user_id;
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_user_listening_history(user_id, limit)
+        })
+        .await
     {
         Ok(history) => Json(history).into_response(),
-        Err(err) => {
-            error!("Error getting listening history: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(error) => ApiError::user_database(error).into_response(),
     }
 }
 
 async fn get_user_listening_events(
     session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Query(query): Query<ListeningEventsQuery>,
 ) -> Response {
     let (start_date, end_date) = get_default_date_range(query.start_date, query.end_date);
 
-    match user_manager.get_user_listening_events(
-        session.user_id,
-        start_date,
-        end_date,
-        query.limit,
-        query.offset,
-    ) {
+    let user_id = session.user_id;
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_user_listening_events(
+                user_id,
+                start_date,
+                end_date,
+                query.limit,
+                query.offset,
+            )
+        })
+        .await
+    {
         Ok(events) => Json(events).into_response(),
-        Err(err) => {
-            error!("Error getting listening events: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(error) => ApiError::user_database(error).into_response(),
     }
 }
 
@@ -268,23 +283,25 @@ struct UserSettingsResponse {
 
 async fn get_user_settings(
     session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
 ) -> Response {
-    match user_manager
-        .get_all_user_settings(session.user_id)
+    let user_id = session.user_id;
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_all_user_settings(user_id)
+        })
+        .await
     {
         Ok(settings) => Json(UserSettingsResponse { settings }).into_response(),
-        Err(err) => {
-            error!("Error getting user settings: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(error) => ApiError::user_database(error).into_response(),
     }
 }
 
 async fn update_user_settings(
     session: Session,
     headers: HeaderMap,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
     Json(body): Json<UpdateSettingsBody>,
 ) -> Response {
@@ -292,19 +309,20 @@ async fn update_user_settings(
         Ok(value) => value,
         Err(status) => return status.into_response(),
     };
-    let stored_events = {
-        let locked_manager = &user_manager;
-        match locked_manager.set_user_settings_with_events(
-            session.user_id,
-            body.settings,
-            operation_id.as_deref(),
-        ) {
-            Ok(events) => events,
-            Err(err) => {
-                error!("Error atomically updating user settings: {}", err);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        }
+    let user_id = session.user_id;
+    let stored_events = match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.set_user_settings_with_events(
+                user_id,
+                body.settings,
+                operation_id.as_deref(),
+            )
+        })
+        .await
+    {
+        Ok(events) => events,
+        Err(error) => return ApiError::user_database(error).into_response(),
     };
 
     // Broadcast all events to other devices
@@ -386,60 +404,65 @@ fn policy_to_response(policy: DeviceSharePolicy) -> DeviceSharePolicyResponse {
 
 async fn get_user_devices(
     session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
 ) -> Response {
-    let devices = match user_manager
-        .get_user_devices(session.user_id)
+    let user_id = session.user_id;
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            let devices = manager.get_user_devices(user_id)?;
+            let result = devices
+                .into_iter()
+                .map(|device| {
+                    let policy = manager
+                        .get_device_share_policy(device.id)
+                        .unwrap_or_default();
+                    DeviceInfoResponse {
+                        id: device.id,
+                        device_uuid: device.device_uuid,
+                        device_type: device.device_type.as_str().to_string(),
+                        device_name: device.device_name,
+                        os_info: device.os_info,
+                        first_seen: device
+                            .first_seen
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs(),
+                        last_seen: device
+                            .last_seen
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs(),
+                        share_policy: policy_to_response(policy),
+                    }
+                })
+                .collect();
+            Ok(result)
+        })
+        .await
     {
-        Ok(devices) => devices,
-        Err(err) => {
-            error!("Error getting user devices: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-
-    let mut result = Vec::new();
-    for device in devices {
-        let policy = user_manager
-            .get_device_share_policy(device.id)
-            .unwrap_or_default();
-        result.push(DeviceInfoResponse {
-            id: device.id,
-            device_uuid: device.device_uuid,
-            device_type: device.device_type.as_str().to_string(),
-            device_name: device.device_name,
-            os_info: device.os_info,
-            first_seen: device
-                .first_seen
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
-            last_seen: device
-                .last_seen
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
-            share_policy: policy_to_response(policy),
-        });
+        Ok(devices) => Json(DevicesResponse { devices }).into_response(),
+        Err(error) => ApiError::user_database(error).into_response(),
     }
-
-    Json(DevicesResponse { devices: result }).into_response()
 }
 
 async fn put_device_share_policy(
     session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     State(playback_session_manager): State<GuardedPlaybackSessionManager>,
     Path(device_id): Path<usize>,
     Json(body): Json<DeviceSharePolicyRequest>,
 ) -> Response {
-    let device = match user_manager.get_device(device_id) {
+    let device = match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_device(device_id)
+        })
+        .await
+    {
         Ok(Some(device)) => device,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Error getting device: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+        Err(error) => return ApiError::user_database(error).into_response(),
     };
 
     if device.user_id != Some(session.user_id) {
@@ -473,11 +496,15 @@ async fn put_device_share_policy(
         return (StatusCode::BAD_REQUEST, err.to_string()).into_response();
     }
 
-    if let Err(err) = user_manager
-        .set_device_share_policy(device_id, &policy)
+    let stored_policy = policy.clone();
+    if let Err(error) = database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.set_device_share_policy(device_id, &stored_policy)
+        })
+        .await
     {
-        error!("Error setting device share policy: {}", err);
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        return ApiError::user_database(error).into_response();
     }
 
     playback_session_manager
@@ -486,4 +513,3 @@ async fn put_device_share_policy(
 
     Json(policy_to_response(policy)).into_response()
 }
-

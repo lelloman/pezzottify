@@ -145,15 +145,18 @@ fn idempotency_key(headers: &HeaderMap) -> Result<Option<String>, StatusCode> {
 /// GET /v1/sync/state - Returns full user state for initial sync
 async fn get_sync_state(
     session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
 ) -> Response {
-    let um = user_manager;
-    let snapshot = match um.get_sync_snapshot(session.user_id) {
+    let user_id = session.user_id;
+    let snapshot = match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_sync_snapshot(user_id)
+        })
+        .await
+    {
         Ok(snapshot) => snapshot,
-        Err(err) => {
-            error!("Error getting consistent sync snapshot: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+        Err(error) => return ApiError::user_database(error).into_response(),
     };
 
     let playlists = snapshot
@@ -184,52 +187,32 @@ async fn get_sync_state(
 /// GET /v1/sync/events - Returns events since a given sequence number
 async fn get_sync_events(
     session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Query(query): Query<SyncEventsQuery>,
 ) -> Response {
-    let um = user_manager;
+    let user_id = session.user_id;
+    let since = query.since;
+    let sync = database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            let current_seq = manager.get_current_seq(user_id)?;
 
-    // Get current sequence number first (needed for pruning check)
-    let current_seq = match um.get_current_seq(session.user_id) {
-        Ok(seq) => seq,
-        Err(err) => {
-            error!("Error getting current seq: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
+            // Return no payload when the event after `since` has been pruned.
+            if since > 0 {
+                match manager.get_min_seq(user_id)? {
+                    Some(min_seq) if since + 1 >= min_seq => {}
+                    _ => return Ok(None),
+                }
+            }
 
-    // Check if requested sequence has been pruned
-    // Return 410 GONE if the event *after* the requested sequence has been pruned.
-    // For example, if since=5 and min_seq=10, events 6-9 have been pruned,
-    // so we can't provide a continuous stream from seq 5.
-    // However, if since=0 and min_seq=1, that's fine - we return event 1.
-    if query.since > 0 {
-        match um.get_min_seq(session.user_id) {
-            Ok(Some(min_seq)) if query.since + 1 < min_seq => {
-                // Requested sequence is no longer available
-                return StatusCode::GONE.into_response();
-            }
-            Ok(None) => {
-                // No events exist but client is asking for events after some sequence.
-                // Either all events were pruned or the client has invalid state.
-                // Return 410 to signal the client should reset their sync state.
-                return StatusCode::GONE.into_response();
-            }
-            Err(err) => {
-                error!("Error getting min seq: {}", err);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-            _ => {}
-        }
-    }
-
-    // Get events since the requested sequence
-    let events = match um.get_events_since(session.user_id, query.since) {
-        Ok(e) => e,
-        Err(err) => {
-            error!("Error getting events since {}: {}", query.since, err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+            let events = manager.get_events_since(user_id, since)?;
+            Ok(Some((events, current_seq)))
+        })
+        .await;
+    let (events, current_seq) = match sync {
+        Ok(Some(sync)) => sync,
+        Ok(None) => return StatusCode::GONE.into_response(),
+        Err(error) => return ApiError::user_database(error).into_response(),
     };
 
     Json(SyncEventsResponse {
@@ -479,41 +462,40 @@ async fn admin_delete_bug_report(
 /// POST /v1/user/notifications/{id}/read - Mark notification as read
 async fn mark_notification_read(
     session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
     Path(notification_id): Path<String>,
 ) -> Response {
-    let (notification, stored_event) = {
-        let um = user_manager;
+    let user_id = session.user_id;
+    let updated = database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            let Some(notification) = manager.mark_notification_read(&notification_id, user_id)?
+            else {
+                return Ok(None);
+            };
 
-        // Mark as read
-        let notification = match um.mark_notification_read(&notification_id, session.user_id) {
-            Ok(Some(n)) => n,
-            Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-            Err(err) => {
-                error!("Error marking notification read: {}", err);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        };
-
-        // Log sync event
-        let read_at = notification
-            .read_at
-            .unwrap_or_else(|| chrono::Utc::now().timestamp());
-        let event = UserEvent::NotificationRead {
-            notification_id: notification_id.clone(),
-            read_at,
-        };
-
-        let stored_event = match um.append_event(session.user_id, &event) {
-            Ok(e) => Some(e),
-            Err(err) => {
-                warn!("Failed to log notification_read event: {}", err);
-                None
-            }
-        };
-
-        (notification, stored_event)
+            let read_at = notification
+                .read_at
+                .unwrap_or_else(|| chrono::Utc::now().timestamp());
+            let event = UserEvent::NotificationRead {
+                notification_id,
+                read_at,
+            };
+            let stored_event = match manager.append_event(user_id, &event) {
+                Ok(event) => Some(event),
+                Err(error) => {
+                    warn!("Failed to log notification_read event: {}", error);
+                    None
+                }
+            };
+            Ok(Some((notification, stored_event)))
+        })
+        .await;
+    let (notification, stored_event) = match updated {
+        Ok(Some(updated)) => updated,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(error) => return ApiError::user_database(error).into_response(),
     };
 
     // Broadcast to other devices
