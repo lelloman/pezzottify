@@ -88,10 +88,18 @@ class TestAdminApi:
             admin = CatalogApiClient(config.server_url)
             try:
                 await admin.login(ADMIN_USER, ADMIN_PASS, device_uuid="admin-api-mcp")
+                await admin.trigger_background_job("catalog_cardinality_stats")
+                for _ in range(100):
+                    history = await admin.get_background_job_history(
+                        "catalog_cardinality_stats"
+                    )
+                    if history and history[0]["status"] != "running":
+                        break
+                    await asyncio.sleep(0.1)
+                assert history[0]["status"] == "completed"
+
                 stats = await admin.mcp_server_stats()
-                # The seed importer bypasses catalog cardinality triggers, so MCP's
-                # cached counters currently remain zero in the deployed fixture.
-                assert stats["catalog"] == {"artists": 0, "albums": 0, "tracks": 0}
+                assert stats["catalog"] == {"artists": 2, "albums": 2, "tracks": 5}
                 assert stats["users"]["total_users"] == 2
             finally:
                 await admin.close()
