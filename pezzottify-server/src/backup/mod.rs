@@ -157,3 +157,31 @@ pub fn passive_checkpoint_all(registry: &DbRegistry) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prepare_backup_reports_each_registered_database() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let path = temp.path().join("registered.db");
+        let connection = Connection::open(&path).unwrap();
+        let registry = DbRegistry::new();
+        registry.register(path, &connection).unwrap();
+        connection
+            .execute("CREATE TABLE backup_test (value INTEGER NOT NULL)", [])
+            .unwrap();
+        connection
+            .execute("INSERT INTO backup_test VALUES (1)", [])
+            .unwrap();
+
+        let result = prepare_backup(&registry);
+
+        assert!(result.all_succeeded);
+        assert_eq!(result.databases.len(), 1);
+        assert_eq!(result.databases[0].db_name, "registered.db");
+        assert!(result.databases[0].success);
+        assert!(result.databases[0].error.is_none());
+    }
+}

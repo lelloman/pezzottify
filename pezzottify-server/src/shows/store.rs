@@ -168,3 +168,61 @@ impl ShowStore for SqliteShowStore {
         Ok(conn.execute("DELETE FROM shows WHERE id = ?1", params![id])? > 0)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn show(id: &str, status: ShowStatus, updated_at: i64) -> Show {
+        Show {
+            id: id.to_string(),
+            title: format!("Show {id}"),
+            status,
+            brief: "A test show".to_string(),
+            summary: "Summary".to_string(),
+            language: "en".to_string(),
+            target_duration_minutes: 60,
+            created_by_user_id: 1,
+            created_at: updated_at,
+            updated_at,
+            published_at: (status == ShowStatus::Published).then_some(updated_at),
+            speakers: Vec::new(),
+            segments: Vec::new(),
+            sources: Vec::new(),
+            error: None,
+        }
+    }
+
+    #[test]
+    fn show_store_crud_filters_and_pages_without_losing_updates() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let store = SqliteShowStore::open(
+            temp.path().join("shows.db"),
+            &crate::backup::DbRegistry::new(),
+        )
+        .unwrap();
+
+        let draft = show("draft", ShowStatus::Draft, 10);
+        let published = show("published", ShowStatus::Published, 20);
+        store.upsert_show(&draft).unwrap();
+        store.upsert_show(&published).unwrap();
+
+        assert_eq!(store.list_published(10, 0).unwrap().len(), 1);
+        assert_eq!(store.list_published(10, 0).unwrap()[0].id, "published");
+        assert_eq!(store.list_admin(1, 0).unwrap()[0].id, "published");
+        assert_eq!(store.list_admin(1, 1).unwrap()[0].id, "draft");
+
+        let mut updated = store.get_show("draft").unwrap().unwrap();
+        updated.title = "Updated title".to_string();
+        updated.updated_at = 30;
+        store.upsert_show(&updated).unwrap();
+        assert_eq!(
+            store.get_show("draft").unwrap().unwrap().title,
+            "Updated title"
+        );
+
+        assert!(store.delete_show("draft").unwrap());
+        assert!(!store.delete_show("draft").unwrap());
+        assert!(store.get_show("draft").unwrap().is_none());
+    }
+}
