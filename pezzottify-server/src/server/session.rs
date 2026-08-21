@@ -1,7 +1,9 @@
-use super::state::ServerState;
+use super::{api_error::ApiError, state::ServerState};
+use crate::db_executor::{DbPriority, DbRunError};
+use crate::oidc::IdTokenClaims;
 use crate::user::auth::AuthTokenValue;
 use crate::user::device::{DeviceRegistration, DeviceType};
-use crate::user::Permission;
+use crate::user::{Permission, UserManager};
 
 use axum::{
     extract::FromRequestParts,
@@ -35,6 +37,7 @@ pub const HEADER_SESSION_TOKEN_KEY: &str = "Authorization";
 pub enum SessionExtractionError {
     AccessDenied,
     InternalError,
+    Database(DbRunError),
 }
 
 impl IntoResponse for SessionExtractionError {
@@ -44,6 +47,7 @@ impl IntoResponse for SessionExtractionError {
             SessionExtractionError::InternalError => {
                 StatusCode::INTERNAL_SERVER_ERROR.into_response()
             }
+            SessionExtractionError::Database(error) => ApiError::from(error).into_response(),
         }
     }
 }
@@ -69,9 +73,11 @@ fn extract_session_token_from_headers(parts: &mut Parts) -> Option<String> {
 }
 
 /// Try to validate the token as an OIDC JWT and create a session
-async fn try_oidc_session(token: &str, ctx: &ServerState) -> Option<Session> {
+async fn try_oidc_session(token: &str, ctx: &ServerState) -> Result<Option<Session>, DbRunError> {
     // Check if OIDC is configured
-    let oidc_client = ctx.oidc_client.as_ref()?;
+    let Some(oidc_client) = ctx.oidc_client.as_ref() else {
+        return Ok(None);
+    };
 
     // Try to validate as OIDC ID token
     let claims = match oidc_client.validate_id_token(token).await {
@@ -82,12 +88,25 @@ async fn try_oidc_session(token: &str, ctx: &ServerState) -> Option<Session> {
         Err(e) => {
             // Not a valid OIDC token - this is expected for legacy sessions
             debug!("Token is not a valid OIDC ID token: {}", e);
-            return None;
+            return Ok(None);
         }
     };
 
-    // Look up or provision local user by OIDC subject
-    let user_manager = &ctx.user_manager;
+    let token = token.to_owned();
+    ctx.database
+        .user_manager
+        .run(DbPriority::Critical, move |user_manager| {
+            resolve_oidc_session(user_manager, claims, token)
+        })
+        .await
+}
+
+fn resolve_oidc_session(
+    user_manager: &UserManager,
+    claims: IdTokenClaims,
+    token: String,
+) -> anyhow::Result<Option<Session>> {
+    // Look up or provision local user by OIDC subject.
     let user_id = match user_manager.get_user_id_by_oidc_subject(&claims.subject) {
         Ok(Some(id)) => {
             debug!("Found existing user for OIDC subject={}", claims.subject);
@@ -113,13 +132,13 @@ async fn try_oidc_session(token: &str, ctx: &ServerState) -> Option<Session> {
                 }
                 Err(e) => {
                     warn!("Failed to provision OIDC user: {}", e);
-                    return None;
+                    return Ok(None);
                 }
             }
         }
         Err(e) => {
             warn!("Failed to look up user by OIDC subject: {}", e);
-            return None;
+            return Ok(None);
         }
     };
 
@@ -137,7 +156,7 @@ async fn try_oidc_session(token: &str, ctx: &ServerState) -> Option<Session> {
                 "Failed to resolve permissions for OIDC user_id={}: {}",
                 user_id, e
             );
-            return None;
+            return Ok(None);
         }
     };
 
@@ -221,63 +240,69 @@ async fn try_oidc_session(token: &str, ctx: &ServerState) -> Option<Session> {
         (None, None)
     };
 
-    Some(Session {
+    Ok(Some(Session {
         user_id,
-        token: token.to_string(),
+        token,
         permissions,
         device_id,
         device_type,
-    })
+    }))
 }
 
 /// Try to validate the token as a legacy database auth token
-async fn try_legacy_session(token: &str, ctx: &ServerState) -> Option<Session> {
-    let user_manager = &ctx.user_manager;
+async fn try_legacy_session(token: &str, ctx: &ServerState) -> Result<Option<Session>, DbRunError> {
     let auth_token_value = AuthTokenValue(token.to_string());
+    ctx.database
+        .user_manager
+        .run(DbPriority::Critical, move |user_manager| {
+            resolve_legacy_session(user_manager, auth_token_value)
+        })
+        .await
+}
+
+fn resolve_legacy_session(
+    user_manager: &UserManager,
+    auth_token_value: AuthTokenValue,
+) -> anyhow::Result<Option<Session>> {
     let auth_token = match user_manager.get_auth_token(&auth_token_value) {
         Ok(Some(token)) => {
             debug!("Found legacy auth token for user_id={}", token.user_id);
 
-            // Update last_used timestamp
-            if let Err(e) = user_manager.update_auth_token_last_used(&auth_token_value) {
-                debug!("Failed to update auth token last_used timestamp: {}", e);
-                // Continue anyway, as this is not critical for authentication
+            if let Err(error) = user_manager.update_auth_token_last_used(&auth_token_value) {
+                debug!("Failed to update auth token last_used timestamp: {error}");
             }
-
             token
         }
         Ok(None) => {
             debug!("Auth token not found in database");
-            return None;
+            return Ok(None);
         }
-        Err(e) => {
-            debug!("Failed to get auth token from database: {}", e);
-            return None;
+        Err(error) => {
+            debug!("Failed to get auth token from database: {error}");
+            return Ok(None);
         }
     };
 
     let permissions = match user_manager.get_user_permissions(auth_token.user_id) {
-        Ok(perms) => {
+        Ok(permissions) => {
             debug!(
                 "Resolved permissions for user_id={}: {:?}",
-                auth_token.user_id, perms
+                auth_token.user_id, permissions
             );
-            perms
+            permissions
         }
-        Err(e) => {
+        Err(error) => {
             debug!(
                 "Failed to resolve permissions for user_id={}: {}",
-                auth_token.user_id, e
+                auth_token.user_id, error
             );
-            return None;
+            return Ok(None);
         }
     };
 
-    // Look up device info if device_id is present
     let (device_id, device_type) = if let Some(device_id) = auth_token.device_id {
         match user_manager.get_device(device_id) {
             Ok(Some(device)) => {
-                // Throttled touch: only update last_seen if >1 hour stale
                 let one_hour_ago = SystemTime::now() - Duration::from_secs(3600);
                 if device.last_seen < one_hour_ago {
                     let _ = user_manager.touch_device(device.id);
@@ -295,11 +320,8 @@ async fn try_legacy_session(token: &str, ctx: &ServerState) -> Option<Session> {
                 );
                 (Some(device_id), None)
             }
-            Err(e) => {
-                debug!(
-                    "Failed to get device info for device_id={}: {}",
-                    device_id, e
-                );
+            Err(error) => {
+                debug!("Failed to get device info for device_id={device_id}: {error}");
                 (Some(device_id), None)
             }
         }
@@ -307,19 +329,19 @@ async fn try_legacy_session(token: &str, ctx: &ServerState) -> Option<Session> {
         (None, None)
     };
 
-    Some(Session {
+    Ok(Some(Session {
         user_id: auth_token.user_id,
         token: auth_token.value.0,
         permissions,
         device_id,
         device_type,
-    })
+    }))
 }
 
 async fn extract_session_from_request_parts(
     parts: &mut Parts,
     ctx: &ServerState,
-) -> Option<Session> {
+) -> Result<Option<Session>, DbRunError> {
     debug!("extracting session from request parts...");
     // Prefer Authorization header over cookies - the header is set fresh on each
     // request by the client, while cookies may contain stale tokens from before
@@ -330,7 +352,7 @@ async fn extract_session_from_request_parts(
     {
         None => {
             debug!("No token in headers nor cookies.");
-            return None;
+            return Ok(None);
         }
         Some(x) => x,
     };
@@ -338,22 +360,22 @@ async fn extract_session_from_request_parts(
     debug!("Got session token (length={})", token.len());
 
     // Try OIDC JWT validation first (if OIDC is configured)
-    if let Some(session) = try_oidc_session(&token, ctx).await {
+    if let Some(session) = try_oidc_session(&token, ctx).await? {
         debug!("Session validated via OIDC for user_id={}", session.user_id);
-        return Some(session);
+        return Ok(Some(session));
     }
 
     // Fall back to legacy database token lookup
-    if let Some(session) = try_legacy_session(&token, ctx).await {
+    if let Some(session) = try_legacy_session(&token, ctx).await? {
         debug!(
             "Session validated via legacy auth for user_id={}",
             session.user_id
         );
-        return Some(session);
+        return Ok(Some(session));
     }
 
     debug!("Token validation failed for both OIDC and legacy auth");
-    None
+    Ok(None)
 }
 
 impl FromRequestParts<ServerState> for Session {
@@ -365,6 +387,7 @@ impl FromRequestParts<ServerState> for Session {
     ) -> Result<Self, Self::Rejection> {
         extract_session_from_request_parts(parts, ctx)
             .await
+            .map_err(SessionExtractionError::Database)?
             .ok_or(SessionExtractionError::AccessDenied)
     }
 }
@@ -376,7 +399,9 @@ impl FromRequestParts<ServerState> for Option<Session> {
         parts: &mut Parts,
         ctx: &ServerState,
     ) -> Result<Self, Self::Rejection> {
-        Ok(extract_session_from_request_parts(parts, ctx).await)
+        extract_session_from_request_parts(parts, ctx)
+            .await
+            .map_err(SessionExtractionError::Database)
     }
 }
 
@@ -520,6 +545,13 @@ mod tests {
         let error = SessionExtractionError::InternalError;
         let response = error.into_response();
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[test]
+    fn session_executor_saturation_is_retryable() {
+        let response = SessionExtractionError::Database(DbRunError::QueueTimeout).into_response();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.headers()[axum::http::header::RETRY_AFTER], "1");
     }
 
     #[test]

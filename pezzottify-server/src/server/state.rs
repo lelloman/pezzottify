@@ -151,6 +151,12 @@ impl FromRef<ServerState> for GuardedUserManager {
     }
 }
 
+impl FromRef<ServerState> for DatabaseHandles {
+    fn from_ref(input: &ServerState) -> Self {
+        input.database.clone()
+    }
+}
+
 impl FromRef<ServerState> for ServerConfig {
     fn from_ref(input: &ServerState) -> Self {
         input.config.clone()
