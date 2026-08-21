@@ -1223,6 +1223,40 @@ mod tests {
     }
 
     #[test]
+    fn test_catalog_event_high_volume_read_is_complete_and_ordered() {
+        use crate::server_store::{CatalogContentType, CatalogEventType};
+
+        const EVENT_COUNT: i64 = 1_205;
+        let test = create_test_store();
+        let store = &test.store;
+
+        for seq in 1..=EVENT_COUNT {
+            let inserted_seq = store
+                .append_catalog_event(
+                    CatalogEventType::TrackUpdated,
+                    CatalogContentType::Track,
+                    &format!("track-{seq}"),
+                    Some("high_volume_test"),
+                )
+                .unwrap();
+            assert_eq!(inserted_seq, seq);
+        }
+
+        let events = store.get_catalog_events_since(0).unwrap();
+        assert_eq!(events.len(), EVENT_COUNT as usize);
+        assert!(events
+            .iter()
+            .enumerate()
+            .all(|(index, event)| event.seq == index as i64 + 1));
+        assert_eq!(events.first().unwrap().content_id, "track-1");
+        assert_eq!(
+            events.last().unwrap().content_id,
+            format!("track-{EVENT_COUNT}")
+        );
+        assert_eq!(store.get_catalog_events_current_seq().unwrap(), EVENT_COUNT);
+    }
+
+    #[test]
     fn test_catalog_event_different_types() {
         use crate::server_store::{CatalogContentType, CatalogEventType};
 

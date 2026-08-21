@@ -3,6 +3,7 @@
 mod common;
 
 use common::{TestClient, TestServer};
+use pezzottify_server::server_store::{CatalogContentType, CatalogEventType};
 use reqwest::StatusCode;
 use serde_json::{json, Value};
 
@@ -140,4 +141,73 @@ async fn catalog_sync_and_backup_prepare_return_complete_response_shapes() {
         .unwrap()
         .iter()
         .all(|database| database["success"] == true));
+}
+
+#[tokio::test]
+async fn catalog_sync_returns_every_high_volume_event_in_sequence() {
+    const EVENT_COUNT: i64 = 1_205;
+    let server = TestServer::spawn().await;
+    let user = TestClient::authenticated(server.base_url.clone()).await;
+    let initial_seq = server
+        .server_store
+        .get_catalog_events_current_seq()
+        .unwrap();
+
+    for index in 1..=EVENT_COUNT {
+        server
+            .server_store
+            .append_catalog_event(
+                CatalogEventType::TrackUpdated,
+                CatalogContentType::Track,
+                &format!("high-volume-track-{index}"),
+                Some("high_volume_test"),
+            )
+            .unwrap();
+    }
+
+    let expected_final_seq = initial_seq + EVENT_COUNT;
+    let mut since = initial_seq;
+    let mut received_sequences = Vec::new();
+    let mut page_count = 0;
+
+    loop {
+        let response = user
+            .client
+            .get(format!("{}/v1/sync/catalog?since={since}", server.base_url))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let page: Value = response.json().await.unwrap();
+        page_count += 1;
+
+        let page_sequences: Vec<i64> = page["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|event| event["seq"].as_i64().unwrap())
+            .collect();
+        assert!(page_sequences.windows(2).all(|pair| pair[0] < pair[1]));
+        assert!(page_sequences.iter().all(|seq| *seq > since));
+        received_sequences.extend(page_sequences);
+
+        let current_seq = page["current_seq"].as_i64().unwrap();
+        assert_eq!(current_seq, expected_final_seq);
+        let next_since = page["next_since"].as_i64().unwrap();
+        if page["has_more"] == true {
+            assert!(next_since > since);
+            since = next_since;
+        } else {
+            assert_eq!(next_since, current_seq);
+            break;
+        }
+    }
+
+    assert!(page_count >= 1);
+    assert_eq!(received_sequences.len(), EVENT_COUNT as usize);
+    assert_eq!(received_sequences.first(), Some(&(initial_seq + 1)));
+    assert_eq!(received_sequences.last(), Some(&expected_final_seq));
+    assert!(received_sequences
+        .windows(2)
+        .all(|pair| pair[1] == pair[0] + 1));
 }
