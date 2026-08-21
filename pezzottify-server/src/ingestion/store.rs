@@ -984,4 +984,82 @@ mod tests {
         assert!(!active_ids.contains(&"job3".to_string())); // Completed
         assert!(!active_ids.contains(&"job4".to_string())); // Failed
     }
+
+    #[test]
+    fn deleting_job_cascades_to_files_reasoning_reviews_and_claims() {
+        let store = SqliteIngestionStore::in_memory().unwrap();
+        let job = IngestionJob::new("job1", "user1", "album.zip", 100, 1);
+        store.create_job(&job).unwrap();
+        store
+            .create_file(&IngestionFile::new(
+                "file1",
+                "job1",
+                "track.flac",
+                100,
+                "/tmp/track.flac",
+            ))
+            .unwrap();
+        store
+            .log_reasoning_step(
+                "job1",
+                &ReasoningStep::new(0, ReasoningStepType::Context, "test"),
+            )
+            .unwrap();
+        store.create_review_item("job1", "Review?", "[]").unwrap();
+        assert_eq!(
+            store
+                .try_claim_job("job1", "process", &[IngestionJobStatus::Pending])
+                .unwrap(),
+            JobClaimResult::Claimed
+        );
+
+        store.delete_job("job1").unwrap();
+
+        assert!(store.get_job("job1").unwrap().is_none());
+        assert!(store.get_files_for_job("job1").unwrap().is_empty());
+        assert!(store.get_reasoning_steps("job1").unwrap().is_empty());
+        assert!(store.get_review_item("job1").unwrap().is_none());
+        assert_eq!(
+            store
+                .try_claim_job("job1", "process", &[IngestionJobStatus::Pending])
+                .unwrap(),
+            JobClaimResult::NotFound
+        );
+    }
+
+    #[test]
+    fn job_lists_apply_owner_status_order_and_limit_contracts() {
+        let store = SqliteIngestionStore::in_memory().unwrap();
+        for (id, owner, status, created_at) in [
+            ("old-pending", "user1", IngestionJobStatus::Pending, 10),
+            ("new-pending", "user1", IngestionJobStatus::Pending, 30),
+            ("completed", "user1", IngestionJobStatus::Completed, 20),
+            ("other-owner", "user2", IngestionJobStatus::Pending, 40),
+        ] {
+            let mut job = IngestionJob::new(id, owner, "album.zip", 100, 1);
+            job.status = status;
+            job.created_at = created_at;
+            store.create_job(&job).unwrap();
+        }
+
+        let user_jobs = store.list_jobs_by_user("user1", 2).unwrap();
+        assert_eq!(
+            user_jobs
+                .iter()
+                .map(|job| job.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["new-pending", "completed"]
+        );
+
+        let pending = store
+            .list_jobs_by_status(IngestionJobStatus::Pending, 2)
+            .unwrap();
+        assert_eq!(
+            pending
+                .iter()
+                .map(|job| job.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["old-pending", "new-pending"]
+        );
+    }
 }

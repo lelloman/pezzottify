@@ -1562,6 +1562,57 @@ mod tests {
     }
 
     #[test]
+    fn enrichment_queue_claims_highest_priority_first_and_respects_limit() {
+        let (store, _tmp) = create_test_store();
+        for (track_id, priority) in [("low", 1), ("high", 100), ("medium", 50)] {
+            store
+                .enqueue_enrichment_if_missing_or_stale(
+                    "track",
+                    track_id,
+                    "contract-test",
+                    priority,
+                    3600,
+                )
+                .unwrap();
+        }
+
+        let claimed = store.claim_enrichment_queue_batch(2).unwrap();
+        assert_eq!(claimed.len(), 2);
+        assert_eq!(claimed[0].entity_id, "high");
+        assert_eq!(claimed[1].entity_id, "medium");
+        assert_eq!(
+            store
+                .get_enrichment_queue_item("track", "low")
+                .unwrap()
+                .unwrap()
+                .status,
+            "queued"
+        );
+    }
+
+    #[test]
+    fn failed_enrichment_item_records_error_and_retry_schedule() {
+        let (store, _tmp) = create_test_store();
+        store
+            .enqueue_enrichment_if_missing_or_stale("album", "album1", "contract-test", 10, 3600)
+            .unwrap();
+        let item = store.claim_enrichment_queue_batch(1).unwrap().remove(0);
+
+        store
+            .fail_enrichment_queue_item(item.id, "provider unavailable", Some(60))
+            .unwrap();
+
+        let failed = store
+            .get_enrichment_queue_item("album", "album1")
+            .unwrap()
+            .unwrap();
+        assert_eq!(failed.status, "queued");
+        assert_eq!(failed.last_error.as_deref(), Some("provider unavailable"));
+        assert_eq!(failed.attempts, 1);
+        assert!(failed.next_attempt_at.is_some());
+    }
+
+    #[test]
     fn test_v1_requeues_stale_running_items() {
         let (store, _tmp) = create_test_store();
         for track_id in ["track1", "track2"] {
