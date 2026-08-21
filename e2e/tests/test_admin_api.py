@@ -1,11 +1,45 @@
 """Deployed-stack contracts for server administration APIs."""
 
+import asyncio
+
 from helpers.api_client import CatalogApiClient
 from helpers.async_runner import run_async
 from helpers.constants import ADMIN_PASS, ADMIN_USER, TEST_PASS, TEST_USER
 
 
 class TestAdminApi:
+    def test_lightweight_background_job_lifecycle(self, config):
+        async def _test():
+            admin = CatalogApiClient(config.server_url)
+            try:
+                await admin.login(
+                    ADMIN_USER, ADMIN_PASS, device_uuid="admin-api-background-job"
+                )
+                jobs = await admin.list_background_jobs()
+                assert any(job["id"] == "whatsnew_batch" for job in jobs)
+
+                triggered = await admin.trigger_background_job("whatsnew_batch")
+                assert triggered == {
+                    "status": "triggered",
+                    "job_id": "whatsnew_batch",
+                }
+
+                history = []
+                for _ in range(50):
+                    history = await admin.get_background_job_history("whatsnew_batch")
+                    if history and history[0]["status"] != "running":
+                        break
+                    await asyncio.sleep(0.1)
+                assert history[0]["status"] == "completed"
+
+                audit = await admin.get_background_job_audit("whatsnew_batch")
+                event_types = {entry["event_type"] for entry in audit}
+                assert {"started", "completed"} <= event_types
+            finally:
+                await admin.close()
+
+        run_async(_test())
+
     def test_mcp_database_backed_server_stats(self, config):
         async def _test():
             admin = CatalogApiClient(config.server_url)

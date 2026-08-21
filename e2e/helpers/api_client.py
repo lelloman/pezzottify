@@ -197,6 +197,39 @@ class CatalogApiClient:
             resp.raise_for_status()
             return await resp.json(content_type=None)
 
+    async def list_background_jobs(self) -> list[dict]:
+        session = await self._ensure_session()
+        async with session.get(f"{self.base_url}/v1/admin/jobs") as resp:
+            resp.raise_for_status()
+            return (await resp.json(content_type=None))["jobs"]
+
+    async def trigger_background_job(self, job_id: str) -> dict:
+        session = await self._ensure_session()
+        async with session.post(
+            f"{self.base_url}/v1/admin/jobs/{job_id}/trigger",
+            json={},
+            headers=self._csrf_headers(),
+        ) as resp:
+            resp.raise_for_status()
+            return await resp.json(content_type=None)
+
+    async def get_background_job_history(self, job_id: str) -> list[dict]:
+        session = await self._ensure_session()
+        async with session.get(
+            f"{self.base_url}/v1/admin/jobs/{job_id}/history", params={"limit": 10}
+        ) as resp:
+            resp.raise_for_status()
+            return (await resp.json(content_type=None))["history"]
+
+    async def get_background_job_audit(self, job_id: str) -> list[dict]:
+        session = await self._ensure_session()
+        async with session.get(
+            f"{self.base_url}/v1/admin/jobs/{job_id}/audit",
+            params={"limit": 10},
+        ) as resp:
+            resp.raise_for_status()
+            return (await resp.json(content_type=None))["entries"]
+
     async def download_limits_status(self) -> int:
         session = await self._ensure_session()
         async with session.get(f"{self.base_url}/v1/download/limits") as resp:
