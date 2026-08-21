@@ -71,8 +71,8 @@ pub async fn make_app(
 
     // Create organic indexer for on-demand search index growth
     state.organic_indexer = Some(crate::search::OrganicIndexer::new(
-        search_vault.clone(),
-        catalog_store.clone(),
+        state.database.search_write.clone(),
+        state.database.catalog_read.clone(),
     ));
 
     // Initialize download manager if enabled
@@ -170,7 +170,7 @@ pub async fn make_app(
                 // Create notification service for download completion notifications
                 let notification_service =
                     Arc::new(crate::notifications::NotificationService::new(
-                        user_store.clone(),
+                        state.database.user_store.clone(),
                         state.ws_connection_manager.clone(),
                     ));
 

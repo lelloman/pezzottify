@@ -23,6 +23,7 @@ use super::protocol::{
 };
 use super::rate_limit::McpRateLimiter;
 use super::registry::McpRegistry;
+use crate::db_executor::DbPriority;
 use crate::server::session::Session;
 use crate::server::state::{GuardedMcpState, ServerState};
 
@@ -286,7 +287,16 @@ async fn handle_tools_call(
 
     // Execute the tool
     let arguments = params.arguments.unwrap_or(serde_json::json!({}));
-    let result = (tool.handler)(ctx, arguments).await?;
+    let handler = tool.handler.clone();
+    let runtime = tokio::runtime::Handle::current();
+    let result = server_state
+        .database
+        .mcp
+        .run(DbPriority::Interactive, move |_| {
+            Ok(runtime.block_on(handler(ctx, arguments)))
+        })
+        .await
+        .map_err(|error| McpError::InternalError(error.to_string()))??;
 
     serde_json::to_value(result).map_err(|e| McpError::InternalError(e.to_string()))
 }
@@ -354,7 +364,17 @@ async fn handle_resources_read(
     };
 
     // Read the resource
-    let contents = (resource.handler)(ctx, params.uri).await?;
+    let handler = resource.handler.clone();
+    let uri = params.uri;
+    let runtime = tokio::runtime::Handle::current();
+    let contents = server_state
+        .database
+        .mcp
+        .run(DbPriority::Interactive, move |_| {
+            Ok(runtime.block_on(handler(ctx, uri)))
+        })
+        .await
+        .map_err(|error| McpError::InternalError(error.to_string()))??;
 
     let result = ResourcesReadResult { contents };
 
