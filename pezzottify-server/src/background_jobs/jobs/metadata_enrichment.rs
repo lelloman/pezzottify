@@ -11,6 +11,7 @@ use crate::background_jobs::{
 };
 use crate::catalog_store::ResolvedTrack;
 use crate::config::{AgentSettings, MetadataEnrichmentJobSettings};
+use crate::db_executor::DbPriority;
 use crate::enrichment_store::{
     AlbumEnrichmentV1, ArtistEnrichmentV1, EnrichmentQueueItemV1, EnrichmentStore, EntityAliasV1,
     EntityContributorV1, EntityEvidenceV1, EntityExternalIdV1, EntityRelationV1, EntitySourceV1,
@@ -171,6 +172,7 @@ fn track_context_from_resolved(
     }
 }
 
+#[derive(Clone)]
 pub struct MetadataEnrichmentJob {
     settings: MetadataEnrichmentJobSettings,
     agent: AgentSettings,
@@ -190,8 +192,13 @@ impl MetadataEnrichmentJob {
         selected_entity_types: &[String],
     ) -> Result<Vec<ListeningBackfillCandidate>, JobError> {
         let track_counts = ctx
-            .user_store
-            .get_all_track_play_counts(ALL_TIME_LISTENING_START_DATE, ALL_TIME_LISTENING_END_DATE)
+            .user_db
+            .run_blocking(DbPriority::Background, |store| {
+                store.get_all_track_play_counts(
+                    ALL_TIME_LISTENING_START_DATE,
+                    ALL_TIME_LISTENING_END_DATE,
+                )
+            })
             .map_err(|e| {
                 JobError::ExecutionFailed(format!("Failed to get listening counts: {e}"))
             })?;
@@ -204,24 +211,29 @@ impl MetadataEnrichmentJob {
             || selected_entity_types
                 .iter()
                 .any(|entity_type| matches!(entity_type.as_str(), "artist" | "album"));
+        let resolved_tracks = if needs_resolved_tracks {
+            let track_ids = track_counts
+                .iter()
+                .map(|track| track.track_id.clone())
+                .collect::<Vec<_>>();
+            ctx.catalog_db
+                .run_blocking(DbPriority::Background, move |store| {
+                    track_ids
+                        .iter()
+                        .map(|track_id| store.get_resolved_track(track_id))
+                        .collect::<anyhow::Result<Vec<_>>>()
+                })
+                .map_err(|e| {
+                    JobError::ExecutionFailed(format!("Failed to resolve listened tracks: {e}"))
+                })?
+        } else {
+            std::iter::repeat_n(None, track_counts.len()).collect()
+        };
         let tracks = track_counts
             .iter()
-            .map(|track_count| {
-                let resolved = if needs_resolved_tracks {
-                    ctx.catalog_store
-                        .get_resolved_track(&track_count.track_id)
-                        .map_err(|e| {
-                            JobError::ExecutionFailed(format!(
-                                "Failed to resolve listened track {}: {e}",
-                                track_count.track_id
-                            ))
-                        })?
-                } else {
-                    None
-                };
-                Ok(track_context_from_resolved(track_count, resolved))
-            })
-            .collect::<Result<Vec<_>, JobError>>()?;
+            .zip(resolved_tracks)
+            .map(|(track_count, resolved)| track_context_from_resolved(track_count, resolved))
+            .collect::<Vec<_>>();
 
         Ok(listening_backfill_candidates(
             &tracks,
@@ -458,7 +470,13 @@ impl MetadataEnrichmentJob {
         store: &dyn EnrichmentStore,
         artist_id: &str,
     ) -> anyhow::Result<Option<WikidataArtistEnrichment>> {
-        let Some(mbid) = ctx.catalog_store.get_artist_mbid(artist_id)? else {
+        let artist_id_owned = artist_id.to_owned();
+        let Some(mbid) = ctx
+            .catalog_db
+            .run_blocking(DbPriority::Background, move |store| {
+                store.get_artist_mbid(&artist_id_owned)
+            })?
+        else {
             return Ok(None);
         };
         let Some(facts) = WikidataClient::new()?.lookup_artist_by_mbid(&mbid).await? else {
@@ -689,6 +707,34 @@ impl BackgroundJob for MetadataEnrichmentJob {
     }
 
     fn execute_with_params(&self, ctx: &JobContext, params: Option<Value>) -> Result<(), JobError> {
+        let enrichment_db = ctx.enrichment_db.as_ref().ok_or_else(|| {
+            JobError::ExecutionFailed("Enrichment store not available in job context".to_string())
+        })?;
+        let job = self.clone();
+        let cancellation_token = ctx.cancellation_token.clone();
+        let job_ctx = ctx.clone();
+        enrichment_db
+            .run_blocking(DbPriority::Background, move |store| {
+                job.execute_with_store(&job_ctx, params, store)
+                    .map_err(anyhow::Error::new)
+            })
+            .map_err(|error| {
+                if cancellation_token.is_cancelled() {
+                    JobError::Cancelled
+                } else {
+                    JobError::ExecutionFailed(error.to_string())
+                }
+            })
+    }
+}
+
+impl MetadataEnrichmentJob {
+    fn execute_with_store(
+        &self,
+        ctx: &JobContext,
+        params: Option<Value>,
+        store: &dyn EnrichmentStore,
+    ) -> Result<(), JobError> {
         let params = match params {
             Some(value) => serde_json::from_value::<MetadataEnrichmentRunParams>(value)
                 .map_err(|e| JobError::ExecutionFailed(format!("Invalid params: {e}")))?,
@@ -706,9 +752,6 @@ impl BackgroundJob for MetadataEnrichmentJob {
             entity_types.clone()
         };
 
-        let store = ctx.enrichment_store.as_ref().ok_or_else(|| {
-            JobError::ExecutionFailed("Enrichment store not available in job context".to_string())
-        })?;
         let requeued_stale_running = store
             .requeue_stale_running_enrichment_queue_items(self.settings.retry_after_secs as i64)
             .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
@@ -737,7 +780,7 @@ impl BackgroundJob for MetadataEnrichmentJob {
         let mut seeded = 0usize;
         let mut batch = claim_batch()?;
         if batch.is_empty() {
-            seeded = self.seed_listening_backfill(ctx, store.as_ref(), &entity_types)?;
+            seeded = self.seed_listening_backfill(ctx, store, &entity_types)?;
             if seeded > 0 {
                 batch = claim_batch()?;
             }
@@ -777,15 +820,10 @@ impl BackgroundJob for MetadataEnrichmentJob {
             }
 
             let result = match provider.as_ref() {
-                Some(provider) => runtime.block_on(self.enrich_queue_item(
-                    ctx,
-                    store.as_ref(),
-                    provider.as_ref(),
-                    &item,
-                )),
-                None => {
-                    runtime.block_on(self.enrich_queue_item_without_llm(ctx, store.as_ref(), &item))
+                Some(provider) => {
+                    runtime.block_on(self.enrich_queue_item(ctx, store, provider.as_ref(), &item))
                 }
+                None => runtime.block_on(self.enrich_queue_item_without_llm(ctx, store, &item)),
             };
 
             match result {

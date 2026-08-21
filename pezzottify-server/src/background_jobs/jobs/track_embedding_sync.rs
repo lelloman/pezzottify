@@ -10,6 +10,7 @@ use crate::background_jobs::{
 };
 use crate::catalog_store::EntityEmbeddingUpsert;
 use crate::config::{AudioEmbeddingSpec, AudioEmbeddingsSettings};
+use crate::db_executor::DbPriority;
 use reqwest::blocking::{multipart, Client};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -71,9 +72,13 @@ impl TrackEmbeddingSyncJob {
 
         let mut missing = Vec::new();
         for spec in &self.settings.specs {
+            let track_id = track_id.to_owned();
+            let namespace = spec.namespace.clone();
             let existing = ctx
-                .catalog_store
-                .get_entity_embedding("track", track_id, &spec.namespace, false)
+                .catalog_db
+                .run_blocking(DbPriority::Background, move |store| {
+                    store.get_entity_embedding("track", &track_id, &namespace, false)
+                })
                 .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
             if existing.is_none() {
                 missing.push(spec.clone());
@@ -141,18 +146,20 @@ impl TrackEmbeddingSyncJob {
             "namespaces": namespaces,
         })));
 
-        let tracks = if force {
-            ctx.catalog_store
-                .list_available_track_ids_with_audio_uri(max_tracks, 0)
-        } else {
-            ctx.catalog_store
-                .list_available_tracks_missing_embeddings(&namespaces, max_tracks)
-        }
-        .map_err(|e| {
-            let msg = format!("Failed to select tracks for embedding sync: {e}");
-            audit.log_failed(&msg, None);
-            JobError::ExecutionFailed(msg)
-        })?;
+        let tracks = ctx
+            .catalog_db
+            .run_blocking(DbPriority::Background, move |store| {
+                if force {
+                    store.list_available_track_ids_with_audio_uri(max_tracks, 0)
+                } else {
+                    store.list_available_tracks_missing_embeddings(&namespaces, max_tracks)
+                }
+            })
+            .map_err(|e| {
+                let msg = format!("Failed to select tracks for embedding sync: {e}");
+                audit.log_failed(&msg, None);
+                JobError::ExecutionFailed(msg)
+            })?;
 
         let client = Client::builder()
             .timeout(Duration::from_secs(self.settings.request_timeout_secs))
@@ -223,7 +230,11 @@ impl TrackEmbeddingSyncJob {
                                 "info": response.model_info,
                             }),
                         };
-                        match ctx.catalog_store.upsert_entity_embedding(&upsert) {
+                        match ctx
+                            .catalog_db
+                            .run_blocking(DbPriority::Background, move |store| {
+                                store.upsert_entity_embedding(&upsert)
+                            }) {
                             Ok(_) => embeddings_stored += 1,
                             Err(e) => {
                                 failures += 1;

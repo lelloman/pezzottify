@@ -9,6 +9,7 @@ use crate::background_jobs::{
     JobAuditLogger,
 };
 use crate::config::CatalogAvailabilityStatsJobSettings;
+use crate::db_executor::DbPriority;
 use crate::search::HashedItemType;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -83,10 +84,14 @@ impl BackgroundJob for CatalogAvailabilityStatsJob {
             "startup_delay_minutes": self.startup_delay_minutes,
         })));
 
+        let cancellation_token = ctx.cancellation_token.clone();
         let refresh = match ctx
-            .catalog_store
-            .refresh_availability_and_stats_with_cancel(&|| ctx.is_cancelled())
-        {
+            .catalog_db
+            .run_blocking(DbPriority::Background, move |store| {
+                store.refresh_availability_and_stats_with_cancel(&|| {
+                    cancellation_token.is_cancelled()
+                })
+            }) {
             Ok(r) => r,
             Err(e) => {
                 if ctx.is_cancelled() {
@@ -110,7 +115,7 @@ impl BackgroundJob for CatalogAvailabilityStatsJob {
             + refresh.repaired.artists_updated)
             > 0
         {
-            if let Some(search_vault) = &ctx.search_vault {
+            if let Some(search_db) = &ctx.search_db {
                 let total_updates = refresh.track_updates.len()
                     + refresh.album_updates.len()
                     + refresh.artist_updates.len();
@@ -139,7 +144,14 @@ impl BackgroundJob for CatalogAvailabilityStatsJob {
                 }
 
                 if !updates.is_empty() {
-                    search_vault.update_availability(&updates);
+                    if let Err(error) =
+                        search_db.run_blocking(DbPriority::Background, move |search_vault| {
+                            search_vault.update_availability(&updates);
+                            Ok(())
+                        })
+                    {
+                        warn!("Failed to update search availability: {error}");
+                    }
                 } else {
                     warn!("Reconciliation reported repairs but did not provide per-item updates");
                 }
@@ -166,8 +178,10 @@ impl BackgroundJob for CatalogAvailabilityStatsJob {
         };
 
         if let Err(e) = ctx
-            .server_store
-            .set_state(Self::snapshot_state_key(), &snapshot_json)
+            .server_db
+            .run_blocking(DbPriority::Background, move |store| {
+                store.set_state(Self::snapshot_state_key(), &snapshot_json)
+            })
         {
             let msg = format!("Failed to persist availability snapshot: {}", e);
             audit.log_failed(&msg, None);

@@ -10,6 +10,7 @@ use crate::background_jobs::{
 };
 use crate::catalog_store::{AlbumAvailability, CatalogStore, ResolvedAlbum};
 use crate::config::FeaturedAlbumsJobSettings;
+use crate::db_executor::DbPriority;
 use crate::user::user_models::PopularAlbum;
 use anyhow::Context;
 use chrono::{Datelike, Duration as ChronoDuration, Utc};
@@ -77,7 +78,10 @@ impl FeaturedAlbumsJob {
     ) -> Result<FeaturedAlbumsSnapshot, JobError> {
         let week_key = Self::current_week_key();
         if !force {
-            match ctx.server_store.get_state(STATE_KEY) {
+            match ctx
+                .server_db
+                .run_blocking(DbPriority::Background, |store| store.get_state(STATE_KEY))
+            {
                 Ok(Some(raw)) => match serde_json::from_str::<FeaturedAlbumsSnapshot>(&raw) {
                     Ok(snapshot) if snapshot.week_key == week_key => {
                         info!(
@@ -104,9 +108,15 @@ impl FeaturedAlbumsJob {
                 "Failed to serialize featured albums snapshot: {err}"
             ))
         })?;
-        ctx.server_store.set_state(STATE_KEY, &raw).map_err(|err| {
-            JobError::ExecutionFailed(format!("Failed to store featured albums snapshot: {err}"))
-        })?;
+        ctx.server_db
+            .run_blocking(DbPriority::Background, move |store| {
+                store.set_state(STATE_KEY, &raw)
+            })
+            .map_err(|err| {
+                JobError::ExecutionFailed(format!(
+                    "Failed to store featured albums snapshot: {err}"
+                ))
+            })?;
         Ok(snapshot)
     }
 
@@ -171,8 +181,11 @@ impl FeaturedAlbumsJob {
         let end_date = parse_yyyymmdd(now)?;
         let limit = self.settings.popular_seed_album_count.max(1);
 
-        ctx.user_manager
-            .get_popular_content(ctx.catalog_store.as_ref(), start_date, end_date, limit, 0)
+        let user_manager = ctx.user_manager.clone();
+        ctx.catalog_db
+            .run_blocking(DbPriority::Background, move |catalog_store| {
+                user_manager.get_popular_content(catalog_store, start_date, end_date, limit, 0)
+            })
             .map(|content| content.albums)
             .map_err(|err| {
                 JobError::ExecutionFailed(format!("Failed to load popular seed albums: {err}"))
@@ -181,15 +194,32 @@ impl FeaturedAlbumsJob {
 
     fn album_play_counts(&self, ctx: &JobContext) -> Result<HashMap<String, u64>, JobError> {
         let track_counts = ctx
-            .user_store
-            .get_all_track_play_counts(ALL_TIME_START_DATE, ALL_TIME_END_DATE)
+            .user_db
+            .run_blocking(DbPriority::Background, |store| {
+                store.get_all_track_play_counts(ALL_TIME_START_DATE, ALL_TIME_END_DATE)
+            })
             .map_err(|err| {
                 JobError::ExecutionFailed(format!("Failed to load all-time play counts: {err}"))
             })?;
 
+        let track_ids = track_counts
+            .iter()
+            .map(|track| track.track_id.clone())
+            .collect::<Vec<_>>();
+        let album_ids = ctx
+            .catalog_db
+            .run_blocking(DbPriority::Background, move |store| {
+                Ok(track_ids
+                    .iter()
+                    .map(|track_id| store.get_track_album_id(track_id))
+                    .collect::<Vec<_>>())
+            })
+            .map_err(|err| {
+                JobError::ExecutionFailed(format!("Failed to map tracks to albums: {err}"))
+            })?;
         let mut album_counts = HashMap::new();
-        for track_count in track_counts {
-            if let Some(album_id) = ctx.catalog_store.get_track_album_id(&track_count.track_id) {
+        for (track_count, album_id) in track_counts.into_iter().zip(album_ids) {
+            if let Some(album_id) = album_id {
                 *album_counts.entry(album_id).or_insert(0) += track_count.play_count;
             }
         }
@@ -204,77 +234,77 @@ impl FeaturedAlbumsJob {
         play_counts: &HashMap<String, u64>,
         play_count_threshold: u64,
     ) -> Result<Vec<CandidateAlbum>, JobError> {
-        let mut candidates: HashMap<String, CandidateAlbum> = HashMap::new();
-
-        for seed in seeds {
-            if ctx.is_cancelled() {
-                return Err(JobError::Cancelled);
-            }
-            let Some(seed_embedding) = ctx
-                .catalog_store
-                .get_entity_embedding("album", &seed.id, DEFAULT_ALBUM_NAMESPACE, true)
-                .map_err(|err| {
-                    JobError::ExecutionFailed(format!(
-                        "Failed to load album embedding for {}: {err}",
-                        seed.id
-                    ))
-                })?
-            else {
-                continue;
-            };
-            let Some(seed_vector) = seed_embedding.vector else {
-                continue;
-            };
-
-            let results = ctx
-                .catalog_store
-                .search_entity_embeddings(
-                    DEFAULT_ALBUM_NAMESPACE,
-                    &seed_vector,
-                    Some("album"),
-                    self.settings.candidate_limit_per_seed,
-                )
-                .map_err(|err| {
-                    JobError::ExecutionFailed(format!(
-                        "Failed to search album embeddings for {}: {err}",
-                        seed.id
-                    ))
-                })?;
-
-            for result in results {
-                let album_id = result.entity_id;
-                if album_id == seed.id || popular_ids.contains(&album_id) {
-                    continue;
-                }
-                let play_count = play_counts.get(&album_id).copied().unwrap_or(0);
-                if play_count > play_count_threshold && play_count != 0 {
-                    continue;
-                }
-                let Some(candidate) = self.resolve_candidate(
-                    ctx.catalog_store.as_ref(),
-                    &album_id,
-                    play_count,
-                    result.score,
-                )?
-                else {
-                    continue;
-                };
-                candidates
-                    .entry(album_id)
-                    .and_modify(|existing| {
-                        if candidate.similarity > existing.similarity {
-                            existing.similarity = candidate.similarity;
+        let seeds = seeds.to_vec();
+        let popular_ids = popular_ids.clone();
+        let play_counts = play_counts.clone();
+        let candidate_limit = self.settings.candidate_limit_per_seed;
+        let cancellation_token = ctx.cancellation_token.clone();
+        let cancellation_check = cancellation_token.clone();
+        ctx.catalog_db
+            .run_blocking(DbPriority::Background, move |catalog_store| {
+                let mut candidates: HashMap<String, CandidateAlbum> = HashMap::new();
+                for seed in &seeds {
+                    if cancellation_token.is_cancelled() {
+                        return Err(JobError::Cancelled.into());
+                    }
+                    let Some(seed_embedding) = catalog_store.get_entity_embedding(
+                        "album",
+                        &seed.id,
+                        DEFAULT_ALBUM_NAMESPACE,
+                        true,
+                    )?
+                    else {
+                        continue;
+                    };
+                    let Some(seed_vector) = seed_embedding.vector else {
+                        continue;
+                    };
+                    let results = catalog_store.search_entity_embeddings(
+                        DEFAULT_ALBUM_NAMESPACE,
+                        &seed_vector,
+                        Some("album"),
+                        candidate_limit,
+                    )?;
+                    for result in results {
+                        let album_id = result.entity_id;
+                        if album_id == seed.id || popular_ids.contains(&album_id) {
+                            continue;
                         }
-                    })
-                    .or_insert(candidate);
-            }
-        }
-
-        Ok(candidates.into_values().collect())
+                        let play_count = play_counts.get(&album_id).copied().unwrap_or(0);
+                        if play_count > play_count_threshold && play_count != 0 {
+                            continue;
+                        }
+                        let Some(candidate) = Self::resolve_candidate(
+                            catalog_store,
+                            &album_id,
+                            play_count,
+                            result.score,
+                        )?
+                        else {
+                            continue;
+                        };
+                        candidates
+                            .entry(album_id)
+                            .and_modify(|existing| {
+                                if candidate.similarity > existing.similarity {
+                                    existing.similarity = candidate.similarity;
+                                }
+                            })
+                            .or_insert(candidate);
+                    }
+                }
+                Ok(candidates.into_values().collect())
+            })
+            .map_err(|err| {
+                if cancellation_check.is_cancelled() {
+                    JobError::Cancelled
+                } else {
+                    JobError::ExecutionFailed(err.to_string())
+                }
+            })
     }
 
     fn resolve_candidate(
-        &self,
         catalog_store: &dyn CatalogStore,
         album_id: &str,
         play_count: u64,

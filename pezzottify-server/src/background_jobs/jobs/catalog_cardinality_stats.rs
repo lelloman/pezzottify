@@ -5,6 +5,7 @@ use crate::background_jobs::{
     job::{BackgroundJob, JobError, JobSchedule, ShutdownBehavior},
     JobAuditLogger,
 };
+use crate::db_executor::DbPriority;
 use crate::server::metrics;
 use std::sync::Arc;
 use std::time::Instant;
@@ -42,9 +43,10 @@ impl BackgroundJob for CatalogCardinalityStatsJob {
         let is_cancelled: Arc<dyn Fn() -> bool + Send + Sync> =
             Arc::new(move || cancellation_token.is_cancelled());
         let stats = match ctx
-            .catalog_store
-            .rebuild_catalog_cardinality_stats(is_cancelled)
-        {
+            .catalog_db
+            .run_blocking(DbPriority::Background, move |store| {
+                store.rebuild_catalog_cardinality_stats(is_cancelled)
+            }) {
             Ok(stats) => stats,
             Err(error) if ctx.is_cancelled() || error.to_string() == "cancelled" => {
                 audit.log_failed("Cancelled", None);

@@ -14,6 +14,7 @@ use crate::catalog_store::{
 use crate::config::{
     AlbumEmbeddingAggregation, AlbumEmbeddingDerivationSpec, AlbumEmbeddingDerivationsSettings,
 };
+use crate::db_executor::DbPriority;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use std::path::PathBuf;
@@ -87,9 +88,13 @@ impl AlbumEmbeddingSyncJob {
     ) -> Result<Option<Vec<Vec<f32>>>, JobError> {
         let mut vectors = Vec::with_capacity(track_ids.len());
         for track_id in track_ids {
+            let track_id = track_id.clone();
+            let source_namespace = source_namespace.to_owned();
             let embedding = ctx
-                .catalog_store
-                .get_entity_embedding("track", track_id, source_namespace, true)
+                .catalog_db
+                .run_blocking(DbPriority::Background, move |store| {
+                    store.get_entity_embedding("track", &track_id, &source_namespace, true)
+                })
                 .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
             let Some(embedding) = embedding else {
                 return Ok(None);
@@ -187,9 +192,13 @@ impl AlbumEmbeddingSyncJob {
         force: bool,
     ) -> Result<SpecOutcome, JobError> {
         if !force {
+            let album_id = album_id.to_owned();
+            let target_namespace = spec.target_namespace.clone();
             let existing = ctx
-                .catalog_store
-                .get_entity_embedding("album", album_id, &spec.target_namespace, false)
+                .catalog_db
+                .run_blocking(DbPriority::Background, move |store| {
+                    store.get_entity_embedding("album", &album_id, &target_namespace, false)
+                })
                 .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
             if existing.is_some() {
                 return Ok(SpecOutcome::SkippedExisting);
@@ -209,17 +218,23 @@ impl AlbumEmbeddingSyncJob {
             metadata: Self::metadata(spec, track_ids, audio_uris),
             model: Self::model(spec),
         };
-        ctx.catalog_store
-            .upsert_entity_embedding(&upsert)
+        ctx.catalog_db
+            .run_blocking(DbPriority::Background, move |store| {
+                store.upsert_entity_embedding(&upsert)
+            })
             .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
         Ok(SpecOutcome::Stored)
     }
 
     fn has_all_targets(&self, ctx: &JobContext, album_id: &str) -> Result<bool, JobError> {
         for spec in &self.settings.specs {
+            let album_id = album_id.to_owned();
+            let target_namespace = spec.target_namespace.clone();
             let existing = ctx
-                .catalog_store
-                .get_entity_embedding("album", album_id, &spec.target_namespace, false)
+                .catalog_db
+                .run_blocking(DbPriority::Background, move |store| {
+                    store.get_entity_embedding("album", &album_id, &target_namespace, false)
+                })
                 .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
             if existing.is_none() {
                 return Ok(false);
@@ -273,16 +288,20 @@ impl AlbumEmbeddingSyncJob {
             None
         } else {
             match ctx
-                .server_store
-                .get_state(CURSOR_STATE_KEY)
+                .server_db
+                .run_blocking(DbPriority::Background, |store| {
+                    store.get_state(CURSOR_STATE_KEY)
+                })
                 .map_err(|e| JobError::ExecutionFailed(e.to_string()))?
             {
                 Some(value) => match value.parse::<i64>() {
                     Ok(rowid) if rowid >= 0 => Some(rowid),
                     _ => {
                         warn!("Discarding invalid album embedding cursor: {value}");
-                        ctx.server_store
-                            .delete_state(CURSOR_STATE_KEY)
+                        ctx.server_db
+                            .run_blocking(DbPriority::Background, |store| {
+                                store.delete_state(CURSOR_STATE_KEY)
+                            })
                             .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
                         None
                     }
@@ -317,15 +336,19 @@ impl AlbumEmbeddingSyncJob {
             let remaining_scan_budget = max_albums_scanned - albums_scanned;
             let fetch_limit = page_size.min(remaining_scan_budget);
             let albums = ctx
-                .catalog_store
-                .list_complete_album_tracklists_page(cursor, fetch_limit)
+                .catalog_db
+                .run_blocking(DbPriority::Background, move |store| {
+                    store.list_complete_album_tracklists_page(cursor, fetch_limit)
+                })
                 .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
             discovery_pages += 1;
 
             if albums.is_empty() {
                 if !force {
-                    ctx.server_store
-                        .delete_state(CURSOR_STATE_KEY)
+                    ctx.server_db
+                        .run_blocking(DbPriority::Background, |store| {
+                            store.delete_state(CURSOR_STATE_KEY)
+                        })
                         .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
                     cursor = None;
                     cursor_wrapped = true;
@@ -359,8 +382,10 @@ impl AlbumEmbeddingSyncJob {
                         albums_skipped_incomplete += 1;
                         cursor = Some(album_rowid);
                         if !force {
-                            ctx.server_store
-                                .set_state(CURSOR_STATE_KEY, &album_rowid.to_string())
+                            ctx.server_db
+                                .run_blocking(DbPriority::Background, move |store| {
+                                    store.set_state(CURSOR_STATE_KEY, &album_rowid.to_string())
+                                })
                                 .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
                         }
                         if albums_considered >= max_albums {
@@ -412,8 +437,10 @@ impl AlbumEmbeddingSyncJob {
 
                 cursor = Some(album_rowid);
                 if !force {
-                    ctx.server_store
-                        .set_state(CURSOR_STATE_KEY, &album_rowid.to_string())
+                    ctx.server_db
+                        .run_blocking(DbPriority::Background, move |store| {
+                            store.set_state(CURSOR_STATE_KEY, &album_rowid.to_string())
+                        })
                         .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
                 }
 
