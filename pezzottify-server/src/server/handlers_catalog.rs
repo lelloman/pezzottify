@@ -9,7 +9,7 @@ async fn home(session: Option<Session>, State(state): State<ServerState>) -> imp
 
 async fn get_artist(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     State(enrichment_store): State<OptionalEnrichmentStore>,
     Path(id): Path<String>,
@@ -21,12 +21,17 @@ async fn get_artist(
         indexer.touch_artist(&id);
     }
 
-    let catalog_store = Arc::clone(&catalog_store);
     let id = id.clone();
     let id_for_status = id.clone();
 
-    match tokio::task::spawn_blocking(move || catalog_store.get_resolved_artist_json(&id)).await {
-        Ok(Ok(Some(artist))) => {
+    match database
+        .catalog_read
+        .run(DbPriority::Interactive, move |catalog_store| {
+            catalog_store.get_resolved_artist_json(&id)
+        })
+        .await
+    {
+        Ok(Some(artist)) => {
             let artist =
                 attach_enrichment_status(artist, "artist", &id_for_status, &enrichment_store);
             Json(attach_artist_enrichment(
@@ -36,17 +41,16 @@ async fn get_artist(
             ))
             .into_response()
         }
-        Ok(Ok(None)) => {
+        Ok(None) => {
             ApiError::not_found("catalog_item_not_found", "Artist not found").into_response()
         }
-        Ok(Err(err)) => ApiError::internal("Failed to load artist", err).into_response(),
-        Err(err) => ApiError::internal("Artist read task failed", err).into_response(),
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
 async fn get_album(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     State(enrichment_store): State<OptionalEnrichmentStore>,
     Path(id): Path<String>,
@@ -56,28 +60,32 @@ async fn get_album(
         indexer.touch_album(&id);
     }
 
-    let catalog_store = Arc::clone(&catalog_store);
     let id = id.clone();
     let id_for_status = id.clone();
 
-    match tokio::task::spawn_blocking(move || catalog_store.get_album_json(&id)).await {
-        Ok(Ok(Some(album))) => Json(attach_album_enrichment(
+    match database
+        .catalog_read
+        .run(DbPriority::Interactive, move |catalog_store| {
+            catalog_store.get_album_json(&id)
+        })
+        .await
+    {
+        Ok(Some(album)) => Json(attach_album_enrichment(
             attach_enrichment_status(album, "album", &id_for_status, &enrichment_store),
             &id_for_status,
             &enrichment_store,
         ))
         .into_response(),
-        Ok(Ok(None)) => {
+        Ok(None) => {
             ApiError::not_found("catalog_item_not_found", "Album not found").into_response()
         }
-        Ok(Err(err)) => ApiError::internal("Failed to load album", err).into_response(),
-        Err(err) => ApiError::internal("Album read task failed", err).into_response(),
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
 async fn get_resolved_album(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     State(enrichment_store): State<OptionalEnrichmentStore>,
     Path(id): Path<String>,
@@ -87,28 +95,32 @@ async fn get_resolved_album(
         indexer.touch_album(&id);
     }
 
-    let catalog_store = Arc::clone(&catalog_store);
     let id = id.clone();
     let id_for_status = id.clone();
 
-    match tokio::task::spawn_blocking(move || catalog_store.get_resolved_album_json(&id)).await {
-        Ok(Ok(Some(album))) => Json(attach_album_enrichment(
+    match database
+        .catalog_read
+        .run(DbPriority::Interactive, move |catalog_store| {
+            catalog_store.get_resolved_album_json(&id)
+        })
+        .await
+    {
+        Ok(Some(album)) => Json(attach_album_enrichment(
             attach_enrichment_status(album, "album", &id_for_status, &enrichment_store),
             &id_for_status,
             &enrichment_store,
         ))
         .into_response(),
-        Ok(Ok(None)) => {
+        Ok(None) => {
             ApiError::not_found("catalog_item_not_found", "Album not found").into_response()
         }
-        Ok(Err(err)) => ApiError::internal("Failed to load resolved album", err).into_response(),
-        Err(err) => ApiError::internal("Resolved album read task failed", err).into_response(),
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
 async fn get_artist_discography(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     Path(id): Path<String>,
     Query(query): Query<DiscographyQuery>,
@@ -126,22 +138,20 @@ async fn get_artist_discography(
     };
     let appears_on = query.appears_on.unwrap_or(false);
 
-    let catalog_store = Arc::clone(&catalog_store);
     let id = id.clone();
 
-    match tokio::task::spawn_blocking(move || {
-        catalog_store.get_discography(&id, limit, offset, sort, appears_on)
-    })
-    .await
+    match database
+        .catalog_read
+        .run(DbPriority::Interactive, move |catalog_store| {
+            catalog_store.get_discography(&id, limit, offset, sort, appears_on)
+        })
+        .await
     {
-        Ok(Ok(Some(discography))) => Json(discography).into_response(),
-        Ok(Ok(None)) => {
+        Ok(Some(discography)) => Json(discography).into_response(),
+        Ok(None) => {
             ApiError::not_found("catalog_item_not_found", "Artist not found").into_response()
         }
-        Ok(Err(err)) => {
-            ApiError::internal("Failed to load artist discography", err).into_response()
-        }
-        Err(err) => ApiError::internal("Artist discography task failed", err).into_response(),
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
@@ -151,63 +161,64 @@ async fn get_artist_discography(
 
 async fn get_genres(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
 ) -> Response {
-    let catalog_store = Arc::clone(&catalog_store);
-
-    match tokio::task::spawn_blocking(move || catalog_store.get_genres_with_counts()).await {
-        Ok(Ok(genres)) => Json(genres).into_response(),
-        Ok(Err(err)) => ApiError::internal("Failed to load genres", err).into_response(),
-        Err(err) => ApiError::internal("Genre read task failed", err).into_response(),
+    match database
+        .catalog_read
+        .run(DbPriority::Interactive, |catalog_store| {
+            catalog_store.get_genres_with_counts()
+        })
+        .await
+    {
+        Ok(genres) => Json(genres).into_response(),
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
 async fn get_genre_tracks(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     Path(genre_name): Path<String>,
     Query(query): Query<GenreTracksQuery>,
 ) -> Response {
     let limit = query.limit.unwrap_or(20).min(100);
     let offset = query.offset.unwrap_or(0);
 
-    let catalog_store = Arc::clone(&catalog_store);
-
-    match tokio::task::spawn_blocking(move || {
-        catalog_store.get_tracks_by_genre(&genre_name, limit, offset)
-    })
-    .await
+    match database
+        .catalog_read
+        .run(DbPriority::Interactive, move |catalog_store| {
+            catalog_store.get_tracks_by_genre(&genre_name, limit, offset)
+        })
+        .await
     {
-        Ok(Ok(result)) => Json(result).into_response(),
-        Ok(Err(err)) => ApiError::internal("Failed to load genre tracks", err).into_response(),
-        Err(err) => ApiError::internal("Genre tracks task failed", err).into_response(),
+        Ok(result) => Json(result).into_response(),
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
 async fn get_genre_radio(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     Path(genre_name): Path<String>,
     Query(query): Query<GenreRadioQuery>,
 ) -> Response {
     let count = query.count.unwrap_or(50).min(200);
 
-    let catalog_store = Arc::clone(&catalog_store);
-
-    match tokio::task::spawn_blocking(move || {
-        catalog_store.get_random_tracks_by_genre(&genre_name, count)
-    })
-    .await
+    match database
+        .catalog_read
+        .run(DbPriority::Interactive, move |catalog_store| {
+            catalog_store.get_random_tracks_by_genre(&genre_name, count)
+        })
+        .await
     {
-        Ok(Ok(track_ids)) => Json(track_ids).into_response(),
-        Ok(Err(err)) => ApiError::internal("Failed to build genre radio", err).into_response(),
-        Err(err) => ApiError::internal("Genre radio task failed", err).into_response(),
+        Ok(track_ids) => Json(track_ids).into_response(),
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
 pub async fn get_track(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     State(enrichment_store): State<OptionalEnrichmentStore>,
     Path(id): Path<String>,
@@ -217,28 +228,32 @@ pub async fn get_track(
         indexer.touch_track(&id);
     }
 
-    let catalog_store = Arc::clone(&catalog_store);
     let id = id.clone();
     let id_for_status = id.clone();
 
-    match tokio::task::spawn_blocking(move || catalog_store.get_track_json(&id)).await {
-        Ok(Ok(Some(track))) => Json(attach_track_enrichment(
+    match database
+        .catalog_read
+        .run(DbPriority::Interactive, move |catalog_store| {
+            catalog_store.get_track_json(&id)
+        })
+        .await
+    {
+        Ok(Some(track)) => Json(attach_track_enrichment(
             attach_enrichment_status(track, "track", &id_for_status, &enrichment_store),
             &id_for_status,
             &enrichment_store,
         ))
         .into_response(),
-        Ok(Ok(None)) => {
+        Ok(None) => {
             ApiError::not_found("catalog_item_not_found", "Track not found").into_response()
         }
-        Ok(Err(err)) => ApiError::internal("Failed to load track", err).into_response(),
-        Err(err) => ApiError::internal("Track read task failed", err).into_response(),
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
 pub async fn get_resolved_track(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     State(enrichment_store): State<OptionalEnrichmentStore>,
     Path(id): Path<String>,
@@ -248,22 +263,26 @@ pub async fn get_resolved_track(
         indexer.touch_track(&id);
     }
 
-    let catalog_store = Arc::clone(&catalog_store);
     let id = id.clone();
     let id_for_status = id.clone();
 
-    match tokio::task::spawn_blocking(move || catalog_store.get_resolved_track_json(&id)).await {
-        Ok(Ok(Some(track))) => Json(attach_track_enrichment(
+    match database
+        .catalog_read
+        .run(DbPriority::Interactive, move |catalog_store| {
+            catalog_store.get_resolved_track_json(&id)
+        })
+        .await
+    {
+        Ok(Some(track)) => Json(attach_track_enrichment(
             attach_enrichment_status(track, "track", &id_for_status, &enrichment_store),
             &id_for_status,
             &enrichment_store,
         ))
         .into_response(),
-        Ok(Ok(None)) => {
+        Ok(None) => {
             ApiError::not_found("catalog_item_not_found", "Track not found").into_response()
         }
-        Ok(Err(err)) => ApiError::internal("Failed to load resolved track", err).into_response(),
-        Err(err) => ApiError::internal("Resolved track read task failed", err).into_response(),
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
@@ -271,7 +290,7 @@ pub async fn get_resolved_track(
 /// Returns per-item results with `{"ok": ...}` or `{"error": "..."}` wrapper.
 async fn post_batch_content(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     State(enrichment_store): State<OptionalEnrichmentStore>,
     Json(request): Json<BatchContentRequest>,
@@ -296,17 +315,50 @@ async fn post_batch_content(
             .into_response();
     }
 
+    for item in &request.artists {
+        if let Some(indexer) = &organic_indexer {
+            indexer.touch_artist(&item.id);
+        }
+    }
+    for item in &request.albums {
+        if let Some(indexer) = &organic_indexer {
+            indexer.touch_album(&item.id);
+        }
+    }
+    for item in &request.tracks {
+        if let Some(indexer) = &organic_indexer {
+            indexer.touch_track(&item.id);
+        }
+    }
+
+    match database
+        .catalog_read
+        .run(DbPriority::Interactive, move |catalog_store| {
+            Ok(build_batch_content(
+                catalog_store,
+                &enrichment_store,
+                request,
+            ))
+        })
+        .await
+    {
+        Ok(response) => Json(response).into_response(),
+        Err(err) => ApiError::from(err).into_response(),
+    }
+}
+
+fn build_batch_content(
+    catalog_store: &dyn CatalogStore,
+    enrichment_store: &OptionalEnrichmentStore,
+    request: BatchContentRequest,
+) -> BatchContentResponse {
     let mut response = BatchContentResponse {
         artists: std::collections::HashMap::with_capacity(request.artists.len()),
         albums: std::collections::HashMap::with_capacity(request.albums.len()),
         tracks: std::collections::HashMap::with_capacity(request.tracks.len()),
     };
 
-    // Fetch artists
     for item in request.artists {
-        if let Some(indexer) = &organic_indexer {
-            indexer.touch_artist(&item.id);
-        }
 
         let result = if item.resolved {
             catalog_store.get_resolved_artist_json(&item.id)
@@ -317,9 +369,9 @@ async fn post_batch_content(
         let batch_result = match result {
             Ok(Some(data)) => {
                 let data = attach_artist_enrichment(
-                    attach_enrichment_status(data, "artist", &item.id, &enrichment_store),
+                    attach_enrichment_status(data, "artist", &item.id, enrichment_store),
                     &item.id,
-                    &enrichment_store,
+                    enrichment_store,
                 );
                 BatchItemResult::Ok { ok: data }
             }
@@ -336,12 +388,7 @@ async fn post_batch_content(
         response.artists.insert(item.id, batch_result);
     }
 
-    // Fetch albums
     for item in request.albums {
-        if let Some(indexer) = &organic_indexer {
-            indexer.touch_album(&item.id);
-        }
-
         let result = if item.resolved {
             catalog_store.get_resolved_album_json(&item.id)
         } else {
@@ -351,9 +398,9 @@ async fn post_batch_content(
         let batch_result = match result {
             Ok(Some(data)) => {
                 let data = attach_album_enrichment(
-                    attach_enrichment_status(data, "album", &item.id, &enrichment_store),
+                    attach_enrichment_status(data, "album", &item.id, enrichment_store),
                     &item.id,
-                    &enrichment_store,
+                    enrichment_store,
                 );
                 BatchItemResult::Ok { ok: data }
             }
@@ -370,12 +417,7 @@ async fn post_batch_content(
         response.albums.insert(item.id, batch_result);
     }
 
-    // Fetch tracks
     for item in request.tracks {
-        if let Some(indexer) = &organic_indexer {
-            indexer.touch_track(&item.id);
-        }
-
         let result = if item.resolved {
             catalog_store.get_resolved_track_json(&item.id)
         } else {
@@ -385,9 +427,9 @@ async fn post_batch_content(
         let batch_result = match result {
             Ok(Some(data)) => {
                 let data = attach_track_enrichment(
-                    attach_enrichment_status(data, "track", &item.id, &enrichment_store),
+                    attach_enrichment_status(data, "track", &item.id, enrichment_store),
                     &item.id,
-                    &enrichment_store,
+                    enrichment_store,
                 );
                 BatchItemResult::Ok { ok: data }
             }
@@ -404,12 +446,13 @@ async fn post_batch_content(
         response.tracks.insert(item.id, batch_result);
     }
 
-    Json(response).into_response()
+    response
 }
 
 async fn get_image(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     State(http_client): State<HttpClient>,
     Path(id): Path<String>,
 ) -> Response {
@@ -421,15 +464,22 @@ async fn get_image(
     }
 
     // Image not cached locally - try to fetch from external URL
-    let image_url = match catalog_store.get_item_image_url(&id) {
+    let image_id = id.clone();
+    let image_url = match database
+        .catalog_read
+        .run(DbPriority::Interactive, move |catalog_store| {
+            catalog_store.get_item_image_url(&image_id)
+        })
+        .await
+    {
         Ok(Some(url)) => url,
         Ok(None) => {
             debug!("No image URL found for item: {}", id);
             return StatusCode::NOT_FOUND.into_response();
         }
-        Err(e) => {
-            error!("Failed to query image URL for {}: {}", id, e);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        Err(err) => {
+            error!("Failed to query image URL for {}: {}", id, err);
+            return ApiError::from(err).into_response();
         }
     };
 
@@ -935,63 +985,77 @@ struct TrackSummary {
 /// GET /v1/content/whatsnew - List recent catalog updates
 async fn get_whats_new(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    State(server_store): State<GuardedServerStore>,
+    State(database): State<DatabaseHandles>,
     Query(query): Query<WhatsNewQuery>,
 ) -> Response {
     let limit = query.limit.min(50);
 
-    let batches = match server_store.list_whatsnew_batches(limit) {
-        Ok(b) => b,
-        Err(e) => {
-            return ApiError::internal("Failed to load What's New batches", e).into_response();
-        }
-    };
-
-    let mut response_batches = Vec::new();
-    for batch in batches {
-        let album_ids = match server_store.get_whatsnew_batch_album_ids(&batch.id) {
-            Ok(ids) => ids,
-            Err(e) => {
-                warn!(
-                    "Failed to get album IDs for What's New batch {}: {}",
-                    batch.id, e
-                );
-                continue;
-            }
-        };
-
-        // Enrich with album names from catalog
-        let albums: Vec<EntityRef> = album_ids
-            .iter()
-            .filter_map(|id| {
-                catalog_store.get_album_json(id).ok().flatten().map(|json| {
-                    let name = json
-                        .get("name")
-                        .and_then(|n| n.as_str())
-                        .unwrap_or("Unknown Album");
-                    EntityRef {
-                        id: id.clone(),
-                        name: name.to_string(),
+    let batches = match database
+        .server
+        .run(DbPriority::Interactive, move |server_store| {
+            let batches = server_store.list_whatsnew_batches(limit)?;
+            Ok(batches
+                .into_iter()
+                .filter_map(|batch| match server_store.get_whatsnew_batch_album_ids(&batch.id) {
+                    Ok(album_ids) => Some((batch, album_ids)),
+                    Err(error) => {
+                        warn!(
+                            "Failed to get album IDs for What's New batch {}: {}",
+                            batch.id, error
+                        );
+                        None
                     }
                 })
-            })
-            .collect();
+                .collect::<Vec<_>>())
+        })
+        .await
+    {
+        Ok(batches) => batches,
+        Err(err) => return ApiError::from(err).into_response(),
+    };
 
-        response_batches.push(WhatsNewBatchResponse {
-            id: batch.id,
-            name: None, // Clients derive from closed_at
-            description: None,
-            closed_at: batch.closed_at,
-            summary: BatchSummary {
-                albums: EntitySummary {
-                    added: albums,
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-        });
-    }
+    let response_batches = match database
+        .catalog_read
+        .run(DbPriority::Interactive, move |catalog_store| {
+            Ok(batches
+                .into_iter()
+                .map(|(batch, album_ids)| {
+                    let albums = album_ids
+                        .iter()
+                        .filter_map(|id| {
+                            catalog_store.get_album_json(id).ok().flatten().map(|json| {
+                                let name = json
+                                    .get("name")
+                                    .and_then(|name| name.as_str())
+                                    .unwrap_or("Unknown Album");
+                                EntityRef {
+                                    id: id.clone(),
+                                    name: name.to_string(),
+                                }
+                            })
+                        })
+                        .collect();
+                    WhatsNewBatchResponse {
+                        id: batch.id,
+                        name: None,
+                        description: None,
+                        closed_at: batch.closed_at,
+                        summary: BatchSummary {
+                            albums: EntitySummary {
+                                added: albums,
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        },
+                    }
+                })
+                .collect())
+        })
+        .await
+    {
+        Ok(batches) => batches,
+        Err(err) => return ApiError::from(err).into_response(),
+    };
 
     Json(WhatsNewResponse {
         batches: response_batches,
@@ -1005,7 +1069,7 @@ async fn get_whats_new(
 async fn get_popular_content(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Query(query): Query<PopularContentQuery>,
 ) -> Response {
     use std::time::SystemTime;
@@ -1047,13 +1111,19 @@ async fn get_popular_content(
         start_date, end_date, albums_limit, artists_limit
     );
 
-    match user_manager.get_popular_content(
-        catalog_store.as_ref(),
-        start_date,
-        end_date,
-        albums_limit,
-        artists_limit,
-    ) {
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |user_manager| {
+            user_manager.get_popular_content(
+                catalog_store.as_ref(),
+                start_date,
+                end_date,
+                albums_limit,
+                artists_limit,
+            )
+        })
+        .await
+    {
         Ok(content) => {
             info!(
                 "get_popular_content: returning {} albums, {} artists",
@@ -1062,21 +1132,28 @@ async fn get_popular_content(
             );
             Json(content).into_response()
         }
-        Err(err) => {
+        Err(crate::db_executor::DbRunError::Store(err)) => {
             error!("Error getting popular content: {}", err);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
 /// Get the current weekly featured album discovery snapshot.
 async fn get_featured_albums(
     _session: Session,
-    State(server_store): State<GuardedServerStore>,
+    State(database): State<DatabaseHandles>,
     Query(query): Query<FeaturedAlbumsQuery>,
 ) -> Response {
     let limit = query.limit.unwrap_or(20).clamp(1, 50);
-    let snapshot = match server_store.get_state(FeaturedAlbumsJob::state_key()) {
+    let state = database
+        .server
+        .run(DbPriority::Interactive, |server_store| {
+            server_store.get_state(FeaturedAlbumsJob::state_key())
+        })
+        .await;
+    let snapshot = match state {
         Ok(Some(raw)) => match serde_json::from_str::<FeaturedAlbumsSnapshot>(&raw) {
             Ok(mut snapshot) => {
                 snapshot.albums.truncate(limit);
@@ -1101,10 +1178,11 @@ async fn get_featured_albums(
             hero_index: 0,
             albums: Vec::new(),
         },
-        Err(err) => {
+        Err(crate::db_executor::DbRunError::Store(err)) => {
             error!("Failed to read featured albums snapshot: {}", err);
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
+        Err(err) => return ApiError::from(err).into_response(),
     };
 
     let mut response = Json(snapshot).into_response();
@@ -1118,18 +1196,25 @@ async fn get_featured_albums(
 /// Get latest persisted catalog availability statistics snapshot.
 async fn get_catalog_stats_snapshot(
     _session: Session,
-    State(server_store): State<GuardedServerStore>,
+    State(database): State<DatabaseHandles>,
 ) -> Response {
     let key = CatalogAvailabilityStatsJob::snapshot_state_key();
-    let Some(raw) = (match server_store.get_state(key) {
+    let state = database
+        .server
+        .run(DbPriority::Interactive, move |server_store| {
+            server_store.get_state(key)
+        })
+        .await;
+    let Some(raw) = (match state {
         Ok(v) => v,
-        Err(err) => {
+        Err(crate::db_executor::DbRunError::Store(err)) => {
             error!(
                 "Failed to read catalog stats snapshot from server store: {}",
                 err
             );
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
+        Err(err) => return ApiError::from(err).into_response(),
     }) else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,

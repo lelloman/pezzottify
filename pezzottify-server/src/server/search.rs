@@ -1,6 +1,6 @@
 //! Search API routes
 
-use crate::catalog_store::CatalogStore;
+use crate::db_executor::{DbPriority, DbRunError};
 use crate::search::resolve;
 use crate::search::streaming::{SearchSection, StreamingSearchPipeline};
 use crate::search::{
@@ -12,17 +12,17 @@ use axum::{
     http::StatusCode,
     response::{
         sse::{Event, KeepAlive, Sse},
-        IntoResponse,
+        IntoResponse, Response,
     },
     routing::{get, post, put},
     Json, Router,
 };
-use futures::stream::{self, Stream};
+use futures::stream;
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
-use std::sync::Arc;
 use std::time::Duration;
 
+use super::api_error::ApiError;
 use super::session::Session;
 use super::state::ServerState;
 
@@ -66,18 +66,6 @@ struct SearchBody {
     pub search_mode: SearchMode,
 }
 
-fn resolve_search_results(
-    catalog_store: &Arc<dyn CatalogStore>,
-    results: Vec<SearchResult>,
-) -> Vec<ResolvedSearchResult> {
-    results
-        .iter()
-        .filter_map(|result| {
-            resolve::resolve_to_result(catalog_store.as_ref(), &result.item_id, result.item_type)
-        })
-        .collect()
-}
-
 enum SearchResponse {
     Resolved(Json<Vec<ResolvedSearchResult>>),
     Raw(Json<Vec<SearchResult>>),
@@ -105,14 +93,23 @@ fn run_search(
     }
 }
 
-fn get_relevance_filter(server_state: &ServerState) -> RelevanceFilterConfig {
-    server_state
-        .server_store
-        .get_state(RELEVANCE_FILTER_CONFIG_KEY)
-        .ok()
-        .flatten()
-        .and_then(|json| RelevanceFilterConfig::from_json(&json).ok())
-        .unwrap_or_default()
+async fn get_relevance_filter(
+    server_state: &ServerState,
+) -> Result<RelevanceFilterConfig, DbRunError> {
+    match server_state
+        .database
+        .server
+        .run(DbPriority::Interactive, |server_store| {
+            server_store.get_state(RELEVANCE_FILTER_CONFIG_KEY)
+        })
+        .await
+    {
+        Ok(json) => Ok(json
+            .and_then(|json| RelevanceFilterConfig::from_json(&json).ok())
+            .unwrap_or_default()),
+        Err(DbRunError::Store(_)) => Ok(RelevanceFilterConfig::default()),
+        Err(err) => Err(err),
+    }
 }
 
 /// Filter resolved search results by availability
@@ -134,27 +131,6 @@ fn is_result_available(result: &ResolvedSearchResult) -> bool {
         ResolvedSearchResult::Album(album) => album.availability != "missing",
         ResolvedSearchResult::Artist(artist) => artist.available,
     }
-}
-
-/// Search with availability filtering using the denormalized availability index.
-/// This is much more efficient than the old batch post-filtering approach.
-fn search_with_availability_filter(
-    search_vault: &dyn SearchVault,
-    _catalog_store: &Arc<dyn CatalogStore>, // No longer needed for filtering
-    relevance_filter: &RelevanceFilterConfig,
-    query: &str,
-    limit: usize,
-    filters: Option<Vec<HashedItemType>>,
-    mode: SearchMode,
-) -> Vec<SearchResult> {
-    // Use availability-aware search that filters at query time.
-    let results = match mode {
-        SearchMode::Strict => search_vault.search_with_availability(query, limit, filters, true),
-        SearchMode::Expanded => {
-            search_vault.search_expanded_with_availability(query, limit, filters, true)
-        }
-    };
-    relevance_filter.filter(results)
 }
 
 /// Filter streaming search sections by availability
@@ -264,7 +240,7 @@ async fn search(
     _session: Session,
     State(server_state): State<ServerState>,
     Json(payload): Json<SearchBody>,
-) -> impl IntoResponse {
+) -> Response {
     let limit = payload.limit.unwrap_or(30).min(100); // Cap at 100 max
     let filters: Option<Vec<HashedItemType>> = payload.filters.map(|v| {
         v.iter()
@@ -276,50 +252,91 @@ async fn search(
             .collect()
     });
 
-    let relevance_filter = get_relevance_filter(&server_state);
+    let relevance_filter = match get_relevance_filter(&server_state).await {
+        Ok(filter) => filter,
+        Err(err) => return ApiError::from(err).into_response(),
+    };
 
     if payload.resolve {
         // For resolved results, fetch more upfront since we need to resolve anyway
-        let search_results = run_search(
-            server_state.search_vault.as_ref(),
-            payload.query.as_str(),
-            limit,
-            filters,
-            payload.search_mode,
-        );
+        let query = payload.query;
+        let mode = payload.search_mode;
+        let search_results = match server_state
+            .database
+            .search_read
+            .run(DbPriority::Interactive, move |search_vault| {
+                Ok(run_search(search_vault, &query, limit, filters, mode))
+            })
+            .await
+        {
+            Ok(results) => results,
+            Err(err) => return ApiError::from(err).into_response(),
+        };
         let filtered_results = relevance_filter.filter(search_results);
 
-        let mut resolved = resolve_search_results(&server_state.catalog_store, filtered_results);
+        let mut resolved = match server_state
+            .database
+            .catalog_read
+            .run(DbPriority::Interactive, move |catalog_store| {
+                Ok(filtered_results
+                    .iter()
+                    .filter_map(|result| {
+                        resolve::resolve_to_result(catalog_store, &result.item_id, result.item_type)
+                    })
+                    .collect())
+            })
+            .await
+        {
+            Ok(results) => results,
+            Err(err) => return ApiError::from(err).into_response(),
+        };
 
         // Apply availability filter if requested
         if payload.exclude_unavailable {
             resolved = filter_by_availability(resolved);
         }
 
-        SearchResponse::Resolved(Json(resolved))
+        SearchResponse::Resolved(Json(resolved)).into_response()
     } else if payload.exclude_unavailable {
         // Use streaming approach to find enough available results
-        let results = search_with_availability_filter(
-            server_state.search_vault.as_ref(),
-            &server_state.catalog_store,
-            &relevance_filter,
-            &payload.query,
-            limit,
-            filters,
-            payload.search_mode,
-        );
-        SearchResponse::Raw(Json(results))
+        let query = payload.query;
+        let mode = payload.search_mode;
+        let results = match server_state
+            .database
+            .search_read
+            .run(DbPriority::Interactive, move |search_vault| {
+                Ok(match mode {
+                    SearchMode::Strict => {
+                        search_vault.search_with_availability(&query, limit, filters, true)
+                    }
+                    SearchMode::Expanded => {
+                        search_vault.search_expanded_with_availability(&query, limit, filters, true)
+                    }
+                })
+            })
+            .await
+        {
+            Ok(results) => relevance_filter.filter(results),
+            Err(err) => return ApiError::from(err).into_response(),
+        };
+        SearchResponse::Raw(Json(results)).into_response()
     } else {
         // No availability filter - simple search
-        let search_results = run_search(
-            server_state.search_vault.as_ref(),
-            payload.query.as_str(),
-            limit,
-            filters,
-            payload.search_mode,
-        );
+        let query = payload.query;
+        let mode = payload.search_mode;
+        let search_results = match server_state
+            .database
+            .search_read
+            .run(DbPriority::Interactive, move |search_vault| {
+                Ok(run_search(search_vault, &query, limit, filters, mode))
+            })
+            .await
+        {
+            Ok(results) => results,
+            Err(err) => return ApiError::from(err).into_response(),
+        };
         let filtered_results = relevance_filter.filter(search_results);
-        SearchResponse::Raw(Json(filtered_results))
+        SearchResponse::Raw(Json(filtered_results)).into_response()
     }
 }
 
@@ -343,28 +360,42 @@ async fn streaming_search(
     _session: Session,
     State(server_state): State<ServerState>,
     Query(params): Query<StreamingSearchQuery>,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+) -> Response {
     // Run organic search first
     let max_results = server_state.config.streaming_search.top_results_limit
         + server_state.config.streaming_search.other_results_limit
         + 50;
-    let search_results = run_search(
-        server_state.search_vault.as_ref(),
-        &params.q,
-        max_results,
-        None,
-        params.search_mode,
-    );
+    let query = params.q.clone();
+    let mode = params.search_mode;
+    let search_results = match server_state
+        .database
+        .search_read
+        .run(DbPriority::Interactive, move |search_vault| {
+            Ok(run_search(search_vault, &query, max_results, None, mode))
+        })
+        .await
+    {
+        Ok(results) => results,
+        Err(err) => return ApiError::from(err).into_response(),
+    };
 
     // Build the pipeline with config from server state
-    let pipeline = StreamingSearchPipeline::new(
-        server_state.catalog_store.as_ref(),
-        server_state.user_manager.as_ref(),
-        server_state.config.streaming_search.clone(),
-    );
-
-    // Execute the pipeline with search results
-    let sections = pipeline.execute(&params.q, search_results);
+    let pipeline_config = server_state.config.streaming_search.clone();
+    let user_manager = server_state.user_manager.clone();
+    let query = params.q.clone();
+    let sections = match server_state
+        .database
+        .catalog_read
+        .run(DbPriority::Interactive, move |catalog_store| {
+            let pipeline =
+                StreamingSearchPipeline::new(catalog_store, user_manager.as_ref(), pipeline_config);
+            Ok(pipeline.execute(&query, search_results))
+        })
+        .await
+    {
+        Ok(sections) => sections,
+        Err(err) => return ApiError::from(err).into_response(),
+    };
 
     // Apply availability filter if requested
     let sections = if params.exclude_unavailable {
@@ -383,9 +414,11 @@ async fn streaming_search(
         .collect();
 
     // Create a stream from the collected events
-    let stream = stream::iter(events.into_iter().map(Ok));
+    let stream = stream::iter(events.into_iter().map(Ok::<_, Infallible>));
 
-    Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
+    Sse::new(stream)
+        .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
+        .into_response()
 }
 
 pub fn make_search_routes(state: ServerState) -> Router {
@@ -409,13 +442,17 @@ struct RelevanceFilterResponse {
 async fn admin_get_relevance_filter(
     _session: Session,
     State(server_state): State<ServerState>,
-) -> impl IntoResponse {
-    let config = get_relevance_filter(&server_state);
+) -> Response {
+    let config = match get_relevance_filter(&server_state).await {
+        Ok(config) => config,
+        Err(err) => return ApiError::from(err).into_response(),
+    };
     let config_json = config.to_json();
     Json(RelevanceFilterResponse {
         config,
         config_json,
     })
+    .into_response()
 }
 
 /// PUT /admin/search/relevance-filter - Update relevance filter configuration
@@ -423,11 +460,16 @@ async fn admin_set_relevance_filter(
     _session: Session,
     State(server_state): State<ServerState>,
     Json(new_config): Json<RelevanceFilterConfig>,
-) -> impl IntoResponse {
+) -> Response {
     let json = new_config.to_json();
+    let stored_json = json.clone();
     match server_state
-        .server_store
-        .set_state(RELEVANCE_FILTER_CONFIG_KEY, &json)
+        .database
+        .server
+        .run(DbPriority::Interactive, move |server_store| {
+            server_store.set_state(RELEVANCE_FILTER_CONFIG_KEY, &stored_json)
+        })
+        .await
     {
         Ok(()) => (
             StatusCode::OK,
@@ -437,11 +479,12 @@ async fn admin_set_relevance_filter(
             }),
         )
             .into_response(),
-        Err(e) => (
+        Err(DbRunError::Store(e)) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": format!("Failed to save config: {}", e)})),
         )
             .into_response(),
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 

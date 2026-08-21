@@ -1,7 +1,6 @@
 //! Recommendation routes for smart continuation and radio playback.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 
 use axum::{
     extract::{Path, Query, State},
@@ -16,6 +15,7 @@ use tracing::error;
 
 use crate::catalog_store::{CatalogStore, ResolvedTrack, TrackAvailability};
 use crate::config::AudioEmbeddingsSettings;
+use crate::db_executor::{DbPriority, DbRunError};
 
 use super::api_error::ApiError;
 use super::session::Session;
@@ -207,27 +207,28 @@ async fn post_continuation_recommendations(
     Json(body): Json<ContinuationRequest>,
 ) -> Response {
     let count = body.count.unwrap_or(1).clamp(1, 10);
-    let catalog_store = Arc::clone(&state.catalog_store);
+    let catalog = state.database.catalog_read.clone();
     let namespace = track_namespace(state.config.audio_embeddings.as_ref());
 
-    match tokio::task::spawn_blocking(move || {
-        let seed = weighted_track_vector(
-            catalog_store.as_ref(),
-            &namespace,
-            &body.context_track_ids,
-            CONTINUATION_CONTEXT_LIMIT,
-        )?;
-        let Some(seed) = seed else {
-            return Ok(Vec::new());
-        };
+    match catalog
+        .run(DbPriority::Interactive, move |catalog_store| {
+            let seed = weighted_track_vector(
+                catalog_store,
+                &namespace,
+                &body.context_track_ids,
+                CONTINUATION_CONTEXT_LIMIT,
+            )?;
+            let Some(seed) = seed else {
+                return Ok(Vec::new());
+            };
 
-        let exclude = body.exclude_track_ids.into_iter().collect::<HashSet<_>>();
-        recommend_tracks(catalog_store.as_ref(), &namespace, &seed, count, &exclude)
-    })
-    .await
+            let exclude = body.exclude_track_ids.into_iter().collect::<HashSet<_>>();
+            recommend_tracks(catalog_store, &namespace, &seed, count, &exclude)
+        })
+        .await
     {
-        Ok(Ok(track_ids)) => no_store_json(TrackIdsResponse { track_ids }),
-        Ok(Err(err)) => {
+        Ok(track_ids) => no_store_json(TrackIdsResponse { track_ids }),
+        Err(DbRunError::Store(err)) => {
             error!("Error generating continuation recommendations: {}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -235,11 +236,7 @@ async fn post_continuation_recommendations(
             )
                 .into_response()
         }
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Internal server error".to_string(),
-        )
-            .into_response(),
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
@@ -257,27 +254,33 @@ async fn get_radio(
         .into_response();
     }
     let count = query.count.unwrap_or(50).clamp(1, 200);
-    let catalog_store = Arc::clone(&state.catalog_store);
+    let catalog = state.database.catalog_read.clone();
     let namespace = track_namespace(state.config.audio_embeddings.as_ref());
     let album_namespace = album_namespace_for_track_namespace(&namespace);
 
-    match tokio::task::spawn_blocking(move || match entity_type.as_str() {
-        "track" => track_radio(catalog_store.as_ref(), &namespace, &entity_id, count),
-        "album" => album_radio(
-            catalog_store.as_ref(),
-            &namespace,
-            &album_namespace,
-            &entity_id,
-            count,
-        ),
-        "artist" => artist_radio(catalog_store.as_ref(), &namespace, &entity_id, count),
-        _ => unreachable!("entity type was validated before spawning"),
-    })
-    .await
+    match catalog
+        .run(
+            DbPriority::Interactive,
+            move |catalog_store| match entity_type.as_str() {
+                "track" => track_radio(catalog_store, &namespace, &entity_id, count),
+                "album" => album_radio(
+                    catalog_store,
+                    &namespace,
+                    &album_namespace,
+                    &entity_id,
+                    count,
+                ),
+                "artist" => artist_radio(catalog_store, &namespace, &entity_id, count),
+                _ => unreachable!("entity type was validated before spawning"),
+            },
+        )
+        .await
     {
-        Ok(Ok(track_ids)) => no_store_json(TrackIdsResponse { track_ids }),
-        Ok(Err(err)) => ApiError::internal("Failed to generate radio", err).into_response(),
-        Err(err) => ApiError::internal("Radio worker task failed", err).into_response(),
+        Ok(track_ids) => no_store_json(TrackIdsResponse { track_ids }),
+        Err(DbRunError::Store(err)) => {
+            ApiError::internal("Failed to generate radio", err).into_response()
+        }
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
@@ -292,16 +295,17 @@ async fn post_radio_build(
     State(state): State<ServerState>,
     Json(body): Json<RadioBuildRequest>,
 ) -> Response {
-    let catalog_store = Arc::clone(&state.catalog_store);
+    let catalog = state.database.catalog_read.clone();
     let settings = state.config.audio_embeddings.clone();
 
-    match tokio::task::spawn_blocking(move || {
-        build_radio(catalog_store.as_ref(), settings.as_ref(), body)
-    })
-    .await
+    match catalog
+        .run(DbPriority::Interactive, move |catalog_store| {
+            build_radio(catalog_store, settings.as_ref(), body)
+        })
+        .await
     {
-        Ok(Ok(track_ids)) => no_store_json(TrackIdsResponse { track_ids }),
-        Ok(Err(err)) => {
+        Ok(track_ids) => no_store_json(TrackIdsResponse { track_ids }),
+        Err(DbRunError::Store(err)) => {
             let status = if err.to_string().starts_with("invalid radio request:") {
                 StatusCode::BAD_REQUEST
             } else {
@@ -310,11 +314,7 @@ async fn post_radio_build(
             error!("Error building advanced radio: {}", err);
             (status, err.to_string()).into_response()
         }
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Internal server error".to_string(),
-        )
-            .into_response(),
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
