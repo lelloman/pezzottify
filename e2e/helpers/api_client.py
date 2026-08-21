@@ -172,6 +172,31 @@ class CatalogApiClient:
             resp.raise_for_status()
             return await resp.json(content_type=None)
 
+    async def continuation_recommendations(
+        self, context_track_ids: list[str], count: int = 1
+    ) -> dict:
+        session = await self._ensure_session()
+        async with session.post(
+            f"{self.base_url}/v1/content/recommendations/continuation",
+            json={
+                "context_track_ids": context_track_ids,
+                "exclude_track_ids": [],
+                "count": count,
+            },
+            headers=self._csrf_headers(),
+        ) as resp:
+            resp.raise_for_status()
+            return await resp.json(content_type=None)
+
+    async def radio(self, entity_type: str, entity_id: str, count: int = 10) -> dict:
+        session = await self._ensure_session()
+        async with session.get(
+            f"{self.base_url}/v1/content/radio/{entity_type}/{entity_id}",
+            params={"count": count},
+        ) as resp:
+            resp.raise_for_status()
+            return await resp.json(content_type=None)
+
     async def get_session(self) -> dict:
         session = await self._ensure_session()
         async with session.get(

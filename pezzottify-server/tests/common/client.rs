@@ -268,6 +268,40 @@ impl TestClient {
             .expect("Get resolved track request failed")
     }
 
+    /// POST /v1/content/recommendations/continuation
+    pub async fn get_continuation_recommendations(
+        &self,
+        context_track_ids: Vec<&str>,
+        exclude_track_ids: Vec<&str>,
+        count: usize,
+    ) -> Response {
+        self.client
+            .post(format!(
+                "{}/v1/content/recommendations/continuation",
+                self.base_url
+            ))
+            .json(&json!({
+                "context_track_ids": context_track_ids,
+                "exclude_track_ids": exclude_track_ids,
+                "count": count,
+            }))
+            .send()
+            .await
+            .expect("Continuation recommendation request failed")
+    }
+
+    /// GET /v1/content/radio/{entity_type}/{entity_id}
+    pub async fn get_radio(&self, entity_type: &str, entity_id: &str, count: usize) -> Response {
+        self.client
+            .get(format!(
+                "{}/v1/content/radio/{}/{}?count={}",
+                self.base_url, entity_type, entity_id, count
+            ))
+            .send()
+            .await
+            .expect("Radio request failed")
+    }
+
     /// POST /v1/content/batch - Batch fetch multiple artists, albums, and tracks
     pub async fn post_batch_content(&self, body: serde_json::Value) -> Response {
         self.client
