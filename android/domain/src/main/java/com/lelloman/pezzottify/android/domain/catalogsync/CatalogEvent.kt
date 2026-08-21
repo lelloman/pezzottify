@@ -84,4 +84,12 @@ data class CatalogSyncResponse(
     /** Current (highest) sequence number. */
     @SerialName("current_seq")
     val currentSeq: Long,
+
+    /** Whether another bounded page is available. */
+    @SerialName("has_more")
+    val hasMore: Boolean = false,
+
+    /** Cursor to use for the next request. Legacy responses complete at currentSeq. */
+    @SerialName("next_since")
+    val nextSince: Long = currentSeq,
 )
