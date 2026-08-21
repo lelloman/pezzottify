@@ -92,6 +92,35 @@ struct CatalogSyncQuery {
 struct CatalogSyncResponse {
     events: Vec<crate::server_store::CatalogEvent>,
     current_seq: i64,
+    has_more: bool,
+    next_since: i64,
+}
+
+impl CatalogSyncResponse {
+    fn complete(events: Vec<crate::server_store::CatalogEvent>, current_seq: i64) -> Self {
+        Self {
+            events,
+            current_seq,
+            has_more: false,
+            next_since: current_seq,
+        }
+    }
+}
+
+#[cfg(test)]
+mod catalog_sync_response_tests {
+    use super::CatalogSyncResponse;
+
+    #[test]
+    fn complete_page_advances_to_the_server_sequence() {
+        let response = CatalogSyncResponse::complete(Vec::new(), 42);
+        let json = serde_json::to_value(response).unwrap();
+
+        assert_eq!(json["events"], serde_json::json!([]));
+        assert_eq!(json["current_seq"], 42);
+        assert_eq!(json["has_more"], false);
+        assert_eq!(json["next_since"], 42);
+    }
 }
 
 // ========================================================================
@@ -246,11 +275,7 @@ async fn get_catalog_sync(
         Err(err) => return ApiError::from(err).into_response(),
     };
 
-    Json(CatalogSyncResponse {
-        events,
-        current_seq,
-    })
-    .into_response()
+    Json(CatalogSyncResponse::complete(events, current_seq)).into_response()
 }
 
 // ========================================================================

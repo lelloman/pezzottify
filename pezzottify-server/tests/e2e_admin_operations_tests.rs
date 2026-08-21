@@ -122,6 +122,8 @@ async fn catalog_sync_and_backup_prepare_return_complete_response_shapes() {
     let sync: Value = response.json().await.unwrap();
     assert!(sync["events"].is_array());
     assert!(sync["current_seq"].is_number());
+    assert_eq!(sync["has_more"], false);
+    assert_eq!(sync["next_since"], sync["current_seq"]);
 
     let response = admin
         .client
