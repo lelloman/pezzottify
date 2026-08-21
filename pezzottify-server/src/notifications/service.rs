@@ -80,3 +80,44 @@ impl NotificationService {
         Ok(notification)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::user::{FullUserStore, SqliteUserStore};
+
+    #[tokio::test]
+    async fn notification_is_persisted_with_its_sync_event_without_connections() {
+        let temp = tempfile::tempdir().unwrap();
+        let store: Arc<dyn FullUserStore> = Arc::new(
+            SqliteUserStore::new(
+                temp.path().join("users.db"),
+                &crate::backup::DbRegistry::new(),
+            )
+            .unwrap(),
+        );
+        let user_id = store.create_user("notification-user").unwrap();
+        let service = NotificationService::new(store.clone(), Arc::new(ConnectionManager::new()));
+
+        let notification = service
+            .create_notification(
+                user_id,
+                NotificationType::DownloadCompleted,
+                "Ready".to_string(),
+                Some("Your album is ready".to_string()),
+                serde_json::json!({"album_id": "album-1"}),
+            )
+            .await
+            .unwrap();
+
+        let stored = store.get_user_notifications(user_id).unwrap();
+        assert_eq!(stored, vec![notification.clone()]);
+        let events = store.get_events_since(user_id, 0).unwrap();
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0].event,
+            UserEvent::NotificationCreated { notification: event_notification }
+                if event_notification == &notification
+        ));
+    }
+}

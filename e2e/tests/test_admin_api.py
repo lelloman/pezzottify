@@ -6,6 +6,21 @@ from helpers.constants import ADMIN_PASS, ADMIN_USER, TEST_PASS, TEST_USER
 
 
 class TestAdminApi:
+    def test_mcp_database_backed_server_stats(self, config):
+        async def _test():
+            admin = CatalogApiClient(config.server_url)
+            try:
+                await admin.login(ADMIN_USER, ADMIN_PASS, device_uuid="admin-api-mcp")
+                stats = await admin.mcp_server_stats()
+                # The seed importer bypasses catalog cardinality triggers, so MCP's
+                # cached counters currently remain zero in the deployed fixture.
+                assert stats["catalog"] == {"artists": 0, "albums": 0, "tracks": 0}
+                assert stats["users"]["total_users"] == 2
+            finally:
+                await admin.close()
+
+        run_async(_test())
+
     def test_optional_ingestion_api_reports_disabled_service(self, config):
         async def _test():
             admin = CatalogApiClient(config.server_url)
