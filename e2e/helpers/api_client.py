@@ -69,6 +69,27 @@ class CatalogApiClient:
             resp.raise_for_status()
             return await resp.json(content_type=None)
 
+    async def get_user_settings(self) -> dict:
+        session = await self._ensure_session()
+        async with session.get(f"{self.base_url}/v1/user/settings") as resp:
+            resp.raise_for_status()
+            return await resp.json(content_type=None)
+
+    async def update_user_settings(self, settings: list[dict]) -> None:
+        session = await self._ensure_session()
+        async with session.put(
+            f"{self.base_url}/v1/user/settings",
+            json={"settings": settings},
+            headers=self._csrf_headers(),
+        ) as resp:
+            resp.raise_for_status()
+
+    async def get_user_devices(self) -> dict:
+        session = await self._ensure_session()
+        async with session.get(f"{self.base_url}/v1/user/devices") as resp:
+            resp.raise_for_status()
+            return await resp.json(content_type=None)
+
     async def create_playlist(
         self, name: str, track_ids: list[str] | None = None
     ) -> str:
