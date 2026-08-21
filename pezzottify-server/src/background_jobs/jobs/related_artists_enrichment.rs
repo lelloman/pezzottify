@@ -21,6 +21,7 @@ use crate::background_jobs::{
     JobAuditLogger,
 };
 use crate::config::RelatedArtistsSettings;
+use crate::db_executor::DbPriority;
 use crate::related_artists::lastfm::LastFmClient;
 use crate::related_artists::musicbrainz::MusicBrainzClient;
 use crate::server_store::{CatalogContentType, CatalogEventType};
@@ -102,7 +103,12 @@ impl BackgroundJob for RelatedArtistsEnrichmentJob {
 
 impl RelatedArtistsEnrichmentJob {
     fn return_cancelled(&self, ctx: &JobContext) -> Result<(), JobError> {
-        if let Err(error) = ctx.catalog_store.release_artist_enrichment_claims() {
+        if let Err(error) = ctx
+            .catalog_db
+            .run_blocking(DbPriority::Background, |store| {
+                store.release_artist_enrichment_claims()
+            })
+        {
             warn!(
                 "Failed to release enrichment claims during cancellation: {}",
                 error
@@ -121,8 +127,10 @@ impl RelatedArtistsEnrichmentJob {
         // Phase 1: Populate MusicBrainz IDs
         // =====================================================================
         let artists_needing_mbid = ctx
-            .catalog_store
-            .get_artists_needing_mbid(batch_size)
+            .catalog_db
+            .run_blocking(DbPriority::Background, move |store| {
+                store.get_artists_needing_mbid(batch_size)
+            })
             .map_err(|e| {
                 JobError::ExecutionFailed(format!("Failed to get artists needing mbid: {}", e))
             })?;
@@ -143,7 +151,14 @@ impl RelatedArtistsEnrichmentJob {
 
             match self.musicbrainz.lookup_mbid_for_spotify_id(spotify_id) {
                 Ok(Some(mbid)) => {
-                    if let Err(e) = ctx.catalog_store.set_artist_mbid(spotify_id, &mbid) {
+                    let spotify_id_owned = spotify_id.clone();
+                    let mbid_owned = mbid.clone();
+                    if let Err(e) = ctx
+                        .catalog_db
+                        .run_blocking(DbPriority::Background, move |store| {
+                            store.set_artist_mbid(&spotify_id_owned, &mbid_owned)
+                        })
+                    {
                         error!("Failed to set mbid for {}: {}", spotify_id, e);
                         mbid_errors += 1;
                     } else {
@@ -152,7 +167,13 @@ impl RelatedArtistsEnrichmentJob {
                     }
                 }
                 Ok(None) => {
-                    if let Err(e) = ctx.catalog_store.mark_artist_mbid_not_found(spotify_id) {
+                    let spotify_id_owned = spotify_id.clone();
+                    if let Err(e) = ctx
+                        .catalog_db
+                        .run_blocking(DbPriority::Background, move |store| {
+                            store.mark_artist_mbid_not_found(&spotify_id_owned)
+                        })
+                    {
                         error!("Failed to mark mbid not found for {}: {}", spotify_id, e);
                         mbid_errors += 1;
                     } else {
@@ -161,8 +182,12 @@ impl RelatedArtistsEnrichmentJob {
                 }
                 Err(e) => {
                     warn!("MusicBrainz lookup failed for {}: {}", spotify_id, e);
-                    ctx.catalog_store
-                        .record_artist_mbid_failure(*artist_rowid, &e.to_string())
+                    let artist_rowid = *artist_rowid;
+                    let error = e.to_string();
+                    ctx.catalog_db
+                        .run_blocking(DbPriority::Background, move |store| {
+                            store.record_artist_mbid_failure(artist_rowid, &error)
+                        })
                         .map_err(|queue_error| {
                             JobError::ExecutionFailed(format!(
                                 "Failed to schedule MusicBrainz retry for {}: {}",
@@ -187,8 +212,10 @@ impl RelatedArtistsEnrichmentJob {
         // Phase 2: Fetch related artists from Last.fm
         // =====================================================================
         let artists_needing_related = ctx
-            .catalog_store
-            .get_artists_needing_related(batch_size)
+            .catalog_db
+            .run_blocking(DbPriority::Background, move |store| {
+                store.get_artists_needing_related(batch_size)
+            })
             .map_err(|e| {
                 JobError::ExecutionFailed(format!("Failed to get artists needing related: {}", e))
             })?;
@@ -216,8 +243,12 @@ impl RelatedArtistsEnrichmentJob {
                         "Last.fm lookup failed for {} (mbid {}): {}",
                         spotify_id, mbid, e
                     );
-                    ctx.catalog_store
-                        .record_artist_related_failure(*artist_rowid, &e.to_string())
+                    let artist_rowid = *artist_rowid;
+                    let error = e.to_string();
+                    ctx.catalog_db
+                        .run_blocking(DbPriority::Background, move |store| {
+                            store.record_artist_related_failure(artist_rowid, &error)
+                        })
                         .map_err(|queue_error| {
                             JobError::ExecutionFailed(format!(
                                 "Failed to schedule Last.fm retry for {}: {}",
@@ -236,8 +267,10 @@ impl RelatedArtistsEnrichmentJob {
                 .filter_map(|artist| artist.mbid.clone())
                 .collect::<Vec<_>>();
             let mut rowids_by_mbid = ctx
-                .catalog_store
-                .get_artist_rowids_by_mbids(&similar_mbids)
+                .catalog_db
+                .run_blocking(DbPriority::Background, move |store| {
+                    store.get_artist_rowids_by_mbids(&similar_mbids)
+                })
                 .map_err(|e| {
                     JobError::ExecutionFailed(format!(
                         "Failed to resolve related artist MBIDs for {}: {}",
@@ -260,15 +293,28 @@ impl RelatedArtistsEnrichmentJob {
                         match self.musicbrainz.lookup_spotify_id_for_mbid(similar_mbid) {
                             Ok(Some(related_spotify_id)) => {
                                 // Try to find this Spotify ID in our catalog and opportunistically cache the mbid
-                                match ctx.catalog_store.get_artist_json(&related_spotify_id) {
+                                let lookup_id = related_spotify_id.clone();
+                                match ctx
+                                    .catalog_db
+                                    .run_blocking(DbPriority::Background, move |store| {
+                                        store.get_artist_json(&lookup_id)
+                                    }) {
                                     Ok(Some(_)) => {
                                         // Artist exists in catalog, cache the mbid for future lookups
-                                        let _ = ctx
-                                            .catalog_store
-                                            .set_artist_mbid(&related_spotify_id, similar_mbid);
+                                        let cache_id = related_spotify_id.clone();
+                                        let cache_mbid = similar_mbid.clone();
+                                        let _ = ctx.catalog_db.run_blocking(
+                                            DbPriority::Background,
+                                            move |store| {
+                                                store.set_artist_mbid(&cache_id, &cache_mbid)
+                                            },
+                                        );
+                                        let lookup_mbid = similar_mbid.clone();
                                         let rowid = ctx
-                                            .catalog_store
-                                            .get_artist_rowid_by_mbid(similar_mbid)
+                                            .catalog_db
+                                            .run_blocking(DbPriority::Background, move |store| {
+                                                store.get_artist_rowid_by_mbid(&lookup_mbid)
+                                            })
                                             .ok()
                                             .flatten();
                                         if let Some(rowid) = rowid {
@@ -292,9 +338,13 @@ impl RelatedArtistsEnrichmentJob {
                 }
             }
 
+            let artist_rowid_owned = *artist_rowid;
+            let related_pairs_owned = related_pairs.clone();
             if let Err(e) = ctx
-                .catalog_store
-                .set_related_artists(*artist_rowid, &related_pairs)
+                .catalog_db
+                .run_blocking(DbPriority::Background, move |store| {
+                    store.set_related_artists(artist_rowid_owned, &related_pairs_owned)
+                })
             {
                 error!("Failed to store related artists for {}: {}", spotify_id, e);
                 related_errors += 1;

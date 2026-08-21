@@ -20,6 +20,7 @@ use crate::background_jobs::{
 };
 use crate::catalog_store::SearchableContentType;
 use crate::config::PopularContentJobSettings;
+use crate::db_executor::DbPriority;
 use crate::search::HashedItemType;
 use crate::user::user_models::{PopularAlbum, PopularArtist, PopularContent};
 use std::collections::HashMap;
@@ -225,9 +226,10 @@ impl BackgroundJob for PopularContentJob {
         // =====================================================================
         let track_limit = self.albums_limit * 5;
         let top_tracks = match ctx
-            .user_store
-            .get_top_tracks(start_date, end_date, track_limit)
-        {
+            .user_db
+            .run_blocking(DbPriority::Background, move |store| {
+                store.get_top_tracks(start_date, end_date, track_limit)
+            }) {
             Ok(tracks) => tracks,
             Err(e) => {
                 let error_msg = format!("Failed to get top tracks: {}", e);
@@ -243,8 +245,21 @@ impl BackgroundJob for PopularContentJob {
 
         // Aggregate play counts by album
         let mut album_plays: HashMap<String, u64> = HashMap::new();
-        for track_stats in &top_tracks {
-            if let Some(album_id) = ctx.catalog_store.get_track_album_id(&track_stats.track_id) {
+        let track_ids = top_tracks
+            .iter()
+            .map(|track| track.track_id.clone())
+            .collect::<Vec<_>>();
+        let album_ids = ctx
+            .catalog_db
+            .run_blocking(DbPriority::Background, move |store| {
+                Ok(track_ids
+                    .iter()
+                    .map(|track_id| store.get_track_album_id(track_id))
+                    .collect::<Vec<_>>())
+            })
+            .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+        for (track_stats, album_id) in top_tracks.iter().zip(album_ids) {
+            if let Some(album_id) = album_id {
                 *album_plays.entry(album_id).or_insert(0) += track_stats.play_count;
             }
         }
@@ -265,9 +280,10 @@ impl BackgroundJob for PopularContentJob {
         // underrepresented compared to artists with one viral hit.
         // =====================================================================
         let all_track_counts = match ctx
-            .user_store
-            .get_all_track_play_counts(start_date, end_date)
-        {
+            .user_db
+            .run_blocking(DbPriority::Background, move |store| {
+                store.get_all_track_play_counts(start_date, end_date)
+            }) {
             Ok(counts) => counts,
             Err(e) => {
                 let error_msg = format!("Failed to get all track play counts: {}", e);
@@ -296,11 +312,21 @@ impl BackgroundJob for PopularContentJob {
 
         // Aggregate play counts by artist from ALL tracks
         let mut artist_plays: HashMap<String, u64> = HashMap::new();
-        for track_count in &all_track_counts {
-            if let Ok(Some(track_json)) = ctx
-                .catalog_store
-                .get_resolved_track_json(&track_count.track_id)
-            {
+        let counted_track_ids = all_track_counts
+            .iter()
+            .map(|track| track.track_id.clone())
+            .collect::<Vec<_>>();
+        let resolved_tracks = ctx
+            .catalog_db
+            .run_blocking(DbPriority::Background, move |store| {
+                Ok(counted_track_ids
+                    .iter()
+                    .map(|track_id| store.get_resolved_track_json(track_id).ok().flatten())
+                    .collect::<Vec<_>>())
+            })
+            .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+        for (track_count, track_json) in all_track_counts.iter().zip(resolved_tracks) {
+            if let Some(track_json) = track_json {
                 if let Some(artists) = track_json.get("artists").and_then(|a| a.as_array()) {
                     for track_artist in artists {
                         if let Some(artist_id) = track_artist
@@ -330,11 +356,24 @@ impl BackgroundJob for PopularContentJob {
         // Build PopularAlbum objects from resolved album JSON
         // =====================================================================
         let mut popular_albums = Vec::with_capacity(top_album_ids.len());
-        for (album_id, play_count) in &top_album_ids {
+        let album_ids = top_album_ids
+            .iter()
+            .map(|(album_id, _)| album_id.clone())
+            .collect::<Vec<_>>();
+        let resolved_albums = ctx
+            .catalog_db
+            .run_blocking(DbPriority::Background, move |store| {
+                Ok(album_ids
+                    .iter()
+                    .map(|album_id| store.get_resolved_album_json(album_id).ok().flatten())
+                    .collect::<Vec<_>>())
+            })
+            .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+        for ((album_id, play_count), album_json) in top_album_ids.iter().zip(resolved_albums) {
             if ctx.is_cancelled() {
                 return Err(JobError::Cancelled);
             }
-            if let Ok(Some(album_json)) = ctx.catalog_store.get_resolved_album_json(album_id) {
+            if let Some(album_json) = album_json {
                 let name = album_json
                     .get("album")
                     .and_then(|a| a.get("name"))
@@ -371,11 +410,24 @@ impl BackgroundJob for PopularContentJob {
         // Build PopularArtist objects from resolved artist JSON
         // =====================================================================
         let mut popular_artists = Vec::with_capacity(top_artist_ids.len());
-        for (artist_id, play_count) in &top_artist_ids {
+        let artist_ids = top_artist_ids
+            .iter()
+            .map(|(artist_id, _)| artist_id.clone())
+            .collect::<Vec<_>>();
+        let resolved_artists = ctx
+            .catalog_db
+            .run_blocking(DbPriority::Background, move |store| {
+                Ok(artist_ids
+                    .iter()
+                    .map(|artist_id| store.get_resolved_artist_json(artist_id).ok().flatten())
+                    .collect::<Vec<_>>())
+            })
+            .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+        for ((artist_id, play_count), artist_json) in top_artist_ids.iter().zip(resolved_artists) {
             if ctx.is_cancelled() {
                 return Err(JobError::Cancelled);
             }
-            if let Ok(Some(artist_json)) = ctx.catalog_store.get_resolved_artist_json(artist_id) {
+            if let Some(artist_json) = artist_json {
                 let name = artist_json
                     .get("artist")
                     .and_then(|a| a.get("name"))
@@ -410,7 +462,7 @@ impl BackgroundJob for PopularContentJob {
         // =====================================================================
         // Update search vault with composite popularity scores for ranking boost
         // =====================================================================
-        if let Some(search_vault) = &ctx.search_vault {
+        if let Some(search_db) = &ctx.search_db {
             // Gather all unique items from listening data
             let mut all_items: HashMap<(String, HashedItemType), u64> = HashMap::new();
 
@@ -434,7 +486,11 @@ impl BackgroundJob for PopularContentJob {
 
             // Get impression data
             let impression_min_date = self.compute_impression_min_date();
-            let impression_totals = search_vault.get_impression_totals(impression_min_date);
+            let impression_totals = search_db
+                .run_blocking(DbPriority::Background, move |search_vault| {
+                    Ok(search_vault.get_impression_totals(impression_min_date))
+                })
+                .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
 
             // Add items that have impressions but no listening data
             for (item_id, item_type) in impression_totals.keys() {
@@ -465,8 +521,10 @@ impl BackgroundJob for PopularContentJob {
 
             // Get Spotify popularity scores from catalog
             let spotify_scores = ctx
-                .catalog_store
-                .get_items_popularity(&catalog_items)
+                .catalog_db
+                .run_blocking(DbPriority::Background, move |store| {
+                    store.get_items_popularity(&catalog_items)
+                })
                 .unwrap_or_default();
 
             // Calculate max values for normalization
@@ -523,15 +581,19 @@ impl BackgroundJob for PopularContentJob {
                 ));
             }
 
-            search_vault.update_popularity(&popularity_items);
-
             // Prune old impression data
             let prune_date = self.compute_impression_prune_date();
-            let pruned_count = search_vault.prune_impressions(prune_date);
+            let updated_count = popularity_items.len();
+            let pruned_count = search_db
+                .run_blocking(DbPriority::Background, move |search_vault| {
+                    search_vault.update_popularity(&popularity_items);
+                    Ok(search_vault.prune_impressions(prune_date))
+                })
+                .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
 
             debug!(
                 "Updated search popularity for {} items (composite scoring); pruned {} old impressions",
-                popularity_items.len(),
+                updated_count,
                 pruned_count
             );
         }
