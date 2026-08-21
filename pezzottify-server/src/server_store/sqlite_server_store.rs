@@ -1359,6 +1359,70 @@ mod tests {
     }
 
     #[test]
+    fn test_catalog_event_page_uses_primary_key_range_scan_at_scale() {
+        const EVENT_COUNT: i64 = 10_000;
+        const PAGE_SIZE: usize = 250;
+        let test = create_test_store();
+        let store = &test.store;
+
+        {
+            let mut conn = store.conn.lock().unwrap();
+            let transaction = conn.transaction().unwrap();
+            {
+                let mut insert = transaction
+                    .prepare(
+                        "INSERT INTO catalog_events
+                         (event_type, content_type, content_id, timestamp, triggered_by)
+                         VALUES ('track_updated', 'track', ?1, 1700000000, 'query_plan_test')",
+                    )
+                    .unwrap();
+                for index in 1..=EVENT_COUNT {
+                    insert.execute([format!("track-{index}")]).unwrap();
+                }
+            }
+            transaction.commit().unwrap();
+
+            let details = conn
+                .prepare(
+                    "EXPLAIN QUERY PLAN
+                     SELECT seq, event_type, content_type, content_id, timestamp, triggered_by
+                     FROM catalog_events
+                     WHERE seq > ?1
+                     ORDER BY seq ASC
+                     LIMIT ?2",
+                )
+                .unwrap()
+                .query_map(params![5_000, PAGE_SIZE as i64 + 1], |row| {
+                    row.get::<_, String>(3)
+                })
+                .unwrap()
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .unwrap();
+
+            assert!(
+                details.iter().any(|detail| {
+                    detail.contains("SEARCH catalog_events USING INTEGER PRIMARY KEY (rowid>?)")
+                }),
+                "unexpected catalog page query plan: {details:?}"
+            );
+            assert!(
+                details
+                    .iter()
+                    .all(|detail| !detail.contains("USE TEMP B-TREE")),
+                "catalog page query should not require a temporary sort: {details:?}"
+            );
+        }
+
+        let page = store.get_catalog_events_page(5_000, PAGE_SIZE).unwrap();
+        assert_eq!(page.events.len(), PAGE_SIZE);
+        assert_eq!(page.events.first().unwrap().seq, 5_001);
+        assert_eq!(page.events.last().unwrap().seq, 5_250);
+        assert_eq!(page.current_seq, EVENT_COUNT);
+        assert!(page.has_more);
+        assert_eq!(page.next_since, 5_250);
+    }
+
+    #[test]
     fn test_catalog_event_different_types() {
         use crate::server_store::{CatalogContentType, CatalogEventType};
 
