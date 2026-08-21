@@ -216,7 +216,7 @@ impl DownloadManager {
     /// - Track exists in catalog
     /// - Track is not already available
     /// - Track is not already in queue
-    pub async fn request_track(
+    pub fn request_track(
         &self,
         user_id: &str,
         track_id: &str,
@@ -278,7 +278,7 @@ impl DownloadManager {
     /// Creates a queue item for the album. The item will be picked up by an
     /// external script that downloads content and uploads it via the ingestion system.
     /// Returns the queued item wrapped in a Vec (for compatibility).
-    pub async fn request_album(
+    pub fn request_album(
         &self,
         user_id: &str,
         album_id: &str,

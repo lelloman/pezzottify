@@ -15,9 +15,11 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
+use crate::db_executor::{DbHandle, DbPriority, DbRunError};
 use crate::download_manager::{AuditLogFilter, DownloadManager, QueueStatus};
 use crate::server::session::Session;
-use crate::server::state::{OptionalDownloadManager, ServerState};
+use crate::server::state::{DatabaseHandles, ServerState};
+use crate::server::ApiError;
 use crate::user::Permission;
 
 // =============================================================================
@@ -116,9 +118,9 @@ pub struct AdminStatsResponse {
 // =============================================================================
 
 fn get_download_manager(
-    dm: &OptionalDownloadManager,
-) -> Result<&DownloadManager, (StatusCode, &'static str)> {
-    dm.as_ref().map(|arc| arc.as_ref()).ok_or((
+    database: &DatabaseHandles,
+) -> Result<DbHandle<DownloadManager>, (StatusCode, &'static str)> {
+    database.download.clone().ok_or((
         StatusCode::SERVICE_UNAVAILABLE,
         "Download manager not enabled",
     ))
@@ -131,20 +133,25 @@ fn get_download_manager(
 /// GET /limits - Get user's rate limit status
 async fn get_user_limits(
     session: Session,
-    State(dm): State<OptionalDownloadManager>,
+    State(database): State<DatabaseHandles>,
 ) -> impl IntoResponse {
-    let manager = match get_download_manager(&dm) {
+    let manager = match get_download_manager(&database) {
         Ok(m) => m,
-        Err(e) => return e.into_response(),
+        Err(error) => return error.into_response(),
     };
 
     let user_id = session.user_id.to_string();
     let is_admin = session.has_permission(Permission::DownloadManagerAdmin);
-    match manager.get_user_limits(&user_id, is_admin) {
+    match manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_user_limits(&user_id, is_admin)
+        })
+        .await
+    {
         Ok(limits) => Json(limits).into_response(),
         Err(e) => {
             warn!("Failed to get user limits: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get limits").into_response()
+            ApiError::from(e).into_response()
         }
     }
 }
@@ -159,31 +166,30 @@ pub struct MyRequestsResponse {
 /// GET /my-requests - Get user's queued download requests
 async fn get_my_requests(
     session: Session,
-    State(dm): State<OptionalDownloadManager>,
+    State(database): State<DatabaseHandles>,
     Query(pagination): Query<PaginationQuery>,
 ) -> impl IntoResponse {
-    let manager = match get_download_manager(&dm) {
+    let manager = match get_download_manager(&database) {
         Ok(m) => m,
-        Err(e) => return e.into_response(),
+        Err(error) => return error.into_response(),
     };
 
     let user_id = session.user_id.to_string();
 
-    // Get both requests and limits in one response
-    let requests = match manager.get_user_requests(&user_id, pagination.limit, pagination.offset) {
-        Ok(r) => r,
-        Err(e) => {
-            warn!("Failed to get user requests: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get requests").into_response();
-        }
-    };
-
     let is_admin = session.has_permission(Permission::DownloadManagerAdmin);
-    let stats = match manager.get_user_limits(&user_id, is_admin) {
-        Ok(s) => s,
+    let result = manager
+        .run(DbPriority::Interactive, move |manager| {
+            Ok((
+                manager.get_user_requests(&user_id, pagination.limit, pagination.offset)?,
+                manager.get_user_limits(&user_id, is_admin)?,
+            ))
+        })
+        .await;
+    let (requests, stats) = match result {
+        Ok(result) => result,
         Err(e) => {
-            warn!("Failed to get user limits: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get limits").into_response();
+            warn!("Failed to get user download requests: {}", e);
+            return ApiError::from(e).into_response();
         }
     };
 
@@ -193,20 +199,23 @@ async fn get_my_requests(
 /// POST /request/track - Request a single track download
 async fn request_track(
     session: Session,
-    State(dm): State<OptionalDownloadManager>,
+    State(database): State<DatabaseHandles>,
     Json(body): Json<RequestTrackBody>,
 ) -> impl IntoResponse {
-    let manager = match get_download_manager(&dm) {
+    let manager = match get_download_manager(&database) {
         Ok(m) => m,
-        Err(e) => return e.into_response(),
+        Err(error) => return error.into_response(),
     };
 
     let user_id = session.user_id.to_string();
     let is_admin = session.has_permission(Permission::DownloadManagerAdmin);
     debug!("User {} requesting track {}", user_id, body.track_id);
 
+    let track_id = body.track_id;
     match manager
-        .request_track(&user_id, &body.track_id, is_admin)
+        .run(DbPriority::Interactive, move |manager| {
+            manager.request_track(&user_id, &track_id, is_admin)
+        })
         .await
     {
         Ok(item) => Json(RequestResponse {
@@ -215,7 +224,7 @@ async fn request_track(
             queue_item_id: Some(item.id),
         })
         .into_response(),
-        Err(e) => {
+        Err(DbRunError::Store(e)) => {
             let msg = e.to_string();
             debug!("Track request failed: {}", msg);
             (
@@ -228,18 +237,19 @@ async fn request_track(
             )
                 .into_response()
         }
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
 /// POST /request/album - Request all tracks in an album
 async fn request_album(
     session: Session,
-    State(dm): State<OptionalDownloadManager>,
+    State(database): State<DatabaseHandles>,
     Json(body): Json<RequestAlbumBody>,
 ) -> impl IntoResponse {
-    let manager = match get_download_manager(&dm) {
+    let manager = match get_download_manager(&database) {
         Ok(m) => m,
-        Err(e) => return e.into_response(),
+        Err(error) => return error.into_response(),
     };
 
     let user_id = session.user_id.to_string();
@@ -249,8 +259,11 @@ async fn request_album(
     );
 
     let is_admin = session.has_permission(Permission::DownloadManagerAdmin);
+    let album_id = body.album_id;
     match manager
-        .request_album(&user_id, &body.album_id, is_admin)
+        .run(DbPriority::Interactive, move |manager| {
+            manager.request_album(&user_id, &album_id, is_admin)
+        })
         .await
     {
         Ok(items) => Json(AlbumRequestResponse {
@@ -258,22 +271,29 @@ async fn request_album(
             status: "PENDING".to_string(),
         })
         .into_response(),
-        Err(e) => {
+        Err(DbRunError::Store(e)) => {
             let msg = e.to_string();
             debug!("Album request failed: {}", msg);
             (StatusCode::BAD_REQUEST, msg).into_response()
         }
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
 /// GET /status - Get download manager status
-async fn get_status(State(dm): State<OptionalDownloadManager>) -> impl IntoResponse {
-    let manager = match get_download_manager(&dm) {
+async fn get_status(State(database): State<DatabaseHandles>) -> impl IntoResponse {
+    let manager = match get_download_manager(&database) {
         Ok(m) => m,
-        Err(e) => return e.into_response(),
+        Err(error) => return error.into_response(),
     };
 
-    let status = manager.get_status();
+    let status = match manager
+        .run(DbPriority::Interactive, |manager| Ok(manager.get_status()))
+        .await
+    {
+        Ok(status) => status,
+        Err(e) => return ApiError::from(e).into_response(),
+    };
     Json(DownloadStatusResponse {
         enabled: status.enabled,
         pending_count: status.pending_count,
@@ -288,22 +308,25 @@ async fn get_status(State(dm): State<OptionalDownloadManager>) -> impl IntoRespo
 /// GET /admin/stats - Get queue statistics
 async fn get_admin_stats(
     session: Session,
-    State(dm): State<OptionalDownloadManager>,
+    State(database): State<DatabaseHandles>,
 ) -> impl IntoResponse {
     if !session.has_permission(Permission::ViewAnalytics) {
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    let manager = match get_download_manager(&dm) {
+    let manager = match get_download_manager(&database) {
         Ok(m) => m,
-        Err(e) => return e.into_response(),
+        Err(error) => return error.into_response(),
     };
 
-    match manager.get_queue_stats() {
+    match manager
+        .run(DbPriority::Interactive, |manager| manager.get_queue_stats())
+        .await
+    {
         Ok(queue_stats) => Json(AdminStatsResponse { queue: queue_stats }).into_response(),
         Err(e) => {
             warn!("Failed to get queue stats: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get stats").into_response()
+            ApiError::from(e).into_response()
         }
     }
 }
@@ -311,27 +334,28 @@ async fn get_admin_stats(
 /// GET /admin/failed - Get failed download items
 async fn get_admin_failed(
     session: Session,
-    State(dm): State<OptionalDownloadManager>,
+    State(database): State<DatabaseHandles>,
     Query(pagination): Query<PaginationQuery>,
 ) -> impl IntoResponse {
     if !session.has_permission(Permission::ViewAnalytics) {
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    let manager = match get_download_manager(&dm) {
+    let manager = match get_download_manager(&database) {
         Ok(m) => m,
-        Err(e) => return e.into_response(),
+        Err(error) => return error.into_response(),
     };
 
-    match manager.get_failed_items(pagination.limit, pagination.offset) {
+    match manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_failed_items(pagination.limit, pagination.offset)
+        })
+        .await
+    {
         Ok(items) => Json(items).into_response(),
         Err(e) => {
             warn!("Failed to get failed items: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get failed items",
-            )
-                .into_response()
+            ApiError::from(e).into_response()
         }
     }
 }
@@ -339,16 +363,16 @@ async fn get_admin_failed(
 /// GET /admin/requests - Get all queued requests
 async fn get_admin_requests(
     session: Session,
-    State(dm): State<OptionalDownloadManager>,
+    State(database): State<DatabaseHandles>,
     Query(query): Query<AdminRequestsQuery>,
 ) -> impl IntoResponse {
     if !session.has_permission(Permission::ViewAnalytics) {
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    let manager = match get_download_manager(&dm) {
+    let manager = match get_download_manager(&database) {
         Ok(m) => m,
-        Err(e) => return e.into_response(),
+        Err(error) => return error.into_response(),
     };
 
     let status = query.status.and_then(|s| match s.to_uppercase().as_str() {
@@ -360,17 +384,22 @@ async fn get_admin_requests(
         _ => None,
     });
 
-    match manager.get_all_requests_filtered(
-        status,
-        query.exclude_completed,
-        query.top_level_only,
-        query.limit,
-        query.offset,
-    ) {
+    match manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_all_requests_filtered(
+                status,
+                query.exclude_completed,
+                query.top_level_only,
+                query.limit,
+                query.offset,
+            )
+        })
+        .await
+    {
         Ok(items) => Json(items).into_response(),
         Err(e) => {
             warn!("Failed to get requests: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get requests").into_response()
+            ApiError::from(e).into_response()
         }
     }
 }
@@ -378,50 +407,63 @@ async fn get_admin_requests(
 /// POST /admin/retry/:id - Retry a failed download
 async fn retry_failed(
     session: Session,
-    State(dm): State<OptionalDownloadManager>,
+    State(database): State<DatabaseHandles>,
     Path(item_id): Path<String>,
 ) -> impl IntoResponse {
     if !session.has_permission(Permission::EditCatalog) {
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    let manager = match get_download_manager(&dm) {
+    let manager = match get_download_manager(&database) {
         Ok(m) => m,
-        Err(e) => return e.into_response(),
+        Err(error) => return error.into_response(),
     };
 
     let user_id = session.user_id.to_string();
-    match manager.retry_failed(&item_id, &user_id) {
+    let retry_id = item_id.clone();
+    match manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.retry_failed(&retry_id, &user_id)
+        })
+        .await
+    {
         Ok(()) => Json(RequestResponse {
             success: true,
             message: "Item queued for retry".to_string(),
             queue_item_id: Some(item_id),
         })
         .into_response(),
-        Err(e) => {
+        Err(DbRunError::Store(e)) => {
             warn!("Failed to retry item: {}", e);
             (StatusCode::BAD_REQUEST, e.to_string()).into_response()
         }
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
 /// DELETE /admin/request/:id - Delete a download request
 async fn delete_request(
     session: Session,
-    State(dm): State<OptionalDownloadManager>,
+    State(database): State<DatabaseHandles>,
     Path(item_id): Path<String>,
 ) -> impl IntoResponse {
     if !session.has_permission(Permission::EditCatalog) {
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    let manager = match get_download_manager(&dm) {
+    let manager = match get_download_manager(&database) {
         Ok(m) => m,
-        Err(e) => return e.into_response(),
+        Err(error) => return error.into_response(),
     };
 
     let user_id = session.user_id.to_string();
-    match manager.delete_request(&item_id, &user_id) {
+    let delete_id = item_id.clone();
+    match manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.delete_request(&delete_id, &user_id)
+        })
+        .await
+    {
         Ok(true) => Json(RequestResponse {
             success: true,
             message: "Request deleted".to_string(),
@@ -429,26 +471,27 @@ async fn delete_request(
         })
         .into_response(),
         Ok(false) => (StatusCode::NOT_FOUND, "Request not found").into_response(),
-        Err(e) => {
+        Err(DbRunError::Store(e)) => {
             warn!("Failed to delete request: {}", e);
             (StatusCode::BAD_REQUEST, e.to_string()).into_response()
         }
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
 /// GET /admin/audit - Query audit log
 async fn get_audit_log(
     session: Session,
-    State(dm): State<OptionalDownloadManager>,
+    State(database): State<DatabaseHandles>,
     Query(query): Query<AuditLogQuery>,
 ) -> impl IntoResponse {
     if !session.has_permission(Permission::ViewAnalytics) {
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    let manager = match get_download_manager(&dm) {
+    let manager = match get_download_manager(&database) {
         Ok(m) => m,
-        Err(e) => return e.into_response(),
+        Err(error) => return error.into_response(),
     };
 
     let filter = AuditLogFilter {
@@ -463,7 +506,12 @@ async fn get_audit_log(
         offset: query.offset,
     };
 
-    match manager.get_audit_log(filter) {
+    match manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_audit_log(filter)
+        })
+        .await
+    {
         Ok((entries, total)) => {
             let json_entries: Vec<serde_json::Value> = entries
                 .into_iter()
@@ -477,7 +525,7 @@ async fn get_audit_log(
         }
         Err(e) => {
             warn!("Failed to get audit log: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get audit log").into_response()
+            ApiError::from(e).into_response()
         }
     }
 }
@@ -485,7 +533,7 @@ async fn get_audit_log(
 /// GET /admin/audit/item/:id - Get audit log for a specific queue item
 async fn get_audit_for_item(
     session: Session,
-    State(dm): State<OptionalDownloadManager>,
+    State(database): State<DatabaseHandles>,
     Path(item_id): Path<String>,
     Query(pagination): Query<PaginationQuery>,
 ) -> impl IntoResponse {
@@ -493,9 +541,9 @@ async fn get_audit_for_item(
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    let manager = match get_download_manager(&dm) {
+    let manager = match get_download_manager(&database) {
         Ok(m) => m,
-        Err(e) => return e.into_response(),
+        Err(error) => return error.into_response(),
     };
 
     let filter = AuditLogFilter {
@@ -510,7 +558,12 @@ async fn get_audit_for_item(
         offset: pagination.offset,
     };
 
-    match manager.get_audit_log(filter) {
+    match manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_audit_log(filter)
+        })
+        .await
+    {
         Ok((entries, total)) => {
             let json_entries: Vec<serde_json::Value> = entries
                 .into_iter()
@@ -524,7 +577,7 @@ async fn get_audit_for_item(
         }
         Err(e) => {
             warn!("Failed to get audit log: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get audit log").into_response()
+            ApiError::from(e).into_response()
         }
     }
 }
@@ -532,7 +585,7 @@ async fn get_audit_for_item(
 /// GET /admin/audit/user/:user_id - Get audit log for a specific user
 async fn get_audit_for_user(
     session: Session,
-    State(dm): State<OptionalDownloadManager>,
+    State(database): State<DatabaseHandles>,
     Path(user_id): Path<String>,
     Query(pagination): Query<PaginationQuery>,
 ) -> impl IntoResponse {
@@ -540,9 +593,9 @@ async fn get_audit_for_user(
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    let manager = match get_download_manager(&dm) {
+    let manager = match get_download_manager(&database) {
         Ok(m) => m,
-        Err(e) => return e.into_response(),
+        Err(error) => return error.into_response(),
     };
 
     let filter = AuditLogFilter {
@@ -557,7 +610,12 @@ async fn get_audit_for_user(
         offset: pagination.offset,
     };
 
-    match manager.get_audit_log(filter) {
+    match manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_audit_log(filter)
+        })
+        .await
+    {
         Ok((entries, total)) => {
             let json_entries: Vec<serde_json::Value> = entries
                 .into_iter()
@@ -571,7 +629,7 @@ async fn get_audit_for_user(
         }
         Err(e) => {
             warn!("Failed to get audit log: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get audit log").into_response()
+            ApiError::from(e).into_response()
         }
     }
 }
