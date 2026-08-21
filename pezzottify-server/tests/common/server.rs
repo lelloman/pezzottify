@@ -22,6 +22,7 @@ pub struct TestServerBuilder {
     download_manager_enabled: bool,
     ingestion_enabled: bool,
     disable_password_auth: bool,
+    available_catalog: bool,
 }
 
 #[allow(dead_code)] // Each integration-test crate uses a different subset of builder options.
@@ -38,6 +39,11 @@ impl TestServerBuilder {
 
     pub fn with_password_auth_disabled(mut self) -> Self {
         self.disable_password_auth = true;
+        self
+    }
+
+    pub fn with_available_catalog(mut self) -> Self {
+        self.available_catalog = true;
         self
     }
 
@@ -163,6 +169,13 @@ impl TestServer {
         // Create temporary test resources
         let (temp_catalog_dir, catalog_db_path, media_path) =
             create_test_catalog().expect("Failed to create test catalog");
+        if options.available_catalog {
+            let connection = rusqlite::Connection::open(&catalog_db_path)
+                .expect("Failed to reopen test catalog");
+            connection
+                .execute("UPDATE tracks SET track_available = 1", [])
+                .expect("Failed to mark test catalog tracks available");
+        }
         let (temp_db_dir, db_path) =
             create_test_db_with_users().expect("Failed to create test database");
 

@@ -90,6 +90,70 @@ class CatalogApiClient:
             resp.raise_for_status()
             return await resp.json(content_type=None)
 
+    async def submit_bug_report(self, title: str, description: str) -> str:
+        session = await self._ensure_session()
+        async with session.post(
+            f"{self.base_url}/v1/user/bug-report",
+            json={
+                "title": title,
+                "description": description,
+                "client_type": "docker-e2e",
+            },
+            headers=self._csrf_headers(),
+        ) as resp:
+            resp.raise_for_status()
+            body = await resp.json(content_type=None)
+            return body["id"]
+
+    async def get_admin_bug_report(self, report_id: str) -> dict:
+        session = await self._ensure_session()
+        async with session.get(
+            f"{self.base_url}/v1/admin/bug-report/{report_id}"
+        ) as resp:
+            resp.raise_for_status()
+            return await resp.json(content_type=None)
+
+    async def delete_admin_bug_report(self, report_id: str) -> None:
+        session = await self._ensure_session()
+        async with session.delete(
+            f"{self.base_url}/v1/admin/bug-report/{report_id}",
+            headers=self._csrf_headers(),
+        ) as resp:
+            resp.raise_for_status()
+
+    async def create_show_draft(self, brief: str) -> dict:
+        session = await self._ensure_session()
+        async with session.post(
+            f"{self.base_url}/v1/content/admin/shows/drafts",
+            json={"brief": brief, "target_duration_minutes": 30, "language": "en"},
+            headers=self._csrf_headers(),
+        ) as resp:
+            resp.raise_for_status()
+            return await resp.json(content_type=None)
+
+    async def get_admin_shows(self) -> list[dict]:
+        session = await self._ensure_session()
+        async with session.get(f"{self.base_url}/v1/content/admin/shows") as resp:
+            resp.raise_for_status()
+            return await resp.json(content_type=None)
+
+    async def delete_admin_show(self, show_id: str) -> None:
+        session = await self._ensure_session()
+        async with session.delete(
+            f"{self.base_url}/v1/content/admin/shows/{show_id}",
+            headers=self._csrf_headers(),
+        ) as resp:
+            resp.raise_for_status()
+
+    async def prepare_backup(self) -> dict:
+        session = await self._ensure_session()
+        async with session.post(
+            f"{self.base_url}/v1/admin/backup/prepare",
+            headers=self._csrf_headers(),
+        ) as resp:
+            resp.raise_for_status()
+            return await resp.json(content_type=None)
+
     async def create_playlist(
         self, name: str, track_ids: list[str] | None = None
     ) -> str:
