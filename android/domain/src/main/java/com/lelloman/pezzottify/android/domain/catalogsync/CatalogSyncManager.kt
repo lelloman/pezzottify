@@ -34,38 +34,59 @@ class CatalogSyncManager @Inject constructor(
      * Fetches all events since the last processed sequence number from the server.
      */
     suspend fun catchUp() {
-        val currentSeq = catalogSyncStore.currentSeq.value
-        logger.info("Catching up on catalog events since seq=$currentSeq")
+        var cursor = catalogSyncStore.currentSeq.value
+        logger.info("Catching up on catalog events since seq=$cursor")
 
-        when (val response = remoteApiClient.getCatalogSync(since = currentSeq)) {
-            is RemoteApiResponse.Success -> {
-                val data = response.data
-                logger.info("Received ${data.events.size} catalog events (current_seq=${data.currentSeq})")
+        while (true) {
+            when (val response = remoteApiClient.getCatalogSync(since = cursor)) {
+                is RemoteApiResponse.Success -> {
+                    val data = response.data
+                    logger.info(
+                        "Received ${data.events.size} catalog events " +
+                            "(current_seq=${data.currentSeq}, has_more=${data.hasMore})",
+                    )
 
-                // Apply each event
-                data.events.forEach { event ->
-                    applyEvent(event)
+                    if (data.hasMore && data.nextSince <= cursor) {
+                        logger.error(
+                            "Catalog sync returned a non-advancing cursor: " +
+                                "requested=$cursor, next_since=${data.nextSince}",
+                        )
+                        return
+                    }
+
+                    data.events.forEach { event ->
+                        applyEvent(event)
+                    }
+
+                    val completedCursor = if (data.hasMore) data.nextSince else data.currentSeq
+                    catalogSyncStore.setCurrentSeq(completedCursor)
+                    if (!data.hasMore) {
+                        return
+                    }
+                    cursor = data.nextSince
                 }
-
-                // Update cursor to server's current sequence
-                catalogSyncStore.setCurrentSeq(data.currentSeq)
-            }
-            is RemoteApiResponse.Error.Network -> {
-                logger.warn("Network error during catalog catch-up")
-            }
-            is RemoteApiResponse.Error.Unauthorized -> {
-                logger.warn("Unauthorized during catalog catch-up")
-            }
-            is RemoteApiResponse.Error.NotFound -> {
-                logger.warn("Catalog sync endpoint not found")
-            }
-            is RemoteApiResponse.Error.EventsPruned -> {
-                // Old events were pruned - reset cursor to 0 so we don't miss future events
-                logger.warn("Catalog events pruned, resetting cursor")
-                catalogSyncStore.setCurrentSeq(0)
-            }
-            is RemoteApiResponse.Error.Unknown -> {
-                logger.error("Unknown error during catalog catch-up: ${response.message}")
+                is RemoteApiResponse.Error.Network -> {
+                    logger.warn("Network error during catalog catch-up")
+                    return
+                }
+                is RemoteApiResponse.Error.Unauthorized -> {
+                    logger.warn("Unauthorized during catalog catch-up")
+                    return
+                }
+                is RemoteApiResponse.Error.NotFound -> {
+                    logger.warn("Catalog sync endpoint not found")
+                    return
+                }
+                is RemoteApiResponse.Error.EventsPruned -> {
+                    // Old events were pruned - reset cursor to 0 so we don't miss future events
+                    logger.warn("Catalog events pruned, resetting cursor")
+                    catalogSyncStore.setCurrentSeq(0)
+                    return
+                }
+                is RemoteApiResponse.Error.Unknown -> {
+                    logger.error("Unknown error during catalog catch-up: ${response.message}")
+                    return
+                }
             }
         }
     }
