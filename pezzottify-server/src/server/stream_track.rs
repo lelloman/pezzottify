@@ -1,9 +1,11 @@
 //! Audio streaming functionality
 
 use super::{
+    api_error::ApiError,
     session::Session,
-    state::{GuardedCatalogStore, OptionalOrganicIndexer, ServerState},
+    state::{DatabaseHandles, OptionalOrganicIndexer, ServerState},
 };
+use crate::db_executor::DbPriority;
 use axum::{
     body::Body,
     extract::{FromRequestParts, Path, State},
@@ -183,7 +185,7 @@ fn audio_content_type(path: &FilePath) -> &'static str {
 pub async fn stream_track(
     _session: Session,
     byte_range: ByteRangeRequest,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     State(organic_indexer): State<OptionalOrganicIndexer>,
     Path(id): Path<String>,
 ) -> Response {
@@ -192,28 +194,31 @@ pub async fn stream_track(
         indexer.touch_track(&id);
     }
 
-    // Get track metadata
-    let track = match catalog_store.get_track(&id) {
-        Ok(Some(track)) => track,
+    let track_id = id.clone();
+    let loaded = database
+        .catalog_read
+        .run(DbPriority::Interactive, move |catalog_store| {
+            let Some(track) = catalog_store.get_track(&track_id)? else {
+                return Ok(None);
+            };
+            // Open through the catalog's root-confined resolver. This prevents catalog
+            // paths and symlinks from escaping the configured media directory.
+            let opened = match catalog_store.open_track_audio_file(&track_id) {
+                Ok(opened) => opened,
+                Err(error) => {
+                    debug!(%error, track_id = %track_id, "Refused or failed to open track audio");
+                    None
+                }
+            };
+            Ok(opened.map(|(file, path)| (track, file, path)))
+        })
+        .await;
+    let (track, file, path) = match loaded {
+        Ok(Some(loaded)) => loaded,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        Err(err) => return ApiError::from(err).into_response(),
     };
-
     debug!("Streaming track: {}", track.name);
-
-    // Open through the catalog's root-confined resolver. This prevents catalog
-    // paths and symlinks from escaping the configured media directory.
-    let (file, path) = match catalog_store.open_track_audio_file(&id) {
-        Ok(None) => {
-            debug!("Track {} audio not available", track.name);
-            return StatusCode::NOT_FOUND.into_response();
-        }
-        Ok(Some(opened)) => opened,
-        Err(error) => {
-            debug!(%error, track_id = %id, "Refused or failed to open track audio");
-            return StatusCode::NOT_FOUND.into_response();
-        }
-    };
     debug!("Streaming track from path {}", path.display());
 
     let mut file = File::from_std(file);
