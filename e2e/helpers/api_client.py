@@ -45,6 +45,13 @@ class CatalogApiClient:
             resp.raise_for_status()
             return await resp.json(content_type=None)
 
+    async def ingestion_jobs_status(self) -> int:
+        """Return the status of the optional ingestion job-list endpoint."""
+        session = await self._ensure_session()
+        async with session.get(f"{self.base_url}/v1/ingestion/my-jobs") as resp:
+            await resp.read()
+            return resp.status
+
     async def like_content(self, content_type: str, content_id: str) -> None:
         session = await self._ensure_session()
         async with session.post(

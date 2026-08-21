@@ -6,6 +6,19 @@ from helpers.constants import ADMIN_PASS, ADMIN_USER, TEST_PASS, TEST_USER
 
 
 class TestAdminApi:
+    def test_optional_ingestion_api_reports_disabled_service(self, config):
+        async def _test():
+            admin = CatalogApiClient(config.server_url)
+            try:
+                await admin.login(
+                    ADMIN_USER, ADMIN_PASS, device_uuid="admin-api-ingestion"
+                )
+                assert await admin.ingestion_jobs_status() == 503
+            finally:
+                await admin.close()
+
+        run_async(_test())
+
     def test_show_draft_lifecycle(self, config):
         async def _test():
             admin = CatalogApiClient(config.server_url)
