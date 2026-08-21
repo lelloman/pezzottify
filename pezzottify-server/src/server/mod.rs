@@ -21,6 +21,7 @@ pub mod state;
 mod stream_track;
 pub mod websocket;
 
+pub(crate) use api_error::ApiError;
 pub use config::ServerConfig;
 pub use download_routes::download_routes;
 pub use http_layers::*;

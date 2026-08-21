@@ -19,13 +19,15 @@ use tracing::{error, warn};
 use uuid::Uuid;
 
 use crate::agent::{CompletionOptions, LlmProvider, Message, OllamaProvider, OpenAIProvider};
+use crate::db_executor::{DbPriority, DbRunError};
+use crate::server::ApiError;
 
 use super::{
     CreateShowDraftRequest, Show, ShowSegment, ShowSegmentKind, ShowSource, ShowSpeaker,
     ShowStatus, UpdateShowScriptRequest,
 };
 use crate::server::session::Session;
-use crate::server::state::{GuardedCatalogStore, GuardedShowStore, ServerState};
+use crate::server::state::{DatabaseHandles, ServerState};
 use crate::server::ServerConfig;
 
 #[derive(Debug, Deserialize)]
@@ -84,77 +86,94 @@ pub fn admin_routes() -> Router<ServerState> {
 }
 
 async fn list_published_shows(
-    State(show_store): State<GuardedShowStore>,
+    State(database): State<DatabaseHandles>,
     Query(query): Query<ListShowsQuery>,
 ) -> Response {
-    match show_store.list_published(query.limit.min(100), query.offset) {
+    match database
+        .shows
+        .run(DbPriority::Interactive, move |store| {
+            store.list_published(query.limit.min(100), query.offset)
+        })
+        .await
+    {
         Ok(shows) => Json(shows).into_response(),
-        Err(err) => {
-            error!("Failed to list published shows: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
 async fn get_published_show(
-    State(show_store): State<GuardedShowStore>,
+    State(database): State<DatabaseHandles>,
     AxumPath(id): AxumPath<String>,
 ) -> Response {
-    match show_store.get_show(&id) {
+    let lookup_id = id.clone();
+    match database
+        .shows
+        .run(DbPriority::Interactive, move |store| {
+            store.get_show(&lookup_id)
+        })
+        .await
+    {
         Ok(Some(show)) if show.status == ShowStatus::Published => Json(show).into_response(),
         Ok(Some(_)) | Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Failed to load show {}: {}", id, err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
 async fn admin_list_shows(
-    State(show_store): State<GuardedShowStore>,
+    State(database): State<DatabaseHandles>,
     Query(query): Query<ListShowsQuery>,
 ) -> Response {
-    match show_store.list_admin(query.limit.min(100), query.offset) {
+    match database
+        .shows
+        .run(DbPriority::Interactive, move |store| {
+            store.list_admin(query.limit.min(100), query.offset)
+        })
+        .await
+    {
         Ok(shows) => Json(shows).into_response(),
-        Err(err) => {
-            error!("Failed to list admin shows: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
 async fn admin_get_show(
-    State(show_store): State<GuardedShowStore>,
+    State(database): State<DatabaseHandles>,
     AxumPath(id): AxumPath<String>,
 ) -> Response {
-    match show_store.get_show(&id) {
+    let lookup_id = id.clone();
+    match database
+        .shows
+        .run(DbPriority::Interactive, move |store| {
+            store.get_show(&lookup_id)
+        })
+        .await
+    {
         Ok(Some(show)) => Json(show).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Failed to load show {}: {}", id, err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
 async fn admin_delete_show(
-    State(show_store): State<GuardedShowStore>,
+    State(database): State<DatabaseHandles>,
     AxumPath(id): AxumPath<String>,
 ) -> Response {
-    match show_store.delete_show(&id) {
+    let delete_id = id.clone();
+    match database
+        .shows
+        .run(DbPriority::Interactive, move |store| {
+            store.delete_show(&delete_id)
+        })
+        .await
+    {
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
         Ok(false) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Failed to delete show {}: {}", id, err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
 async fn create_show_draft(
     session: Session,
-    State(show_store): State<GuardedShowStore>,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     State(config): State<ServerConfig>,
     Json(request): Json<CreateShowDraftRequest>,
 ) -> Response {
@@ -166,12 +185,27 @@ async fn create_show_draft(
     let target_duration_minutes = request.target_duration_minutes.unwrap_or(75).clamp(10, 120);
     let language = request.language.unwrap_or_else(|| "en".to_string());
     let track_count = ((target_duration_minutes as usize) / 6).clamp(6, 16);
-    let track_refs = match catalog_store.list_available_track_ids_with_audio_uri(track_count, 0) {
-        Ok(ids) => ids,
-        Err(err) => {
-            error!("Failed to pick tracks for show draft: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+    let track_refs = match database
+        .catalog_read
+        .run(DbPriority::Interactive, move |store| {
+            let refs = store.list_available_track_ids_with_audio_uri(track_count, 0)?;
+            Ok(refs
+                .into_iter()
+                .map(|(track_id, audio_uri)| {
+                    let title = store
+                        .get_track(&track_id)
+                        .ok()
+                        .flatten()
+                        .map(|track| track.name)
+                        .unwrap_or_else(|| track_id.clone());
+                    (track_id, audio_uri, title)
+                })
+                .collect::<Vec<_>>())
+        })
+        .await
+    {
+        Ok(refs) => refs,
+        Err(err) => return ApiError::from(err).into_response(),
     };
 
     if track_refs.is_empty() {
@@ -219,13 +253,7 @@ async fn create_show_draft(
         source_ids: vec!["catalog".to_string()],
     });
 
-    for (index, (track_id, _audio_uri)) in track_refs.iter().enumerate() {
-        let track_title = catalog_store
-            .get_track(track_id)
-            .ok()
-            .flatten()
-            .map(|track| track.name)
-            .unwrap_or_else(|| track_id.clone());
+    for (index, (track_id, _audio_uri, track_title)) in track_refs.iter().enumerate() {
         track_context.push((track_id.clone(), track_title.clone()));
         let speaker_id = if index % 2 == 0 { "host_1" } else { "host_2" };
         let source_id = format!("track_{}", index + 1);
@@ -253,7 +281,7 @@ async fn create_show_draft(
         segments.push(ShowSegment {
             id: Uuid::new_v4().to_string(),
             kind: ShowSegmentKind::Track,
-            title: track_title,
+            title: track_title.clone(),
             track_id: Some(track_id.clone()),
             speaker_id: None,
             text: None,
@@ -305,22 +333,33 @@ async fn create_show_draft(
         candidate.speakers = generated.speakers;
         candidate.segments = generated.segments;
         candidate.sources = generated.sources;
-        match validate_show_script(&candidate, config.shows.max_speakers, &catalog_store) {
+        match validate_show_script_async(&database, candidate.clone(), config.shows.max_speakers)
+            .await
+        {
             Ok(()) => show = candidate,
-            Err(err) => warn!("Ignoring invalid LLM show script for {}: {}", show.id, err),
+            Err(ShowValidationError::Invalid(err)) => {
+                warn!("Ignoring invalid LLM show script for {}: {}", show.id, err)
+            }
+            Err(ShowValidationError::Database(err)) => return ApiError::from(err).into_response(),
         }
     }
 
-    if let Err(err) = validate_show_script(&show, config.shows.max_speakers, &catalog_store) {
-        return bad_request(err);
+    match validate_show_script_async(&database, show.clone(), config.shows.max_speakers).await {
+        Ok(()) => {}
+        Err(ShowValidationError::Invalid(err)) => return bad_request(err),
+        Err(ShowValidationError::Database(err)) => return ApiError::from(err).into_response(),
     }
 
-    match show_store.upsert_show(&show) {
+    let stored_show = show.clone();
+    match database
+        .shows
+        .run(DbPriority::Interactive, move |store| {
+            store.upsert_show(&stored_show)
+        })
+        .await
+    {
         Ok(()) => (StatusCode::CREATED, Json(show)).into_response(),
-        Err(err) => {
-            error!("Failed to store show draft: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
@@ -407,19 +446,22 @@ fn extract_json_object(content: &str) -> String {
 }
 
 async fn update_show_script(
-    State(show_store): State<GuardedShowStore>,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     State(config): State<ServerConfig>,
     AxumPath(id): AxumPath<String>,
     Json(request): Json<UpdateShowScriptRequest>,
 ) -> Response {
-    let mut show = match show_store.get_show(&id) {
+    let lookup_id = id.clone();
+    let mut show = match database
+        .shows
+        .run(DbPriority::Interactive, move |store| {
+            store.get_show(&lookup_id)
+        })
+        .await
+    {
         Ok(Some(show)) => show,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Failed to load show {}: {}", id, err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+        Err(err) => return ApiError::from(err).into_response(),
     };
 
     show.title = request.title;
@@ -434,32 +476,42 @@ async fn update_show_script(
     show.published_at = None;
     show.updated_at = Utc::now().timestamp();
 
-    if let Err(err) = validate_show_script(&show, config.shows.max_speakers, &catalog_store) {
-        return bad_request(err);
+    match validate_show_script_async(&database, show.clone(), config.shows.max_speakers).await {
+        Ok(()) => {}
+        Err(ShowValidationError::Invalid(err)) => return bad_request(err),
+        Err(ShowValidationError::Database(err)) => return ApiError::from(err).into_response(),
     }
 
-    match show_store.upsert_show(&show) {
+    let stored_show = show.clone();
+    match database
+        .shows
+        .run(DbPriority::Interactive, move |store| {
+            store.upsert_show(&stored_show)
+        })
+        .await
+    {
         Ok(()) => Json(show).into_response(),
-        Err(err) => {
-            error!("Failed to update show {}: {}", id, err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
 async fn synthesize_show(
-    State(show_store): State<GuardedShowStore>,
+    State(database): State<DatabaseHandles>,
     State(config): State<ServerConfig>,
     State(client): State<crate::server::state::HttpClient>,
     AxumPath(id): AxumPath<String>,
 ) -> Response {
-    let mut show = match show_store.get_show(&id) {
+    let lookup_id = id.clone();
+    let mut show = match database
+        .shows
+        .run(DbPriority::Interactive, move |store| {
+            store.get_show(&lookup_id)
+        })
+        .await
+    {
         Ok(Some(show)) => show,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Failed to load show {} for synthesis: {}", id, err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+        Err(err) => return ApiError::from(err).into_response(),
     };
 
     if show.status == ShowStatus::Published {
@@ -469,9 +521,15 @@ async fn synthesize_show(
     show.status = ShowStatus::Synthesizing;
     show.error = None;
     show.updated_at = Utc::now().timestamp();
-    if let Err(err) = show_store.upsert_show(&show) {
-        error!("Failed to mark show {} synthesizing: {}", id, err);
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    let synthesizing_show = show.clone();
+    if let Err(err) = database
+        .shows
+        .run(DbPriority::Interactive, move |store| {
+            store.upsert_show(&synthesizing_show)
+        })
+        .await
+    {
+        return ApiError::from(err).into_response();
     }
 
     let result = synthesize_narration_segments(&mut show, &config, &client).await;
@@ -480,24 +538,35 @@ async fn synthesize_show(
             show.status = ShowStatus::Ready;
             show.error = None;
             show.updated_at = Utc::now().timestamp();
-            match show_store.upsert_show(&show) {
+            let stored_show = show.clone();
+            match database
+                .shows
+                .run(DbPriority::Interactive, move |store| {
+                    store.upsert_show(&stored_show)
+                })
+                .await
+            {
                 Ok(()) => Json(SynthesizeShowResponse {
                     id,
                     synthesized_segments: count,
                     status: show.status,
                 })
                 .into_response(),
-                Err(err) => {
-                    error!("Failed to persist synthesized show: {}", err);
-                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
-                }
+                Err(err) => ApiError::from(err).into_response(),
             }
         }
         Err(message) => {
             show.status = ShowStatus::Failed;
             show.error = Some(message.clone());
             show.updated_at = Utc::now().timestamp();
-            if let Err(err) = show_store.upsert_show(&show) {
+            let failed_show = show.clone();
+            if let Err(err) = database
+                .shows
+                .run(DbPriority::Interactive, move |store| {
+                    store.upsert_show(&failed_show)
+                })
+                .await
+            {
                 error!("Failed to persist failed show state: {}", err);
             }
             (
@@ -510,16 +579,20 @@ async fn synthesize_show(
 }
 
 async fn publish_show(
-    State(show_store): State<GuardedShowStore>,
+    State(database): State<DatabaseHandles>,
     AxumPath(id): AxumPath<String>,
 ) -> Response {
-    let mut show = match show_store.get_show(&id) {
+    let lookup_id = id.clone();
+    let mut show = match database
+        .shows
+        .run(DbPriority::Interactive, move |store| {
+            store.get_show(&lookup_id)
+        })
+        .await
+    {
         Ok(Some(show)) => show,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Failed to load show {} for publish: {}", id, err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+        Err(err) => return ApiError::from(err).into_response(),
     };
 
     if show.status != ShowStatus::Ready && show.status != ShowStatus::Published {
@@ -531,27 +604,35 @@ async fn publish_show(
     show.published_at = Some(show.published_at.unwrap_or(now));
     show.updated_at = now;
 
-    match show_store.upsert_show(&show) {
+    let stored_show = show.clone();
+    match database
+        .shows
+        .run(DbPriority::Interactive, move |store| {
+            store.upsert_show(&stored_show)
+        })
+        .await
+    {
         Ok(()) => Json(show).into_response(),
-        Err(err) => {
-            error!("Failed to publish show {}: {}", id, err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(err) => ApiError::from(err).into_response(),
     }
 }
 
 async fn stream_show_segment(
-    State(show_store): State<GuardedShowStore>,
+    State(database): State<DatabaseHandles>,
     State(config): State<ServerConfig>,
     AxumPath((show_id, segment_id)): AxumPath<(String, String)>,
 ) -> Response {
-    let show = match show_store.get_show(&show_id) {
+    let lookup_id = show_id.clone();
+    let show = match database
+        .shows
+        .run(DbPriority::Interactive, move |store| {
+            store.get_show(&lookup_id)
+        })
+        .await
+    {
         Ok(Some(show)) if show.status == ShowStatus::Published => show,
         Ok(Some(_)) | Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Failed to load show {}: {}", show_id, err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+        Err(err) => return ApiError::from(err).into_response(),
     };
 
     let segment = match show
@@ -675,10 +756,30 @@ async fn request_tts_audio(
         .map_err(|err| format!("failed to read simple-ai TTS audio: {}", err))
 }
 
+enum ShowValidationError {
+    Invalid(String),
+    Database(DbRunError),
+}
+
+async fn validate_show_script_async(
+    database: &DatabaseHandles,
+    show: Show,
+    max_speakers: usize,
+) -> Result<(), ShowValidationError> {
+    database
+        .catalog_read
+        .run(DbPriority::Interactive, move |catalog_store| {
+            Ok(validate_show_script(&show, max_speakers, catalog_store))
+        })
+        .await
+        .map_err(ShowValidationError::Database)?
+        .map_err(ShowValidationError::Invalid)
+}
+
 fn validate_show_script(
     show: &Show,
     max_speakers: usize,
-    catalog_store: &GuardedCatalogStore,
+    catalog_store: &dyn crate::catalog_store::CatalogStore,
 ) -> Result<(), String> {
     if show.title.trim().is_empty() {
         return Err("title cannot be empty".to_string());

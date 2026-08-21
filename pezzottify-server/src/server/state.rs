@@ -55,6 +55,7 @@ pub struct DatabaseHandles {
     pub user_manager: DbHandle<UserManager>,
     pub server: DbHandle<dyn ServerStore>,
     pub shows: DbHandle<dyn ShowStore>,
+    pub backup: DbHandle<DbRegistry>,
     pub enrichment_read: Option<DbHandle<dyn EnrichmentStore>>,
     pub enrichment_write: Option<DbHandle<dyn EnrichmentStore>>,
 }
@@ -68,6 +69,7 @@ impl DatabaseHandles {
         user_manager: Arc<UserManager>,
         server_store: Arc<dyn ServerStore>,
         show_store: Arc<dyn ShowStore>,
+        db_registry: Arc<DbRegistry>,
         enrichment_store: Option<Arc<dyn EnrichmentStore>>,
     ) -> Self {
         let executor = DbExecutor::new(DbExecutorConfig::default());
@@ -84,6 +86,7 @@ impl DatabaseHandles {
             user_manager: DbHandle::new(user_manager, executor.clone(), DbLane::User),
             server: DbHandle::new(server_store, executor.clone(), DbLane::Server),
             shows: DbHandle::new(show_store, executor.clone(), DbLane::Shows),
+            backup: DbHandle::new(db_registry, executor.clone(), DbLane::Server),
             enrichment_read: enrichment_store
                 .clone()
                 .map(|store| DbHandle::new(store, executor.clone(), DbLane::EnrichmentRead)),
