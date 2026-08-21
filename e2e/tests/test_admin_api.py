@@ -8,6 +8,27 @@ from helpers.constants import ADMIN_PASS, ADMIN_USER, TEST_PASS, TEST_USER
 
 
 class TestAdminApi:
+    def test_catalog_sync_exposes_paging_metadata(self, config):
+        async def _test():
+            api = CatalogApiClient(config.server_url)
+            try:
+                await api.login(
+                    TEST_USER, TEST_PASS, device_uuid="catalog-sync-page-metadata"
+                )
+                page = await api.get_catalog_sync()
+                assert set(page) >= {
+                    "events",
+                    "current_seq",
+                    "has_more",
+                    "next_since",
+                }
+                assert page["has_more"] is False
+                assert page["next_since"] == page["current_seq"]
+            finally:
+                await api.close()
+
+        run_async(_test())
+
     def test_heavy_catalog_job_lifecycle(self, config):
         async def _test():
             admin = CatalogApiClient(config.server_url)

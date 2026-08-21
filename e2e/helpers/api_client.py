@@ -197,6 +197,14 @@ class CatalogApiClient:
             resp.raise_for_status()
             return await resp.json(content_type=None)
 
+    async def get_catalog_sync(self, since: int = 0) -> dict:
+        session = await self._ensure_session()
+        async with session.get(
+            f"{self.base_url}/v1/sync/catalog", params={"since": since}
+        ) as resp:
+            resp.raise_for_status()
+            return await resp.json(content_type=None)
+
     async def list_background_jobs(self) -> list[dict]:
         session = await self._ensure_session()
         async with session.get(f"{self.base_url}/v1/admin/jobs") as resp:
