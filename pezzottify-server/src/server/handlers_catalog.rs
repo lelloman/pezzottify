@@ -7,11 +7,91 @@ async fn home(session: Option<Session>, State(state): State<ServerState>) -> imp
     Json(stats)
 }
 
+async fn with_artist_enrichment(
+    database: &DatabaseHandles,
+    value: serde_json::Value,
+    artist_id: String,
+) -> serde_json::Value {
+    let Some(handle) = &database.enrichment_read else {
+        return value;
+    };
+    let fallback = value.clone();
+    match handle
+        .run(DbPriority::Interactive, move |store| {
+            Ok(attach_artist_enrichment(
+                attach_enrichment_status(value, "artist", &artist_id, Some(store)),
+                &artist_id,
+                Some(store),
+            ))
+        })
+        .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            debug!(%error, "Failed to schedule artist enrichment read");
+            fallback
+        }
+    }
+}
+
+async fn with_album_enrichment(
+    database: &DatabaseHandles,
+    value: serde_json::Value,
+    album_id: String,
+) -> serde_json::Value {
+    let Some(handle) = &database.enrichment_read else {
+        return value;
+    };
+    let fallback = value.clone();
+    match handle
+        .run(DbPriority::Interactive, move |store| {
+            Ok(attach_album_enrichment(
+                attach_enrichment_status(value, "album", &album_id, Some(store)),
+                &album_id,
+                Some(store),
+            ))
+        })
+        .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            debug!(%error, "Failed to schedule album enrichment read");
+            fallback
+        }
+    }
+}
+
+async fn with_track_enrichment(
+    database: &DatabaseHandles,
+    value: serde_json::Value,
+    track_id: String,
+) -> serde_json::Value {
+    let Some(handle) = &database.enrichment_read else {
+        return value;
+    };
+    let fallback = value.clone();
+    match handle
+        .run(DbPriority::Interactive, move |store| {
+            Ok(attach_track_enrichment(
+                attach_enrichment_status(value, "track", &track_id, Some(store)),
+                &track_id,
+                Some(store),
+            ))
+        })
+        .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            debug!(%error, "Failed to schedule track enrichment read");
+            fallback
+        }
+    }
+}
+
 async fn get_artist(
     _session: Session,
     State(database): State<DatabaseHandles>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
-    State(enrichment_store): State<OptionalEnrichmentStore>,
     Path(id): Path<String>,
 ) -> Response {
     debug!("get_artist: id={}", id);
@@ -31,16 +111,8 @@ async fn get_artist(
         })
         .await
     {
-        Ok(Some(artist)) => {
-            let artist =
-                attach_enrichment_status(artist, "artist", &id_for_status, &enrichment_store);
-            Json(attach_artist_enrichment(
-                artist,
-                &id_for_status,
-                &enrichment_store,
-            ))
-            .into_response()
-        }
+        Ok(Some(artist)) => Json(with_artist_enrichment(&database, artist, id_for_status).await)
+            .into_response(),
         Ok(None) => {
             ApiError::not_found("catalog_item_not_found", "Artist not found").into_response()
         }
@@ -52,7 +124,6 @@ async fn get_album(
     _session: Session,
     State(database): State<DatabaseHandles>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
-    State(enrichment_store): State<OptionalEnrichmentStore>,
     Path(id): Path<String>,
 ) -> Response {
     // Queue album for organic search index expansion
@@ -70,12 +141,8 @@ async fn get_album(
         })
         .await
     {
-        Ok(Some(album)) => Json(attach_album_enrichment(
-            attach_enrichment_status(album, "album", &id_for_status, &enrichment_store),
-            &id_for_status,
-            &enrichment_store,
-        ))
-        .into_response(),
+        Ok(Some(album)) => Json(with_album_enrichment(&database, album, id_for_status).await)
+            .into_response(),
         Ok(None) => {
             ApiError::not_found("catalog_item_not_found", "Album not found").into_response()
         }
@@ -87,7 +154,6 @@ async fn get_resolved_album(
     _session: Session,
     State(database): State<DatabaseHandles>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
-    State(enrichment_store): State<OptionalEnrichmentStore>,
     Path(id): Path<String>,
 ) -> Response {
     // Queue album for organic search index expansion
@@ -105,12 +171,8 @@ async fn get_resolved_album(
         })
         .await
     {
-        Ok(Some(album)) => Json(attach_album_enrichment(
-            attach_enrichment_status(album, "album", &id_for_status, &enrichment_store),
-            &id_for_status,
-            &enrichment_store,
-        ))
-        .into_response(),
+        Ok(Some(album)) => Json(with_album_enrichment(&database, album, id_for_status).await)
+            .into_response(),
         Ok(None) => {
             ApiError::not_found("catalog_item_not_found", "Album not found").into_response()
         }
@@ -220,7 +282,6 @@ pub async fn get_track(
     _session: Session,
     State(database): State<DatabaseHandles>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
-    State(enrichment_store): State<OptionalEnrichmentStore>,
     Path(id): Path<String>,
 ) -> Response {
     // Queue track for organic search index expansion
@@ -238,12 +299,8 @@ pub async fn get_track(
         })
         .await
     {
-        Ok(Some(track)) => Json(attach_track_enrichment(
-            attach_enrichment_status(track, "track", &id_for_status, &enrichment_store),
-            &id_for_status,
-            &enrichment_store,
-        ))
-        .into_response(),
+        Ok(Some(track)) => Json(with_track_enrichment(&database, track, id_for_status).await)
+            .into_response(),
         Ok(None) => {
             ApiError::not_found("catalog_item_not_found", "Track not found").into_response()
         }
@@ -255,7 +312,6 @@ pub async fn get_resolved_track(
     _session: Session,
     State(database): State<DatabaseHandles>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
-    State(enrichment_store): State<OptionalEnrichmentStore>,
     Path(id): Path<String>,
 ) -> Response {
     // Queue track for organic search index expansion
@@ -273,12 +329,8 @@ pub async fn get_resolved_track(
         })
         .await
     {
-        Ok(Some(track)) => Json(attach_track_enrichment(
-            attach_enrichment_status(track, "track", &id_for_status, &enrichment_store),
-            &id_for_status,
-            &enrichment_store,
-        ))
-        .into_response(),
+        Ok(Some(track)) => Json(with_track_enrichment(&database, track, id_for_status).await)
+            .into_response(),
         Ok(None) => {
             ApiError::not_found("catalog_item_not_found", "Track not found").into_response()
         }
@@ -292,7 +344,6 @@ async fn post_batch_content(
     _session: Session,
     State(database): State<DatabaseHandles>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
-    State(enrichment_store): State<OptionalEnrichmentStore>,
     Json(request): Json<BatchContentRequest>,
 ) -> Response {
     let total_items = request.artists.len() + request.albums.len() + request.tracks.len();
@@ -331,25 +382,37 @@ async fn post_batch_content(
         }
     }
 
-    match database
+    let response = match database
         .catalog_read
         .run(DbPriority::Interactive, move |catalog_store| {
-            Ok(build_batch_content(
-                catalog_store,
-                &enrichment_store,
-                request,
-            ))
+            Ok(build_batch_content(catalog_store, request))
+        })
+        .await
+    {
+        Ok(response) => response,
+        Err(err) => return ApiError::from(err).into_response(),
+    };
+
+    let Some(enrichment) = &database.enrichment_read else {
+        return Json(response).into_response();
+    };
+    let fallback = response.clone();
+    match enrichment
+        .run(DbPriority::Interactive, move |store| {
+            Ok(enrich_batch_content(response, store))
         })
         .await
     {
         Ok(response) => Json(response).into_response(),
-        Err(err) => ApiError::from(err).into_response(),
+        Err(error) => {
+            debug!(%error, "Failed to schedule batch enrichment read");
+            Json(fallback).into_response()
+        }
     }
 }
 
 fn build_batch_content(
     catalog_store: &dyn CatalogStore,
-    enrichment_store: &OptionalEnrichmentStore,
     request: BatchContentRequest,
 ) -> BatchContentResponse {
     let mut response = BatchContentResponse {
@@ -367,14 +430,7 @@ fn build_batch_content(
         };
 
         let batch_result = match result {
-            Ok(Some(data)) => {
-                let data = attach_artist_enrichment(
-                    attach_enrichment_status(data, "artist", &item.id, enrichment_store),
-                    &item.id,
-                    enrichment_store,
-                );
-                BatchItemResult::Ok { ok: data }
-            }
+            Ok(Some(data)) => BatchItemResult::Ok { ok: data },
             Ok(None) => BatchItemResult::Error {
                 error: "not_found".to_string(),
             },
@@ -396,14 +452,7 @@ fn build_batch_content(
         };
 
         let batch_result = match result {
-            Ok(Some(data)) => {
-                let data = attach_album_enrichment(
-                    attach_enrichment_status(data, "album", &item.id, enrichment_store),
-                    &item.id,
-                    enrichment_store,
-                );
-                BatchItemResult::Ok { ok: data }
-            }
+            Ok(Some(data)) => BatchItemResult::Ok { ok: data },
             Ok(None) => BatchItemResult::Error {
                 error: "not_found".to_string(),
             },
@@ -425,14 +474,7 @@ fn build_batch_content(
         };
 
         let batch_result = match result {
-            Ok(Some(data)) => {
-                let data = attach_track_enrichment(
-                    attach_enrichment_status(data, "track", &item.id, enrichment_store),
-                    &item.id,
-                    enrichment_store,
-                );
-                BatchItemResult::Ok { ok: data }
-            }
+            Ok(Some(data)) => BatchItemResult::Ok { ok: data },
             Ok(None) => BatchItemResult::Error {
                 error: "not_found".to_string(),
             },
@@ -446,6 +488,40 @@ fn build_batch_content(
         response.tracks.insert(item.id, batch_result);
     }
 
+    response
+}
+
+fn enrich_batch_content(
+    mut response: BatchContentResponse,
+    store: &dyn EnrichmentStore,
+) -> BatchContentResponse {
+    for (id, item) in &mut response.artists {
+        if let BatchItemResult::Ok { ok } = item {
+            *ok = attach_artist_enrichment(
+                attach_enrichment_status(std::mem::take(ok), "artist", id, Some(store)),
+                id,
+                Some(store),
+            );
+        }
+    }
+    for (id, item) in &mut response.albums {
+        if let BatchItemResult::Ok { ok } = item {
+            *ok = attach_album_enrichment(
+                attach_enrichment_status(std::mem::take(ok), "album", id, Some(store)),
+                id,
+                Some(store),
+            );
+        }
+    }
+    for (id, item) in &mut response.tracks {
+        if let BatchItemResult::Ok { ok } = item {
+            *ok = attach_track_enrichment(
+                attach_enrichment_status(std::mem::take(ok), "track", id, Some(store)),
+                id,
+                Some(store),
+            );
+        }
+    }
     response
 }
 

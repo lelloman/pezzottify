@@ -190,6 +190,11 @@ pub async fn make_app(
                 if let Err(e) = ingestion_manager.init().await {
                     error!("Failed to initialize ingestion manager: {:?}", e);
                 } else {
+                    state.database.ingestion = Some(crate::db_executor::DbHandle::new(
+                        ingestion_manager.clone(),
+                        state.database.executor.clone(),
+                        crate::db_executor::DbLane::Ingestion,
+                    ));
                     state.ingestion_manager = Some(ingestion_manager);
                     info!("Ingestion manager initialized successfully");
                 }
