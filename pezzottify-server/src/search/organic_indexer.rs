@@ -519,4 +519,36 @@ mod tests {
         assert!(!set.contains(&id2));
         assert!(set.contains(&id3));
     }
+
+    #[test]
+    fn index_tasks_preserve_entity_type_and_identifier() {
+        for (task, expected_type, expected_id) in [
+            (IndexTask::Artist("artist-1".into()), "artist", "artist-1"),
+            (IndexTask::Album("album-1".into()), "album", "album-1"),
+            (IndexTask::Track("track-1".into()), "track", "track-1"),
+        ] {
+            assert_eq!(task.type_name(), expected_type);
+            assert_eq!(task.id(), expected_id);
+        }
+    }
+
+    #[test]
+    fn adding_to_batch_deduplicates_by_entity_type_and_id() {
+        let (queue_tx, _queue_rx) = mpsc::channel(1);
+        let indexer = OrganicIndexer {
+            indexed_ids: RwLock::new(HashSet::new()),
+            queue_tx,
+            is_running: RwLock::new(true),
+        };
+        let mut batch = Vec::new();
+
+        indexer.add_to_batch(&mut batch, "same", "Artist", HashedItemType::Artist);
+        indexer.add_to_batch(&mut batch, "same", "Artist", HashedItemType::Artist);
+        indexer.add_to_batch(&mut batch, "same", "Album", HashedItemType::Album);
+
+        assert_eq!(batch.len(), 2);
+        assert_eq!(indexer.indexed_count(), 2);
+        assert!(indexer.is_indexed("same", HashedItemType::Artist));
+        assert!(indexer.is_indexed("same", HashedItemType::Album));
+    }
 }

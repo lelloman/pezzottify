@@ -52,6 +52,42 @@ class CatalogApiClient:
             await resp.read()
             return resp.status
 
+    async def mcp_server_stats(self) -> dict:
+        """Initialize MCP and execute its database-backed server stats tool."""
+        session = await self._ensure_session()
+        ws_url = self.base_url.replace("http://", "ws://", 1) + "/v1/mcp"
+        async with session.ws_connect(ws_url) as socket:
+            await socket.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "docker-e2e", "version": "1"},
+                    },
+                }
+            )
+            initialized = await socket.receive_json()
+            assert initialized["result"]["protocolVersion"] == "2024-11-05"
+            await socket.send_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "server.query",
+                        "arguments": {"query_type": "stats"},
+                    },
+                }
+            )
+            response = await socket.receive_json()
+            content = response["result"]["content"][0]["text"]
+            import json
+
+            return json.loads(content)
+
     async def like_content(self, content_type: str, content_id: str) -> None:
         session = await self._ensure_session()
         async with session.post(
