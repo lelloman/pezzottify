@@ -8,6 +8,49 @@ from helpers.constants import ADMIN_PASS, ADMIN_USER, TEST_PASS, TEST_USER
 
 
 class TestAdminApi:
+    def test_heavy_catalog_job_lifecycle(self, config):
+        async def _test():
+            admin = CatalogApiClient(config.server_url)
+            try:
+                await admin.login(
+                    ADMIN_USER, ADMIN_PASS, device_uuid="admin-api-heavy-job"
+                )
+                jobs = await admin.list_background_jobs()
+                assert any(job["id"] == "catalog_cardinality_stats" for job in jobs)
+
+                triggered = await admin.trigger_background_job(
+                    "catalog_cardinality_stats"
+                )
+                assert triggered == {
+                    "status": "triggered",
+                    "job_id": "catalog_cardinality_stats",
+                }
+
+                history = []
+                for _ in range(100):
+                    history = await admin.get_background_job_history(
+                        "catalog_cardinality_stats"
+                    )
+                    if history and history[0]["status"] != "running":
+                        break
+                    await asyncio.sleep(0.1)
+                assert history[0]["status"] == "completed"
+
+                audit = await admin.get_background_job_audit(
+                    "catalog_cardinality_stats"
+                )
+                completed = next(
+                    entry for entry in audit if entry["event_type"] == "completed"
+                )
+                assert completed["details"]["artists"] > 0
+                assert completed["details"]["albums"] > 0
+                assert completed["details"]["tracks"] > 0
+                assert completed["details"]["mutation_version"] >= 0
+            finally:
+                await admin.close()
+
+        run_async(_test())
+
     def test_lightweight_background_job_lifecycle(self, config):
         async def _test():
             admin = CatalogApiClient(config.server_url)
