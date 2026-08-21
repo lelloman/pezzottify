@@ -114,6 +114,11 @@ pub async fn make_app(
                     });
                 }
 
+                state.database.download = Some(crate::db_executor::DbHandle::new(
+                    manager.clone(),
+                    state.database.executor.clone(),
+                    crate::db_executor::DbLane::Download,
+                ));
                 state.download_manager = Some(manager);
                 info!("Download manager initialized successfully");
             }

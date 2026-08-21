@@ -56,6 +56,7 @@ pub struct DatabaseHandles {
     pub server: DbHandle<dyn ServerStore>,
     pub shows: DbHandle<dyn ShowStore>,
     pub backup: DbHandle<DbRegistry>,
+    pub download: Option<DbHandle<DownloadManager>>,
     pub enrichment_read: Option<DbHandle<dyn EnrichmentStore>>,
     pub enrichment_write: Option<DbHandle<dyn EnrichmentStore>>,
 }
@@ -87,6 +88,7 @@ impl DatabaseHandles {
             server: DbHandle::new(server_store, executor.clone(), DbLane::Server),
             shows: DbHandle::new(show_store, executor.clone(), DbLane::Shows),
             backup: DbHandle::new(db_registry, executor.clone(), DbLane::Server),
+            download: None,
             enrichment_read: enrichment_store
                 .clone()
                 .map(|store| DbHandle::new(store, executor.clone(), DbLane::EnrichmentRead)),
