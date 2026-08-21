@@ -235,14 +235,14 @@ struct BatchContentRequest {
     pub tracks: Vec<BatchItemRequest>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct BatchContentResponse {
     pub artists: std::collections::HashMap<String, BatchItemResult>,
     pub albums: std::collections::HashMap<String, BatchItemResult>,
     pub tracks: std::collections::HashMap<String, BatchItemResult>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(untagged)]
 enum BatchItemResult {
     Ok { ok: serde_json::Value },

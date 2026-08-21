@@ -25,6 +25,7 @@ use crate::background_jobs::{JobError, JobInfo, SchedulerHandle};
 use crate::catalog_store::{CatalogStore, DiscographySort};
 use crate::config::{AlbumEmbeddingDerivationSpec, AudioEmbeddingSpec};
 use crate::db_executor::DbPriority;
+use crate::enrichment_store::EnrichmentStore;
 use crate::shows::{
     admin_routes as show_admin_routes, public_routes as show_public_routes, SqliteShowStore,
 };

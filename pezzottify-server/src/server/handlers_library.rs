@@ -409,7 +409,7 @@ fn attach_enrichment_status(
     mut value: serde_json::Value,
     entity_type: &str,
     entity_id: &str,
-    enrichment_store: &OptionalEnrichmentStore,
+    enrichment_store: Option<&dyn EnrichmentStore>,
 ) -> serde_json::Value {
     let Some(store) = enrichment_store else {
         return value;
@@ -434,7 +434,7 @@ fn attach_enrichment_status(
 fn attach_artist_enrichment(
     mut value: serde_json::Value,
     artist_id: &str,
-    enrichment_store: &OptionalEnrichmentStore,
+    enrichment_store: Option<&dyn EnrichmentStore>,
 ) -> serde_json::Value {
     let Some(store) = enrichment_store else {
         return value;
@@ -501,7 +501,7 @@ fn attach_artist_enrichment(
 fn attach_album_enrichment(
     mut value: serde_json::Value,
     album_id: &str,
-    enrichment_store: &OptionalEnrichmentStore,
+    enrichment_store: Option<&dyn EnrichmentStore>,
 ) -> serde_json::Value {
     let Some(store) = enrichment_store else {
         return value;
@@ -565,7 +565,7 @@ fn attach_album_enrichment(
 fn attach_track_enrichment(
     mut value: serde_json::Value,
     track_id: &str,
-    enrichment_store: &OptionalEnrichmentStore,
+    enrichment_store: Option<&dyn EnrichmentStore>,
 ) -> serde_json::Value {
     let Some(store) = enrichment_store else {
         return value;

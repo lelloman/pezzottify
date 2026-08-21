@@ -16,12 +16,13 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
+use crate::db_executor::{DbHandle, DbPriority, DbRunError};
 use crate::ingestion::{
     IngestionContextType, IngestionError, IngestionFile, IngestionJob, IngestionManager,
     ReviewQueueItem,
 };
 use crate::server::session::Session;
-use crate::server::state::{OptionalIngestionManager, ServerState};
+use crate::server::state::{DatabaseHandles, ServerState};
 use crate::user::Permission;
 
 // =============================================================================
@@ -128,9 +129,9 @@ pub struct ErrorResponse {
 // =============================================================================
 
 fn get_ingestion_manager(
-    im: &OptionalIngestionManager,
-) -> Result<&IngestionManager, (StatusCode, &'static str)> {
-    im.as_ref().map(|arc| arc.as_ref()).ok_or((
+    database: &DatabaseHandles,
+) -> Result<&DbHandle<IngestionManager>, (StatusCode, &'static str)> {
+    database.ingestion.as_ref().ok_or((
         StatusCode::SERVICE_UNAVAILABLE,
         "Ingestion manager not enabled",
     ))
@@ -169,20 +170,35 @@ fn can_access_ingestion_job(
     false
 }
 
-fn authorize_job(
+async fn authorize_job(
     session: &Session,
-    manager: &IngestionManager,
+    manager: &DbHandle<IngestionManager>,
     job_id: &str,
     action: IngestionJobAction,
 ) -> Result<IngestionJob, StatusCode> {
-    match manager.get_job(job_id) {
+    let job_id_owned = job_id.to_string();
+    match manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_job(&job_id_owned).map_err(anyhow::Error::new)
+        })
+        .await
+    {
         Ok(Some(job)) if can_access_ingestion_job(session, &job, action) => Ok(job),
         Ok(Some(_)) => Err(StatusCode::FORBIDDEN),
         Ok(None) => Err(StatusCode::NOT_FOUND),
         Err(error) => {
             warn!(%error, %job_id, "Failed to load ingestion job for authorization");
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
+            Err(executor_status(&error))
         }
+    }
+}
+
+fn executor_status(error: &DbRunError) -> StatusCode {
+    match error {
+        DbRunError::QueueTimeout | DbRunError::ExecutionTimeout | DbRunError::ShuttingDown => {
+            StatusCode::SERVICE_UNAVAILABLE
+        }
+        DbRunError::Panicked(_) | DbRunError::Store(_) => StatusCode::INTERNAL_SERVER_ERROR,
     }
 }
 
@@ -193,7 +209,7 @@ fn authorize_job(
 /// POST /upload - Upload a file for ingestion (multipart/form-data)
 async fn upload_file(
     session: Session,
-    State(im): State<OptionalIngestionManager>,
+    State(database): State<DatabaseHandles>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
     if !session.has_permission(Permission::EditCatalog)
@@ -202,7 +218,7 @@ async fn upload_file(
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    let manager = match get_ingestion_manager(&im) {
+    let manager = match get_ingestion_manager(&database) {
         Ok(m) => m,
         Err(e) => return e.into_response(),
     };
@@ -288,15 +304,21 @@ async fn upload_file(
         data.len()
     );
 
+    let runtime = tokio::runtime::Handle::current();
+    let upload_user_id = user_id.clone();
     match manager
-        .process_upload(
-            &user_id,
-            &filename,
-            &data,
-            context_type,
-            context_id,
-            session.has_permission(Permission::ServerAdmin),
-        )
+        .run(DbPriority::Interactive, move |manager| {
+            runtime
+                .block_on(manager.process_upload(
+                    &upload_user_id,
+                    &filename,
+                    &data,
+                    context_type,
+                    context_id,
+                    session.has_permission(Permission::ServerAdmin),
+                ))
+                .map_err(anyhow::Error::new)
+        })
         .await
     {
         Ok(result) => {
@@ -309,14 +331,21 @@ async fn upload_file(
 
             // Spawn background tasks to auto-process each job
             for job_id in &result.job_ids {
-                let manager_clone = im.clone();
+                let manager_clone = manager.clone();
                 let job_id_clone = job_id.clone();
                 tokio::spawn(async move {
-                    if let Some(manager) = manager_clone {
-                        debug!("Auto-processing job {}", job_id_clone);
-                        if let Err(e) = manager.process_job(&job_id_clone).await {
-                            warn!("Auto-process failed for job {}: {}", job_id_clone, e);
-                        }
+                    debug!("Auto-processing job {}", job_id_clone);
+                    let runtime = tokio::runtime::Handle::current();
+                    let logged_job_id = job_id_clone.clone();
+                    if let Err(e) = manager_clone
+                        .run(DbPriority::Background, move |manager| {
+                            runtime
+                                .block_on(manager.process_job(&job_id_clone))
+                                .map_err(anyhow::Error::new)
+                        })
+                        .await
+                    {
+                        warn!("Auto-process failed for job {}: {}", logged_job_id, e);
                     }
                 });
             }
@@ -334,10 +363,14 @@ async fn upload_file(
         }
         Err(e) => {
             warn!("Failed to create ingestion job: {}", e);
-            let status = if matches!(e, IngestionError::InvalidContext(_)) {
+            let status = if matches!(
+                &e,
+                DbRunError::Store(error)
+                    if error.downcast_ref::<IngestionError>().is_some_and(|error| matches!(error, IngestionError::InvalidContext(_)))
+            ) {
                 StatusCode::BAD_REQUEST
             } else {
-                StatusCode::INTERNAL_SERVER_ERROR
+                executor_status(&e)
             };
             (
                 status,
@@ -353,15 +386,15 @@ async fn upload_file(
 /// GET /job/:id - Get job status
 async fn get_job(
     session: Session,
-    State(im): State<OptionalIngestionManager>,
+    State(database): State<DatabaseHandles>,
     Path(job_id): Path<String>,
 ) -> impl IntoResponse {
-    let manager = match get_ingestion_manager(&im) {
+    let manager = match get_ingestion_manager(&database) {
         Ok(m) => m,
         Err(e) => return e.into_response(),
     };
 
-    match authorize_job(&session, manager, &job_id, IngestionJobAction::View) {
+    match authorize_job(&session, manager, &job_id, IngestionJobAction::View).await {
         Ok(job) => Json(JobStatusResponse { job }).into_response(),
         Err(status) => status.into_response(),
     }
@@ -370,22 +403,28 @@ async fn get_job(
 /// GET /job/:id/details - Get detailed job information including files, candidates, and review
 async fn get_job_details(
     session: Session,
-    State(im): State<OptionalIngestionManager>,
+    State(database): State<DatabaseHandles>,
     Path(job_id): Path<String>,
 ) -> impl IntoResponse {
-    let manager = match get_ingestion_manager(&im) {
+    let manager = match get_ingestion_manager(&database) {
         Ok(m) => m,
         Err(e) => return e.into_response(),
     };
 
     // Get the job
-    let job = match authorize_job(&session, manager, &job_id, IngestionJobAction::View) {
+    let job = match authorize_job(&session, manager, &job_id, IngestionJobAction::View).await {
         Ok(job) => job,
         Err(status) => return status.into_response(),
     };
 
     // Get files for the job
-    let files = match manager.get_files(&job_id) {
+    let files_job_id = job_id.clone();
+    let files = match manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_files(&files_job_id).map_err(anyhow::Error::new)
+        })
+        .await
+    {
         Ok(files) => files,
         Err(e) => {
             warn!("Failed to get files for job {}: {}", job_id, e);
@@ -394,7 +433,15 @@ async fn get_job_details(
     };
 
     // Get candidates from the pending review (if any)
-    let (candidates, review) = match manager.get_job_details(&job_id) {
+    let details_job_id = job_id.clone();
+    let (candidates, review) = match manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager
+                .get_job_details(&details_job_id)
+                .map_err(anyhow::Error::new)
+        })
+        .await
+    {
         Ok((cands, rev)) => (cands, rev),
         Err(e) => {
             warn!("Failed to get job details for {}: {}", job_id, e);
@@ -427,7 +474,7 @@ async fn get_job_details(
 /// GET /my-jobs - Get user's jobs
 async fn get_my_jobs(
     session: Session,
-    State(im): State<OptionalIngestionManager>,
+    State(database): State<DatabaseHandles>,
     Query(pagination): Query<PaginationQuery>,
 ) -> impl IntoResponse {
     if !session.has_permission(Permission::EditCatalog)
@@ -436,14 +483,22 @@ async fn get_my_jobs(
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    let manager = match get_ingestion_manager(&im) {
+    let manager = match get_ingestion_manager(&database) {
         Ok(m) => m,
         Err(e) => return e.into_response(),
     };
 
     let user_id = session.user_id.to_string();
 
-    match manager.list_user_jobs(&user_id, pagination.limit) {
+    let queried_user_id = user_id.clone();
+    match manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager
+                .list_user_jobs(&queried_user_id, pagination.limit)
+                .map_err(anyhow::Error::new)
+        })
+        .await
+    {
         Ok(jobs) => Json(jobs).into_response(),
         Err(e) => {
             warn!("Failed to list jobs for user {}: {}", user_id, e);
@@ -455,22 +510,39 @@ async fn get_my_jobs(
 /// POST /job/:id/process - Trigger processing of a pending job
 async fn process_job(
     session: Session,
-    State(im): State<OptionalIngestionManager>,
+    State(database): State<DatabaseHandles>,
     Path(job_id): Path<String>,
 ) -> impl IntoResponse {
-    let manager = match get_ingestion_manager(&im) {
+    let manager = match get_ingestion_manager(&database) {
         Ok(m) => m,
         Err(e) => return e.into_response(),
     };
 
-    if let Err(status) = authorize_job(&session, manager, &job_id, IngestionJobAction::Process) {
+    if let Err(status) =
+        authorize_job(&session, manager, &job_id, IngestionJobAction::Process).await
+    {
         return status.into_response();
     }
 
-    match manager.process_job(&job_id).await {
+    let process_job_id = job_id.clone();
+    let runtime = tokio::runtime::Handle::current();
+    match manager
+        .run(DbPriority::Interactive, move |manager| {
+            runtime
+                .block_on(manager.process_job(&process_job_id))
+                .map_err(anyhow::Error::new)
+        })
+        .await
+    {
         Ok(()) => {
             // Return updated job status
-            match manager.get_job(&job_id) {
+            let updated_job_id = job_id.clone();
+            match manager
+                .run(DbPriority::Interactive, move |manager| {
+                    manager.get_job(&updated_job_id).map_err(anyhow::Error::new)
+                })
+                .await
+            {
                 Ok(Some(job)) => Json(JobStatusResponse { job }).into_response(),
                 Ok(None) => StatusCode::NOT_FOUND.into_response(),
                 Err(e) => {
@@ -495,22 +567,39 @@ async fn process_job(
 /// POST /job/:id/convert - Trigger conversion of a matched job
 async fn convert_job(
     session: Session,
-    State(im): State<OptionalIngestionManager>,
+    State(database): State<DatabaseHandles>,
     Path(job_id): Path<String>,
 ) -> impl IntoResponse {
-    let manager = match get_ingestion_manager(&im) {
+    let manager = match get_ingestion_manager(&database) {
         Ok(m) => m,
         Err(e) => return e.into_response(),
     };
 
-    if let Err(status) = authorize_job(&session, manager, &job_id, IngestionJobAction::Convert) {
+    if let Err(status) =
+        authorize_job(&session, manager, &job_id, IngestionJobAction::Convert).await
+    {
         return status.into_response();
     }
 
-    match manager.convert_job(&job_id).await {
+    let convert_job_id = job_id.clone();
+    let runtime = tokio::runtime::Handle::current();
+    match manager
+        .run(DbPriority::Interactive, move |manager| {
+            runtime
+                .block_on(manager.convert_job(&convert_job_id))
+                .map_err(anyhow::Error::new)
+        })
+        .await
+    {
         Ok(()) => {
             // Return updated job status
-            match manager.get_job(&job_id) {
+            let updated_job_id = job_id.clone();
+            match manager
+                .run(DbPriority::Interactive, move |manager| {
+                    manager.get_job(&updated_job_id).map_err(anyhow::Error::new)
+                })
+                .await
+            {
                 Ok(Some(job)) => Json(JobStatusResponse { job }).into_response(),
                 Ok(None) => StatusCode::NOT_FOUND.into_response(),
                 Err(e) => {
@@ -539,7 +628,7 @@ async fn convert_job(
 /// GET /reviews - Get pending review items
 async fn get_pending_reviews(
     session: Session,
-    State(im): State<OptionalIngestionManager>,
+    State(database): State<DatabaseHandles>,
     Query(pagination): Query<PaginationQuery>,
 ) -> impl IntoResponse {
     if !session.has_permission(Permission::EditCatalog)
@@ -548,15 +637,28 @@ async fn get_pending_reviews(
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    let manager = match get_ingestion_manager(&im) {
+    let manager = match get_ingestion_manager(&database) {
         Ok(m) => m,
         Err(e) => return e.into_response(),
     };
 
     let reviews = if session.has_permission(Permission::ServerAdmin) {
-        manager.get_pending_reviews(pagination.limit)
+        manager
+            .run(DbPriority::Interactive, move |manager| {
+                manager
+                    .get_pending_reviews(pagination.limit)
+                    .map_err(anyhow::Error::new)
+            })
+            .await
     } else {
-        manager.get_pending_reviews_for_user(&session.user_id.to_string(), pagination.limit)
+        let user_id = session.user_id.to_string();
+        manager
+            .run(DbPriority::Interactive, move |manager| {
+                manager
+                    .get_pending_reviews_for_user(&user_id, pagination.limit)
+                    .map_err(anyhow::Error::new)
+            })
+            .await
     };
     match reviews {
         Ok(items) => Json(ReviewQueueResponse { items }).into_response(),
@@ -570,11 +672,11 @@ async fn get_pending_reviews(
 /// POST /review/:job_id/resolve - Resolve a review
 async fn resolve_review(
     session: Session,
-    State(im): State<OptionalIngestionManager>,
+    State(database): State<DatabaseHandles>,
     Path(job_id): Path<String>,
     Json(body): Json<ResolveReviewBody>,
 ) -> impl IntoResponse {
-    let manager = match get_ingestion_manager(&im) {
+    let manager = match get_ingestion_manager(&database) {
         Ok(m) => m,
         Err(e) => return e.into_response(),
     };
@@ -584,14 +686,28 @@ async fn resolve_review(
         manager,
         &job_id,
         IngestionJobAction::ResolveReview,
-    ) {
+    )
+    .await
+    {
         return status.into_response();
     }
 
     let reviewer_id = session.user_id.to_string();
 
+    let resolved_job_id = job_id.clone();
+    let resolving_user_id = reviewer_id.clone();
+    let selected_option = body.selected_option.clone();
+    let runtime = tokio::runtime::Handle::current();
     match manager
-        .resolve_review(&job_id, &reviewer_id, &body.selected_option)
+        .run(DbPriority::Interactive, move |manager| {
+            runtime
+                .block_on(manager.resolve_review(
+                    &resolved_job_id,
+                    &resolving_user_id,
+                    &selected_option,
+                ))
+                .map_err(anyhow::Error::new)
+        })
         .await
     {
         Ok(()) => {
@@ -600,7 +716,13 @@ async fn resolve_review(
                 job_id, reviewer_id, body.selected_option
             );
             // Return updated job status
-            match manager.get_job(&job_id) {
+            let updated_job_id = job_id.clone();
+            match manager
+                .run(DbPriority::Interactive, move |manager| {
+                    manager.get_job(&updated_job_id).map_err(anyhow::Error::new)
+                })
+                .await
+            {
                 Ok(Some(job)) => Json(JobStatusResponse { job }).into_response(),
                 Ok(None) => StatusCode::NOT_FOUND.into_response(),
                 Err(e) => {
@@ -629,19 +751,26 @@ async fn resolve_review(
 /// GET /admin/jobs - List all ingestion jobs
 async fn admin_list_jobs(
     session: Session,
-    State(im): State<OptionalIngestionManager>,
+    State(database): State<DatabaseHandles>,
     Query(pagination): Query<PaginationQuery>,
 ) -> impl IntoResponse {
     if !session.has_permission(Permission::ServerAdmin) {
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    let manager = match get_ingestion_manager(&im) {
+    let manager = match get_ingestion_manager(&database) {
         Ok(m) => m,
         Err(e) => return e.into_response(),
     };
 
-    match manager.list_all_jobs(pagination.limit) {
+    match manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager
+                .list_all_jobs(pagination.limit)
+                .map_err(anyhow::Error::new)
+        })
+        .await
+    {
         Ok(jobs) => Json(jobs).into_response(),
         Err(e) => {
             warn!("Failed to list all jobs: {}", e);
@@ -653,19 +782,29 @@ async fn admin_list_jobs(
 /// DELETE /job/:id - Delete a job (user can delete their own jobs)
 async fn delete_job(
     session: Session,
-    State(im): State<OptionalIngestionManager>,
+    State(database): State<DatabaseHandles>,
     Path(job_id): Path<String>,
 ) -> impl IntoResponse {
-    let manager = match get_ingestion_manager(&im) {
+    let manager = match get_ingestion_manager(&database) {
         Ok(m) => m,
         Err(e) => return e.into_response(),
     };
 
-    if let Err(status) = authorize_job(&session, manager, &job_id, IngestionJobAction::Delete) {
+    if let Err(status) = authorize_job(&session, manager, &job_id, IngestionJobAction::Delete).await
+    {
         return status.into_response();
     }
 
-    match manager.delete_job(&job_id).await {
+    let deleted_job_id = job_id.clone();
+    let runtime = tokio::runtime::Handle::current();
+    match manager
+        .run(DbPriority::Interactive, move |manager| {
+            runtime
+                .block_on(manager.delete_job(&deleted_job_id))
+                .map_err(anyhow::Error::new)
+        })
+        .await
+    {
         Ok(()) => {
             info!("Deleted ingestion job {}", job_id);
             StatusCode::NO_CONTENT.into_response()
