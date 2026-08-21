@@ -1,6 +1,6 @@
 async fn login(
     State(config): State<ServerConfig>,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Json(body): Json<LoginBody>,
 ) -> Response {
     let start = Instant::now();
@@ -31,16 +31,22 @@ async fn login(
         }
     };
 
-    let locked_manager = &user_manager;
-    let credentials = match locked_manager.get_user_credentials(&body.user_handle) {
+    let user_handle = body.user_handle.clone();
+    let credentials = match database
+        .user_manager
+        .run(DbPriority::Critical, move |manager| {
+            manager.get_user_credentials(&user_handle)
+        })
+        .await
+    {
         Ok(Some(creds)) => creds,
         Ok(None) => {
             super::metrics::record_login_attempt("failure", start.elapsed());
             return StatusCode::UNAUTHORIZED.into_response();
         }
-        Err(_) => {
+        Err(error) => {
             super::metrics::record_login_attempt("error", start.elapsed());
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            return ApiError::from(error).into_response();
         }
     };
 
@@ -50,45 +56,30 @@ async fn login(
             &password_credentials.hash,
             &password_credentials.salt,
         ) {
-            // Fetch user permissions
-            let permissions = match locked_manager.get_user_permissions(credentials.user_id) {
-                Ok(perms) => perms,
-                Err(err) => {
-                    error!("Error fetching user permissions: {}", err);
-                    super::metrics::record_login_attempt("error", start.elapsed());
-                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-                }
-            };
+            let login_result = database
+                .user_manager
+                .run(DbPriority::Critical, move |manager| {
+                    let permissions = manager.get_user_permissions(credentials.user_id)?;
+                    let device_id = manager.register_or_update_device(&device_registration)?;
 
-            // 2. Register/update device
-            let device_id = match locked_manager.register_or_update_device(&device_registration) {
-                Ok(id) => id,
-                Err(e) => {
-                    error!("Device registration failed: {}", e);
-                    super::metrics::record_login_attempt("error", start.elapsed());
-                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-                }
-            };
+                    if let Err(error) =
+                        manager.associate_device_with_user(device_id, credentials.user_id)
+                    {
+                        error!("Device association failed: {}", error);
+                    }
+                    if let Err(error) = manager
+                        .enforce_user_device_limit(credentials.user_id, MAX_DEVICES_PER_USER)
+                    {
+                        error!("Device limit enforcement failed: {}", error);
+                    }
 
-            // 3. Associate device with user
-            if let Err(e) =
-                locked_manager.associate_device_with_user(device_id, credentials.user_id)
-            {
-                error!("Device association failed: {}", e);
-                // Non-fatal, continue with login
-            }
+                    let auth_token = manager.generate_auth_token(&credentials, device_id)?;
+                    Ok((permissions, auth_token))
+                })
+                .await;
 
-            // 4. Enforce per-user device limit
-            if let Err(e) =
-                locked_manager.enforce_user_device_limit(credentials.user_id, MAX_DEVICES_PER_USER)
-            {
-                error!("Device limit enforcement failed: {}", e);
-                // Non-fatal, continue with login
-            }
-
-            // 5. Generate auth token with device_id
-            return match locked_manager.generate_auth_token(&credentials, device_id) {
-                Ok(auth_token) => {
+            return match login_result {
+                Ok((permissions, auth_token)) => {
                     super::metrics::record_login_attempt("success", start.elapsed());
                     let response_body = LoginSuccessResponse {
                         token: auth_token.value.0.clone(),
@@ -109,10 +100,10 @@ async fn login(
                     );
                     response
                 }
-                Err(err) => {
-                    error!("Error with auth token generation: {}", err);
+                Err(error) => {
+                    error!("Error completing login database operations: {}", error);
                     super::metrics::record_login_attempt("error", start.elapsed());
-                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                    ApiError::from(error).into_response()
                 }
             };
         }
@@ -122,14 +113,25 @@ async fn login(
 }
 
 async fn logout(
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     State(config): State<ServerConfig>,
     session: Session,
 ) -> Response {
-    // Try to delete auth token from database (for legacy sessions)
-    // For OIDC sessions, this will fail since JWT isn't stored in DB - that's OK
-    let locked_manager = &user_manager;
-    let _ = locked_manager.delete_auth_token(&session.user_id, &AuthTokenValue(session.token));
+    let user_id = session.user_id;
+    let token = AuthTokenValue(session.token);
+    if let Err(error) = database
+        .user_manager
+        .run(DbPriority::Critical, move |manager| {
+            // A raw provider token is not present in the local token table. Preserve
+            // logout's best-effort revocation semantics while still surfacing executor
+            // saturation and shutdown failures to the client.
+            let _ = manager.delete_auth_token(&user_id, &token);
+            Ok(())
+        })
+        .await
+    {
+        return ApiError::from(error).into_response();
+    }
 
     // Always clear both cookies using exactly the same attributes used when setting them.
     let mut response = response::Builder::new()
@@ -218,7 +220,7 @@ async fn oidc_callback(
     Query(params): Query<OidcCallbackQuery>,
     State(oidc_client): State<OptionalOidcClient>,
     State(auth_state_store): State<GuardedAuthStateStore>,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     State(config): State<ServerConfig>,
 ) -> Response {
     let start = Instant::now();
@@ -261,113 +263,20 @@ async fn oidc_callback(
         auth_result.subject
     );
 
-    // Look up or provision local user by OIDC subject
-    let user_id = {
-        let locked_manager = &user_manager;
-
-        match locked_manager.get_user_id_by_oidc_subject(&auth_result.subject) {
-            Ok(Some(id)) => {
-                debug!(
-                    "Found existing user for OIDC subject={}",
-                    auth_result.subject
-                );
-                id
-            }
-            Ok(None) => {
-                // Auto-provision new user
-                info!(
-                    "Provisioning new user for OIDC subject={} (email={:?}, username={:?})",
-                    auth_result.subject, auth_result.email, auth_result.preferred_username
-                );
-                match locked_manager.provision_oidc_user(
-                    &auth_result.subject,
-                    auth_result.preferred_username.as_deref(),
-                    auth_result.email.as_deref(),
-                ) {
-                    Ok(id) => {
-                        info!(
-                            "Successfully provisioned new user_id={} for OIDC subject={}",
-                            id, auth_result.subject
-                        );
-                        id
-                    }
-                    Err(e) => {
-                        error!("Failed to provision OIDC user: {}", e);
-                        super::metrics::record_login_attempt("error", start.elapsed());
-                        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-                    }
-                }
-            }
-            Err(e) => {
-                error!("Failed to look up user by OIDC subject: {}", e);
-                super::metrics::record_login_attempt("error", start.elapsed());
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        }
-    };
-
     // Exchange the provider credential for a local opaque session. This keeps ID
     // tokens out of browser cookies and makes logout/revocation authoritative here.
-    let session_token = {
-        let locked_manager = &user_manager;
-        let device_id = stored_state.device_id.as_deref().and_then(|device_uuid| {
-            match locked_manager.get_device_by_uuid(device_uuid) {
-                Ok(Some(device)) => {
-                    if let Err(error) =
-                        locked_manager.associate_device_with_user(device.id, user_id)
-                    {
-                        debug!(
-                            "Could not associate OIDC device {} with user {}: {}",
-                            device.id, user_id, error
-                        );
-                    }
-                    Some(device.id)
-                }
-                Ok(None) => {
-                    let device_type = stored_state.device_type.as_deref().unwrap_or("web");
-                    let registration = DeviceRegistration::validate_and_sanitize(
-                        device_uuid,
-                        device_type,
-                        Some(device_uuid),
-                        stored_state.device_name.as_deref(),
-                    )
-                    .map_err(|error| {
-                        debug!("Ignoring invalid OIDC device information: {error}");
-                        error
-                    })
-                    .ok()?;
-                    match locked_manager.register_or_update_device(&registration) {
-                        Ok(device_id) => {
-                            if let Err(error) =
-                                locked_manager.associate_device_with_user(device_id, user_id)
-                            {
-                                debug!(
-                                    "Could not associate OIDC device {} with user {}: {}",
-                                    device_id, user_id, error
-                                );
-                            }
-                            Some(device_id)
-                        }
-                        Err(error) => {
-                            debug!("Could not register OIDC device: {error}");
-                            None
-                        }
-                    }
-                }
-                Err(error) => {
-                    debug!("Could not look up OIDC device: {error}");
-                    None
-                }
-            }
-        });
-
-        match locked_manager.generate_auth_token_for_user(user_id, device_id) {
-            Ok(token) => token.value.0,
-            Err(error) => {
-                error!("Failed to create local OIDC session: {error}");
-                super::metrics::record_login_attempt("error", start.elapsed());
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
+    let oidc_session = database
+        .user_manager
+        .run(DbPriority::Critical, move |manager| {
+            complete_oidc_login(manager, auth_result, stored_state)
+        })
+        .await;
+    let (user_id, session_token) = match oidc_session {
+        Ok(session) => session,
+        Err(error) => {
+            error!("Failed to create local OIDC session: {error}");
+            super::metrics::record_login_attempt("error", start.elapsed());
+            return ApiError::from(error).into_response();
         }
     };
 
@@ -384,27 +293,116 @@ async fn oidc_callback(
     response
 }
 
+fn complete_oidc_login(
+    manager: &crate::user::UserManager,
+    auth_result: crate::oidc::AuthResult,
+    stored_state: crate::oidc::AuthState,
+) -> anyhow::Result<(usize, String)> {
+    let user_id = match manager.get_user_id_by_oidc_subject(&auth_result.subject)? {
+        Some(id) => {
+            debug!(
+                "Found existing user for OIDC subject={}",
+                auth_result.subject
+            );
+            id
+        }
+        None => {
+            info!(
+                "Provisioning new user for OIDC subject={} (email={:?}, username={:?})",
+                auth_result.subject, auth_result.email, auth_result.preferred_username
+            );
+            let id = manager.provision_oidc_user(
+                &auth_result.subject,
+                auth_result.preferred_username.as_deref(),
+                auth_result.email.as_deref(),
+            )?;
+            info!(
+                "Successfully provisioned new user_id={} for OIDC subject={}",
+                id, auth_result.subject
+            );
+            id
+        }
+    };
+
+    let device_id = stored_state.device_id.as_deref().and_then(|device_uuid| {
+        match manager.get_device_by_uuid(device_uuid) {
+            Ok(Some(device)) => {
+                if let Err(error) = manager.associate_device_with_user(device.id, user_id) {
+                    debug!(
+                        "Could not associate OIDC device {} with user {}: {}",
+                        device.id, user_id, error
+                    );
+                }
+                Some(device.id)
+            }
+            Ok(None) => {
+                let device_type = stored_state.device_type.as_deref().unwrap_or("web");
+                let registration = DeviceRegistration::validate_and_sanitize(
+                    device_uuid,
+                    device_type,
+                    Some(device_uuid),
+                    stored_state.device_name.as_deref(),
+                )
+                .map_err(|error| {
+                    debug!("Ignoring invalid OIDC device information: {error}");
+                    error
+                })
+                .ok()?;
+                match manager.register_or_update_device(&registration) {
+                    Ok(device_id) => {
+                        if let Err(error) =
+                            manager.associate_device_with_user(device_id, user_id)
+                        {
+                            debug!(
+                                "Could not associate OIDC device {} with user {}: {}",
+                                device_id, user_id, error
+                            );
+                        }
+                        Some(device_id)
+                    }
+                    Err(error) => {
+                        debug!("Could not register OIDC device: {error}");
+                        None
+                    }
+                }
+            }
+            Err(error) => {
+                debug!("Could not look up OIDC device: {error}");
+                None
+            }
+        }
+    });
+
+    let token = manager.generate_auth_token_for_user(user_id, device_id)?;
+    Ok((user_id, token.value.0))
+}
+
 async fn get_session(
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     State(config): State<ServerConfig>,
     cookie_jar: CookieJar,
     session: Session,
 ) -> Response {
-    let locked_manager = &user_manager;
-
     // Get the user handle from user_id
-    let user_handle = match locked_manager.get_user_handle(session.user_id) {
+    let user_id = session.user_id;
+    let user_handle = match database
+        .user_manager
+        .run(DbPriority::Critical, move |manager| {
+            manager.get_user_handle(user_id)
+        })
+        .await
+    {
         Ok(Some(handle)) => handle,
         Ok(None) => {
             error!("User handle not found for user_id={}", session.user_id);
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
-        Err(err) => {
+        Err(error) => {
             error!(
                 "Failed to get user handle for user_id={}: {}",
-                session.user_id, err
+                session.user_id, error
             );
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            return ApiError::from(error).into_response();
         }
     };
 
@@ -424,4 +422,3 @@ async fn get_session(
     append_session_cookies(&mut response, session.token, csrf_token, &config);
     response
 }
-
