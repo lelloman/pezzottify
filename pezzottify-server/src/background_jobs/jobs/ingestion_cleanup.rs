@@ -14,6 +14,7 @@ use crate::background_jobs::{
     JobAuditLogger,
 };
 use crate::config::IngestionCleanupJobSettings;
+use crate::db_executor::{DbExecutor, DbExecutorConfig, DbHandle, DbLane, DbPriority};
 use crate::ingestion::IngestionStore;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -29,7 +30,7 @@ pub struct IngestionCleanupJob {
     /// Interval in hours between runs
     interval_hours: u64,
     /// The ingestion store to query for active jobs.
-    ingestion_store: Arc<dyn IngestionStore>,
+    ingestion_store: DbHandle<dyn IngestionStore>,
     /// Directory containing job temp directories.
     temp_dir: PathBuf,
     /// Minimum age in seconds before a directory is eligible for cleanup.
@@ -53,9 +54,23 @@ impl IngestionCleanupJob {
         temp_dir: PathBuf,
         settings: &IngestionCleanupJobSettings,
     ) -> Self {
+        Self::from_settings_with_executor(
+            ingestion_store,
+            temp_dir,
+            settings,
+            DbExecutor::new(DbExecutorConfig::default()),
+        )
+    }
+
+    pub fn from_settings_with_executor(
+        ingestion_store: Arc<dyn IngestionStore>,
+        temp_dir: PathBuf,
+        settings: &IngestionCleanupJobSettings,
+        db_executor: DbExecutor,
+    ) -> Self {
         Self {
             interval_hours: settings.interval_hours,
-            ingestion_store,
+            ingestion_store: DbHandle::new(ingestion_store, db_executor, DbLane::Ingestion),
             temp_dir,
             min_age_secs: settings.min_age_secs,
         }
@@ -94,7 +109,7 @@ impl BackgroundJob for IngestionCleanupJob {
     }
 
     fn execute(&self, ctx: &JobContext) -> Result<(), JobError> {
-        let audit = JobAuditLogger::new(Arc::clone(&ctx.server_store), self.id());
+        let audit = JobAuditLogger::new(ctx.server_db.clone(), self.id());
 
         audit.log_started(Some(serde_json::json!({
             "temp_dir": self.temp_dir.to_string_lossy(),
@@ -115,15 +130,17 @@ impl BackgroundJob for IngestionCleanupJob {
         }
 
         // Get list of active job IDs
-        let active_job_ids: std::collections::HashSet<String> =
-            match self.ingestion_store.list_active_job_ids() {
-                Ok(ids) => ids.into_iter().collect(),
-                Err(e) => {
-                    let error_msg = format!("Failed to list active job IDs: {}", e);
-                    audit.log_failed(&error_msg, None);
-                    return Err(JobError::ExecutionFailed(error_msg));
-                }
-            };
+        let active_job_ids: std::collections::HashSet<String> = match self
+            .ingestion_store
+            .run_blocking(DbPriority::Background, |store| store.list_active_job_ids())
+        {
+            Ok(ids) => ids.into_iter().collect(),
+            Err(e) => {
+                let error_msg = format!("Failed to list active job IDs: {}", e);
+                audit.log_failed(&error_msg, None);
+                return Err(JobError::ExecutionFailed(error_msg));
+            }
+        };
 
         debug!("Found {} active ingestion jobs", active_job_ids.len());
 

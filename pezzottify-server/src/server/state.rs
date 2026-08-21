@@ -75,7 +75,31 @@ impl DatabaseHandles {
         db_registry: Arc<DbRegistry>,
         enrichment_store: Option<Arc<dyn EnrichmentStore>>,
     ) -> Self {
-        let executor = DbExecutor::new(DbExecutorConfig::default());
+        Self::new_with_executor(
+            catalog_store,
+            search_vault,
+            user_store,
+            user_manager,
+            server_store,
+            show_store,
+            db_registry,
+            enrichment_store,
+            DbExecutor::new(DbExecutorConfig::default()),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_executor(
+        catalog_store: Arc<dyn CatalogStore>,
+        search_vault: Arc<dyn SearchVault>,
+        user_store: Arc<dyn FullUserStore>,
+        user_manager: Arc<UserManager>,
+        server_store: Arc<dyn ServerStore>,
+        show_store: Arc<dyn ShowStore>,
+        db_registry: Arc<DbRegistry>,
+        enrichment_store: Option<Arc<dyn EnrichmentStore>>,
+        executor: DbExecutor,
+    ) -> Self {
         Self {
             catalog_read: DbHandle::new(
                 catalog_store.clone(),

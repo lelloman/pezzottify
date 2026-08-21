@@ -19,6 +19,7 @@ use pezzottify_server::background_jobs::{create_scheduler, GuardedSearchVault, J
 use pezzottify_server::backup::DbRegistry;
 use pezzottify_server::catalog_store::{CatalogStore, SqliteCatalogStore};
 use pezzottify_server::config;
+use pezzottify_server::db_executor::{DbExecutor, DbExecutorConfig};
 use pezzottify_server::enrichment_store::SqliteEnrichmentStore;
 use pezzottify_server::ingestion::{IngestionStore, SqliteIngestionStore};
 use pezzottify_server::search::{Fts5LevenshteinSearchVault, NoopSearchVault};
@@ -277,6 +278,7 @@ async fn main() -> Result<()> {
     let guarded_search_vault: GuardedSearchVault = std::sync::Arc::from(search_vault);
 
     // Set up background job scheduler
+    let db_executor = DbExecutor::new(DbExecutorConfig::default());
     let shutdown_token = CancellationToken::new();
     let (hook_sender, hook_receiver) = tokio::sync::mpsc::channel(100);
 
@@ -294,13 +296,14 @@ async fn main() -> Result<()> {
             }
         };
 
-    let mut job_context = JobContext::with_search_vault(
+    let mut job_context = JobContext::with_search_vault_and_executor(
         shutdown_token.child_token(),
         catalog_store.clone() as Arc<dyn CatalogStore>,
         user_store.clone() as Arc<dyn user::FullUserStore>,
         server_store.clone() as Arc<dyn server_store::ServerStore>,
         user_manager.clone(),
         guarded_search_vault.clone(),
+        db_executor.clone(),
     );
 
     if let Some(ref store) = enrichment_store {
@@ -370,10 +373,11 @@ async fn main() -> Result<()> {
                     .cloned()
                     .unwrap_or_default();
                 scheduler
-                    .register_job(Arc::new(IngestionCleanupJob::from_settings(
+                    .register_job(Arc::new(IngestionCleanupJob::from_settings_with_executor(
                         ingestion_store,
                         temp_dir,
                         &ic_settings,
+                        db_executor.clone(),
                     )))
                     .await;
                 info!("Registered ingestion cleanup job");
@@ -588,6 +592,7 @@ async fn main() -> Result<()> {
             app_config.shows.clone(),
             db_registry.clone(),
             enrichment_store.clone().map(|store| store as Arc<dyn pezzottify_server::enrichment_store::EnrichmentStore>),
+            db_executor,
         ) => {
             info!("HTTP server stopped: {:?}", result);
             shutdown_token.cancel();

@@ -14,7 +14,6 @@ use crate::background_jobs::{
 use crate::config::AudioAnalysisSettings;
 // use crate::enrichment_store::AudioFeatures;
 // use std::path::Path;
-use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
 
@@ -54,7 +53,7 @@ impl BackgroundJob for AudioAnalysisJob {
             JobError::ExecutionFailed("Enrichment store not available in job context".to_string())
         })?;
 
-        let audit = JobAuditLogger::new(Arc::clone(&ctx.server_store), self.id());
+        let audit = JobAuditLogger::new(ctx.server_db.clone(), self.id());
 
         audit.log_started(Some(serde_json::json!({
             "batch_size": self.settings.batch_size,

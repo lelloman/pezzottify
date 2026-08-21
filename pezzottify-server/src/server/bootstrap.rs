@@ -11,6 +11,36 @@ pub async fn make_app(
     db_registry: Arc<crate::backup::DbRegistry>,
     enrichment_store: OptionalEnrichmentStore,
 ) -> Result<Router> {
+    make_app_with_executor(
+        config,
+        catalog_store,
+        search_vault,
+        user_store,
+        user_manager,
+        scheduler_handle,
+        server_store,
+        oidc_config,
+        db_registry,
+        enrichment_store,
+        crate::db_executor::DbExecutor::new(Default::default()),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn make_app_with_executor(
+    config: ServerConfig,
+    catalog_store: Arc<dyn CatalogStore>,
+    search_vault: super::state::GuardedSearchVault,
+    user_store: Arc<dyn FullUserStore>,
+    user_manager: GuardedUserManager,
+    scheduler_handle: Option<SchedulerHandle>,
+    server_store: Arc<dyn crate::server_store::ServerStore>,
+    oidc_config: Option<crate::config::OidcConfig>,
+    db_registry: Arc<crate::backup::DbRegistry>,
+    enrichment_store: OptionalEnrichmentStore,
+    db_executor: crate::db_executor::DbExecutor,
+) -> Result<Router> {
     // Initialize OIDC client if configured
     let oidc_client = match oidc_config {
         Some(cfg) => {
@@ -54,6 +84,7 @@ pub async fn make_app(
         show_store,
         db_registry,
         enrichment_store,
+        db_executor,
     );
     state.oidc_client = oidc_client;
 
@@ -271,6 +302,7 @@ pub async fn run_server(
     shows: crate::config::ShowsSettings,
     db_registry: Arc<crate::backup::DbRegistry>,
     enrichment_store: OptionalEnrichmentStore,
+    db_executor: crate::db_executor::DbExecutor,
 ) -> Result<()> {
     let disable_password_auth = oidc_config
         .as_ref()
@@ -297,7 +329,7 @@ pub async fn run_server(
         audio_embeddings,
     };
 
-    let app = make_app(
+    let app = make_app_with_executor(
         config,
         catalog_store.clone(),
         guarded_search_vault.clone(),
@@ -308,6 +340,7 @@ pub async fn run_server(
         oidc_config,
         db_registry,
         enrichment_store,
+        db_executor,
     )
     .await?;
 

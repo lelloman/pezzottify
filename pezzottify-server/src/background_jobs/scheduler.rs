@@ -462,53 +462,8 @@ impl JobScheduler {
         self.job_cancel_tokens
             .insert(job_id.to_string(), cancel_token.clone());
 
-        // Create job context with the specific cancellation token
-        let ctx = match (
-            &self.job_context.search_vault,
-            &self.job_context.sync_notifier,
-        ) {
-            (Some(search_vault), Some(sync_notifier)) => {
-                JobContext::with_search_vault_and_sync_notifier(
-                    cancel_token,
-                    Arc::clone(&self.job_context.catalog_store),
-                    Arc::clone(&self.job_context.user_store),
-                    Arc::clone(&self.job_context.server_store),
-                    Arc::clone(&self.job_context.user_manager),
-                    Arc::clone(search_vault),
-                    Arc::clone(sync_notifier),
-                )
-            }
-            (Some(search_vault), None) => JobContext::with_search_vault(
-                cancel_token,
-                Arc::clone(&self.job_context.catalog_store),
-                Arc::clone(&self.job_context.user_store),
-                Arc::clone(&self.job_context.server_store),
-                Arc::clone(&self.job_context.user_manager),
-                Arc::clone(search_vault),
-            ),
-            (None, Some(sync_notifier)) => JobContext::with_sync_notifier(
-                cancel_token,
-                Arc::clone(&self.job_context.catalog_store),
-                Arc::clone(&self.job_context.user_store),
-                Arc::clone(&self.job_context.server_store),
-                Arc::clone(&self.job_context.user_manager),
-                Arc::clone(sync_notifier),
-            ),
-            (None, None) => JobContext::new(
-                cancel_token,
-                Arc::clone(&self.job_context.catalog_store),
-                Arc::clone(&self.job_context.user_store),
-                Arc::clone(&self.job_context.server_store),
-                Arc::clone(&self.job_context.user_manager),
-            ),
-        };
-
-        // Propagate optional enrichment store
-        let ctx = if let Some(ref store) = self.job_context.enrichment_store {
-            ctx.with_enrichment_store(Arc::clone(store))
-        } else {
-            ctx
-        };
+        // Preserve the shared executor and all typed handles for every run.
+        let ctx = self.job_context.with_cancellation_token(cancel_token);
 
         let server_store = Arc::clone(&self.server_store);
         let job_id_owned = job_id.to_string();

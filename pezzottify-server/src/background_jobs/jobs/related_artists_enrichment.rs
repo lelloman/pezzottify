@@ -25,7 +25,6 @@ use crate::related_artists::lastfm::LastFmClient;
 use crate::related_artists::musicbrainz::MusicBrainzClient;
 use crate::server_store::{CatalogContentType, CatalogEventType};
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, error, info, warn};
 
@@ -77,7 +76,7 @@ impl BackgroundJob for RelatedArtistsEnrichmentJob {
     }
 
     fn execute(&self, ctx: &JobContext) -> Result<(), JobError> {
-        let audit = JobAuditLogger::new(Arc::clone(&ctx.server_store), self.id());
+        let audit = JobAuditLogger::new(ctx.server_db.clone(), self.id());
         let batch_size = self.settings.batch_size;
 
         audit.log_started(Some(serde_json::json!({

@@ -9,7 +9,7 @@ use crate::background_jobs::{
     JobAuditLogger,
 };
 use crate::config::DevicePruningJobSettings;
-use std::sync::Arc;
+use crate::db_executor::DbPriority;
 use std::time::Duration;
 use tracing::info;
 
@@ -50,7 +50,7 @@ impl BackgroundJob for DevicePruningJob {
     }
 
     fn execute(&self, ctx: &JobContext) -> Result<(), JobError> {
-        let audit = JobAuditLogger::new(Arc::clone(&ctx.server_store), self.id());
+        let audit = JobAuditLogger::new(ctx.server_db.clone(), self.id());
 
         if ctx.is_cancelled() {
             return Err(JobError::Cancelled);
@@ -60,10 +60,12 @@ impl BackgroundJob for DevicePruningJob {
             "retention_days": self.retention_days,
         })));
 
+        let retention_days = self.retention_days as u32;
         match ctx
-            .user_store
-            .prune_inactive_devices(self.retention_days as u32)
-        {
+            .user_db
+            .run_blocking(DbPriority::Background, move |store| {
+                store.prune_inactive_devices(retention_days)
+            }) {
             Ok(deleted) => {
                 if deleted > 0 {
                     info!("Pruned {} inactive devices", deleted);
