@@ -20,7 +20,6 @@ use crate::user::user_models::TrackPlayCount;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 use std::time::Duration;
 use tracing::{info, warn};
 
@@ -719,7 +718,7 @@ impl BackgroundJob for MetadataEnrichmentJob {
                 requeued_stale_running
             );
         }
-        let audit = JobAuditLogger::new(Arc::clone(&ctx.server_store), self.id());
+        let audit = JobAuditLogger::new(ctx.server_db.clone(), self.id());
         audit.log_started(Some(serde_json::json!({
             "batch_size": batch_size,
             "entity_types": selected_entity_types.clone(),
@@ -1828,6 +1827,7 @@ fn now_secs() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     fn track_context(
         track_id: &str,

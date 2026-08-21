@@ -18,7 +18,6 @@ use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
 use std::time::Duration;
 use tracing::{info, warn};
 
@@ -346,7 +345,7 @@ impl BackgroundJob for FeaturedAlbumsJob {
     }
 
     fn execute_with_params(&self, ctx: &JobContext, params: Option<Value>) -> Result<(), JobError> {
-        let audit = JobAuditLogger::new(Arc::clone(&ctx.server_store), self.id());
+        let audit = JobAuditLogger::new(ctx.server_db.clone(), self.id());
         let force = params
             .as_ref()
             .and_then(|value| value.get("force"))

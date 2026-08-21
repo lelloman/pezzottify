@@ -1,4 +1,5 @@
 use crate::catalog_store::CatalogStore;
+use crate::db_executor::{DbExecutor, DbExecutorConfig, DbHandle, DbLane};
 use crate::download_manager::DownloadSyncNotifier;
 use crate::enrichment_store::EnrichmentStore;
 use crate::search::SearchVault;
@@ -47,6 +48,14 @@ pub struct JobContext {
 
     /// Access to enrichment store for audio features and metadata enrichment.
     pub enrichment_store: Option<Arc<dyn EnrichmentStore>>,
+
+    /// Shared priority-aware execution for synchronous job database work.
+    pub db_executor: DbExecutor,
+    pub catalog_db: DbHandle<dyn CatalogStore>,
+    pub user_db: DbHandle<dyn FullUserStore>,
+    pub server_db: DbHandle<dyn ServerStore>,
+    pub search_db: Option<DbHandle<dyn SearchVault>>,
+    pub enrichment_db: Option<DbHandle<dyn EnrichmentStore>>,
 }
 
 impl JobContext {
@@ -58,8 +67,33 @@ impl JobContext {
         server_store: Arc<dyn ServerStore>,
         user_manager: GuardedUserManager,
     ) -> Self {
+        Self::new_with_executor(
+            cancellation_token,
+            catalog_store,
+            user_store,
+            server_store,
+            user_manager,
+            DbExecutor::new(DbExecutorConfig::default()),
+        )
+    }
+
+    pub fn new_with_executor(
+        cancellation_token: CancellationToken,
+        catalog_store: Arc<dyn CatalogStore>,
+        user_store: Arc<dyn FullUserStore>,
+        server_store: Arc<dyn ServerStore>,
+        user_manager: GuardedUserManager,
+        db_executor: DbExecutor,
+    ) -> Self {
         Self {
             cancellation_token,
+            catalog_db: DbHandle::new(
+                catalog_store.clone(),
+                db_executor.clone(),
+                DbLane::CatalogWrite,
+            ),
+            user_db: DbHandle::new(user_store.clone(), db_executor.clone(), DbLane::User),
+            server_db: DbHandle::new(server_store.clone(), db_executor.clone(), DbLane::Server),
             catalog_store,
             user_store,
             server_store,
@@ -67,6 +101,9 @@ impl JobContext {
             search_vault: None,
             sync_notifier: None,
             enrichment_store: None,
+            search_db: None,
+            enrichment_db: None,
+            db_executor,
         }
     }
 
@@ -79,16 +116,42 @@ impl JobContext {
         user_manager: GuardedUserManager,
         search_vault: GuardedSearchVault,
     ) -> Self {
-        Self {
+        Self::with_search_vault_and_executor(
             cancellation_token,
             catalog_store,
             user_store,
             server_store,
             user_manager,
-            search_vault: Some(search_vault),
-            sync_notifier: None,
-            enrichment_store: None,
-        }
+            search_vault,
+            DbExecutor::new(DbExecutorConfig::default()),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_search_vault_and_executor(
+        cancellation_token: CancellationToken,
+        catalog_store: Arc<dyn CatalogStore>,
+        user_store: Arc<dyn FullUserStore>,
+        server_store: Arc<dyn ServerStore>,
+        user_manager: GuardedUserManager,
+        search_vault: GuardedSearchVault,
+        db_executor: DbExecutor,
+    ) -> Self {
+        let mut context = Self::new_with_executor(
+            cancellation_token,
+            catalog_store,
+            user_store,
+            server_store,
+            user_manager,
+            db_executor.clone(),
+        );
+        context.search_db = Some(DbHandle::new(
+            search_vault.clone(),
+            db_executor,
+            DbLane::SearchWrite,
+        ));
+        context.search_vault = Some(search_vault);
+        context
     }
 
     /// Create a new job context with sync notifier.
@@ -100,16 +163,15 @@ impl JobContext {
         user_manager: GuardedUserManager,
         sync_notifier: GuardedSyncNotifier,
     ) -> Self {
-        Self {
+        let mut context = Self::new(
             cancellation_token,
             catalog_store,
             user_store,
             server_store,
             user_manager,
-            search_vault: None,
-            sync_notifier: Some(sync_notifier),
-            enrichment_store: None,
-        }
+        );
+        context.sync_notifier = Some(sync_notifier);
+        context
     }
 
     /// Create a new job context with search vault and sync notifier.
@@ -122,22 +184,34 @@ impl JobContext {
         search_vault: GuardedSearchVault,
         sync_notifier: GuardedSyncNotifier,
     ) -> Self {
-        Self {
+        let mut context = Self::with_search_vault(
             cancellation_token,
             catalog_store,
             user_store,
             server_store,
             user_manager,
-            search_vault: Some(search_vault),
-            sync_notifier: Some(sync_notifier),
-            enrichment_store: None,
-        }
+            search_vault,
+        );
+        context.sync_notifier = Some(sync_notifier);
+        context
     }
 
     /// Set the enrichment store on this context.
     pub fn with_enrichment_store(mut self, store: Arc<dyn EnrichmentStore>) -> Self {
+        self.enrichment_db = Some(DbHandle::new(
+            store.clone(),
+            self.db_executor.clone(),
+            DbLane::EnrichmentWrite,
+        ));
         self.enrichment_store = Some(store);
         self
+    }
+
+    /// Clone all database handles while giving one execution its own cancellation token.
+    pub fn with_cancellation_token(&self, cancellation_token: CancellationToken) -> Self {
+        let mut context = self.clone();
+        context.cancellation_token = cancellation_token;
+        context
     }
 
     /// Check if cancellation has been requested.

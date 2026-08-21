@@ -10,7 +10,7 @@ use crate::background_jobs::{
     JobAuditLogger,
 };
 use crate::config::IntervalJobSettings;
-use std::sync::Arc;
+use crate::db_executor::DbPriority;
 use std::time::Duration;
 use tracing::info;
 use uuid::Uuid;
@@ -72,7 +72,7 @@ impl BackgroundJob for WhatsNewBatchJob {
     }
 
     fn execute(&self, ctx: &JobContext) -> Result<(), JobError> {
-        let audit = JobAuditLogger::new(Arc::clone(&ctx.server_store), self.id());
+        let audit = JobAuditLogger::new(ctx.server_db.clone(), self.id());
 
         // Check for cancellation before starting
         if ctx.is_cancelled() {
@@ -82,7 +82,9 @@ impl BackgroundJob for WhatsNewBatchJob {
         audit.log_started(None);
 
         // Get pending albums
-        let pending = match ctx.server_store.get_pending_whatsnew_albums() {
+        let pending = match ctx.server_db.run_blocking(DbPriority::Background, |store| {
+            store.get_pending_whatsnew_albums()
+        }) {
             Ok(p) => p,
             Err(e) => {
                 let error_msg = format!("Failed to get pending albums: {}", e);
@@ -109,9 +111,13 @@ impl BackgroundJob for WhatsNewBatchJob {
         let batch_id = Uuid::new_v4().to_string();
         let closed_at = chrono::Utc::now().timestamp();
 
+        let batch_id_for_store = batch_id.clone();
+        let album_ids_for_store = album_ids.clone();
         if let Err(e) = ctx
-            .server_store
-            .create_whatsnew_batch(&batch_id, closed_at, &album_ids)
+            .server_db
+            .run_blocking(DbPriority::Background, move |store| {
+                store.create_whatsnew_batch(&batch_id_for_store, closed_at, &album_ids_for_store)
+            })
         {
             let error_msg = format!("Failed to create batch: {}", e);
             audit.log_failed(&error_msg, None);
@@ -119,7 +125,9 @@ impl BackgroundJob for WhatsNewBatchJob {
         }
 
         // Clear the pending list
-        if let Err(e) = ctx.server_store.clear_pending_whatsnew_albums() {
+        if let Err(e) = ctx.server_db.run_blocking(DbPriority::Background, |store| {
+            store.clear_pending_whatsnew_albums()
+        }) {
             // Log but don't fail - batch was created successfully
             info!("Warning: Failed to clear pending albums: {}", e);
         }

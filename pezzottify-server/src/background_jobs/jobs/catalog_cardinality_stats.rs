@@ -34,7 +34,7 @@ impl BackgroundJob for CatalogCardinalityStatsJob {
     }
 
     fn execute(&self, ctx: &JobContext) -> Result<(), JobError> {
-        let audit = JobAuditLogger::new(ctx.server_store.clone(), self.id());
+        let audit = JobAuditLogger::new(ctx.server_db.clone(), self.id());
         let started_at = Instant::now();
         audit.log_started(None);
 

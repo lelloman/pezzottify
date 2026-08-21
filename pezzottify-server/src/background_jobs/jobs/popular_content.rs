@@ -23,7 +23,6 @@ use crate::config::PopularContentJobSettings;
 use crate::search::HashedItemType;
 use crate::user::user_models::{PopularAlbum, PopularArtist, PopularContent};
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, info};
 
@@ -200,7 +199,7 @@ impl BackgroundJob for PopularContentJob {
     }
 
     fn execute(&self, ctx: &JobContext) -> Result<(), JobError> {
-        let audit = JobAuditLogger::new(Arc::clone(&ctx.server_store), self.id());
+        let audit = JobAuditLogger::new(ctx.server_db.clone(), self.id());
         let (start_date, end_date) = self.compute_date_range();
 
         info!(

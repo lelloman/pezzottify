@@ -76,7 +76,7 @@ impl BackgroundJob for CatalogAvailabilityStatsJob {
             return Err(JobError::Cancelled);
         }
 
-        let audit = JobAuditLogger::new(ctx.server_store.clone(), self.id());
+        let audit = JobAuditLogger::new(ctx.server_db.clone(), self.id());
         let started_at = Instant::now();
         audit.log_started(Some(serde_json::json!({
             "interval_hours": self.interval_hours,

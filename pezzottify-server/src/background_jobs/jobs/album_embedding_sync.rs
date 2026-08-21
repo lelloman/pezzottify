@@ -233,7 +233,7 @@ impl AlbumEmbeddingSyncJob {
         ctx: &JobContext,
         params: AlbumEmbeddingSyncParams,
     ) -> Result<(), JobError> {
-        let audit = JobAuditLogger::new(ctx.server_store.clone(), self.id());
+        let audit = JobAuditLogger::new(ctx.server_db.clone(), self.id());
         let started_at = Instant::now();
         let max_albums = params
             .max_albums

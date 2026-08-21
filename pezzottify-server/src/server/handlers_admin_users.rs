@@ -1084,6 +1084,7 @@ impl ServerState {
         show_store: Arc<dyn crate::shows::ShowStore>,
         db_registry: Arc<crate::backup::DbRegistry>,
         enrichment_store: OptionalEnrichmentStore,
+        db_executor: crate::db_executor::DbExecutor,
     ) -> ServerState {
         // Create connection manager
         let ws_connection_manager = Arc::new(super::websocket::ConnectionManager::new());
@@ -1104,7 +1105,7 @@ impl ServerState {
             .build()
             .expect("Failed to create HTTP client");
 
-        let database = super::state::DatabaseHandles::new(
+        let database = super::state::DatabaseHandles::new_with_executor(
             catalog_store.clone(),
             search_vault.clone(),
             user_store,
@@ -1113,6 +1114,7 @@ impl ServerState {
             show_store.clone(),
             db_registry.clone(),
             enrichment_store.clone(),
+            db_executor,
         );
 
         // Create playback session manager for multi-device sync
