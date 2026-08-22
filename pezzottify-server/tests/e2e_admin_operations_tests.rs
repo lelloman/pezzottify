@@ -150,8 +150,9 @@ async fn catalog_sync_returns_every_high_volume_event_in_sequence() {
     let user = TestClient::authenticated(server.base_url.clone()).await;
     let initial_seq = server
         .server_store
-        .get_catalog_events_current_seq()
-        .unwrap();
+        .get_catalog_events_page(0, 1)
+        .unwrap()
+        .current_seq;
 
     for index in 1..=EVENT_COUNT {
         server

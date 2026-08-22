@@ -620,22 +620,6 @@ impl ServerStore for SqliteServerStore {
         Ok(conn.last_insert_rowid())
     }
 
-    fn get_catalog_events_since(&self, since_seq: i64) -> Result<Vec<CatalogEvent>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT seq, event_type, content_type, content_id, timestamp, triggered_by
-             FROM catalog_events
-             WHERE seq > ?1
-             ORDER BY seq ASC",
-        )?;
-
-        let events = stmt
-            .query_map(params![since_seq], Self::row_to_catalog_event)?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-
-        Ok(events)
-    }
-
     fn get_catalog_events_page(&self, since_seq: i64, limit: usize) -> Result<CatalogEventPage> {
         let conn = self.conn.lock().unwrap();
         let current_seq = conn
@@ -672,16 +656,6 @@ impl ServerStore for SqliteServerStore {
             has_more,
             next_since,
         })
-    }
-
-    fn get_catalog_events_current_seq(&self) -> Result<i64> {
-        let conn = self.conn.lock().unwrap();
-        let seq: Option<i64> = conn
-            .query_row("SELECT MAX(seq) FROM catalog_events", [], |row| row.get(0))
-            .optional()?
-            .flatten();
-
-        Ok(seq.unwrap_or(0))
     }
 
     fn cleanup_old_catalog_events(&self, before_timestamp: i64) -> Result<usize> {
@@ -1199,9 +1173,9 @@ mod tests {
         let store = &test.store;
 
         // Initially no events
-        let events = store.get_catalog_events_since(0).unwrap();
-        assert!(events.is_empty());
-        assert_eq!(store.get_catalog_events_current_seq().unwrap(), 0);
+        let page = store.get_catalog_events_page(0, 10).unwrap();
+        assert!(page.events.is_empty());
+        assert_eq!(page.current_seq, 0);
 
         // Append an event
         let seq = store
@@ -1215,7 +1189,7 @@ mod tests {
         assert_eq!(seq, 1);
 
         // Get events since 0
-        let events = store.get_catalog_events_since(0).unwrap();
+        let events = store.get_catalog_events_page(0, 10).unwrap().events;
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].seq, 1);
         assert_eq!(events[0].event_type, CatalogEventType::AlbumUpdated);
@@ -1227,7 +1201,7 @@ mod tests {
         );
 
         // Current seq should be 1
-        assert_eq!(store.get_catalog_events_current_seq().unwrap(), 1);
+        assert_eq!(store.get_catalog_events_page(0, 1).unwrap().current_seq, 1);
     }
 
     #[test]
@@ -1251,14 +1225,14 @@ mod tests {
         }
 
         // Get events since seq 2 (should return events 3, 4, 5)
-        let events = store.get_catalog_events_since(2).unwrap();
+        let events = store.get_catalog_events_page(2, 10).unwrap().events;
         assert_eq!(events.len(), 3);
         assert_eq!(events[0].seq, 3);
         assert_eq!(events[1].seq, 4);
         assert_eq!(events[2].seq, 5);
 
         // Current seq should be 5
-        assert_eq!(store.get_catalog_events_current_seq().unwrap(), 5);
+        assert_eq!(store.get_catalog_events_page(0, 1).unwrap().current_seq, 5);
     }
 
     #[test]
@@ -1281,7 +1255,10 @@ mod tests {
             assert_eq!(inserted_seq, seq);
         }
 
-        let events = store.get_catalog_events_since(0).unwrap();
+        let events = store
+            .get_catalog_events_page(0, EVENT_COUNT as usize)
+            .unwrap()
+            .events;
         assert_eq!(events.len(), EVENT_COUNT as usize);
         assert!(events
             .iter()
@@ -1292,7 +1269,10 @@ mod tests {
             events.last().unwrap().content_id,
             format!("track-{EVENT_COUNT}")
         );
-        assert_eq!(store.get_catalog_events_current_seq().unwrap(), EVENT_COUNT);
+        assert_eq!(
+            store.get_catalog_events_page(0, 1).unwrap().current_seq,
+            EVENT_COUNT
+        );
     }
 
     #[test]
@@ -1455,7 +1435,7 @@ mod tests {
             )
             .unwrap();
 
-        let events = store.get_catalog_events_since(0).unwrap();
+        let events = store.get_catalog_events_page(0, 10).unwrap().events;
         assert_eq!(events.len(), 3);
 
         assert_eq!(events[0].event_type, CatalogEventType::AlbumAdded);
@@ -1500,14 +1480,17 @@ mod tests {
             .unwrap();
         }
 
-        assert_eq!(store.get_catalog_events_since(0).unwrap().len(), 3);
+        assert_eq!(
+            store.get_catalog_events_page(0, 10).unwrap().events.len(),
+            3
+        );
 
         // Cleanup events before timestamp 3000
         let deleted = store.cleanup_old_catalog_events(3000).unwrap();
         assert_eq!(deleted, 2);
 
         // Only one event should remain
-        let events = store.get_catalog_events_since(0).unwrap();
+        let events = store.get_catalog_events_page(0, 10).unwrap().events;
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].content_id, "new-1");
     }
