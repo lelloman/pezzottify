@@ -75,12 +75,8 @@ pub trait ServerStore: Send + Sync {
         content_id: &str,
         triggered_by: Option<&str>,
     ) -> Result<i64>;
-    /// Get catalog events since a given sequence number (exclusive).
-    fn get_catalog_events_since(&self, since_seq: i64) -> Result<Vec<CatalogEvent>>;
     /// Get a bounded page and the catalog high-water mark from one database snapshot.
     fn get_catalog_events_page(&self, since_seq: i64, limit: usize) -> Result<CatalogEventPage>;
-    /// Get the current (highest) sequence number for catalog events.
-    fn get_catalog_events_current_seq(&self) -> Result<i64>;
     /// Delete catalog events older than a given timestamp (for pruning).
     fn cleanup_old_catalog_events(&self, before_timestamp: i64) -> Result<usize>;
 

@@ -248,12 +248,6 @@ mod tests {
         ) -> anyhow::Result<i64> {
             Ok(1)
         }
-        fn get_catalog_events_since(
-            &self,
-            _since_seq: i64,
-        ) -> anyhow::Result<Vec<crate::server_store::CatalogEvent>> {
-            Ok(vec![])
-        }
         fn get_catalog_events_page(
             &self,
             _since_seq: i64,
@@ -265,9 +259,6 @@ mod tests {
                 has_more: false,
                 next_since: 0,
             })
-        }
-        fn get_catalog_events_current_seq(&self) -> anyhow::Result<i64> {
-            Ok(0)
         }
         fn cleanup_old_catalog_events(&self, _before_timestamp: i64) -> anyhow::Result<usize> {
             Ok(0)

@@ -249,28 +249,42 @@ enum BatchItemResult {
     Error { error: String },
 }
 
+fn admin_user_db_error(context: &'static str, error: crate::db_executor::DbRunError) -> Response {
+    match error {
+        crate::db_executor::DbRunError::Store(source) => {
+            error!("{context}: {source}");
+            ApiError::internal(context, source).into_response()
+        }
+        error => ApiError::from(error).into_response(),
+    }
+}
+
+enum DeleteUserOutcome {
+    Missing,
+    SelfDelete,
+    Deleted(bool),
+}
+
 async fn admin_get_users(
     _session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
 ) -> Response {
-    let manager = &user_manager;
-    match manager.get_all_user_handles() {
-        Ok(handles) => {
-            let mut users: Vec<UserInfo> = vec![];
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, |manager| {
+            let handles = manager.get_all_user_handles()?;
+            let mut users = Vec::with_capacity(handles.len());
             for handle in handles {
-                if let Ok(Some(user_id)) = manager.get_user_id(&handle) {
-                    users.push(UserInfo {
-                        user_handle: handle,
-                        user_id,
-                    });
+                if let Some(user_id) = manager.get_user_id(&handle)? {
+                    users.push(UserInfo { user_handle: handle, user_id });
                 }
             }
-            Json(users).into_response()
-        }
-        Err(err) => {
-            error!("Error getting users: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+            Ok(users)
+        })
+        .await
+    {
+        Ok(users) => Json(users).into_response(),
+        Err(error) => admin_user_db_error("Failed to get users", error),
     }
 }
 
@@ -287,72 +301,63 @@ struct CreateUserResponse {
 
 async fn admin_create_user(
     _session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Json(body): Json<CreateUserBody>,
 ) -> Response {
-    let manager = &user_manager;
-
     if body.user_handle.is_empty() {
         return ApiError::bad_request("invalid_user_handle", "User handle cannot be empty")
             .into_response();
     }
-    match manager.get_user_id(&body.user_handle) {
-        Ok(Some(_)) => {
-            return ApiError::conflict("user_handle_exists", "User handle already exists")
-                .into_response();
-        }
-        Ok(None) => {}
-        Err(err) => {
-            return ApiError::internal("Failed to check user handle", err).into_response();
-        }
+    let user_handle = body.user_handle;
+    let handle_for_insert = user_handle.clone();
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            if manager.get_user_id(&handle_for_insert)?.is_some() {
+                return Ok(None);
+            }
+            Ok(Some(manager.add_user(&handle_for_insert)?))
+        })
+        .await
+    {
+        Ok(Some(user_id)) => (
+            StatusCode::CREATED,
+            Json(CreateUserResponse { user_id, user_handle }),
+        )
+            .into_response(),
+        Ok(None) => ApiError::conflict("user_handle_exists", "User handle already exists")
+            .into_response(),
+        Err(error) => admin_user_db_error("Failed to create user", error),
     }
-
-    let user_id = match manager.add_user(&body.user_handle) {
-        Ok(id) => id,
-        Err(err) => {
-            return ApiError::internal("Failed to create user", err).into_response();
-        }
-    };
-
-    (
-        StatusCode::CREATED,
-        Json(CreateUserResponse {
-            user_id,
-            user_handle: body.user_handle,
-        }),
-    )
-        .into_response()
 }
 
 async fn admin_delete_user(
     session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Path(user_handle): Path<String>,
 ) -> Response {
-    let manager = &user_manager;
-
-    // Get user id first
-    let user_id = match manager.get_user_id(&user_handle) {
-        Ok(Some(id)) => id,
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Error getting user id: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    let requesting_user_id = session.user_id;
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            let Some(user_id) = manager.get_user_id(&user_handle)? else {
+                return Ok(DeleteUserOutcome::Missing);
+            };
+            if user_id == requesting_user_id {
+                return Ok(DeleteUserOutcome::SelfDelete);
+            }
+            Ok(DeleteUserOutcome::Deleted(manager.delete_user(user_id)?))
+        })
+        .await
+    {
+        Ok(DeleteUserOutcome::Missing | DeleteUserOutcome::Deleted(false)) => {
+            StatusCode::NOT_FOUND.into_response()
         }
-    };
-
-    // Prevent self-deletion
-    if user_id == session.user_id {
-        return (StatusCode::BAD_REQUEST, "Cannot delete your own account").into_response();
-    }
-
-    match manager.delete_user(user_id) {
-        Ok(true) => StatusCode::NO_CONTENT.into_response(),
-        Ok(false) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Error deleting user: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        Ok(DeleteUserOutcome::SelfDelete) => {
+            (StatusCode::BAD_REQUEST, "Cannot delete your own account").into_response()
         }
+        Ok(DeleteUserOutcome::Deleted(true)) => StatusCode::NO_CONTENT.into_response(),
+        Err(error) => admin_user_db_error("Failed to delete user", error),
     }
 }
 
@@ -364,22 +369,24 @@ struct UserCredentialsStatusResponse {
 
 async fn admin_get_user_credentials_status(
     _session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Path(user_handle): Path<String>,
 ) -> Response {
-    let manager = &user_manager;
-
-    match manager.get_user_credentials(&user_handle) {
+    let handle_for_query = user_handle.clone();
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_user_credentials(&handle_for_query)
+        })
+        .await
+    {
         Ok(Some(creds)) => Json(UserCredentialsStatusResponse {
             user_handle,
             has_password: creds.username_password.is_some(),
         })
         .into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Error getting user credentials: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(error) => admin_user_db_error("Failed to get user credentials", error),
     }
 }
 
@@ -390,80 +397,70 @@ struct SetPasswordBody {
 
 async fn admin_set_user_password(
     _session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Path(user_handle): Path<String>,
     Json(body): Json<SetPasswordBody>,
 ) -> Response {
-    let manager = &user_manager;
-
-    // Check if user exists and has password already
-    let has_password = match manager.get_user_credentials(&user_handle) {
-        Ok(Some(creds)) => creds.username_password.is_some(),
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Error getting user credentials: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-
-    let result = if has_password {
-        manager.update_password_credentials(&user_handle, body.password)
-    } else {
-        manager.create_password_credentials(&user_handle, body.password)
-    };
-
-    match result {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => {
-            error!("Error setting user password: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            let Some(credentials) = manager.get_user_credentials(&user_handle)? else {
+                return Ok(false);
+            };
+            if credentials.username_password.is_some() {
+                manager.update_password_credentials(&user_handle, body.password)?;
+            } else {
+                manager.create_password_credentials(&user_handle, body.password)?;
+            }
+            Ok(true)
+        })
+        .await
+    {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => StatusCode::NOT_FOUND.into_response(),
+        Err(error) => admin_user_db_error("Failed to set user password", error),
     }
 }
 
 async fn admin_delete_user_password(
     _session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Path(user_handle): Path<String>,
 ) -> Response {
-    let manager = &user_manager;
-
-    // Check if user exists
-    match manager.get_user_credentials(&user_handle) {
-        Ok(Some(_)) => {}
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Error getting user credentials: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-
-    match manager.delete_password_credentials(&user_handle) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => {
-            error!("Error deleting user password: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            if manager.get_user_credentials(&user_handle)?.is_none() {
+                return Ok(false);
+            }
+            manager.delete_password_credentials(&user_handle)?;
+            Ok(true)
+        })
+        .await
+    {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => StatusCode::NOT_FOUND.into_response(),
+        Err(error) => admin_user_db_error("Failed to delete user password", error),
     }
 }
 
 async fn admin_get_user_roles(
     _session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Path(user_handle): Path<String>,
 ) -> Response {
-    let manager = &user_manager;
-    let user_id = match manager.get_user_id(&user_handle) {
-        Ok(Some(id)) => id,
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Error getting user id: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-
-    match manager.get_user_roles(user_id) {
-        Ok(roles) => {
+    let handle_for_query = user_handle.clone();
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            let Some(user_id) = manager.get_user_id(&handle_for_query)? else {
+                return Ok(None);
+            };
+            Ok(Some(manager.get_user_roles(user_id)?))
+        })
+        .await
+    {
+        Ok(Some(roles)) => {
             let role_strings: Vec<String> = roles.iter().map(|r| r.as_str().to_owned()).collect();
             Json(UserRolesResponse {
                 user_handle,
@@ -471,16 +468,14 @@ async fn admin_get_user_roles(
             })
             .into_response()
         }
-        Err(err) => {
-            error!("Error getting user roles: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(error) => admin_user_db_error("Failed to get user roles", error),
     }
 }
 
 async fn admin_add_user_role(
     _session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
     Path(user_handle): Path<String>,
     Json(body): Json<AddRoleBody>,
@@ -490,26 +485,20 @@ async fn admin_add_user_role(
         None => return (StatusCode::BAD_REQUEST, "Invalid role").into_response(),
     };
 
-    let (user_id, stored_event) = {
-        let manager = &user_manager;
-        let user_id = match manager.get_user_id(&user_handle) {
-            Ok(Some(id)) => id,
-            Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-            Err(err) => {
-                error!("Error getting user id: {}", err);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        };
-
-        let stored_event = match manager.set_user_role_with_event(user_id, role, true) {
-            Ok(stored) => stored,
-            Err(err) => {
-                error!("Error atomically adding user role: {}", err);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        };
-
-        (user_id, stored_event)
+    let result = database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            let Some(user_id) = manager.get_user_id(&user_handle)? else {
+                return Ok(None);
+            };
+            let stored_event = manager.set_user_role_with_event(user_id, role, true)?;
+            Ok(Some((user_id, stored_event)))
+        })
+        .await;
+    let (user_id, stored_event) = match result {
+        Ok(Some(result)) => result,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(error) => return admin_user_db_error("Failed to add user role", error),
     };
 
     // Broadcast to all user's devices
@@ -526,7 +515,7 @@ async fn admin_add_user_role(
 
 async fn admin_remove_user_role(
     _session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
     Path((user_handle, role_name)): Path<(String, String)>,
 ) -> Response {
@@ -535,26 +524,20 @@ async fn admin_remove_user_role(
         None => return (StatusCode::BAD_REQUEST, "Invalid role").into_response(),
     };
 
-    let (user_id, stored_event) = {
-        let manager = &user_manager;
-        let user_id = match manager.get_user_id(&user_handle) {
-            Ok(Some(id)) => id,
-            Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-            Err(err) => {
-                error!("Error getting user id: {}", err);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        };
-
-        let stored_event = match manager.set_user_role_with_event(user_id, role, false) {
-            Ok(stored) => stored,
-            Err(err) => {
-                error!("Error atomically removing user role: {}", err);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        };
-
-        (user_id, stored_event)
+    let result = database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            let Some(user_id) = manager.get_user_id(&user_handle)? else {
+                return Ok(None);
+            };
+            let stored_event = manager.set_user_role_with_event(user_id, role, false)?;
+            Ok(Some((user_id, stored_event)))
+        })
+        .await;
+    let (user_id, stored_event) = match result {
+        Ok(Some(result)) => result,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(error) => return admin_user_db_error("Failed to remove user role", error),
     };
 
     // Broadcast to all user's devices
@@ -571,21 +554,21 @@ async fn admin_remove_user_role(
 
 async fn admin_get_user_permissions(
     _session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Path(user_handle): Path<String>,
 ) -> Response {
-    let manager = &user_manager;
-    let user_id = match manager.get_user_id(&user_handle) {
-        Ok(Some(id)) => id,
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Error getting user id: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-
-    match manager.get_user_permissions(user_id) {
-        Ok(permissions) => {
+    let handle_for_query = user_handle.clone();
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            let Some(user_id) = manager.get_user_id(&handle_for_query)? else {
+                return Ok(None);
+            };
+            Ok(Some(manager.get_user_permissions(user_id)?))
+        })
+        .await
+    {
+        Ok(Some(permissions)) => {
             let perm_strings: Vec<String> =
                 permissions.iter().map(|p| format!("{:?}", p)).collect();
             Json(UserPermissionsResponse {
@@ -594,16 +577,14 @@ async fn admin_get_user_permissions(
             })
             .into_response()
         }
-        Err(err) => {
-            error!("Error getting user permissions: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(error) => admin_user_db_error("Failed to get user permissions", error),
     }
 }
 
 async fn admin_add_user_extra_permission(
     _session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
     Path(user_handle): Path<String>,
     Json(body): Json<AddExtraPermissionBody>,
@@ -624,17 +605,12 @@ async fn admin_add_user_extra_permission(
         _ => return (StatusCode::BAD_REQUEST, "Invalid permission").into_response(),
     };
 
-    let (user_id, permission_id, stored_event) = {
-        let manager = &user_manager;
-        let user_id = match manager.get_user_id(&user_handle) {
-            Ok(Some(id)) => id,
-            Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-            Err(err) => {
-                error!("Error getting user id: {}", err);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        };
-
+    let result = database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            let Some(user_id) = manager.get_user_id(&user_handle)? else {
+                return Ok(None);
+            };
         let start_time = SystemTime::now();
         let end_time = body
             .duration_seconds
@@ -647,16 +623,15 @@ async fn admin_add_user_extra_permission(
             countdown: body.countdown,
         };
 
-        let (permission_id, stored_event) =
-            match manager.add_extra_permission_with_event(user_id, grant) {
-                Ok(result) => result,
-                Err(err) => {
-                    error!("Error atomically adding extra permission: {}", err);
-                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-                }
-            };
-
-        (user_id, permission_id, stored_event)
+            let (permission_id, stored_event) =
+                manager.add_extra_permission_with_event(user_id, grant)?;
+            Ok(Some((user_id, permission_id, stored_event)))
+        })
+        .await;
+    let (user_id, permission_id, stored_event) = match result {
+        Ok(Some(result)) => result,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(error) => return admin_user_db_error("Failed to add user permission", error),
     };
 
     // Broadcast to all user's devices
@@ -677,20 +652,20 @@ async fn admin_add_user_extra_permission(
 
 async fn admin_remove_extra_permission(
     _session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
     Path(permission_id): Path<usize>,
 ) -> Response {
-    let (user_id, stored_event) = {
-        let manager = &user_manager;
-        match manager.remove_extra_permission_with_event(permission_id) {
-            Ok(Some((user_id, _permission, stored_event))) => (user_id, stored_event),
-            Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-            Err(err) => {
-                error!("Error atomically removing extra permission: {}", err);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        }
+    let result = database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.remove_extra_permission_with_event(permission_id)
+        })
+        .await;
+    let (user_id, stored_event) = match result {
+        Ok(Some((user_id, _permission, stored_event))) => (user_id, stored_event),
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(error) => return admin_user_db_error("Failed to remove user permission", error),
     };
 
     // Broadcast the sync event to user's connected devices
@@ -718,86 +693,90 @@ struct BandwidthQueryParams {
 /// Get bandwidth summary for all users (admin only)
 async fn admin_get_bandwidth_summary(
     _session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Query(params): Query<BandwidthQueryParams>,
 ) -> Response {
-    match user_manager
-        .get_total_bandwidth_summary(params.start_date, params.end_date)
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_total_bandwidth_summary(params.start_date, params.end_date)
+        })
+        .await
     {
         Ok(summary) => Json(summary).into_response(),
-        Err(err) => {
-            error!("Error getting bandwidth summary: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(error) => admin_user_db_error("Failed to get bandwidth summary", error),
     }
 }
 
 /// Get detailed bandwidth usage for all users (admin only)
 async fn admin_get_bandwidth_usage(
     _session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Query(params): Query<BandwidthQueryParams>,
 ) -> Response {
-    match user_manager
-        .get_all_bandwidth_usage(params.start_date, params.end_date)
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_all_bandwidth_usage(params.start_date, params.end_date)
+        })
+        .await
     {
         Ok(usage) => Json(usage).into_response(),
-        Err(err) => {
-            error!("Error getting bandwidth usage: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(error) => admin_user_db_error("Failed to get bandwidth usage", error),
     }
 }
 
 /// Get bandwidth summary for a specific user (admin only)
 async fn admin_get_user_bandwidth_summary(
     _session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Path(user_handle): Path<String>,
     Query(params): Query<BandwidthQueryParams>,
 ) -> Response {
-    let manager = &user_manager;
-    let user_id = match manager.get_user_id(&user_handle) {
-        Ok(Some(id)) => id,
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Error getting user id: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-
-    match manager.get_user_bandwidth_summary(user_id, params.start_date, params.end_date) {
-        Ok(summary) => Json(summary).into_response(),
-        Err(err) => {
-            error!("Error getting user bandwidth summary: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            let Some(user_id) = manager.get_user_id(&user_handle)? else {
+                return Ok(None);
+            };
+            Ok(Some(manager.get_user_bandwidth_summary(
+                user_id,
+                params.start_date,
+                params.end_date,
+            )?))
+        })
+        .await
+    {
+        Ok(Some(summary)) => Json(summary).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(error) => admin_user_db_error("Failed to get user bandwidth summary", error),
     }
 }
 
 /// Get detailed bandwidth usage for a specific user (admin only)
 async fn admin_get_user_bandwidth_usage(
     _session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Path(user_handle): Path<String>,
     Query(params): Query<BandwidthQueryParams>,
 ) -> Response {
-    let manager = &user_manager;
-    let user_id = match manager.get_user_id(&user_handle) {
-        Ok(Some(id)) => id,
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Error getting user id: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-
-    match manager.get_user_bandwidth_usage(user_id, params.start_date, params.end_date) {
-        Ok(usage) => Json(usage).into_response(),
-        Err(err) => {
-            error!("Error getting user bandwidth usage: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            let Some(user_id) = manager.get_user_id(&user_handle)? else {
+                return Ok(None);
+            };
+            Ok(Some(manager.get_user_bandwidth_usage(
+                user_id,
+                params.start_date,
+                params.end_date,
+            )?))
+        })
+        .await
+    {
+        Ok(Some(usage)) => Json(usage).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(error) => admin_user_db_error("Failed to get user bandwidth usage", error),
     }
 }
 
@@ -806,87 +785,88 @@ async fn admin_get_user_bandwidth_usage(
 /// Get daily listening stats for the platform (admin only)
 async fn admin_get_daily_listening_stats(
     _session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Query(query): Query<DateRangeQuery>,
 ) -> Response {
     let (start_date, end_date) = get_default_date_range(query.start_date, query.end_date);
 
-    match user_manager
-        .get_daily_listening_stats(start_date, end_date)
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_daily_listening_stats(start_date, end_date)
+        })
+        .await
     {
         Ok(stats) => Json(stats).into_response(),
-        Err(err) => {
-            error!("Error getting daily listening stats: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(error) => admin_user_db_error("Failed to get daily listening stats", error),
     }
 }
 
 /// Get top tracks by play count (admin only)
 async fn admin_get_top_tracks(
     _session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Query(query): Query<TopTracksQuery>,
 ) -> Response {
     let (start_date, end_date) = get_default_date_range(query.start_date, query.end_date);
     let limit = query.limit.unwrap_or(50).min(500);
 
-    match user_manager
-        .get_top_tracks(start_date, end_date, limit)
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_top_tracks(start_date, end_date, limit)
+        })
+        .await
     {
         Ok(tracks) => Json(tracks).into_response(),
-        Err(err) => {
-            error!("Error getting top tracks: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(error) => admin_user_db_error("Failed to get top tracks", error),
     }
 }
 
 /// Get listening stats for a specific track (admin only)
 async fn admin_get_track_listening_stats(
     _session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Path(track_id): Path<String>,
     Query(query): Query<DateRangeQuery>,
 ) -> Response {
     let (start_date, end_date) = get_default_date_range(query.start_date, query.end_date);
 
-    match user_manager
-        .get_track_listening_stats(&track_id, start_date, end_date)
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            manager.get_track_listening_stats(&track_id, start_date, end_date)
+        })
+        .await
     {
         Ok(stats) => Json(stats).into_response(),
-        Err(err) => {
-            error!("Error getting track listening stats: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(error) => admin_user_db_error("Failed to get track listening stats", error),
     }
 }
 
 /// Get listening summary for a specific user (admin only)
 async fn admin_get_user_listening_summary(
     _session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     Path(user_handle): Path<String>,
     Query(query): Query<DateRangeQuery>,
 ) -> Response {
-    let manager = &user_manager;
-    let user_id = match manager.get_user_id(&user_handle) {
-        Ok(Some(id)) => id,
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            error!("Error getting user id: {}", err);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-
     let (start_date, end_date) = get_default_date_range(query.start_date, query.end_date);
-
-    match manager.get_user_listening_summary(user_id, start_date, end_date) {
-        Ok(summary) => Json(summary).into_response(),
-        Err(err) => {
-            error!("Error getting user listening summary: {}", err);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            let Some(user_id) = manager.get_user_id(&user_handle)? else {
+                return Ok(None);
+            };
+            Ok(Some(manager.get_user_listening_summary(
+                user_id, start_date, end_date,
+            )?))
+        })
+        .await
+    {
+        Ok(Some(summary)) => Json(summary).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(error) => admin_user_db_error("Failed to get user listening summary", error),
     }
 }
 
@@ -902,51 +882,59 @@ struct OnlineUsersResponse {
 /// Get count and handles of currently connected users
 async fn admin_get_online_users(
     _session: Session,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
 ) -> Response {
     // Get connected user IDs from WebSocket connection manager
     let user_ids = connection_manager.get_connected_user_ids().await;
     let count = user_ids.len();
 
-    // Get handles for first 3 users
-    let manager = &user_manager;
-    let handles: Vec<String> = user_ids
-        .into_iter()
-        .take(3)
-        .filter_map(|user_id| manager.get_user_handle(user_id).ok())
-        .flatten()
-        .collect();
-
-    Json(OnlineUsersResponse { count, handles }).into_response()
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            user_ids
+                .into_iter()
+                .take(3)
+                .map(|user_id| manager.get_user_handle(user_id))
+                .collect::<anyhow::Result<Vec<_>>>()
+                .map(|handles| handles.into_iter().flatten().collect::<Vec<_>>())
+        })
+        .await
+    {
+        Ok(handles) => Json(OnlineUsersResponse { count, handles }).into_response(),
+        Err(error) => admin_user_db_error("Failed to get online user handles", error),
+    }
 }
 
 /// Get active playback sessions across all users.
 async fn admin_get_playback_sessions(
     _session: Session,
     State(playback_session_manager): State<GuardedPlaybackSessionManager>,
-    State(user_manager): State<GuardedUserManager>,
+    State(database): State<DatabaseHandles>,
 ) -> Response {
     let sessions = playback_session_manager.get_active_sessions().await;
-
-    let manager = &user_manager;
-    let enriched: Vec<serde_json::Value> = sessions
-        .into_iter()
-        .map(|s| {
-            let handle = manager
-                .get_user_handle(s.user_id)
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| format!("user_{}", s.user_id));
-            serde_json::json!({
-                "user_id": s.user_id,
-                "user_handle": handle,
-                "devices": s.devices,
-            })
+    match database
+        .user_manager
+        .run(DbPriority::Interactive, move |manager| {
+            sessions
+                .into_iter()
+                .map(|session| {
+                    let handle = manager
+                        .get_user_handle(session.user_id)?
+                        .unwrap_or_else(|| format!("user_{}", session.user_id));
+                    Ok(serde_json::json!({
+                        "user_id": session.user_id,
+                        "user_handle": handle,
+                        "devices": session.devices,
+                    }))
+                })
+                .collect::<anyhow::Result<Vec<_>>>()
         })
-        .collect();
-
-    Json(enriched).into_response()
+        .await
+    {
+        Ok(enriched) => Json(enriched).into_response(),
+        Err(error) => admin_user_db_error("Failed to get playback session users", error),
+    }
 }
 
 // ============================================================================
