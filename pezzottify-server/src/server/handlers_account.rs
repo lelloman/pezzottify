@@ -186,54 +186,67 @@ struct ImpressionBody {
 /// This data is used for popularity scoring.
 async fn post_impression(
     session: Session,
-    State(search_vault): State<super::state::GuardedSearchVault>,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     Json(body): Json<ImpressionBody>,
-) -> StatusCode {
+) -> Response {
     // Parse item type
     let item_type = match body.item_type.to_lowercase().as_str() {
         "artist" => crate::search::HashedItemType::Artist,
         "album" => crate::search::HashedItemType::Album,
         "track" => crate::search::HashedItemType::Track,
-        _ => return StatusCode::BAD_REQUEST,
+        _ => return StatusCode::BAD_REQUEST.into_response(),
     };
 
     // Validate item_id is not empty
     if body.item_id.is_empty() || body.item_id.len() > 128 {
-        return StatusCode::BAD_REQUEST;
+        return StatusCode::BAD_REQUEST.into_response();
     }
 
-    let exists = match item_type {
-        crate::search::HashedItemType::Artist => catalog_store.get_artist_json(&body.item_id),
-        crate::search::HashedItemType::Album => catalog_store.get_album_json(&body.item_id),
-        crate::search::HashedItemType::Track => catalog_store.get_track_json(&body.item_id),
-    };
+    let item_id = body.item_id;
+    let item_id_for_validation = item_id.clone();
+    let item_type_for_validation = item_type;
+    let exists = database
+        .catalog_read
+        .run(DbPriority::Interactive, move |catalog_store| {
+            match item_type_for_validation {
+                crate::search::HashedItemType::Artist => {
+                    catalog_store.get_artist_json(&item_id_for_validation)
+                }
+                crate::search::HashedItemType::Album => {
+                    catalog_store.get_album_json(&item_id_for_validation)
+                }
+                crate::search::HashedItemType::Track => {
+                    catalog_store.get_track_json(&item_id_for_validation)
+                }
+            }
+        })
+        .await;
     match exists {
         Ok(Some(_)) => {}
-        Ok(None) => return StatusCode::NOT_FOUND,
-        Err(error) => {
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(crate::db_executor::DbRunError::Store(error)) => {
             error!("Failed to validate impression catalog entity: {error}");
-            return StatusCode::INTERNAL_SERVER_ERROR;
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
+        Err(error) => return ApiError::from(error).into_response(),
     }
 
-    // Record the impression in a blocking task to avoid blocking the async runtime
-    // while waiting for the write_conn mutex (which may be held by long-running index operations)
-    let item_id = body.item_id;
     let source = crate::search::ImpressionSource {
         user_id: session.user_id,
         device_id: session.device_id,
     };
-    let recorded = tokio::task::spawn_blocking(move || {
-        search_vault.record_impression(&item_id, item_type, source);
-    })
-    .await;
-    if let Err(error) = recorded {
-        error!("Failed to execute impression recording task: {error}");
-        return StatusCode::INTERNAL_SERVER_ERROR;
+    if let Err(error) = database
+        .search_write
+        .run(DbPriority::Interactive, move |search_vault| {
+            search_vault.record_impression(&item_id, item_type, source);
+            Ok(())
+        })
+        .await
+    {
+        return ApiError::from(error).into_response();
     }
 
-    StatusCode::NO_CONTENT
+    StatusCode::NO_CONTENT.into_response()
 }
 
 /// Helper to get default date range (last 30 days if not specified)

@@ -116,6 +116,172 @@ async fn test_catalog_missing_reference_is_a_bad_request() {
     assert!(body["request_id"].as_str().is_some_and(|id| !id.is_empty()));
 }
 
+#[tokio::test]
+async fn test_catalog_admin_crud_lifecycle_preserves_relations_and_metadata() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated_admin(server.base_url.clone()).await;
+    let artist_id = "crud-contract-artist";
+    let album_id = "crud-contract-album";
+    let track_id = "crud-contract-track";
+
+    let response = client
+        .client
+        .post(format!("{}/v1/content/artist", server.base_url))
+        .json(&serde_json::json!({
+            "id": artist_id,
+            "name": "Contract Artist",
+            "genres": ["ambient"],
+            "followers_total": 10,
+            "popularity": 20
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let response = client
+        .client
+        .put(format!("{}/v1/content/artist/{artist_id}", server.base_url))
+        .json(&serde_json::json!({
+            "name": "Updated Contract Artist",
+            "genres": ["ambient", "electronic"],
+            "followers_total": 11,
+            "popularity": 21
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = client.get_artist(artist_id).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let artist: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(artist["artist"]["name"], "Updated Contract Artist");
+    assert_eq!(
+        artist["artist"]["genres"],
+        serde_json::json!(["ambient", "electronic"])
+    );
+
+    let response = client
+        .client
+        .post(format!("{}/v1/content/album", server.base_url))
+        .json(&serde_json::json!({
+            "id": album_id,
+            "name": "Contract Album",
+            "album_type": "album",
+            "artist_ids": [artist_id],
+            "label": "Contract Label",
+            "release_date": "2026",
+            "release_date_precision": "year",
+            "popularity": 30
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let response = client
+        .client
+        .put(format!("{}/v1/content/album/{album_id}", server.base_url))
+        .json(&serde_json::json!({
+            "name": "Updated Contract Album",
+            "album_type": "single",
+            "artist_ids": [artist_id],
+            "label": "Updated Contract Label",
+            "release_date": "2026-08-22",
+            "release_date_precision": "day",
+            "external_id_upc": "123456789012",
+            "popularity": 31
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = client.get_album(album_id).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let album: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(album["name"], "Updated Contract Album");
+    assert_eq!(album["album_type"], "single");
+    assert_eq!(album["label"], "Updated Contract Label");
+
+    let response = client
+        .client
+        .post(format!("{}/v1/content/track", server.base_url))
+        .json(&serde_json::json!({
+            "id": track_id,
+            "name": "Contract Track",
+            "album_id": album_id,
+            "artist_ids": [artist_id],
+            "disc_number": 1,
+            "track_number": 1,
+            "duration_ms": 123000,
+            "explicit": false,
+            "popularity": 40,
+            "language": "en"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let response = client
+        .client
+        .put(format!("{}/v1/content/track/{track_id}", server.base_url))
+        .json(&serde_json::json!({
+            "name": "Updated Contract Track",
+            "album_id": album_id,
+            "artist_ids": [artist_id],
+            "disc_number": 2,
+            "track_number": 3,
+            "duration_ms": 124000,
+            "explicit": true,
+            "popularity": 41,
+            "language": "it",
+            "external_id_isrc": "ITABC2600001"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = client.get_track(track_id).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let track: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(track["name"], "Updated Contract Track");
+    assert_eq!(track["album_id"], album_id);
+    assert_eq!(track["disc_number"], 2);
+    assert_eq!(track["track_number"], 3);
+    assert_eq!(track["language"], "it");
+
+    for path in [
+        format!("track/{track_id}"),
+        format!("album/{album_id}"),
+        format!("artist/{artist_id}"),
+    ] {
+        let response = client
+            .client
+            .delete(format!("{}/v1/content/{path}", server.base_url))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT, "path={path}");
+    }
+
+    assert_eq!(
+        client.get_track(track_id).await.status(),
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        client.get_album(album_id).await.status(),
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        client.get_artist(artist_id).await.status(),
+        StatusCode::NOT_FOUND
+    );
+}
+
 // =============================================================================
 // Artist Tests
 // =============================================================================

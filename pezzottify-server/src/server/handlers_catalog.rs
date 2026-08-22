@@ -750,7 +750,7 @@ fn default_track() -> i32 {
 
 async fn create_artist(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     Json(data): Json<CreateArtistRequest>,
 ) -> Response {
     use crate::catalog_store::{validate_artist, Artist};
@@ -768,15 +768,24 @@ async fn create_artist(
         return ApiError::bad_request("invalid_artist", e.to_string()).into_response();
     }
 
-    match catalog_store.create_artist(&artist) {
+    match database
+        .catalog_write
+        .run(DbPriority::Interactive, move |catalog_store| {
+            catalog_store.create_artist(&artist)
+        })
+        .await
+    {
         Ok(()) => StatusCode::CREATED.into_response(),
-        Err(e) => ApiError::catalog_mutation(e).into_response(),
+        Err(crate::db_executor::DbRunError::Store(error)) => {
+            ApiError::catalog_mutation(error).into_response()
+        }
+        Err(error) => ApiError::from(error).into_response(),
     }
 }
 
 async fn update_artist(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     Path(id): Path<String>,
     Json(data): Json<UpdateArtistMetadataRequest>,
 ) -> Response {
@@ -795,29 +804,47 @@ async fn update_artist(
         return ApiError::bad_request("invalid_artist", e.to_string()).into_response();
     }
 
-    match catalog_store.update_artist(&artist) {
+    match database
+        .catalog_write
+        .run(DbPriority::Interactive, move |catalog_store| {
+            catalog_store.update_artist(&artist)
+        })
+        .await
+    {
         Ok(()) => StatusCode::OK.into_response(),
-        Err(e) => ApiError::catalog_mutation(e).into_response(),
+        Err(crate::db_executor::DbRunError::Store(error)) => {
+            ApiError::catalog_mutation(error).into_response()
+        }
+        Err(error) => ApiError::from(error).into_response(),
     }
 }
 
 async fn delete_artist(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     Path(id): Path<String>,
 ) -> Response {
-    match catalog_store.delete_artist(&id) {
+    match database
+        .catalog_write
+        .run(DbPriority::Interactive, move |catalog_store| {
+            catalog_store.delete_artist(&id)
+        })
+        .await
+    {
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
         Ok(false) => {
             ApiError::not_found("catalog_item_not_found", "Artist not found").into_response()
         }
-        Err(e) => ApiError::internal("Failed to delete artist", e).into_response(),
+        Err(crate::db_executor::DbRunError::Store(error)) => {
+            ApiError::internal("Failed to delete artist", error).into_response()
+        }
+        Err(error) => ApiError::from(error).into_response(),
     }
 }
 
 async fn create_album(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     Json(data): Json<CreateAlbumRequest>,
 ) -> Response {
     use crate::catalog_store::{validate_album, Album, AlbumAvailability, AlbumType};
@@ -838,15 +865,25 @@ async fn create_album(
         return ApiError::bad_request("invalid_album", e.to_string()).into_response();
     }
 
-    match catalog_store.create_album(&album, &data.artist_ids) {
+    let artist_ids = data.artist_ids;
+    match database
+        .catalog_write
+        .run(DbPriority::Interactive, move |catalog_store| {
+            catalog_store.create_album(&album, &artist_ids)
+        })
+        .await
+    {
         Ok(()) => StatusCode::CREATED.into_response(),
-        Err(e) => ApiError::catalog_mutation(e).into_response(),
+        Err(crate::db_executor::DbRunError::Store(error)) => {
+            ApiError::catalog_mutation(error).into_response()
+        }
+        Err(error) => ApiError::from(error).into_response(),
     }
 }
 
 async fn update_album(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     Path(id): Path<String>,
     Json(data): Json<UpdateAlbumMetadataRequest>,
 ) -> Response {
@@ -866,29 +903,48 @@ async fn update_album(
         return ApiError::bad_request("invalid_album", e.to_string()).into_response();
     }
 
-    match catalog_store.update_album_metadata(&id, &metadata, data.artist_ids.as_deref()) {
+    let artist_ids = data.artist_ids;
+    match database
+        .catalog_write
+        .run(DbPriority::Interactive, move |catalog_store| {
+            catalog_store.update_album_metadata(&id, &metadata, artist_ids.as_deref())
+        })
+        .await
+    {
         Ok(()) => StatusCode::OK.into_response(),
-        Err(e) => ApiError::catalog_mutation(e).into_response(),
+        Err(crate::db_executor::DbRunError::Store(error)) => {
+            ApiError::catalog_mutation(error).into_response()
+        }
+        Err(error) => ApiError::from(error).into_response(),
     }
 }
 
 async fn delete_album(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     Path(id): Path<String>,
 ) -> Response {
-    match catalog_store.delete_album(&id) {
+    match database
+        .catalog_write
+        .run(DbPriority::Interactive, move |catalog_store| {
+            catalog_store.delete_album(&id)
+        })
+        .await
+    {
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
         Ok(false) => {
             ApiError::not_found("catalog_item_not_found", "Album not found").into_response()
         }
-        Err(e) => ApiError::internal("Failed to delete album", e).into_response(),
+        Err(crate::db_executor::DbRunError::Store(error)) => {
+            ApiError::internal("Failed to delete album", error).into_response()
+        }
+        Err(error) => ApiError::from(error).into_response(),
     }
 }
 
 async fn create_track(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     Json(data): Json<CreateTrackRequest>,
 ) -> Response {
     use crate::catalog_store::{validate_track, Track, TrackAvailability};
@@ -912,15 +968,25 @@ async fn create_track(
         return ApiError::bad_request("invalid_track", e.to_string()).into_response();
     }
 
-    match catalog_store.create_track(&track, &data.artist_ids) {
+    let artist_ids = data.artist_ids;
+    match database
+        .catalog_write
+        .run(DbPriority::Interactive, move |catalog_store| {
+            catalog_store.create_track(&track, &artist_ids)
+        })
+        .await
+    {
         Ok(()) => StatusCode::CREATED.into_response(),
-        Err(e) => ApiError::catalog_mutation(e).into_response(),
+        Err(crate::db_executor::DbRunError::Store(error)) => {
+            ApiError::catalog_mutation(error).into_response()
+        }
+        Err(error) => ApiError::from(error).into_response(),
     }
 }
 
 async fn update_track(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     Path(id): Path<String>,
     Json(data): Json<UpdateTrackMetadataRequest>,
 ) -> Response {
@@ -942,23 +1008,42 @@ async fn update_track(
         return ApiError::bad_request("invalid_track", e.to_string()).into_response();
     }
 
-    match catalog_store.update_track_metadata(&id, &metadata, data.artist_ids.as_deref()) {
+    let artist_ids = data.artist_ids;
+    match database
+        .catalog_write
+        .run(DbPriority::Interactive, move |catalog_store| {
+            catalog_store.update_track_metadata(&id, &metadata, artist_ids.as_deref())
+        })
+        .await
+    {
         Ok(()) => StatusCode::OK.into_response(),
-        Err(e) => ApiError::catalog_mutation(e).into_response(),
+        Err(crate::db_executor::DbRunError::Store(error)) => {
+            ApiError::catalog_mutation(error).into_response()
+        }
+        Err(error) => ApiError::from(error).into_response(),
     }
 }
 
 async fn delete_track(
     _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
+    State(database): State<DatabaseHandles>,
     Path(id): Path<String>,
 ) -> Response {
-    match catalog_store.delete_track(&id) {
+    match database
+        .catalog_write
+        .run(DbPriority::Interactive, move |catalog_store| {
+            catalog_store.delete_track(&id)
+        })
+        .await
+    {
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
         Ok(false) => {
             ApiError::not_found("catalog_item_not_found", "Track not found").into_response()
         }
-        Err(e) => ApiError::internal("Failed to delete track", e).into_response(),
+        Err(crate::db_executor::DbRunError::Store(error)) => {
+            ApiError::internal("Failed to delete track", error).into_response()
+        }
+        Err(error) => ApiError::from(error).into_response(),
     }
 }
 
