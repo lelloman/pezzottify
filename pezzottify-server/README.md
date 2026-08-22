@@ -131,6 +131,46 @@ The pezzottify server is the backend component of Pezzottify that provides:
 - Unit-test modules live in companion `*_tests.rs` files. Cross-domain behavior is
   protected by active E2E suites under `tests/`.
 
+### Database Execution Model
+
+SQLite stores are synchronous. Async HTTP handlers therefore submit database work
+through the typed handles in `DatabaseHandles`; they must not call mutable stores
+directly or create private blocking pools. Synchronous background-job entry points use
+the same scheduler through `DbHandle::run_blocking`.
+
+Each handle belongs to a concurrency lane. Read-heavy catalog and search work has
+separate read/write lanes, while user, server, shows, download, ingestion, enrichment,
+and MCP persistence use lanes sized for their locking models. Catalog writes, user
+writes, and other single-writer SQLite databases default to one concurrent operation.
+
+Callers must select one of three priorities:
+
+- `Critical`: authentication and session validation.
+- `Interactive`: user-triggered reads and mutations, including administrative actions.
+- `Background`: scheduled maintenance, ingestion, indexing, and enrichment.
+
+The scheduler uses bounded queues, fixed workers, weighted priority selection, and
+per-lane concurrency limits. Queue and execution deadlines are defined per priority.
+Timed-out queued work is cancelled before it starts; an execution timeout stops waiting
+for the result but cannot forcibly interrupt arbitrary synchronous Rust code. HTTP
+capacity failures use the standard retryable `503 Service Unavailable` response.
+
+Compound persistence operations that depend on a shared snapshot or must stay atomic
+belong in one executor closure and, where necessary, one SQLite transaction. Do not
+split lookup-and-mutate workflows across separate submissions. Async work such as
+WebSocket broadcasts happens after the persistence closure completes.
+
+Large collections require bounded keyset pagination with an explicit server-side
+maximum. Catalog synchronization uses `seq > since ORDER BY seq LIMIT ...`, defaults to
+500 events, caps requests at 1,000, and fetches one extra row to determine `has_more`.
+Its page and catalog high-water mark are read under the same store lock. Query-plan and
+10,000-row regression tests protect the primary-key range scan and prevent temporary
+sorting. Android checkpoints every completed page and safely resumes after interruption.
+
+Run `bash scripts/check-db-boundaries.sh` before committing database-handler changes.
+CI runs the same check to prevent direct mutable-store extraction, private blocking work
+in migrated handler groups, and reintroduction of unbounded catalog-event APIs.
+
 ### Key Types
 
 - **`SqliteCatalogStore`**: SQLite-backed catalog with CRUD operations
