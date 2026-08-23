@@ -8,6 +8,32 @@ use reqwest::StatusCode;
 use serde_json::{json, Value};
 
 #[tokio::test]
+async fn storage_report_preserves_complete_admin_response_contract() {
+    let server = TestServer::spawn().await;
+    let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
+
+    let response = admin
+        .client
+        .get(format!("{}/v1/admin/storage", server.base_url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let report: Value = response.json().await.unwrap();
+    assert!(report["total_bytes"].is_number());
+    assert!(report["database_total_bytes"].is_number());
+    assert!(report["filesystem_total_bytes"].is_number());
+    assert!(report["databases"].as_array().unwrap().len() >= 4);
+    assert_eq!(report["components"].as_array().unwrap().len(), 4);
+    assert_eq!(
+        report["total_bytes"].as_u64().unwrap(),
+        report["database_total_bytes"].as_u64().unwrap()
+            + report["filesystem_total_bytes"].as_u64().unwrap()
+    );
+}
+
+#[tokio::test]
 async fn show_draft_is_admin_visible_publicly_hidden_and_deletable() {
     let server = TestServer::builder().with_available_catalog().spawn().await;
     let admin = TestClient::authenticated_admin(server.base_url.clone()).await;

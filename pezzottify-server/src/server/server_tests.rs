@@ -89,6 +89,41 @@ mod tests {
         assert_eq!(error, PasswordWorkError::WorkerPanicked);
     }
 
+    #[tokio::test]
+    async fn filesystem_work_reads_and_atomically_replaces_cache_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let cache_path = temp.path().join("nested").join("cover.jpg");
+        let pool = FilesystemWorkPool::with_limits(
+            1,
+            Duration::from_millis(100),
+            Duration::from_secs(1),
+        );
+
+        pool.write_atomic(cache_path.clone(), b"first image".to_vec())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            pool.read(cache_path.clone()).await.unwrap().unwrap(),
+            b"first image"
+        );
+
+        pool.write_atomic(cache_path.clone(), b"replacement".to_vec())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            pool.read(cache_path).await.unwrap().unwrap(),
+            b"replacement"
+        );
+
+        let files = std::fs::read_dir(temp.path().join("nested"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>();
+        assert_eq!(files, vec![std::ffi::OsString::from("cover.jpg")]);
+    }
+
     fn valid_listening_request() -> ListeningEventRequest {
         ListeningEventRequest {
             track_id: "track-1".to_string(),
