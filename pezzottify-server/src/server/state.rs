@@ -16,7 +16,7 @@ use crate::user::{FullUserStore, UserManager};
 use std::sync::Arc;
 use std::time::Instant;
 
-use super::password_verification::PasswordVerificationPool;
+use super::password_work::PasswordWorkPool;
 use super::websocket::{ConnectionManager, PlaybackSessionManager};
 use super::ServerConfig;
 
@@ -150,7 +150,7 @@ pub struct ServerState {
     pub enrichment_store: OptionalEnrichmentStore,
     /// Priority-aware database handles used by incrementally migrated call sites.
     pub database: DatabaseHandles,
-    pub(super) password_verification: PasswordVerificationPool,
+    pub(super) password_work: PasswordWorkPool,
     /// Playback session manager for multi-device playback sync
     pub playback_session_manager: GuardedPlaybackSessionManager,
     /// Database registry for backup checkpoint operations
@@ -192,9 +192,9 @@ impl FromRef<ServerState> for DatabaseHandles {
     }
 }
 
-impl FromRef<ServerState> for PasswordVerificationPool {
+impl FromRef<ServerState> for PasswordWorkPool {
     fn from_ref(input: &ServerState) -> Self {
-        input.password_verification.clone()
+        input.password_work.clone()
     }
 }
 

@@ -3,21 +3,21 @@ use std::{sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::sync::Semaphore;
 
-use crate::user::auth::PezzottifyHasher;
+use crate::user::{auth::PezzottifyHasher, UserManager, UsernamePasswordCredentials};
 
 const DEFAULT_MAX_CONCURRENT: usize = 4;
 const DEFAULT_QUEUE_TIMEOUT: Duration = Duration::from_secs(1);
 const DEFAULT_EXECUTION_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Clone)]
-pub(super) struct PasswordVerificationPool {
+pub(super) struct PasswordWorkPool {
     permits: Arc<Semaphore>,
     queue_timeout: Duration,
     execution_timeout: Duration,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
-pub(super) enum PasswordVerificationError {
+pub(super) enum PasswordWorkError {
     #[error("password verification queue timed out")]
     QueueTimeout,
     #[error("password verification timed out")]
@@ -28,7 +28,7 @@ pub(super) enum PasswordVerificationError {
     WorkerPanicked,
 }
 
-impl Default for PasswordVerificationPool {
+impl Default for PasswordWorkPool {
     fn default() -> Self {
         Self::with_limits(
             DEFAULT_MAX_CONCURRENT,
@@ -38,7 +38,7 @@ impl Default for PasswordVerificationPool {
     }
 }
 
-impl PasswordVerificationPool {
+impl PasswordWorkPool {
     pub(super) fn with_limits(
         max_concurrent: usize,
         queue_timeout: Duration,
@@ -61,12 +61,21 @@ impl PasswordVerificationPool {
         password: String,
         hash: String,
         salt: String,
-    ) -> Result<bool, PasswordVerificationError> {
+    ) -> Result<bool, PasswordWorkError> {
         self.run(move || hasher.verify(password, hash, salt).unwrap_or(false))
             .await
     }
 
-    pub(super) async fn run<T, F>(&self, work: F) -> Result<T, PasswordVerificationError>
+    pub(super) async fn hash(
+        &self,
+        user_id: usize,
+        password: String,
+    ) -> Result<anyhow::Result<UsernamePasswordCredentials>, PasswordWorkError> {
+        self.run(move || UserManager::create_hashed_password(user_id, password))
+            .await
+    }
+
+    pub(super) async fn run<T, F>(&self, work: F) -> Result<T, PasswordWorkError>
     where
         T: Send + 'static,
         F: FnOnce() -> T + Send + 'static,
@@ -76,8 +85,8 @@ impl PasswordVerificationPool {
             Arc::clone(&self.permits).acquire_owned(),
         )
         .await
-        .map_err(|_| PasswordVerificationError::QueueTimeout)?
-        .map_err(|_| PasswordVerificationError::ShuttingDown)?;
+        .map_err(|_| PasswordWorkError::QueueTimeout)?
+        .map_err(|_| PasswordWorkError::ShuttingDown)?;
 
         let worker = tokio::task::spawn_blocking(move || {
             let _permit = permit;
@@ -86,13 +95,13 @@ impl PasswordVerificationPool {
 
         match tokio::time::timeout(self.execution_timeout, worker).await {
             Ok(Ok(result)) => Ok(result),
-            Ok(Err(_)) => Err(PasswordVerificationError::WorkerPanicked),
-            Err(_) => Err(PasswordVerificationError::ExecutionTimeout),
+            Ok(Err(_)) => Err(PasswordWorkError::WorkerPanicked),
+            Err(_) => Err(PasswordWorkError::ExecutionTimeout),
         }
     }
 }
 
 const _: fn() = || {
     fn assert_send_sync<T: Send + Sync>() {}
-    assert_send_sync::<PasswordVerificationPool>();
+    assert_send_sync::<PasswordWorkPool>();
 };

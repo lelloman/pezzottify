@@ -21,7 +21,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn password_work_runs_off_the_async_runtime_thread() {
         let runtime_thread = std::thread::current().id();
-        let pool = PasswordVerificationPool::with_limits(
+        let pool = PasswordWorkPool::with_limits(
             1,
             Duration::from_millis(100),
             Duration::from_secs(1),
@@ -37,7 +37,7 @@ mod tests {
 
     #[tokio::test]
     async fn password_work_rejects_when_its_bounded_queue_times_out() {
-        let pool = PasswordVerificationPool::with_limits(
+        let pool = PasswordWorkPool::with_limits(
             1,
             Duration::from_millis(20),
             Duration::from_secs(1),
@@ -65,7 +65,7 @@ mod tests {
             .run(|| ())
             .await
             .expect_err("second job must not bypass the concurrency limit");
-        assert_eq!(error, PasswordVerificationError::QueueTimeout);
+        assert_eq!(error, PasswordWorkError::QueueTimeout);
 
         let (lock, condvar) = &*gate;
         *lock.lock().unwrap() = true;
@@ -75,7 +75,7 @@ mod tests {
 
     #[tokio::test]
     async fn password_work_reports_panics_without_panicking_the_runtime() {
-        let pool = PasswordVerificationPool::with_limits(
+        let pool = PasswordWorkPool::with_limits(
             1,
             Duration::from_millis(100),
             Duration::from_secs(1),
@@ -86,7 +86,7 @@ mod tests {
             .await
             .expect_err("worker panic should be contained");
 
-        assert_eq!(error, PasswordVerificationError::WorkerPanicked);
+        assert_eq!(error, PasswordWorkError::WorkerPanicked);
     }
 
     fn valid_listening_request() -> ListeningEventRequest {

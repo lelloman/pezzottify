@@ -8,6 +8,8 @@ use tracing::error;
 
 use crate::{catalog_store::CatalogMutationError, db_executor::DbRunError, user::UserServiceError};
 
+use super::password_work::PasswordWorkError;
+
 pub const REQUEST_ID_HEADER: HeaderName = HeaderName::from_static("x-request-id");
 const RETRY_AFTER_SECONDS: &str = "1";
 
@@ -82,7 +84,7 @@ impl ApiError {
         }
     }
 
-    pub fn password_verification_unavailable() -> Self {
+    fn password_work_unavailable() -> Self {
         let mut error = Self::new(
             StatusCode::SERVICE_UNAVAILABLE,
             "authentication_busy",
@@ -110,6 +112,19 @@ impl ApiError {
         );
         error.retry_after = Some(HeaderValue::from_static(RETRY_AFTER_SECONDS));
         error
+    }
+}
+
+impl From<PasswordWorkError> for ApiError {
+    fn from(error: PasswordWorkError) -> Self {
+        match error {
+            PasswordWorkError::QueueTimeout
+            | PasswordWorkError::ExecutionTimeout
+            | PasswordWorkError::ShuttingDown => Self::password_work_unavailable(),
+            PasswordWorkError::WorkerPanicked => {
+                Self::internal("Password worker failed", "worker panicked")
+            }
+        }
     }
 }
 
@@ -244,7 +259,7 @@ mod tests {
 
     #[tokio::test]
     async fn password_verification_capacity_is_retryable_without_exposing_details() {
-        let response = ApiError::password_verification_unavailable().into_response();
+        let response = ApiError::password_work_unavailable().into_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(
             response.headers()[axum::http::header::RETRY_AFTER],
