@@ -39,7 +39,12 @@ impl FilesystemWorkPool {
         execution_timeout: Duration,
     ) -> Self {
         Self {
-            inner: BoundedBlockingPool::new(max_concurrent, queue_timeout, execution_timeout),
+            inner: BoundedBlockingPool::new(
+                "filesystem",
+                max_concurrent,
+                queue_timeout,
+                execution_timeout,
+            ),
         }
     }
 

@@ -61,6 +61,13 @@ class CatalogApiClient:
             resp.raise_for_status()
             return await resp.json()
 
+    async def get_storage_report(self) -> dict:
+        """Return the administrative database and filesystem storage report."""
+        session = await self._ensure_session()
+        async with session.get(f"{self.base_url}/v1/admin/storage") as resp:
+            resp.raise_for_status()
+            return await resp.json()
+
     async def mcp_server_stats(self) -> dict:
         """Initialize MCP and execute its database-backed server stats tool."""
         session = await self._ensure_session()

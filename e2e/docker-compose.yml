@@ -64,6 +64,7 @@ services:
     working_dir: /e2e
     environment:
       - PEZZOTTIFY_SERVER_URL=http://pezzottify-server:3001
+      - PEZZOTTIFY_METRICS_URL=http://pezzottify-server:9091
       - OIDC_URL=http://mock-oidc:8080
       - ANDROID_HOSTS=
     depends_on:

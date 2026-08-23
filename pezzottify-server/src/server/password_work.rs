@@ -36,7 +36,12 @@ impl PasswordWorkPool {
             "password verification concurrency must be non-zero"
         );
         Self {
-            inner: BoundedBlockingPool::new(max_concurrent, queue_timeout, execution_timeout),
+            inner: BoundedBlockingPool::new(
+                "password",
+                max_concurrent,
+                queue_timeout,
+                execution_timeout,
+            ),
         }
     }
 

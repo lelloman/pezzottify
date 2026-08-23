@@ -18,6 +18,24 @@ mod tests {
     use std::sync::RwLock;
     use tower::ServiceExt; // for `call`, `oneshot`, and `ready
 
+    fn blocking_metric_has_labels(metric_name: &str, expected_labels: &[(&str, &str)]) -> bool {
+        crate::server::metrics::init_metrics();
+        crate::server::metrics::REGISTRY
+            .gather()
+            .into_iter()
+            .find(|family| family.get_name() == metric_name)
+            .is_some_and(|family| {
+                family.get_metric().iter().any(|metric| {
+                    expected_labels.iter().all(|(expected_name, expected_value)| {
+                        metric.get_label().iter().any(|label| {
+                            label.get_name() == *expected_name
+                                && label.get_value() == *expected_value
+                        })
+                    })
+                })
+            })
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn password_work_runs_off_the_async_runtime_thread() {
         let runtime_thread = std::thread::current().id();
@@ -66,6 +84,10 @@ mod tests {
             .await
             .expect_err("second job must not bypass the concurrency limit");
         assert_eq!(error, PasswordWorkError::QueueTimeout);
+        assert!(blocking_metric_has_labels(
+            "pezzottify_blocking_work_operations_total",
+            &[("pool", "password"), ("outcome", "queue_timeout")],
+        ));
 
         let (lock, condvar) = &*gate;
         *lock.lock().unwrap() = true;
@@ -87,6 +109,10 @@ mod tests {
             .expect_err("worker panic should be contained");
 
         assert_eq!(error, PasswordWorkError::WorkerPanicked);
+        assert!(blocking_metric_has_labels(
+            "pezzottify_blocking_work_operations_total",
+            &[("pool", "password"), ("outcome", "panicked")],
+        ));
     }
 
     #[tokio::test]
