@@ -7,6 +7,60 @@ use pezzottify_server::server_store::{CatalogContentType, CatalogEventType};
 use reqwest::StatusCode;
 use serde_json::{json, Value};
 
+fn metric_has_labels(metric_name: &str, expected_labels: &[(&str, &str)]) -> bool {
+    pezzottify_server::server::metrics::REGISTRY
+        .gather()
+        .into_iter()
+        .find(|family| family.get_name() == metric_name)
+        .is_some_and(|family| {
+            family.get_metric().iter().any(|metric| {
+                expected_labels
+                    .iter()
+                    .all(|(expected_name, expected_value)| {
+                        metric.get_label().iter().any(|label| {
+                            label.get_name() == *expected_name
+                                && label.get_value() == *expected_value
+                        })
+                    })
+            })
+        })
+}
+
+#[tokio::test]
+async fn executor_metrics_cover_database_password_and_filesystem_work() {
+    pezzottify_server::server::metrics::init_metrics();
+    let server = TestServer::builder().with_available_catalog().spawn().await;
+    let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
+
+    let coverage = admin
+        .client
+        .get(format!("{}/v1/admin/embeddings/coverage", server.base_url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(coverage.status(), StatusCode::OK);
+    let storage = admin
+        .client
+        .get(format!("{}/v1/admin/storage", server.base_url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(storage.status(), StatusCode::OK);
+
+    assert!(metric_has_labels(
+        "pezzottify_db_executor_operations_total",
+        &[("lane", "catalog_read"), ("priority", "interactive")],
+    ));
+    assert!(metric_has_labels(
+        "pezzottify_blocking_work_operations_total",
+        &[("pool", "password")],
+    ));
+    assert!(metric_has_labels(
+        "pezzottify_blocking_work_operations_total",
+        &[("pool", "filesystem")],
+    ));
+}
+
 #[tokio::test]
 async fn storage_report_preserves_complete_admin_response_contract() {
     let server = TestServer::spawn().await;

@@ -2,12 +2,40 @@
 
 import asyncio
 
+import aiohttp
+
 from helpers.api_client import CatalogApiClient
 from helpers.async_runner import run_async
 from helpers.constants import ADMIN_PASS, ADMIN_USER, TEST_PASS, TEST_USER
 
 
 class TestAdminApi:
+    def test_executor_metrics_expose_bounded_operational_labels(self, config):
+        async def _test():
+            admin = CatalogApiClient(config.server_url)
+            try:
+                await admin.login(
+                    ADMIN_USER, ADMIN_PASS, device_uuid="admin-api-executor-metrics"
+                )
+                await admin.get_embedding_coverage()
+                await admin.get_storage_report()
+
+                async with aiohttp.ClientSession() as metrics_session:
+                    async with metrics_session.get(f"{config.metrics_url}/metrics") as resp:
+                        resp.raise_for_status()
+                        metrics = await resp.text()
+
+                assert "pezzottify_db_executor_queue_wait_seconds" in metrics
+                assert 'lane="catalog_read"' in metrics
+                assert 'priority="interactive"' in metrics
+                assert "pezzottify_blocking_work_queue_wait_seconds" in metrics
+                assert 'pool="password"' in metrics
+                assert 'pool="filesystem"' in metrics
+            finally:
+                await admin.close()
+
+        run_async(_test())
+
     def test_embedding_coverage_response_shape(self, config):
         async def _test():
             admin = CatalogApiClient(config.server_url)

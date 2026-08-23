@@ -54,6 +54,14 @@ impl DbPriority {
             Self::Background => 2,
         }
     }
+
+    pub(crate) const fn label(self) -> &'static str {
+        match self {
+            Self::Critical => "critical",
+            Self::Interactive => "interactive",
+            Self::Background => "background",
+        }
+    }
 }
 
 /// Independent database concurrency domains.
@@ -71,6 +79,25 @@ pub enum DbLane {
     EnrichmentWrite,
     Mcp,
     Shows,
+}
+
+impl DbLane {
+    pub(crate) const fn label(self) -> &'static str {
+        match self {
+            Self::CatalogRead => "catalog_read",
+            Self::CatalogWrite => "catalog_write",
+            Self::User => "user",
+            Self::Server => "server",
+            Self::SearchRead => "search_read",
+            Self::SearchWrite => "search_write",
+            Self::Download => "download",
+            Self::Ingestion => "ingestion",
+            Self::EnrichmentRead => "enrichment_read",
+            Self::EnrichmentWrite => "enrichment_write",
+            Self::Mcp => "mcp",
+            Self::Shows => "shows",
+        }
+    }
 }
 
 /// Queue and execution budgets for one priority class.
@@ -158,6 +185,8 @@ type Task = Box<dyn FnOnce() + Send + 'static>;
 
 struct Job {
     lane: DbLane,
+    priority: DbPriority,
+    enqueued_at: Instant,
     cancelled: Arc<AtomicBool>,
     task: Task,
 }
@@ -183,7 +212,13 @@ impl QueueState {
         let mut removed = false;
         for queue in &mut self.queues {
             let previous_len = queue.len();
-            queue.retain(|job| !job.cancelled.load(Ordering::Acquire));
+            queue.retain(|job| {
+                let keep = !job.cancelled.load(Ordering::Acquire);
+                if !keep {
+                    crate::server::metrics::db_executor_cancelled(job.priority);
+                }
+                keep
+            });
             removed |= queue.len() != previous_len;
         }
         removed
@@ -285,6 +320,7 @@ impl DbExecutor {
             return Err(EnqueueError::Full(job));
         }
         queue.push_back(job);
+        crate::server::metrics::db_executor_enqueued(priority);
         drop(state);
         shared.work_available.notify_one();
         Ok(())
@@ -405,38 +441,53 @@ where
             let _ = result_tx.send(result);
         });
 
-        self.executor
+        if let Err(error) = self
+            .executor
             .enqueue_async(
                 priority,
                 Job {
                     lane: self.lane,
+                    priority,
+                    enqueued_at: Instant::now(),
                     cancelled: cancelled.clone(),
                     task,
                 },
                 queue_deadline,
             )
-            .await?;
+            .await
+        {
+            record_db_error(self.lane, priority, &error);
+            return Err(error);
+        }
 
         match tokio::time::timeout_at(tokio::time::Instant::from_std(queue_deadline), started_rx)
             .await
         {
             Ok(Ok(())) => {}
-            Ok(Err(_)) => return Err(DbRunError::ShuttingDown),
+            Ok(Err(_)) => {
+                let error = DbRunError::ShuttingDown;
+                record_db_error(self.lane, priority, &error);
+                return Err(error);
+            }
             Err(_) => {
                 cancelled.store(true, Ordering::Release);
                 self.executor.inner.shared.work_available.notify_all();
-                return Err(DbRunError::QueueTimeout);
+                let error = DbRunError::QueueTimeout;
+                record_db_error(self.lane, priority, &error);
+                return Err(error);
             }
         }
 
-        match tokio::time::timeout(config.execution_timeout, result_rx).await {
+        let result = match tokio::time::timeout(config.execution_timeout, result_rx).await {
             Ok(Ok(result)) => result,
             Ok(Err(_)) => Err(DbRunError::ShuttingDown),
             Err(_) => {
                 cancelled.store(true, Ordering::Release);
                 Err(DbRunError::ExecutionTimeout)
             }
-        }
+        };
+        record_db_outcome(self.lane, priority, &result);
+        result
     }
 
     /// Run through the same scheduler from a synchronous caller.
@@ -463,32 +514,64 @@ where
             let _ = result_tx.send(result);
         });
 
-        self.executor.enqueue_blocking(
+        if let Err(error) = self.executor.enqueue_blocking(
             priority,
             Job {
                 lane: self.lane,
+                priority,
+                enqueued_at: Instant::now(),
                 cancelled: cancelled.clone(),
                 task,
             },
             queue_deadline,
-        )?;
+        ) {
+            record_db_error(self.lane, priority, &error);
+            return Err(error);
+        }
 
         let remaining = queue_deadline.saturating_duration_since(Instant::now());
         if started_rx.recv_timeout(remaining).is_err() {
             cancelled.store(true, Ordering::Release);
             self.executor.inner.shared.work_available.notify_all();
-            return Err(DbRunError::QueueTimeout);
+            let error = DbRunError::QueueTimeout;
+            record_db_error(self.lane, priority, &error);
+            return Err(error);
         }
 
-        match result_rx.recv_timeout(config.execution_timeout) {
+        let result = match result_rx.recv_timeout(config.execution_timeout) {
             Ok(result) => result,
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                 cancelled.store(true, Ordering::Release);
                 Err(DbRunError::ExecutionTimeout)
             }
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(DbRunError::ShuttingDown),
-        }
+        };
+        record_db_outcome(self.lane, priority, &result);
+        result
     }
+}
+
+fn record_db_outcome<T>(lane: DbLane, priority: DbPriority, result: &Result<T, DbRunError>) {
+    use crate::server::metrics::ExecutorOutcome;
+
+    let outcome = match result {
+        Ok(_) => ExecutorOutcome::Success,
+        Err(error) => return record_db_error(lane, priority, error),
+    };
+    crate::server::metrics::record_db_executor_outcome(lane, priority, outcome);
+}
+
+fn record_db_error(lane: DbLane, priority: DbPriority, error: &DbRunError) {
+    use crate::server::metrics::ExecutorOutcome;
+
+    let outcome = match error {
+        DbRunError::Store(_) => ExecutorOutcome::StoreError,
+        DbRunError::QueueTimeout => ExecutorOutcome::QueueTimeout,
+        DbRunError::ExecutionTimeout => ExecutorOutcome::ExecutionTimeout,
+        DbRunError::ShuttingDown => ExecutorOutcome::ShuttingDown,
+        DbRunError::Panicked(_) => ExecutorOutcome::Panicked,
+    };
+    crate::server::metrics::record_db_executor_outcome(lane, priority, outcome);
 }
 
 fn panic_message(payload: Box<dyn std::any::Any + Send>) -> DbRunError {
@@ -503,7 +586,10 @@ fn panic_message(payload: Box<dyn std::any::Any + Send>) -> DbRunError {
 fn worker_loop(shared: Arc<Shared>) {
     while let Some(job) = take_next_job(&shared) {
         let lane = job.lane;
+        let priority = job.priority;
+        let started = Instant::now();
         (job.task)();
+        crate::server::metrics::db_executor_execution_finished(lane, priority, started.elapsed());
 
         let mut state = shared.state.lock().unwrap();
         let active = state
@@ -541,7 +627,11 @@ fn take_next_job(shared: &Shared) -> Option<Job> {
                     .expect("eligible queue position must exist");
                 *state.active_by_lane.entry(job.lane).or_insert(0) += 1;
                 state.schedule_cursor = (schedule_index + 1) % WEIGHTED_SCHEDULE.len();
+                let lane = job.lane;
+                let priority = job.priority;
+                let queue_wait = job.enqueued_at.elapsed();
                 drop(state);
+                crate::server::metrics::db_executor_started(lane, priority, queue_wait);
                 shared.capacity_available.notify_one();
                 shared.work_available.notify_all();
                 return Some(job);
@@ -559,6 +649,26 @@ fn take_next_job(shared: &Shared) -> Option<Job> {
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn executor_metric_has_labels(metric_name: &str, expected_labels: &[(&str, &str)]) -> bool {
+        crate::server::metrics::init_metrics();
+        crate::server::metrics::REGISTRY
+            .gather()
+            .into_iter()
+            .find(|family| family.get_name() == metric_name)
+            .is_some_and(|family| {
+                family.get_metric().iter().any(|metric| {
+                    expected_labels
+                        .iter()
+                        .all(|(expected_name, expected_value)| {
+                            metric.get_label().iter().any(|label| {
+                                label.get_name() == *expected_name
+                                    && label.get_value() == *expected_value
+                            })
+                        })
+                })
+            })
+    }
 
     fn test_config(worker_threads: usize) -> DbExecutorConfig {
         let budget = DbPriorityConfig {
@@ -641,6 +751,14 @@ mod tests {
             .unwrap_err();
         assert!(matches!(error, DbRunError::ExecutionTimeout));
         assert_eq!(heartbeat.await.unwrap(), 42);
+        assert!(executor_metric_has_labels(
+            "pezzottify_db_executor_operations_total",
+            &[
+                ("lane", "user"),
+                ("priority", "interactive"),
+                ("outcome", "execution_timeout"),
+            ],
+        ));
     }
 
     #[tokio::test]
@@ -680,6 +798,14 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(error, DbRunError::QueueTimeout));
+        assert!(executor_metric_has_labels(
+            "pezzottify_db_executor_operations_total",
+            &[
+                ("lane", "user"),
+                ("priority", "interactive"),
+                ("outcome", "queue_timeout"),
+            ],
+        ));
 
         let (lock, condvar) = &*release;
         *lock.lock().unwrap() = true;

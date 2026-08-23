@@ -14,6 +14,8 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 use walkdir::WalkDir;
 
+use crate::db_executor::{DbLane, DbPriority};
+
 /// Metric name prefix for all Pezzottify metrics
 const PREFIX: &str = "pezzottify";
 
@@ -79,6 +81,86 @@ lazy_static! {
         format!("{PREFIX}_db_connection_errors_total"),
         "Total database connection errors"
     ).expect("Failed to create db_connection_errors_total metric");
+
+    pub static ref DB_EXECUTOR_QUEUE_WAIT_SECONDS: HistogramVec = HistogramVec::new(
+        HistogramOpts::new(
+            format!("{PREFIX}_db_executor_queue_wait_seconds"),
+            "Time database operations spend waiting for an executor worker"
+        ).buckets(vec![0.0001, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 30.0]),
+        &["lane", "priority"]
+    ).expect("Failed to create db_executor_queue_wait_seconds metric");
+
+    pub static ref DB_EXECUTOR_EXECUTION_SECONDS: HistogramVec = HistogramVec::new(
+        HistogramOpts::new(
+            format!("{PREFIX}_db_executor_execution_seconds"),
+            "Time database operations spend executing on a worker"
+        ).buckets(vec![0.0001, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 30.0, 300.0]),
+        &["lane", "priority"]
+    ).expect("Failed to create db_executor_execution_seconds metric");
+
+    pub static ref DB_EXECUTOR_OPERATIONS_TOTAL: CounterVec = CounterVec::new(
+        Opts::new(
+            format!("{PREFIX}_db_executor_operations_total"),
+            "Database executor operations by outcome"
+        ),
+        &["lane", "priority", "outcome"]
+    ).expect("Failed to create db_executor_operations_total metric");
+
+    pub static ref DB_EXECUTOR_QUEUED: GaugeVec = GaugeVec::new(
+        Opts::new(
+            format!("{PREFIX}_db_executor_queued"),
+            "Database operations currently queued by priority"
+        ),
+        &["priority"]
+    ).expect("Failed to create db_executor_queued metric");
+
+    pub static ref DB_EXECUTOR_ACTIVE: GaugeVec = GaugeVec::new(
+        Opts::new(
+            format!("{PREFIX}_db_executor_active"),
+            "Database operations currently executing by lane"
+        ),
+        &["lane"]
+    ).expect("Failed to create db_executor_active metric");
+
+    pub static ref BLOCKING_WORK_QUEUE_WAIT_SECONDS: HistogramVec = HistogramVec::new(
+        HistogramOpts::new(
+            format!("{PREFIX}_blocking_work_queue_wait_seconds"),
+            "Time bounded blocking work spends waiting for capacity"
+        ).buckets(vec![0.0001, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0]),
+        &["pool"]
+    ).expect("Failed to create blocking_work_queue_wait_seconds metric");
+
+    pub static ref BLOCKING_WORK_EXECUTION_SECONDS: HistogramVec = HistogramVec::new(
+        HistogramOpts::new(
+            format!("{PREFIX}_blocking_work_execution_seconds"),
+            "Time bounded blocking work spends executing"
+        ).buckets(vec![0.0001, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 30.0, 60.0]),
+        &["pool"]
+    ).expect("Failed to create blocking_work_execution_seconds metric");
+
+    pub static ref BLOCKING_WORK_OPERATIONS_TOTAL: CounterVec = CounterVec::new(
+        Opts::new(
+            format!("{PREFIX}_blocking_work_operations_total"),
+            "Bounded blocking work operations by outcome"
+        ),
+        &["pool", "outcome"]
+    ).expect("Failed to create blocking_work_operations_total metric");
+
+    pub static ref BLOCKING_WORK_WAITING: GaugeVec = GaugeVec::new(
+        Opts::new(
+            format!("{PREFIX}_blocking_work_waiting"),
+            "Bounded blocking operations currently waiting for capacity"
+        ),
+        &["pool"]
+    ).expect("Failed to create blocking_work_waiting metric");
+
+    pub static ref BLOCKING_WORK_ACTIVE: GaugeVec = GaugeVec::new(
+        Opts::new(
+            format!("{PREFIX}_blocking_work_active"),
+            "Bounded blocking operations currently executing"
+        ),
+        &["pool"]
+    ).expect("Failed to create blocking_work_active metric");
 
     // Catalog Metrics
     pub static ref CATALOG_ITEMS_TOTAL: GaugeVec = GaugeVec::new(
@@ -281,6 +363,16 @@ pub fn init_metrics() {
     let _ = REGISTRY.register(Box::new(RATE_LIMIT_HITS_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(DB_QUERY_DURATION_SECONDS.clone()));
     let _ = REGISTRY.register(Box::new(DB_CONNECTION_ERRORS_TOTAL.clone()));
+    let _ = REGISTRY.register(Box::new(DB_EXECUTOR_QUEUE_WAIT_SECONDS.clone()));
+    let _ = REGISTRY.register(Box::new(DB_EXECUTOR_EXECUTION_SECONDS.clone()));
+    let _ = REGISTRY.register(Box::new(DB_EXECUTOR_OPERATIONS_TOTAL.clone()));
+    let _ = REGISTRY.register(Box::new(DB_EXECUTOR_QUEUED.clone()));
+    let _ = REGISTRY.register(Box::new(DB_EXECUTOR_ACTIVE.clone()));
+    let _ = REGISTRY.register(Box::new(BLOCKING_WORK_QUEUE_WAIT_SECONDS.clone()));
+    let _ = REGISTRY.register(Box::new(BLOCKING_WORK_EXECUTION_SECONDS.clone()));
+    let _ = REGISTRY.register(Box::new(BLOCKING_WORK_OPERATIONS_TOTAL.clone()));
+    let _ = REGISTRY.register(Box::new(BLOCKING_WORK_WAITING.clone()));
+    let _ = REGISTRY.register(Box::new(BLOCKING_WORK_ACTIVE.clone()));
     let _ = REGISTRY.register(Box::new(CATALOG_ITEMS_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(CATALOG_SIZE_BYTES.clone()));
     let _ = REGISTRY.register(Box::new(ERRORS_TOTAL.clone()));
@@ -316,6 +408,101 @@ pub fn init_metrics() {
     let _ = REGISTRY.register(Box::new(HOMELAB_STORAGE_BYTES.clone()));
 
     tracing::info!("Metrics system initialized successfully");
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum ExecutorOutcome {
+    Success,
+    StoreError,
+    QueueTimeout,
+    ExecutionTimeout,
+    ShuttingDown,
+    Panicked,
+}
+
+impl ExecutorOutcome {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Success => "success",
+            Self::StoreError => "store_error",
+            Self::QueueTimeout => "queue_timeout",
+            Self::ExecutionTimeout => "execution_timeout",
+            Self::ShuttingDown => "shutting_down",
+            Self::Panicked => "panicked",
+        }
+    }
+}
+
+pub(crate) fn db_executor_enqueued(priority: DbPriority) {
+    DB_EXECUTOR_QUEUED
+        .with_label_values(&[priority.label()])
+        .inc();
+}
+
+pub(crate) fn db_executor_started(lane: DbLane, priority: DbPriority, queue_wait: Duration) {
+    DB_EXECUTOR_QUEUED
+        .with_label_values(&[priority.label()])
+        .dec();
+    DB_EXECUTOR_ACTIVE.with_label_values(&[lane.label()]).inc();
+    DB_EXECUTOR_QUEUE_WAIT_SECONDS
+        .with_label_values(&[lane.label(), priority.label()])
+        .observe(queue_wait.as_secs_f64());
+}
+
+pub(crate) fn db_executor_cancelled(priority: DbPriority) {
+    DB_EXECUTOR_QUEUED
+        .with_label_values(&[priority.label()])
+        .dec();
+}
+
+pub(crate) fn db_executor_execution_finished(
+    lane: DbLane,
+    priority: DbPriority,
+    execution: Duration,
+) {
+    DB_EXECUTOR_ACTIVE.with_label_values(&[lane.label()]).dec();
+    DB_EXECUTOR_EXECUTION_SECONDS
+        .with_label_values(&[lane.label(), priority.label()])
+        .observe(execution.as_secs_f64());
+}
+
+pub(crate) fn record_db_executor_outcome(
+    lane: DbLane,
+    priority: DbPriority,
+    outcome: ExecutorOutcome,
+) {
+    DB_EXECUTOR_OPERATIONS_TOTAL
+        .with_label_values(&[lane.label(), priority.label(), outcome.label()])
+        .inc();
+}
+
+pub(crate) fn blocking_work_waiting(pool: &'static str, waiting: bool) {
+    let metric = BLOCKING_WORK_WAITING.with_label_values(&[pool]);
+    if waiting {
+        metric.inc();
+    } else {
+        metric.dec();
+    }
+}
+
+pub(crate) fn blocking_work_started(pool: &'static str, queue_wait: Duration) {
+    BLOCKING_WORK_ACTIVE.with_label_values(&[pool]).inc();
+    BLOCKING_WORK_QUEUE_WAIT_SECONDS
+        .with_label_values(&[pool])
+        .observe(queue_wait.as_secs_f64());
+}
+
+pub(crate) fn blocking_work_finished(pool: &'static str, execution: Duration) {
+    BLOCKING_WORK_ACTIVE.with_label_values(&[pool]).dec();
+    BLOCKING_WORK_EXECUTION_SECONDS
+        .with_label_values(&[pool])
+        .observe(execution.as_secs_f64());
+}
+
+pub(crate) fn record_blocking_work_outcome(pool: &'static str, outcome: ExecutorOutcome) {
+    BLOCKING_WORK_OPERATIONS_TOTAL
+        .with_label_values(&[pool, outcome.label()])
+        .inc();
 }
 
 /// Initialize catalog-specific metrics
@@ -786,6 +973,52 @@ pub fn update_storage_metrics(db_dir: &Path, media_path: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn executor_observability_metrics_are_registered() {
+        init_metrics();
+        db_executor_enqueued(DbPriority::Interactive);
+        db_executor_started(
+            DbLane::CatalogRead,
+            DbPriority::Interactive,
+            Duration::from_millis(2),
+        );
+        db_executor_execution_finished(
+            DbLane::CatalogRead,
+            DbPriority::Interactive,
+            Duration::from_millis(3),
+        );
+        record_db_executor_outcome(
+            DbLane::CatalogRead,
+            DbPriority::Interactive,
+            ExecutorOutcome::Success,
+        );
+        blocking_work_waiting("password", true);
+        blocking_work_waiting("password", false);
+        blocking_work_started("password", Duration::from_millis(2));
+        blocking_work_finished("password", Duration::from_millis(3));
+        record_blocking_work_outcome("password", ExecutorOutcome::Success);
+
+        let metric_names = REGISTRY
+            .gather()
+            .into_iter()
+            .map(|family| family.get_name().to_owned())
+            .collect::<std::collections::HashSet<_>>();
+        for expected in [
+            "pezzottify_db_executor_queue_wait_seconds",
+            "pezzottify_db_executor_execution_seconds",
+            "pezzottify_db_executor_operations_total",
+            "pezzottify_db_executor_queued",
+            "pezzottify_db_executor_active",
+            "pezzottify_blocking_work_queue_wait_seconds",
+            "pezzottify_blocking_work_execution_seconds",
+            "pezzottify_blocking_work_operations_total",
+            "pezzottify_blocking_work_waiting",
+            "pezzottify_blocking_work_active",
+        ] {
+            assert!(metric_names.contains(expected), "missing metric {expected}");
+        }
+    }
 
     #[test]
     fn test_metrics_initialization() {

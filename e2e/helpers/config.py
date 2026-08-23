@@ -9,6 +9,7 @@ from .constants import ADMIN_PASS, ADMIN_USER, TEST_PASS, TEST_USER
 @dataclass
 class E2EConfig:
     server_url: str
+    metrics_url: str
     oidc_url: str
     web_url: str
     android_hosts: list[str]
@@ -22,6 +23,9 @@ class E2EConfig:
         server_url = os.environ.get(
             "PEZZOTTIFY_SERVER_URL", "http://pezzottify-server:3001"
         )
+        metrics_url = os.environ.get(
+            "PEZZOTTIFY_METRICS_URL", "http://pezzottify-server:9091"
+        )
         oidc_url = os.environ.get("OIDC_URL", "http://mock-oidc:8080")
         web_url = server_url  # frontend served by pezzottify-server
         android_hosts_str = os.environ.get("ANDROID_HOSTS", "")
@@ -30,6 +34,7 @@ class E2EConfig:
         ]
         return cls(
             server_url=server_url,
+            metrics_url=metrics_url,
             oidc_url=oidc_url,
             web_url=web_url,
             android_hosts=android_hosts,
