@@ -34,6 +34,28 @@ async fn storage_report_preserves_complete_admin_response_contract() {
 }
 
 #[tokio::test]
+async fn embedding_coverage_preserves_complete_admin_response_contract() {
+    let server = TestServer::builder().with_available_catalog().spawn().await;
+    let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
+
+    let response = admin
+        .client
+        .get(format!("{}/v1/admin/embeddings/coverage", server.base_url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let coverage: Value = response.json().await.unwrap();
+    assert!(coverage["enabled"].is_boolean());
+    assert!(coverage["specs"].is_array());
+    assert!(coverage["coverage"].is_object());
+    assert!(coverage["album_derived"]["enabled"].is_boolean());
+    assert!(coverage["album_derived"]["specs"].is_array());
+    assert!(coverage["album_derived"]["coverage"].is_object());
+}
+
+#[tokio::test]
 async fn show_draft_is_admin_visible_publicly_hidden_and_deletable() {
     let server = TestServer::builder().with_available_catalog().spawn().await;
     let admin = TestClient::authenticated_admin(server.base_url.clone()).await;

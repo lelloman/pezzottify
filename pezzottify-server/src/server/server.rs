@@ -40,8 +40,6 @@ use crate::{
 use axum_extra::extract::cookie::CookieJar;
 use tower_http::services::{ServeDir, ServeFile};
 
-const AUDIO_EMBEDDING_COVERAGE_TIMEOUT: Duration = Duration::from_secs(20);
-
 use axum::{
     body::Body,
     extract::{DefaultBodyLimit, Path, Query, State},

@@ -52,6 +52,15 @@ class CatalogApiClient:
             await resp.read()
             return resp.status
 
+    async def get_embedding_coverage(self) -> dict:
+        """Return the administrative track and album embedding coverage report."""
+        session = await self._ensure_session()
+        async with session.get(
+            f"{self.base_url}/v1/admin/embeddings/coverage"
+        ) as resp:
+            resp.raise_for_status()
+            return await resp.json()
+
     async def mcp_server_stats(self) -> dict:
         """Initialize MCP and execute its database-backed server stats tool."""
         session = await self._ensure_session()
