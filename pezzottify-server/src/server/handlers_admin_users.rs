@@ -1131,6 +1131,7 @@ impl ServerState {
             ingestion_manager: None, // Will be set by make_app if ingestion is enabled
             enrichment_store,
             database,
+            password_verification: PasswordVerificationPool::default(),
             playback_session_manager,
             db_registry,
         }
