@@ -1,9 +1,8 @@
-use std::{sync::Arc, time::Duration};
-
-use thiserror::Error;
-use tokio::sync::Semaphore;
+use std::time::Duration;
 
 use crate::user::{auth::PezzottifyHasher, UserManager, UsernamePasswordCredentials};
+
+use super::blocking_work::{BlockingWorkError, BoundedBlockingPool};
 
 const DEFAULT_MAX_CONCURRENT: usize = 4;
 const DEFAULT_QUEUE_TIMEOUT: Duration = Duration::from_secs(1);
@@ -11,22 +10,10 @@ const DEFAULT_EXECUTION_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Clone)]
 pub(super) struct PasswordWorkPool {
-    permits: Arc<Semaphore>,
-    queue_timeout: Duration,
-    execution_timeout: Duration,
+    inner: BoundedBlockingPool,
 }
 
-#[derive(Debug, Error, PartialEq, Eq)]
-pub(super) enum PasswordWorkError {
-    #[error("password verification queue timed out")]
-    QueueTimeout,
-    #[error("password verification timed out")]
-    ExecutionTimeout,
-    #[error("password verification pool is shutting down")]
-    ShuttingDown,
-    #[error("password verification worker panicked")]
-    WorkerPanicked,
-}
+pub(super) type PasswordWorkError = BlockingWorkError;
 
 impl Default for PasswordWorkPool {
     fn default() -> Self {
@@ -49,9 +36,7 @@ impl PasswordWorkPool {
             "password verification concurrency must be non-zero"
         );
         Self {
-            permits: Arc::new(Semaphore::new(max_concurrent)),
-            queue_timeout,
-            execution_timeout,
+            inner: BoundedBlockingPool::new(max_concurrent, queue_timeout, execution_timeout),
         }
     }
 
@@ -80,24 +65,7 @@ impl PasswordWorkPool {
         T: Send + 'static,
         F: FnOnce() -> T + Send + 'static,
     {
-        let permit = tokio::time::timeout(
-            self.queue_timeout,
-            Arc::clone(&self.permits).acquire_owned(),
-        )
-        .await
-        .map_err(|_| PasswordWorkError::QueueTimeout)?
-        .map_err(|_| PasswordWorkError::ShuttingDown)?;
-
-        let worker = tokio::task::spawn_blocking(move || {
-            let _permit = permit;
-            work()
-        });
-
-        match tokio::time::timeout(self.execution_timeout, worker).await {
-            Ok(Ok(result)) => Ok(result),
-            Ok(Err(_)) => Err(PasswordWorkError::WorkerPanicked),
-            Err(_) => Err(PasswordWorkError::ExecutionTimeout),
-        }
+        self.inner.run(work).await
     }
 }
 

@@ -1,8 +1,10 @@
 mod api_error;
 mod authorization;
+mod blocking_work;
 pub mod config;
 mod download_routes;
 mod embeddings;
+mod filesystem_work;
 mod http_layers;
 mod ingestion_routes;
 pub mod metrics;

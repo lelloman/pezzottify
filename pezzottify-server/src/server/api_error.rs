@@ -9,6 +9,7 @@ use tracing::error;
 use crate::{catalog_store::CatalogMutationError, db_executor::DbRunError, user::UserServiceError};
 
 use super::password_work::PasswordWorkError;
+use super::{blocking_work::BlockingWorkError, filesystem_work::FilesystemWorkError};
 
 pub const REQUEST_ID_HEADER: HeaderName = HeaderName::from_static("x-request-id");
 const RETRY_AFTER_SECONDS: &str = "1";
@@ -113,6 +114,16 @@ impl ApiError {
         error.retry_after = Some(HeaderValue::from_static(RETRY_AFTER_SECONDS));
         error
     }
+
+    fn filesystem_unavailable() -> Self {
+        let mut error = Self::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "filesystem_busy",
+            "Filesystem capacity is temporarily unavailable",
+        );
+        error.retry_after = Some(HeaderValue::from_static(RETRY_AFTER_SECONDS));
+        error
+    }
 }
 
 impl From<PasswordWorkError> for ApiError {
@@ -123,6 +134,19 @@ impl From<PasswordWorkError> for ApiError {
             | PasswordWorkError::ShuttingDown => Self::password_work_unavailable(),
             PasswordWorkError::WorkerPanicked => {
                 Self::internal("Password worker failed", "worker panicked")
+            }
+        }
+    }
+}
+
+impl From<FilesystemWorkError> for ApiError {
+    fn from(error: FilesystemWorkError) -> Self {
+        match error.0 {
+            BlockingWorkError::QueueTimeout
+            | BlockingWorkError::ExecutionTimeout
+            | BlockingWorkError::ShuttingDown => Self::filesystem_unavailable(),
+            BlockingWorkError::WorkerPanicked => {
+                Self::internal("Filesystem worker failed", "worker panicked")
             }
         }
     }

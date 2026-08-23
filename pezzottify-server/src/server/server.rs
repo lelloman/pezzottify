@@ -8,8 +8,6 @@ mod route_builder;
 
 use anyhow::{Context, Result};
 use std::{
-    fs::File,
-    io::Read,
     net::SocketAddr,
     sync::Arc,
     time::{Duration, Instant},
@@ -57,6 +55,7 @@ use serde::{Deserialize, Serialize};
 use tower_governor::GovernorLayer;
 
 use super::api_error::ApiError;
+use super::filesystem_work::FilesystemWorkPool;
 #[cfg(test)]
 use super::password_work::PasswordWorkError;
 use super::password_work::PasswordWorkPool;

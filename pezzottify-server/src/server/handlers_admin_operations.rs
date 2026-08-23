@@ -44,21 +44,19 @@ async fn admin_get_storage_report(
     session: Session,
     State(config): State<ServerConfig>,
     State(db_registry): State<super::state::GuardedDbRegistry>,
+    State(filesystem_work): State<FilesystemWorkPool>,
 ) -> Response {
     debug!("Storage report requested by user_id={}", session.user_id);
 
     let db_paths = db_registry.all();
-    let result = tokio::task::spawn_blocking(move || {
+    let result = filesystem_work.run(move || {
         super::storage_report::collect_storage_report(&config, db_paths)
     })
     .await;
 
     match result {
         Ok(report) => (StatusCode::OK, Json(report)).into_response(),
-        Err(e) => {
-            error!("Storage report task panicked: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(error) => ApiError::from(error).into_response(),
     }
 }
 

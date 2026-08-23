@@ -1146,6 +1146,7 @@ impl ServerState {
             enrichment_store,
             database,
             password_work: PasswordWorkPool::default(),
+            filesystem_work: FilesystemWorkPool::default(),
             playback_session_manager,
             db_registry,
         }

@@ -529,14 +529,21 @@ async fn get_image(
     _session: Session,
     State(catalog_store): State<GuardedCatalogStore>,
     State(database): State<DatabaseHandles>,
+    State(filesystem_work): State<FilesystemWorkPool>,
     State(http_client): State<HttpClient>,
     Path(id): Path<String>,
 ) -> Response {
     let file_path = catalog_store.get_image_path(&id);
 
-    // First, check if we have the image cached locally
-    if file_path.exists() {
-        return serve_image_file(&file_path).await;
+    // First, check if we have the image cached locally.
+    match filesystem_work.read(file_path.clone()).await {
+        Ok(Ok(buffer)) => return serve_image_bytes(buffer),
+        Ok(Err(error)) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Ok(Err(error)) => {
+            error!(%error, path = %file_path.display(), "Failed to read cached image");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+        Err(error) => return ApiError::from(error).into_response(),
     }
 
     // Image not cached locally - try to fetch from external URL
@@ -594,17 +601,19 @@ async fn get_image(
         }
     };
 
-    // Save the image to disk for future requests
-    if let Some(parent) = file_path.parent() {
-        if let Err(e) = std::fs::create_dir_all(parent) {
-            warn!("Failed to create images directory: {}", e);
-        }
-    }
-    if let Err(e) = std::fs::write(&file_path, &bytes) {
-        warn!("Failed to cache image to {}: {}", file_path.display(), e);
-        // Continue anyway - we can still serve the image
-    } else {
-        debug!("Cached image for {} to {}", id, file_path.display());
+    // Save the image atomically for future requests. Cache failure does not fail
+    // this response because the validated bytes are already available.
+    match filesystem_work
+        .write_atomic(file_path.clone(), bytes.to_vec())
+        .await
+    {
+        Ok(Ok(())) => debug!("Cached image for {} to {}", id, file_path.display()),
+        Ok(Err(error)) => warn!(
+            "Failed to cache image to {}: {}",
+            file_path.display(),
+            error
+        ),
+        Err(error) => warn!("Failed to schedule image cache write: {}", error),
     }
 
     // Return the image
@@ -615,18 +624,7 @@ async fn get_image(
         .unwrap()
 }
 
-/// Helper function to serve an image file from disk.
-async fn serve_image_file(file_path: &std::path::Path) -> Response {
-    let mut file = match File::open(file_path) {
-        Ok(f) => f,
-        Err(_) => return StatusCode::NOT_FOUND.into_response(),
-    };
-
-    let mut buffer = Vec::new();
-    if file.read_to_end(&mut buffer).is_err() {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-
+fn serve_image_bytes(buffer: Vec<u8>) -> Response {
     if let Some(kind) = infer::get(&buffer) {
         if kind.mime_type().starts_with("image/") {
             return Response::builder()
