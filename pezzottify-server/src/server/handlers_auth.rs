@@ -1,6 +1,7 @@
 async fn login(
     State(config): State<ServerConfig>,
     State(database): State<DatabaseHandles>,
+    State(password_verification): State<PasswordVerificationPool>,
     Json(body): Json<LoginBody>,
 ) -> Response {
     let start = Instant::now();
@@ -51,11 +52,35 @@ async fn login(
     };
 
     if let Some(password_credentials) = &credentials.username_password {
-        if let Ok(true) = password_credentials.hasher.verify(
-            &body.password,
-            &password_credentials.hash,
-            &password_credentials.salt,
-        ) {
+        let verified = password_verification
+            .verify(
+                password_credentials.hasher.clone(),
+                body.password.clone(),
+                password_credentials.hash.clone(),
+                password_credentials.salt.clone(),
+            )
+            .await;
+
+        let verified = match verified {
+            Err(PasswordVerificationError::QueueTimeout)
+            | Err(PasswordVerificationError::ExecutionTimeout)
+            | Err(PasswordVerificationError::ShuttingDown) => {
+                warn!("Password verification capacity is temporarily unavailable");
+                super::metrics::record_login_attempt("error", start.elapsed());
+                return ApiError::password_verification_unavailable().into_response();
+            }
+            Err(PasswordVerificationError::WorkerPanicked) => {
+                super::metrics::record_login_attempt("error", start.elapsed());
+                return ApiError::internal(
+                    "Password verification worker failed",
+                    "worker panicked",
+                )
+                .into_response();
+            }
+            Ok(verified) => verified,
+        };
+
+        if verified {
             let login_result = database
                 .user_manager
                 .run(DbPriority::Critical, move |manager| {

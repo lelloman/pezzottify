@@ -82,6 +82,16 @@ impl ApiError {
         }
     }
 
+    pub fn password_verification_unavailable() -> Self {
+        let mut error = Self::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "authentication_busy",
+            "Authentication capacity is temporarily unavailable",
+        );
+        error.retry_after = Some(HeaderValue::from_static(RETRY_AFTER_SECONDS));
+        error
+    }
+
     fn new(status: StatusCode, code: &'static str, message: impl Into<String>) -> Self {
         Self {
             status,
@@ -230,6 +240,27 @@ mod tests {
                 "Database capacity is temporarily unavailable"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn password_verification_capacity_is_retryable_without_exposing_details() {
+        let response = ApiError::password_verification_unavailable().into_response();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            response.headers()[axum::http::header::RETRY_AFTER],
+            RETRY_AFTER_SECONDS
+        );
+        assert!(response.headers().contains_key(REQUEST_ID_HEADER));
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["code"], "authentication_busy");
+        assert_eq!(
+            body["message"],
+            "Authentication capacity is temporarily unavailable"
+        );
     }
 
     #[tokio::test]

@@ -18,6 +18,77 @@ mod tests {
     use std::sync::RwLock;
     use tower::ServiceExt; // for `call`, `oneshot`, and `ready
 
+    #[tokio::test(flavor = "current_thread")]
+    async fn password_work_runs_off_the_async_runtime_thread() {
+        let runtime_thread = std::thread::current().id();
+        let pool = PasswordVerificationPool::with_limits(
+            1,
+            Duration::from_millis(100),
+            Duration::from_secs(1),
+        );
+
+        let worker_thread = pool
+            .run(|| std::thread::current().id())
+            .await
+            .expect("password work should complete");
+
+        assert_ne!(worker_thread, runtime_thread);
+    }
+
+    #[tokio::test]
+    async fn password_work_rejects_when_its_bounded_queue_times_out() {
+        let pool = PasswordVerificationPool::with_limits(
+            1,
+            Duration::from_millis(20),
+            Duration::from_secs(1),
+        );
+        let gate = Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+
+        let first_pool = pool.clone();
+        let first_gate = Arc::clone(&gate);
+        let first = tokio::spawn(async move {
+            first_pool
+                .run(move || {
+                    started_tx.send(()).expect("test receiver should remain open");
+                    let (lock, condvar) = &*first_gate;
+                    let mut released = lock.lock().unwrap();
+                    while !*released {
+                        released = condvar.wait(released).unwrap();
+                    }
+                })
+                .await
+        });
+        started_rx.await.expect("first job should start");
+
+        let error = pool
+            .run(|| ())
+            .await
+            .expect_err("second job must not bypass the concurrency limit");
+        assert_eq!(error, PasswordVerificationError::QueueTimeout);
+
+        let (lock, condvar) = &*gate;
+        *lock.lock().unwrap() = true;
+        condvar.notify_all();
+        first.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn password_work_reports_panics_without_panicking_the_runtime() {
+        let pool = PasswordVerificationPool::with_limits(
+            1,
+            Duration::from_millis(100),
+            Duration::from_secs(1),
+        );
+
+        let error = pool
+            .run(|| panic!("sentinel password worker panic"))
+            .await
+            .expect_err("worker panic should be contained");
+
+        assert_eq!(error, PasswordVerificationError::WorkerPanicked);
+    }
+
     fn valid_listening_request() -> ListeningEventRequest {
         ListeningEventRequest {
             track_id: "track-1".to_string(),
