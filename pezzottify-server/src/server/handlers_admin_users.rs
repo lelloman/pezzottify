@@ -398,27 +398,41 @@ struct SetPasswordBody {
 async fn admin_set_user_password(
     _session: Session,
     State(database): State<DatabaseHandles>,
+    State(password_work): State<PasswordWorkPool>,
     Path(user_handle): Path<String>,
     Json(body): Json<SetPasswordBody>,
 ) -> Response {
+    let credentials = match database
+        .user_manager
+        .run(DbPriority::Interactive, {
+            let user_handle = user_handle.clone();
+            move |manager| manager.get_user_credentials(&user_handle)
+        })
+        .await
+    {
+        Ok(Some(credentials)) => credentials,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(error) => return admin_user_db_error("Failed to read user credentials", error),
+    };
+
+    let password = match password_work.hash(credentials.user_id, body.password).await {
+        Ok(Ok(password)) => password,
+        Ok(Err(error)) => {
+            return ApiError::internal("Failed to hash user password", error).into_response()
+        }
+        Err(error) => return ApiError::from(error).into_response(),
+    };
+
     match database
         .user_manager
         .run(DbPriority::Interactive, move |manager| {
-            let Some(credentials) = manager.get_user_credentials(&user_handle)? else {
-                return Ok(false);
-            };
-            if credentials.username_password.is_some() {
-                manager.update_password_credentials(&user_handle, body.password)?;
-            } else {
-                manager.create_password_credentials(&user_handle, body.password)?;
-            }
-            Ok(true)
+            manager.set_prehashed_password_credentials(&user_handle, password)
         })
         .await
     {
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
         Ok(false) => StatusCode::NOT_FOUND.into_response(),
-        Err(error) => admin_user_db_error("Failed to set user password", error),
+        Err(error) => admin_user_db_error("Failed to persist user password", error),
     }
 }
 
@@ -1131,7 +1145,7 @@ impl ServerState {
             ingestion_manager: None, // Will be set by make_app if ingestion is enabled
             enrichment_store,
             database,
-            password_verification: PasswordVerificationPool::default(),
+            password_work: PasswordWorkPool::default(),
             playback_session_manager,
             db_registry,
         }

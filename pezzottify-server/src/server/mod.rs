@@ -6,7 +6,7 @@ mod embeddings;
 mod http_layers;
 mod ingestion_routes;
 pub mod metrics;
-mod password_verification;
+mod password_work;
 mod recommendations;
 // TODO: Re-enable after updating for Spotify schema (depends on downloader)
 // pub mod proxy;

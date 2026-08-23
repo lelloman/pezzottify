@@ -147,7 +147,7 @@ impl UserManager {
         Ok(token)
     }
 
-    fn create_hashed_password(
+    pub(crate) fn create_hashed_password(
         user_id: usize,
         password: String,
     ) -> Result<UsernamePasswordCredentials> {
@@ -216,6 +216,27 @@ impl UserManager {
             Some(Self::create_hashed_password(credentials.user_id, password)?);
         self.user_store
             .update_user_auth_credentials(credentials.clone())
+    }
+
+    /// Persist password credentials prepared outside the database executor.
+    ///
+    /// The handle is resolved again at commit time and owns the mutation semantics.
+    /// SQLite may reuse deleted numeric user ids, so a pre-hash snapshot id is not a
+    /// durable identity. Rebinding here prevents stale foreign-key data if the handle
+    /// was deleted and recreated while hashing was in progress.
+    pub(crate) fn set_prehashed_password_credentials(
+        &self,
+        user_handle: &str,
+        password: UsernamePasswordCredentials,
+    ) -> Result<bool> {
+        let Some(mut credentials) = self.user_store.get_user_auth_credentials(user_handle)? else {
+            return Ok(false);
+        };
+        let mut password = password;
+        password.user_id = credentials.user_id;
+        credentials.username_password = Some(password);
+        self.user_store.update_user_auth_credentials(credentials)?;
+        Ok(true)
     }
 
     pub fn delete_password_credentials(&self, user_handle: &String) -> Result<()> {
@@ -1286,6 +1307,53 @@ mod tests {
 
         manager.delete_auth_token(&user_id, &session.value).unwrap();
         assert!(manager.get_auth_token(&session.value).unwrap().is_none());
+    }
+
+    #[test]
+    fn prehashed_password_persistence_binds_to_the_current_handle_owner() {
+        let (manager, _temp_dir) = create_test_manager();
+        let handle = "password-race-user".to_owned();
+        let original_user_id = manager.add_user(&handle).unwrap();
+        let password = UserManager::create_hashed_password(
+            original_user_id,
+            "correct horse battery staple".to_owned(),
+        )
+        .unwrap();
+
+        assert!(manager
+            .set_prehashed_password_credentials(&handle, password.clone())
+            .unwrap());
+        let stored = manager
+            .get_user_credentials(&handle)
+            .unwrap()
+            .unwrap()
+            .username_password
+            .unwrap();
+        assert!(stored
+            .hasher
+            .verify("correct horse battery staple", &stored.hash, &stored.salt,)
+            .unwrap());
+
+        manager.delete_user(original_user_id).unwrap();
+        let replacement_user_id = manager.add_user(&handle).unwrap();
+        assert!(manager
+            .set_prehashed_password_credentials(&handle, password)
+            .unwrap());
+        let replacement_password = manager
+            .get_user_credentials(&handle)
+            .unwrap()
+            .unwrap()
+            .username_password
+            .unwrap();
+        assert_eq!(replacement_password.user_id, replacement_user_id);
+        assert!(replacement_password
+            .hasher
+            .verify(
+                "correct horse battery staple",
+                &replacement_password.hash,
+                &replacement_password.salt,
+            )
+            .unwrap());
     }
 
     #[test]

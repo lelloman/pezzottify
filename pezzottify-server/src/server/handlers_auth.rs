@@ -1,7 +1,7 @@
 async fn login(
     State(config): State<ServerConfig>,
     State(database): State<DatabaseHandles>,
-    State(password_verification): State<PasswordVerificationPool>,
+    State(password_work): State<PasswordWorkPool>,
     Json(body): Json<LoginBody>,
 ) -> Response {
     let start = Instant::now();
@@ -52,7 +52,7 @@ async fn login(
     };
 
     if let Some(password_credentials) = &credentials.username_password {
-        let verified = password_verification
+        let verified = password_work
             .verify(
                 password_credentials.hasher.clone(),
                 body.password.clone(),
@@ -62,20 +62,9 @@ async fn login(
             .await;
 
         let verified = match verified {
-            Err(PasswordVerificationError::QueueTimeout)
-            | Err(PasswordVerificationError::ExecutionTimeout)
-            | Err(PasswordVerificationError::ShuttingDown) => {
-                warn!("Password verification capacity is temporarily unavailable");
+            Err(error) => {
                 super::metrics::record_login_attempt("error", start.elapsed());
-                return ApiError::password_verification_unavailable().into_response();
-            }
-            Err(PasswordVerificationError::WorkerPanicked) => {
-                super::metrics::record_login_attempt("error", start.elapsed());
-                return ApiError::internal(
-                    "Password verification worker failed",
-                    "worker panicked",
-                )
-                .into_response();
+                return ApiError::from(error).into_response();
             }
             Ok(verified) => verified,
         };

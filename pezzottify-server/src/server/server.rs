@@ -57,7 +57,9 @@ use serde::{Deserialize, Serialize};
 use tower_governor::GovernorLayer;
 
 use super::api_error::ApiError;
-use super::password_verification::{PasswordVerificationError, PasswordVerificationPool};
+#[cfg(test)]
+use super::password_work::PasswordWorkError;
+use super::password_work::PasswordWorkPool;
 #[cfg(feature = "slowdown")]
 use super::slowdown_request;
 use super::{
