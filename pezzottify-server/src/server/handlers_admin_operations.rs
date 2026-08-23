@@ -132,10 +132,10 @@ async fn admin_list_jobs(
 
 async fn admin_get_audio_embedding_coverage(
     session: Session,
-    State(state): State<ServerState>,
+    State(config): State<ServerConfig>,
+    State(database): State<DatabaseHandles>,
 ) -> Response {
-    let (enabled, specs, album_enabled, album_specs) = match state.config.audio_embeddings.as_ref()
-    {
+    let (enabled, specs, album_enabled, album_specs) = match config.audio_embeddings.as_ref() {
         Some(settings) => (
             settings.enabled,
             settings.specs.clone(),
@@ -158,44 +158,18 @@ async fn admin_get_audio_embedding_coverage(
         .map(|spec| spec.target_namespace.clone())
         .collect::<Vec<_>>();
 
-    let catalog_store = Arc::clone(&state.catalog_store);
-    let media_path = state.config.media_path.clone();
-    let coverage_result = tokio::time::timeout(
-        AUDIO_EMBEDDING_COVERAGE_TIMEOUT,
-        tokio::task::spawn_blocking(move || {
-            let track_coverage = catalog_store.get_track_embedding_coverage(&namespaces);
+    let media_path = config.media_path.clone();
+    match database
+        .catalog_read
+        .run(DbPriority::Interactive, move |catalog_store| {
+            let coverage = catalog_store.get_track_embedding_coverage(&namespaces)?;
             let album_coverage =
-                catalog_store.get_album_embedding_coverage(&album_namespaces, &media_path);
-            (track_coverage, album_coverage)
-        }),
-    )
-    .await;
-
-    let (coverage_result, album_coverage_result) = match coverage_result {
-        Ok(Ok(result)) => result,
-        Ok(Err(e)) => {
-            error!("Failed to join audio embedding coverage task: {}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to get audio embedding coverage"})),
-            )
-                .into_response();
-        }
-        Err(_) => {
-            warn!(
-                "Audio embedding coverage timed out after {:?}",
-                AUDIO_EMBEDDING_COVERAGE_TIMEOUT
-            );
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(serde_json::json!({"error": "Audio embedding coverage timed out"})),
-            )
-                .into_response();
-        }
-    };
-
-    match (coverage_result, album_coverage_result) {
-        (Ok(coverage), Ok(album_coverage)) => {
+                catalog_store.get_album_embedding_coverage(&album_namespaces, &media_path)?;
+            Ok((coverage, album_coverage))
+        })
+        .await
+    {
+        Ok((coverage, album_coverage)) => {
             debug!(
                 "User {} retrieved audio embedding coverage: missing_any={}",
                 session.user_id, coverage.tracks_missing_any_embedding
@@ -231,14 +205,7 @@ async fn admin_get_audio_embedding_coverage(
             )
                 .into_response()
         }
-        (Err(e), _) | (_, Err(e)) => {
-            error!("Failed to get audio embedding coverage: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to get audio embedding coverage"})),
-            )
-                .into_response()
-        }
+        Err(error) => ApiError::from(error).into_response(),
     }
 }
 

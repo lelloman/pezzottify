@@ -8,6 +8,25 @@ from helpers.constants import ADMIN_PASS, ADMIN_USER, TEST_PASS, TEST_USER
 
 
 class TestAdminApi:
+    def test_embedding_coverage_response_shape(self, config):
+        async def _test():
+            admin = CatalogApiClient(config.server_url)
+            try:
+                await admin.login(
+                    ADMIN_USER, ADMIN_PASS, device_uuid="admin-api-embedding-coverage"
+                )
+                result = await admin.get_embedding_coverage()
+                assert isinstance(result["enabled"], bool)
+                assert isinstance(result["specs"], list)
+                assert isinstance(result["coverage"], dict)
+                assert isinstance(result["album_derived"]["enabled"], bool)
+                assert isinstance(result["album_derived"]["specs"], list)
+                assert isinstance(result["album_derived"]["coverage"], dict)
+            finally:
+                await admin.close()
+
+        run_async(_test())
+
     def test_catalog_sync_exposes_paging_metadata(self, config):
         async def _test():
             api = CatalogApiClient(config.server_url)
