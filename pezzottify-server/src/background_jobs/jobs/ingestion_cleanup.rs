@@ -10,7 +10,10 @@
 
 use crate::background_jobs::{
     context::JobContext,
-    job::{BackgroundJob, JobError, JobSchedule, ShutdownBehavior},
+    job::{
+        BackgroundJob, JobError, JobExecutionPolicy, JobResourceClass, JobSchedule,
+        ShutdownBehavior,
+    },
     JobAuditLogger,
 };
 use crate::config::IngestionCleanupJobSettings;
@@ -101,6 +104,13 @@ impl BackgroundJob for IngestionCleanupJob {
     fn schedule(&self) -> JobSchedule {
         // Run at configured interval
         JobSchedule::Interval(Duration::from_secs(self.interval_hours * 60 * 60))
+    }
+
+    fn execution_policy(&self) -> JobExecutionPolicy {
+        JobExecutionPolicy::new(JobResourceClass::IoBound)
+            .with_queue_timeout(Duration::from_secs(30))
+            .with_max_runtime(Duration::from_secs(10 * 60))
+            .with_circuit_breaker(3, Duration::from_secs(30 * 60))
     }
 
     fn shutdown_behavior(&self) -> ShutdownBehavior {
@@ -424,6 +434,19 @@ mod tests {
             }
             _ => panic!("Expected Interval schedule"),
         }
+    }
+
+    #[test]
+    fn execution_policy_isolates_filesystem_cleanup() {
+        let store: Arc<dyn IngestionStore> = Arc::new(MockIngestionStore { active_ids: vec![] });
+        let policy = IngestionCleanupJob::new(store, PathBuf::from("/tmp/test")).execution_policy();
+
+        assert_eq!(policy.resource_class, JobResourceClass::IoBound);
+        assert_eq!(policy.queue_timeout, Duration::from_secs(30));
+        assert_eq!(policy.max_runtime, Some(Duration::from_secs(10 * 60)));
+        let breaker = policy.circuit_breaker.unwrap();
+        assert_eq!(breaker.failure_threshold, 3);
+        assert_eq!(breaker.cooldown, Duration::from_secs(30 * 60));
     }
 
     #[test]
