@@ -4,6 +4,7 @@
 //! background tasks like search reindexing, cache precomputation, and event log pruning.
 
 mod audit_logger;
+mod circuit_breaker;
 mod context;
 mod controls;
 mod handle;
@@ -16,7 +17,7 @@ pub use context::{GuardedSearchVault, JobContext};
 pub use controls::JobPauseState;
 pub use handle::{JobExecutionPolicyInfo, JobInfo, SchedulerHandle};
 pub use job::{
-    BackgroundJob, HookEvent, JobError, JobExecutionPolicy, JobResourceClass, JobSchedule,
-    ShutdownBehavior,
+    BackgroundJob, HookEvent, JobCircuitBreakerPolicy, JobError, JobExecutionPolicy,
+    JobResourceClass, JobSchedule, ShutdownBehavior,
 };
 pub use scheduler::{create_scheduler, JobScheduler, JobSchedulerConfig};

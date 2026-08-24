@@ -41,6 +41,13 @@ pub struct JobExecutionPolicy {
     pub resource_class: JobResourceClass,
     pub queue_timeout: Duration,
     pub max_runtime: Option<Duration>,
+    pub circuit_breaker: Option<JobCircuitBreakerPolicy>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct JobCircuitBreakerPolicy {
+    pub failure_threshold: u32,
+    pub cooldown: Duration,
 }
 
 impl JobExecutionPolicy {
@@ -49,6 +56,7 @@ impl JobExecutionPolicy {
             resource_class,
             queue_timeout: Duration::from_secs(30),
             max_runtime: None,
+            circuit_breaker: None,
         }
     }
 
@@ -61,6 +69,22 @@ impl JobExecutionPolicy {
     pub fn with_max_runtime(mut self, timeout: Duration) -> Self {
         assert!(!timeout.is_zero(), "job runtime budget must be non-zero");
         self.max_runtime = Some(timeout);
+        self
+    }
+
+    pub fn with_circuit_breaker(mut self, failure_threshold: u32, cooldown: Duration) -> Self {
+        assert!(
+            failure_threshold > 0,
+            "circuit-breaker failure threshold must be non-zero"
+        );
+        assert!(
+            !cooldown.is_zero(),
+            "circuit-breaker cooldown must be non-zero"
+        );
+        self.circuit_breaker = Some(JobCircuitBreakerPolicy {
+            failure_threshold,
+            cooldown,
+        });
         self
     }
 }
@@ -132,6 +156,7 @@ pub enum JobError {
     AlreadyRunning,
     NotRunning,
     Paused,
+    CircuitOpen,
     ExecutionFailed(String),
     Cancelled,
     Timeout,
@@ -144,6 +169,7 @@ impl std::fmt::Display for JobError {
             JobError::AlreadyRunning => write!(f, "Job is already running"),
             JobError::NotRunning => write!(f, "Job is not running"),
             JobError::Paused => write!(f, "Job execution is paused"),
+            JobError::CircuitOpen => write!(f, "Job circuit breaker is open"),
             JobError::ExecutionFailed(msg) => write!(f, "Execution failed: {}", msg),
             JobError::Cancelled => write!(f, "Job was cancelled"),
             JobError::Timeout => write!(f, "Job timed out"),
