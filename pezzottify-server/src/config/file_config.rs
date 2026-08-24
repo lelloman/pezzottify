@@ -16,6 +16,8 @@ pub struct FileConfig {
     /// Disable only for local development served over plain HTTP.
     pub secure_session_cookies: Option<bool>,
     pub session_cookie_max_age_secs: Option<u64>,
+    /// Compatibility switch for clients that send a token without the Bearer scheme.
+    pub allow_legacy_raw_authorization: Option<bool>,
     /// Password-login attempts allowed per peer IP/account in the burst bucket.
     pub login_rate_limit_per_minute: Option<u32>,
     /// Password-login attempts allowed per peer IP/account in the sustained bucket.

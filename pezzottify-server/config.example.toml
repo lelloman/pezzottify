@@ -16,6 +16,8 @@ frontend_dir_path = "/app/web"
 secure_session_cookies = true
 # Browser cookie lifetime in seconds. Server-side token expiry remains authoritative.
 session_cookie_max_age_secs = 604800
+# Temporary compatibility for older web/Android releases. Disable after they have migrated.
+allow_legacy_raw_authorization = true
 # Password-login attempts are limited independently by peer IP and account.
 login_rate_limit_per_minute = 10
 login_rate_limit_per_hour = 100

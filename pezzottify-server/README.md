@@ -801,9 +801,14 @@ Non-retryable errors immediately mark the item as `FAILED`. Retryable errors tri
 5. Server enforces per-user device limit (50 devices max)
 6. Server generates auth token linked to the device
 7. Token returned in response body and set as HTTP-only cookie
-8. Client includes cookie in subsequent requests
+8. Client includes the cookie or `Authorization: Bearer <token>` in subsequent requests
 9. Session middleware validates token and extracts user permissions + device info
 10. Permission middleware checks required permissions for each route
+
+Older clients that send the token as the entire `Authorization` value can be supported temporarily
+with `allow_legacy_raw_authorization = true` (the compatibility default). Once all deployed web and
+Android clients have migrated, set it to `false` to reject raw, duplicated, malformed, and unsupported
+authorization schemes.
 
 ### User Roles
 

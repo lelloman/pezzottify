@@ -20,6 +20,8 @@ pub struct ServerConfig {
     pub secure_session_cookies: bool,
     /// Browser session cookie lifetime. Server-side token expiry remains authoritative.
     pub session_cookie_max_age_secs: u64,
+    /// Temporarily accept the pre-Bearer raw Authorization header used by old clients.
+    pub allow_legacy_raw_authorization: bool,
     /// Password-login burst budget, independently enforced by peer IP and account.
     pub login_rate_limit_per_minute: u32,
     /// Password-login sustained budget, independently enforced by peer IP and account.
@@ -52,6 +54,7 @@ impl Default for ServerConfig {
             disable_password_auth: false,
             secure_session_cookies: true,
             session_cookie_max_age_secs: 7 * 24 * 60 * 60,
+            allow_legacy_raw_authorization: true,
             login_rate_limit_per_minute: 10,
             login_rate_limit_per_hour: 100,
             streaming_search: StreamingSearchSettings::default(),
