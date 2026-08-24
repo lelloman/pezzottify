@@ -5,6 +5,7 @@
 
 mod audit_logger;
 mod context;
+mod controls;
 mod handle;
 mod job;
 pub mod jobs;
@@ -12,6 +13,7 @@ mod scheduler;
 
 pub use audit_logger::JobAuditLogger;
 pub use context::{GuardedSearchVault, JobContext};
+pub use controls::JobPauseState;
 pub use handle::{JobExecutionPolicyInfo, JobInfo, SchedulerHandle};
 pub use job::{
     BackgroundJob, HookEvent, JobError, JobExecutionPolicy, JobResourceClass, JobSchedule,

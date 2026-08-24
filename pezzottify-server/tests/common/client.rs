@@ -1058,6 +1058,28 @@ impl TestClient {
             .expect("Trigger job request failed")
     }
 
+    /// GET /v1/admin/jobs/controls
+    pub async fn admin_get_job_controls(&self) -> Response {
+        self.client
+            .get(format!("{}/v1/admin/jobs/controls", self.base_url))
+            .send()
+            .await
+            .expect("Get job controls request failed")
+    }
+
+    /// PUT /v1/admin/jobs/controls/global
+    pub async fn admin_set_global_job_pause(&self, paused: bool, cancel_running: bool) -> Response {
+        self.client
+            .put(format!("{}/v1/admin/jobs/controls/global", self.base_url))
+            .json(&json!({
+                "paused": paused,
+                "cancel_running": cancel_running,
+            }))
+            .send()
+            .await
+            .expect("Set global job pause request failed")
+    }
+
     /// GET /v1/admin/jobs/{job_id}/history?limit={limit}
     pub async fn admin_get_job_history(&self, job_id: &str, limit: usize) -> Response {
         self.client

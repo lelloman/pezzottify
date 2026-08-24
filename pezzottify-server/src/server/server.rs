@@ -19,7 +19,7 @@ use crate::background_jobs::jobs::{
     CatalogAvailabilityStatsJob, CatalogAvailabilityStatsSnapshot, FeaturedAlbumsJob,
     FeaturedAlbumsSnapshot,
 };
-use crate::background_jobs::{JobError, JobInfo, SchedulerHandle};
+use crate::background_jobs::{JobError, JobInfo, JobResourceClass, SchedulerHandle};
 use crate::catalog_store::{CatalogStore, DiscographySort};
 use crate::config::{AlbumEmbeddingDerivationSpec, AudioEmbeddingSpec};
 use crate::db_executor::DbPriority;
