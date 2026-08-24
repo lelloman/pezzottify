@@ -54,6 +54,7 @@ internal class ExoPlatformPlayer(
     private var progressPollingJob: Job? = null
 
     private var pendingTrackIndex: Int? = null
+    private var pendingTrackPositionMs: Long = 0L
 
     private val mutableIsActive = MutableStateFlow(false)
     override val isActive = mutableIsActive.asStateFlow()
@@ -288,6 +289,7 @@ internal class ExoPlatformPlayer(
     override fun loadPlaylist(tracksUrls: List<String>, playWhenReady: Boolean) {
         logger.info("loadPlaylist() - ${tracksUrls.size} tracks, playWhenReady=$playWhenReady, sessionToken=${sessionToken != null}")
         pendingTrackIndex = null
+        pendingTrackPositionMs = 0L
         mutableIsPlaying.value = playWhenReady
         if (sessionToken == null) {
             val newSessionToken =
@@ -326,8 +328,9 @@ internal class ExoPlatformPlayer(
             // Apply pending track index if one was set before playlist was ready
             val targetIndex = pendingTrackIndex
             if (targetIndex != null) {
-                it.seekTo(targetIndex, 0)
+                it.seekTo(targetIndex, pendingTrackPositionMs)
                 pendingTrackIndex = null
+                pendingTrackPositionMs = 0L
                 mutableCurrentTrackIndex.value = targetIndex
             } else {
                 // Emit initial track index - the listener only fires on
@@ -337,12 +340,17 @@ internal class ExoPlatformPlayer(
         }
     }
 
-    override fun loadTrackIndex(loadTrackIndex: Int) {
+    override fun loadTrackIndex(index: Int) {
+        loadTrack(index, 0L)
+    }
+
+    override fun loadTrack(index: Int, positionMs: Long) {
         if (mediaController != null) {
-            mediaController?.seekTo(loadTrackIndex, 0)
+            mediaController?.seekTo(index, positionMs)
         } else {
             // Store for later when mediaController is ready
-            pendingTrackIndex = loadTrackIndex
+            pendingTrackIndex = index
+            pendingTrackPositionMs = positionMs
         }
     }
 
