@@ -102,6 +102,7 @@ pub struct AppConfig {
     pub frontend_dir_path: Option<String>,
     pub secure_session_cookies: bool,
     pub session_cookie_max_age_secs: u64,
+    pub allow_legacy_raw_authorization: bool,
     pub login_rate_limit_per_minute: u32,
     pub login_rate_limit_per_hour: u32,
     pub downloader_url: Option<String>,
@@ -171,6 +172,7 @@ impl AppConfig {
         if session_cookie_max_age_secs == 0 {
             bail!("session_cookie_max_age_secs must be greater than zero");
         }
+        let allow_legacy_raw_authorization = file.allow_legacy_raw_authorization.unwrap_or(true);
         let login_rate_limit_per_minute = file.login_rate_limit_per_minute.unwrap_or(10);
         let login_rate_limit_per_hour = file.login_rate_limit_per_hour.unwrap_or(100);
         if login_rate_limit_per_minute == 0 || login_rate_limit_per_hour == 0 {
@@ -566,6 +568,7 @@ impl AppConfig {
             frontend_dir_path,
             secure_session_cookies,
             session_cookie_max_age_secs,
+            allow_legacy_raw_authorization,
             login_rate_limit_per_minute,
             login_rate_limit_per_hour,
             downloader_url,
@@ -1153,6 +1156,7 @@ mod tests {
         assert_eq!(config.frontend_dir_path, Some("/frontend".to_string()));
         assert!(config.secure_session_cookies);
         assert_eq!(config.session_cookie_max_age_secs, 604_800);
+        assert!(config.allow_legacy_raw_authorization);
         assert_eq!(config.login_rate_limit_per_minute, 10);
         assert_eq!(config.login_rate_limit_per_hour, 100);
         assert_eq!(
@@ -1185,6 +1189,7 @@ mod tests {
             logging_level: Some("body".to_string()),
             secure_session_cookies: Some(false),
             session_cookie_max_age_secs: Some(86_400),
+            allow_legacy_raw_authorization: Some(false),
             login_rate_limit_per_minute: Some(250),
             login_rate_limit_per_hour: Some(2_000),
             ..Default::default()
@@ -1202,6 +1207,7 @@ mod tests {
         assert_eq!(config.content_cache_age_sec, 3600);
         assert!(!config.secure_session_cookies);
         assert_eq!(config.session_cookie_max_age_secs, 86_400);
+        assert!(!config.allow_legacy_raw_authorization);
         assert_eq!(config.login_rate_limit_per_minute, 250);
         assert_eq!(config.login_rate_limit_per_hour, 2_000);
     }

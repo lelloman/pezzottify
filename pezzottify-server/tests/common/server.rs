@@ -23,6 +23,7 @@ pub struct TestServerBuilder {
     ingestion_enabled: bool,
     disable_password_auth: bool,
     available_catalog: bool,
+    strict_authorization_header: bool,
 }
 
 #[allow(dead_code)] // Each integration-test crate uses a different subset of builder options.
@@ -44,6 +45,11 @@ impl TestServerBuilder {
 
     pub fn with_available_catalog(mut self) -> Self {
         self.available_catalog = true;
+        self
+    }
+
+    pub fn with_strict_authorization_header(mut self) -> Self {
+        self.strict_authorization_header = true;
         self
     }
 
@@ -237,6 +243,7 @@ impl TestServer {
             disable_password_auth: options.disable_password_auth,
             secure_session_cookies: false,
             session_cookie_max_age_secs: 7 * 24 * 60 * 60,
+            allow_legacy_raw_authorization: !options.strict_authorization_header,
             login_rate_limit_per_minute: 1_000,
             login_rate_limit_per_hour: 1_000,
             streaming_search: pezzottify_server::config::StreamingSearchSettings::default(),

@@ -7,10 +7,11 @@ use crate::user::{Permission, UserManager};
 
 use axum::{
     extract::FromRequestParts,
-    http::{request::Parts, StatusCode},
+    http::{header::AUTHORIZATION, request::Parts, HeaderMap, StatusCode},
     response::IntoResponse,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
 use tracing::{debug, warn};
 
@@ -64,12 +65,79 @@ async fn extract_session_token_from_cookies(
         .map(|s| s.to_string())
 }
 
-fn extract_session_token_from_headers(parts: &mut Parts) -> Option<String> {
-    parts
-        .headers
-        .get(HEADER_SESSION_TOKEN_KEY)
-        .map(|v| v.as_bytes().to_owned())
-        .map(|b| String::from_utf8_lossy(&b).into_owned())
+#[derive(Debug)]
+enum AuthorizationHeaderError {
+    Duplicate,
+    InvalidEncoding,
+    MalformedBearer,
+    UnsupportedScheme,
+    LegacyRawDisabled,
+}
+
+static LEGACY_AUTHORIZATION_WARNING_EMITTED: AtomicBool = AtomicBool::new(false);
+
+fn valid_token68(value: &str) -> bool {
+    let mut padding_started = false;
+    !value.is_empty()
+        && value.bytes().all(|byte| {
+            if byte == b'=' {
+                padding_started = true;
+                return true;
+            }
+            if padding_started {
+                return false;
+            }
+            byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~' | b'+' | b'/')
+        })
+}
+
+fn parse_authorization_header(
+    headers: &HeaderMap,
+    allow_legacy_raw: bool,
+) -> Result<Option<String>, AuthorizationHeaderError> {
+    let mut values = headers.get_all(AUTHORIZATION).iter();
+    let Some(value) = values.next() else {
+        return Ok(None);
+    };
+    if values.next().is_some() {
+        return Err(AuthorizationHeaderError::Duplicate);
+    }
+
+    let value = value
+        .to_str()
+        .map_err(|_| AuthorizationHeaderError::InvalidEncoding)?;
+    let value_bytes = value.as_bytes();
+    let starts_with_bearer = value_bytes
+        .get(.."Bearer".len())
+        .map(|scheme| scheme.eq_ignore_ascii_case(b"Bearer"))
+        .unwrap_or(false);
+    if starts_with_bearer && value_bytes.get("Bearer".len()) == Some(&b' ') {
+        let credential = value["Bearer".len() + 1..].trim_start_matches(' ');
+        if valid_token68(credential) {
+            return Ok(Some(credential.to_owned()));
+        }
+        return Err(AuthorizationHeaderError::MalformedBearer);
+    }
+
+    if value.eq_ignore_ascii_case("Bearer") {
+        return Err(AuthorizationHeaderError::MalformedBearer);
+    }
+    if value.bytes().any(|byte| byte.is_ascii_whitespace()) {
+        return Err(AuthorizationHeaderError::UnsupportedScheme);
+    }
+    if !allow_legacy_raw {
+        return Err(AuthorizationHeaderError::LegacyRawDisabled);
+    }
+    if !valid_token68(value) {
+        return Err(AuthorizationHeaderError::MalformedBearer);
+    }
+
+    if !LEGACY_AUTHORIZATION_WARNING_EMITTED.swap(true, Ordering::Relaxed) {
+        warn!(
+            "Accepted a deprecated raw Authorization credential; migrate the client to 'Bearer <token>' and disable allow_legacy_raw_authorization"
+        );
+    }
+    Ok(Some(value.to_owned()))
 }
 
 /// Try to validate the token as an OIDC JWT and create a session
@@ -347,9 +415,16 @@ async fn extract_session_from_request_parts(
     // request by the client, while cookies may contain stale tokens from before
     // a token refresh. Cookies are only used as fallback for WebSocket connections
     // which cannot send custom headers.
-    let token = match extract_session_token_from_headers(parts)
-        .or(extract_session_token_from_cookies(parts, ctx).await)
-    {
+    let header_token =
+        match parse_authorization_header(&parts.headers, ctx.config.allow_legacy_raw_authorization)
+        {
+            Ok(token) => token,
+            Err(error) => {
+                debug!(?error, "Rejecting malformed Authorization header");
+                return Ok(None);
+            }
+        };
+    let token = match header_token.or(extract_session_token_from_cookies(parts, ctx).await) {
         None => {
             debug!("No token in headers nor cookies.");
             return Ok(None);
@@ -472,64 +547,118 @@ mod tests {
     }
 
     #[test]
-    fn extract_session_token_from_headers_with_valid_token() {
+    fn authorization_header_accepts_bearer_token() {
         let mut headers = HeaderMap::new();
         headers.insert(
             HEADER_SESSION_TOKEN_KEY,
-            HeaderValue::from_static("test-auth-token-123"),
+            HeaderValue::from_static("Bearer test-auth-token-123"),
         );
 
-        let mut parts = create_parts_with_headers(headers);
-        let token = extract_session_token_from_headers(&mut parts);
-        assert_eq!(token, Some("test-auth-token-123".to_string()));
+        let parts = create_parts_with_headers(headers);
+        let token = parse_authorization_header(&parts.headers, false).unwrap();
+        assert_eq!(token.as_deref(), Some("test-auth-token-123"));
     }
 
     #[test]
-    fn extract_session_token_from_headers_without_token() {
+    fn authorization_header_scheme_is_case_insensitive() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HEADER_SESSION_TOKEN_KEY,
+            HeaderValue::from_static("bEaReR token.with-symbols_123-456"),
+        );
+
+        let parts = create_parts_with_headers(headers);
+        let token = parse_authorization_header(&parts.headers, false).unwrap();
+        assert_eq!(token.as_deref(), Some("token.with-symbols_123-456"));
+    }
+
+    #[test]
+    fn authorization_header_absence_is_not_an_error() {
         let headers = HeaderMap::new();
-        let mut parts = create_parts_with_headers(headers);
-        let token = extract_session_token_from_headers(&mut parts);
-        assert_eq!(token, None);
+        let parts = create_parts_with_headers(headers);
+        assert_eq!(
+            parse_authorization_header(&parts.headers, false).unwrap(),
+            None
+        );
     }
 
     #[test]
-    fn extract_session_token_from_headers_with_empty_value() {
+    fn authorization_header_rejects_empty_bearer_credential() {
         let mut headers = HeaderMap::new();
-        headers.insert(HEADER_SESSION_TOKEN_KEY, HeaderValue::from_static(""));
+        headers.insert(HEADER_SESSION_TOKEN_KEY, HeaderValue::from_static("Bearer"));
 
-        let mut parts = create_parts_with_headers(headers);
-        let token = extract_session_token_from_headers(&mut parts);
-        assert_eq!(token, Some("".to_string()));
+        let parts = create_parts_with_headers(headers);
+        assert!(parse_authorization_header(&parts.headers, false).is_err());
     }
 
     #[test]
-    fn extract_session_token_from_headers_with_special_characters() {
+    fn authorization_header_rejects_unsupported_scheme() {
         let mut headers = HeaderMap::new();
         headers.insert(
             HEADER_SESSION_TOKEN_KEY,
-            HeaderValue::from_static("token-with-dashes_and_underscores.123"),
+            HeaderValue::from_static("Basic dXNlcjpwYXNz"),
         );
 
-        let mut parts = create_parts_with_headers(headers);
-        let token = extract_session_token_from_headers(&mut parts);
-        assert_eq!(
-            token,
-            Some("token-with-dashes_and_underscores.123".to_string())
-        );
+        let parts = create_parts_with_headers(headers);
+        assert!(parse_authorization_header(&parts.headers, true).is_err());
     }
 
     #[test]
-    fn extract_session_token_from_headers_case_sensitive() {
+    fn authorization_header_rejects_duplicate_values() {
         let mut headers = HeaderMap::new();
-        headers.insert(
-            "authorization",
-            HeaderValue::from_static("lowercase-header"),
+        headers.append(
+            HEADER_SESSION_TOKEN_KEY,
+            HeaderValue::from_static("Bearer first"),
+        );
+        headers.append(
+            HEADER_SESSION_TOKEN_KEY,
+            HeaderValue::from_static("Bearer second"),
         );
 
-        let mut parts = create_parts_with_headers(headers);
-        let token = extract_session_token_from_headers(&mut parts);
-        // HTTP headers are case-insensitive, so this should work
-        assert_eq!(token, Some("lowercase-header".to_string()));
+        let parts = create_parts_with_headers(headers);
+        assert!(parse_authorization_header(&parts.headers, true).is_err());
+    }
+
+    #[test]
+    fn authorization_header_rejects_whitespace_inside_credential() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HEADER_SESSION_TOKEN_KEY,
+            HeaderValue::from_static("Bearer first second"),
+        );
+
+        let parts = create_parts_with_headers(headers);
+        assert!(parse_authorization_header(&parts.headers, false).is_err());
+    }
+
+    #[test]
+    fn authorization_header_rejects_non_ascii_without_panicking() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HEADER_SESSION_TOKEN_KEY,
+            HeaderValue::from_bytes("éééé".as_bytes()).unwrap(),
+        );
+
+        let parts = create_parts_with_headers(headers);
+        assert!(parse_authorization_header(&parts.headers, true).is_err());
+    }
+
+    #[test]
+    fn legacy_raw_authorization_requires_compatibility_mode() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HEADER_SESSION_TOKEN_KEY,
+            HeaderValue::from_static("legacy-token.with-symbols_123"),
+        );
+        let parts = create_parts_with_headers(headers);
+
+        assert!(parse_authorization_header(&parts.headers, false).is_err());
+        assert_eq!(
+            parse_authorization_header(&parts.headers, true)
+                .unwrap()
+                .as_deref(),
+            Some("legacy-token.with-symbols_123")
+        );
     }
 
     #[test]

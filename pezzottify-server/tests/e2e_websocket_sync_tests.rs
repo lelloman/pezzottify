@@ -445,7 +445,7 @@ async fn connect_ws_with_auth_header(
 
     let request = http::Request::builder()
         .uri(&ws_url)
-        .header(header::AUTHORIZATION, session_token)
+        .header(header::AUTHORIZATION, format!("Bearer {session_token}"))
         .header(header::HOST, "localhost")
         .header(header::CONNECTION, "Upgrade")
         .header(header::UPGRADE, "websocket")

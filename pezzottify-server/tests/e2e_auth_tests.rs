@@ -7,6 +7,21 @@ mod common;
 use common::{TestClient, TestServer, ADMIN_PASS, ADMIN_USER, ARTIST_1_ID, TEST_PASS, TEST_USER};
 use reqwest::StatusCode;
 
+fn session_token_from(response: &reqwest::Response) -> String {
+    response
+        .headers()
+        .get_all(reqwest::header::SET_COOKIE)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .find_map(|cookie| {
+            cookie
+                .strip_prefix("session_token=")
+                .and_then(|value| value.split(';').next())
+                .map(str::to_owned)
+        })
+        .expect("login response should contain a session token")
+}
+
 #[tokio::test]
 async fn test_login_sets_consistent_session_and_csrf_cookie_policy() {
     let server = TestServer::spawn().await;
@@ -101,6 +116,80 @@ async fn test_login_with_valid_credentials() {
 
     // Verify session cookie is set
     // (reqwest client automatically handles cookies)
+}
+
+#[tokio::test]
+async fn bearer_authorization_authenticates_without_cookies() {
+    let server = TestServer::spawn().await;
+    let login_client = TestClient::new(server.base_url.clone());
+    let login = login_client.login(TEST_USER, TEST_PASS).await;
+    let token = session_token_from(&login);
+
+    let response = reqwest::Client::new()
+        .get(format!("{}/v1/auth/session", server.base_url))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn legacy_raw_authorization_remains_available_during_client_rollout() {
+    let server = TestServer::spawn().await;
+    let login_client = TestClient::new(server.base_url.clone());
+    let login = login_client.login(TEST_USER, TEST_PASS).await;
+    let token = session_token_from(&login);
+
+    let response = reqwest::Client::new()
+        .get(format!("{}/v1/auth/session", server.base_url))
+        .header(reqwest::header::AUTHORIZATION, token)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn strict_authorization_mode_rejects_legacy_raw_credentials() {
+    let server = TestServer::builder()
+        .with_strict_authorization_header()
+        .spawn()
+        .await;
+    let login_client = TestClient::new(server.base_url.clone());
+    let login = login_client.login(TEST_USER, TEST_PASS).await;
+    let token = session_token_from(&login);
+
+    let response = reqwest::Client::new()
+        .get(format!("{}/v1/auth/session", server.base_url))
+        .header(reqwest::header::AUTHORIZATION, token)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn malformed_authorization_does_not_fall_back_to_valid_cookie() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::new(server.base_url.clone());
+    assert_eq!(
+        client.login(TEST_USER, TEST_PASS).await.status(),
+        StatusCode::CREATED
+    );
+
+    let response = client
+        .client
+        .get(format!("{}/v1/auth/session", server.base_url))
+        .header(reqwest::header::AUTHORIZATION, "Basic dXNlcjpwYXNz")
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
