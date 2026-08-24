@@ -179,10 +179,10 @@ class PlayerImpl(
         // Load tracks into player
         val baseUrl = configStore.baseUrl.value
         val urls = savedState.playlist.tracksIds.map { "$baseUrl/v1/content/stream/$it" }
-        platformPlayer.loadPlaylist(urls)
+        platformPlayer.loadPlaylist(urls, playWhenReady = savedState.isPlaying)
 
-        // Seek to saved position
-        platformPlayer.loadTrackIndex(savedState.currentTrackIndex)
+        // Restore both the selected track and its exact position.
+        platformPlayer.loadTrack(savedState.currentTrackIndex, savedState.positionMs)
 
         // Clear saved state after successful restoration
         playbackStateStore.clearState()
