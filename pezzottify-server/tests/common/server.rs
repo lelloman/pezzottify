@@ -17,7 +17,7 @@ use std::time::Duration;
 use tempfile::TempDir;
 use tokio::net::TcpListener;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct TestServerBuilder {
     download_manager_enabled: bool,
     ingestion_enabled: bool,
@@ -25,6 +25,7 @@ pub struct TestServerBuilder {
     available_catalog: bool,
     strict_authorization_header: bool,
     scheduler_enabled: bool,
+    scheduler_jobs: Vec<Arc<dyn pezzottify_server::background_jobs::BackgroundJob>>,
 }
 
 #[allow(dead_code)] // Each integration-test crate uses a different subset of builder options.
@@ -56,6 +57,15 @@ impl TestServerBuilder {
 
     pub fn with_scheduler(mut self) -> Self {
         self.scheduler_enabled = true;
+        self
+    }
+
+    pub fn with_scheduler_job(
+        mut self,
+        job: Arc<dyn pezzottify_server::background_jobs::BackgroundJob>,
+    ) -> Self {
+        self.scheduler_enabled = true;
+        self.scheduler_jobs.push(job);
         self
     }
 
@@ -294,6 +304,9 @@ impl TestServer {
                     scheduler_shutdown.clone(),
                     context,
                 );
+                for job in options.scheduler_jobs {
+                    scheduler.register_job(job).await;
+                }
                 tokio::spawn(async move { scheduler.run().await });
                 (Some(handle), Some(scheduler_shutdown), Some(hook_sender))
             } else {
