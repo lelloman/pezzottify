@@ -26,6 +26,11 @@ class LocalExoPlayer(
 ) {
     private var mediaController: MediaController? = null
     private var sessionToken: SessionToken? = null
+    private var controllerConnectionInProgress = false
+    @Volatile
+    private var released = false
+    private val controllerLock = Any()
+    private val pendingControllerActions = mutableListOf<(MediaController) -> Unit>()
 
     private val _state = MutableStateFlow(LocalPlayerState())
     val state: StateFlow<LocalPlayerState> = _state.asStateFlow()
@@ -95,7 +100,7 @@ class LocalExoPlayer(
         trackInfoList = trackInfoList + tracks
         _state.update { it.copy(queue = trackInfoList) }
 
-        mediaController?.let { controller ->
+        ensureMediaController { controller ->
             tracks.forEach { track ->
                 val mediaItem = MediaItem.Builder()
                     .setUri(Uri.parse(track.uri))
@@ -215,30 +220,64 @@ class LocalExoPlayer(
 
     fun release() {
         stopProgressPolling()
-        mediaController?.removeListener(playerListener)
-        mediaController?.release()
-        mediaController = null
-        sessionToken = null
+        val controller = synchronized(controllerLock) {
+            released = true
+            pendingControllerActions.clear()
+            controllerConnectionInProgress = false
+            sessionToken = null
+            mediaController.also { mediaController = null }
+        }
+        controller?.removeListener(playerListener)
+        controller?.release()
     }
 
     private fun ensureMediaController(onReady: (MediaController) -> Unit) {
-        mediaController?.let { controller ->
+        val readyController = synchronized(controllerLock) {
+            if (released) return
+            mediaController?.also { return@synchronized it }
+
+            pendingControllerActions += onReady
+            if (controllerConnectionInProgress) return
+            controllerConnectionInProgress = true
+            null
+        }
+        readyController?.let { controller ->
             onReady(controller)
             return
         }
 
-        val newSessionToken = sessionToken ?: SessionToken(
-            context,
-            ComponentName(context, LocalPlaybackService::class.java)
-        ).also { sessionToken = it }
+        val newSessionToken = synchronized(controllerLock) {
+            sessionToken ?: SessionToken(
+                context,
+                ComponentName(context, LocalPlaybackService::class.java)
+            ).also { sessionToken = it }
+        }
 
         val controllerFuture = MediaController.Builder(context, newSessionToken).buildAsync()
         controllerFuture.addListener(
             {
-                val controller = controllerFuture.get()
-                mediaController = controller
+                val controller = runCatching { controllerFuture.get() }.getOrElse {
+                    synchronized(controllerLock) {
+                        controllerConnectionInProgress = false
+                        sessionToken = null
+                    }
+                    return@addListener
+                }
+                val actions = synchronized(controllerLock) {
+                    controllerConnectionInProgress = false
+                    if (released) {
+                        emptyList()
+                    } else {
+                        mediaController = controller
+                        pendingControllerActions.toList().also { pendingControllerActions.clear() }
+                    }
+                }
+                if (released) {
+                    controller.release()
+                    return@addListener
+                }
                 controller.addListener(playerListener)
-                onReady(controller)
+                actions.forEach { it(controller) }
 
                 // Apply any pending play/pause action
                 pendingPlayWhenReady?.let { shouldPlay ->
