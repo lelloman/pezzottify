@@ -24,6 +24,7 @@ pub struct TestServerBuilder {
     disable_password_auth: bool,
     available_catalog: bool,
     strict_authorization_header: bool,
+    scheduler_enabled: bool,
 }
 
 #[allow(dead_code)] // Each integration-test crate uses a different subset of builder options.
@@ -50,6 +51,11 @@ impl TestServerBuilder {
 
     pub fn with_strict_authorization_header(mut self) -> Self {
         self.strict_authorization_header = true;
+        self
+    }
+
+    pub fn with_scheduler(mut self) -> Self {
+        self.scheduler_enabled = true;
         self
     }
 
@@ -142,6 +148,9 @@ pub struct TestServer {
     _temp_catalog_dir: TempDir,
     _temp_db_dir: TempDir,
     _shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
+    _scheduler_shutdown: Option<tokio_util::sync::CancellationToken>,
+    _scheduler_hook_sender:
+        Option<tokio::sync::mpsc::Sender<pezzottify_server::background_jobs::HookEvent>>,
 }
 
 impl TestServer {
@@ -267,13 +276,37 @@ impl TestServer {
         );
         let server_store_for_test = server_store.clone();
 
+        let (scheduler_handle, scheduler_shutdown, scheduler_hook_sender) =
+            if options.scheduler_enabled {
+                let scheduler_shutdown = tokio_util::sync::CancellationToken::new();
+                let (hook_sender, hook_receiver) = tokio::sync::mpsc::channel(16);
+                let context = pezzottify_server::background_jobs::JobContext::with_search_vault(
+                    scheduler_shutdown.child_token(),
+                    catalog_store.clone(),
+                    user_store.clone(),
+                    server_store.clone(),
+                    user_manager.clone(),
+                    search_vault.clone(),
+                );
+                let (mut scheduler, handle) = pezzottify_server::background_jobs::create_scheduler(
+                    server_store.clone(),
+                    hook_receiver,
+                    scheduler_shutdown.clone(),
+                    context,
+                );
+                tokio::spawn(async move { scheduler.run().await });
+                (Some(handle), Some(scheduler_shutdown), Some(hook_sender))
+            } else {
+                (None, None, None)
+            };
+
         let app = make_app(
             config,
             catalog_store,
             search_vault,
             user_store,
             user_manager,
-            None, // scheduler_handle
+            scheduler_handle,
             server_store,
             None, // oidc_config
             db_registry,
@@ -304,6 +337,8 @@ impl TestServer {
             _temp_catalog_dir: temp_catalog_dir,
             _temp_db_dir: temp_db_dir,
             _shutdown_tx: Some(shutdown_tx),
+            _scheduler_shutdown: scheduler_shutdown,
+            _scheduler_hook_sender: scheduler_hook_sender,
         };
 
         server.wait_for_ready().await;
@@ -345,6 +380,9 @@ impl TestServer {
 
 impl Drop for TestServer {
     fn drop(&mut self) {
+        if let Some(token) = self._scheduler_shutdown.take() {
+            token.cancel();
+        }
         // Send shutdown signal
         if let Some(tx) = self._shutdown_tx.take() {
             let _ = tx.send(());

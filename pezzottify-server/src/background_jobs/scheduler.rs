@@ -698,6 +698,47 @@ mod tests {
         run_on_startup: bool,
     }
 
+    struct BlockingTestJob {
+        id: &'static str,
+        started: Arc<AtomicUsize>,
+        active: Arc<AtomicUsize>,
+        max_active: Arc<AtomicUsize>,
+        release: Arc<AtomicBool>,
+    }
+
+    impl BackgroundJob for BlockingTestJob {
+        fn id(&self) -> &'static str {
+            self.id
+        }
+
+        fn name(&self) -> &'static str {
+            "Blocking Test Job"
+        }
+
+        fn description(&self) -> &'static str {
+            "Characterizes scheduler concurrency and deduplication"
+        }
+
+        fn schedule(&self) -> JobSchedule {
+            JobSchedule::Manual
+        }
+
+        fn execute(&self, ctx: &JobContext) -> Result<(), JobError> {
+            let active = self.active.fetch_add(1, Ordering::SeqCst) + 1;
+            self.max_active.fetch_max(active, Ordering::SeqCst);
+            self.started.fetch_add(1, Ordering::SeqCst);
+            while !self.release.load(Ordering::SeqCst) && !ctx.is_cancelled() {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            self.active.fetch_sub(1, Ordering::SeqCst);
+            if ctx.is_cancelled() {
+                Err(JobError::Cancelled)
+            } else {
+                Ok(())
+            }
+        }
+    }
+
     impl BackgroundJob for DeferredIntervalTestJob {
         fn id(&self) -> &'static str {
             self.id
@@ -1273,6 +1314,68 @@ mod tests {
 
         shutdown_token.cancel();
         let _ = tokio::time::timeout(Duration::from_secs(2), sched_handle).await;
+    }
+
+    #[tokio::test]
+    async fn distinct_jobs_run_independently_while_each_job_is_deduplicated() {
+        let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
+        let shutdown_token = scheduler.shutdown_token.clone();
+        let started = Arc::new(AtomicUsize::new(0));
+        let active = Arc::new(AtomicUsize::new(0));
+        let max_active = Arc::new(AtomicUsize::new(0));
+        let release = Arc::new(AtomicBool::new(false));
+
+        for id in ["blocking_one", "blocking_two"] {
+            scheduler
+                .register_job(Arc::new(BlockingTestJob {
+                    id,
+                    started: started.clone(),
+                    active: active.clone(),
+                    max_active: max_active.clone(),
+                    release: release.clone(),
+                }))
+                .await;
+        }
+
+        let scheduler_task = tokio::spawn(async move { scheduler.run().await });
+        handle.trigger_job("blocking_one", None).await.unwrap();
+        assert!(matches!(
+            handle.trigger_job("blocking_one", None).await,
+            Err(JobError::AlreadyRunning)
+        ));
+        handle.trigger_job("blocking_two", None).await.unwrap();
+
+        for _ in 0..100 {
+            if started.load(Ordering::SeqCst) == 2 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(started.load(Ordering::SeqCst), 2);
+        assert_eq!(max_active.load(Ordering::SeqCst), 2);
+
+        release.store(true, Ordering::SeqCst);
+        for _ in 0..100 {
+            if !handle.is_job_running("blocking_one").await
+                && !handle.is_job_running("blocking_two").await
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(!handle.is_job_running("blocking_one").await);
+        assert!(!handle.is_job_running("blocking_two").await);
+        assert_eq!(
+            handle.get_job_history("blocking_one", 1).unwrap()[0].status,
+            "completed"
+        );
+        assert_eq!(
+            handle.get_job_history("blocking_two", 1).unwrap()[0].status,
+            "completed"
+        );
+
+        shutdown_token.cancel();
+        let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;
     }
 
     #[tokio::test]
