@@ -17,7 +17,10 @@
 
 use crate::background_jobs::{
     context::JobContext,
-    job::{BackgroundJob, JobError, JobSchedule, ShutdownBehavior},
+    job::{
+        BackgroundJob, JobError, JobExecutionPolicy, JobResourceClass, JobSchedule,
+        ShutdownBehavior,
+    },
     JobAuditLogger,
 };
 use crate::config::RelatedArtistsSettings;
@@ -66,6 +69,13 @@ impl BackgroundJob for RelatedArtistsEnrichmentJob {
 
     fn schedule(&self) -> JobSchedule {
         JobSchedule::Interval(Duration::from_secs(self.settings.interval_hours * 60 * 60))
+    }
+
+    fn execution_policy(&self) -> JobExecutionPolicy {
+        JobExecutionPolicy::new(JobResourceClass::IoBound)
+            .with_queue_timeout(Duration::from_secs(60))
+            .with_max_runtime(Duration::from_secs(2 * 60 * 60))
+            .with_circuit_breaker(3, Duration::from_secs(60 * 60))
     }
 
     fn shutdown_behavior(&self) -> ShutdownBehavior {
@@ -403,8 +413,31 @@ impl RelatedArtistsEnrichmentJob {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn test_job_id() {
         assert_eq!("related_artists_enrichment", "related_artists_enrichment");
+    }
+
+    #[test]
+    fn execution_policy_isolates_remote_artist_enrichment() {
+        let job = RelatedArtistsEnrichmentJob::new(RelatedArtistsSettings {
+            enabled: true,
+            lastfm_api_key: "test-key".to_string(),
+            musicbrainz_user_agent: "pezzottify-tests/1.0".to_string(),
+            batch_size: 10,
+            similar_artists_limit: 5,
+            interval_hours: 24,
+        })
+        .unwrap();
+        let policy = job.execution_policy();
+
+        assert_eq!(policy.resource_class, JobResourceClass::IoBound);
+        assert_eq!(policy.queue_timeout, Duration::from_secs(60));
+        assert_eq!(policy.max_runtime, Some(Duration::from_secs(2 * 60 * 60)));
+        let breaker = policy.circuit_breaker.unwrap();
+        assert_eq!(breaker.failure_threshold, 3);
+        assert_eq!(breaker.cooldown, Duration::from_secs(60 * 60));
     }
 }
