@@ -147,3 +147,35 @@ async fn test_get_job_history_returns_503_when_no_scheduler() {
     let body: serde_json::Value = response.json().await.unwrap();
     assert!(body["error"].as_str().unwrap().contains("not available"));
 }
+
+// ============================================================================
+// Configured Scheduler Contract Tests
+// ============================================================================
+
+#[tokio::test]
+async fn configured_scheduler_lists_registered_jobs() {
+    let server = TestServer::builder().with_scheduler().spawn().await;
+    let client = TestClient::authenticated_admin(server.base_url.clone()).await;
+
+    let response = client.admin_list_jobs().await;
+    assert_eq!(response.status(), 200);
+    assert_eq!(
+        response.json::<serde_json::Value>().await.unwrap(),
+        serde_json::json!({"jobs": []})
+    );
+}
+
+#[tokio::test]
+async fn configured_scheduler_preserves_missing_job_contracts() {
+    let server = TestServer::builder().with_scheduler().spawn().await;
+    let client = TestClient::authenticated_admin(server.base_url.clone()).await;
+
+    assert_eq!(client.admin_get_job("missing").await.status(), 404);
+    assert_eq!(client.admin_trigger_job("missing").await.status(), 404);
+    let history = client.admin_get_job_history("missing", 10).await;
+    assert_eq!(history.status(), 200);
+    assert_eq!(
+        history.json::<serde_json::Value>().await.unwrap(),
+        serde_json::json!({"history": []})
+    );
+}
