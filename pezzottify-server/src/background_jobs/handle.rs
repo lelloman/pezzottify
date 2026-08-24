@@ -1,4 +1,4 @@
-use super::job::{BackgroundJob, JobError, JobSchedule};
+use super::job::{BackgroundJob, JobError, JobExecutionPolicy, JobSchedule};
 use crate::server_store::{JobAuditEntry, JobRun, ServerStore};
 use anyhow::Result;
 use serde::Serialize;
@@ -16,6 +16,24 @@ pub struct JobInfo {
     pub is_running: bool,
     pub last_run: Option<JobRunInfo>,
     pub next_run_at: Option<String>,
+    pub policy: JobExecutionPolicyInfo,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JobExecutionPolicyInfo {
+    pub resource_class: &'static str,
+    pub queue_timeout_secs: u64,
+    pub max_runtime_secs: Option<u64>,
+}
+
+impl From<JobExecutionPolicy> for JobExecutionPolicyInfo {
+    fn from(policy: JobExecutionPolicy) -> Self {
+        Self {
+            resource_class: policy.resource_class.as_str(),
+            queue_timeout_secs: policy.queue_timeout.as_secs(),
+            max_runtime_secs: policy.max_runtime.map(|duration| duration.as_secs()),
+        }
+    }
 }
 
 /// Serializable schedule information.
@@ -176,6 +194,7 @@ impl SchedulerHandle {
                 is_running,
                 last_run,
                 next_run_at,
+                policy: job.execution_policy().into(),
             });
         }
 
@@ -205,6 +224,7 @@ impl SchedulerHandle {
                 is_running,
                 last_run,
                 next_run_at,
+                policy: job.execution_policy().into(),
             }))
         } else {
             Ok(None)
