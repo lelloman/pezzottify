@@ -17,6 +17,7 @@ import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
 import com.lelloman.pezzottify.android.logger.Logger
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -113,6 +114,16 @@ class PerformLogoutTest {
         performLogout()
 
         coVerify { remoteApiClient.logout() }
+    }
+
+    @Test
+    fun `invoke calls remote logout before clearing auth state`() = runTest {
+        performLogout()
+
+        coVerifyOrder {
+            remoteApiClient.logout()
+            authStore.storeAuthState(AuthState.LoggedOut)
+        }
     }
 
     @Test
