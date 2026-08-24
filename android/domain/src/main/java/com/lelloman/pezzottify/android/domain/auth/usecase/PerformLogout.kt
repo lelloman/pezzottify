@@ -56,10 +56,11 @@ class PerformLogout @Inject internal constructor(
         syncManager.cleanup()
         logger.debug("invoke() resetting catalog sync manager")
         catalogSyncManager.reset()
-        logger.debug("invoke() setting auth state to LoggedOut")
-        authStore.storeAuthState(AuthState.LoggedOut)
         logger.debug("invoke() calling remote logout")
         remoteApiClient.logout()
+        // Keep the credential available until the server has received the logout request.
+        logger.debug("invoke() setting auth state to LoggedOut")
+        authStore.storeAuthState(AuthState.LoggedOut)
         logger.debug("invoke() clearing statics cache")
         staticsCache.clearAll()
         logger.debug("invoke() deleting statics store")
