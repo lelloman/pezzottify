@@ -3,6 +3,9 @@ package com.lelloman.pezzottify.android.cache
 import coil3.disk.DiskCache
 import okio.FileSystem
 import okio.Path
+import okio.buffer
+import java.net.URLDecoder
+import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -23,6 +26,11 @@ class TrackingDiskCache(
      * Using ConcurrentHashMap for thread safety.
      */
     private val keyIndex = ConcurrentHashMap<String, Long>()
+    private val indexLock = Any()
+
+    init {
+        loadIndex()
+    }
 
     override val directory: Path
         get() = delegate.directory
@@ -52,14 +60,20 @@ class TrackingDiskCache(
     override fun remove(key: String): Boolean {
         val removed = delegate.remove(key)
         if (removed) {
-            keyIndex.remove(key)
+            synchronized(indexLock) {
+                keyIndex.remove(key)
+                persistIndex()
+            }
         }
         return removed
     }
 
     override fun clear() {
         delegate.clear()
-        keyIndex.clear()
+        synchronized(indexLock) {
+            keyIndex.clear()
+            persistIndex()
+        }
     }
 
     override fun shutdown() {
@@ -70,7 +84,9 @@ class TrackingDiskCache(
     /**
      * Returns the number of tracked entries.
      */
-    fun getEntryCount(): Int = keyIndex.size
+    fun getEntryCount(): Int {
+        return keyIndex.size
+    }
 
     /**
      * Trims the oldest entries by percentage.
@@ -85,8 +101,6 @@ class TrackingDiskCache(
             return 0L
         }
 
-        val sizeBefore = size
-
         // Sort entries by timestamp (oldest first) and take the oldest N percent
         val sortedEntries = keyIndex.entries
             .sortedBy { it.value }
@@ -94,11 +108,54 @@ class TrackingDiskCache(
         val countToRemove = (sortedEntries.size * percent).toInt().coerceAtLeast(1)
         val entriesToRemove = sortedEntries.take(countToRemove)
 
+        var bytesFreed = 0L
         entriesToRemove.forEach { (key, _) ->
-            remove(key)
+            val entrySize = getEntrySizeBytes(key)
+            if (remove(key)) {
+                bytesFreed += entrySize
+            }
         }
 
-        return sizeBefore - size
+        return bytesFreed
+    }
+
+    private fun getEntrySizeBytes(key: String): Long =
+        delegate.openSnapshot(key)?.use { snapshot ->
+            listOf(snapshot.data, snapshot.metadata)
+                .sumOf { fileSystem.metadataOrNull(it)?.size ?: 0L }
+        } ?: 0L
+
+    private fun loadIndex() {
+        val indexPath = directory.resolve(INDEX_FILE_NAME)
+        if (fileSystem.metadataOrNull(indexPath) == null) return
+
+        fileSystem.source(indexPath).buffer().use { source ->
+            while (true) {
+                val line = source.readUtf8Line() ?: break
+                val separator = line.indexOf('\t')
+                if (separator <= 0) continue
+                val timestamp = line.substring(0, separator).toLongOrNull() ?: continue
+                val key = runCatching {
+                    URLDecoder.decode(line.substring(separator + 1), Charsets.UTF_8.name())
+                }.getOrNull() ?: continue
+                delegate.openSnapshot(key)?.use {
+                    keyIndex[key] = timestamp
+                }
+            }
+        }
+    }
+
+    private fun persistIndex() {
+        val temporaryPath = directory.resolve(INDEX_TEMP_FILE_NAME)
+        fileSystem.sink(temporaryPath).buffer().use { sink ->
+            keyIndex.entries.forEach { (key, timestamp) ->
+                sink.writeDecimalLong(timestamp)
+                sink.writeByte('\t'.code)
+                sink.writeUtf8(URLEncoder.encode(key, Charsets.UTF_8.name()))
+                sink.writeByte('\n'.code)
+            }
+        }
+        fileSystem.atomicMove(temporaryPath, directory.resolve(INDEX_FILE_NAME))
     }
 
     /**
@@ -117,15 +174,13 @@ class TrackingDiskCache(
 
         override fun commit() {
             delegate.commit()
-            // Record the key with current timestamp after successful commit
-            keyIndex[key] = System.currentTimeMillis()
+            recordCommittedEntry(key)
         }
 
         override fun commitAndOpenSnapshot(): DiskCache.Snapshot? {
             val snapshot = delegate.commitAndOpenSnapshot()
             if (snapshot != null) {
-                // Record the key with current timestamp after successful commit
-                keyIndex[key] = System.currentTimeMillis()
+                recordCommittedEntry(key)
             }
             return snapshot
         }
@@ -136,7 +191,17 @@ class TrackingDiskCache(
         }
     }
 
+    private fun recordCommittedEntry(key: String) {
+        synchronized(indexLock) {
+            keyIndex[key] = System.currentTimeMillis()
+            persistIndex()
+        }
+    }
+
     companion object {
+        private const val INDEX_FILE_NAME = ".tracking-index"
+        private const val INDEX_TEMP_FILE_NAME = ".tracking-index.tmp"
+
         /**
          * Creates a [TrackingDiskCache] wrapping a new [DiskCache] built with the given configuration.
          */
