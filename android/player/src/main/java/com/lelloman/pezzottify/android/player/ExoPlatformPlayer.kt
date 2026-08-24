@@ -43,6 +43,16 @@ internal class ExoPlatformPlayer(
 
     private var sessionToken: SessionToken? = null
 
+    private var controllerConnectionInProgress = false
+
+    private data class PendingPlaylist(
+        val tracksUrls: List<String>,
+        val playWhenReady: Boolean,
+    )
+
+    private var pendingPlaylist: PendingPlaylist? = null
+    private val pendingMediaItems = mutableListOf<String>()
+
     private enum class MediaControllerState {
         DISCONNECTED,
         CONNECTING,
@@ -291,52 +301,89 @@ internal class ExoPlatformPlayer(
         pendingTrackIndex = null
         pendingTrackPositionMs = 0L
         mutableIsPlaying.value = playWhenReady
-        if (sessionToken == null) {
-            val newSessionToken =
-                SessionToken(context, ComponentName(context, PlaybackService::class.java))
-            sessionToken = newSessionToken
-            mutableControllerState.value = MediaControllerState.CONNECTING
-            val controllerFuture = MediaController.Builder(context, newSessionToken).buildAsync()
-            controllerFuture.addListener(
-                {
+        pendingPlaylist = PendingPlaylist(tracksUrls, playWhenReady)
+        pendingMediaItems.clear()
+
+        if (isControllerReady()) {
+            consumePendingOperations()
+        } else {
+            connectControllerIfNeeded()
+        }
+    }
+
+    private fun connectControllerIfNeeded() {
+        if (controllerConnectionInProgress) return
+
+        mediaController?.let { controller ->
+            if (!controller.isConnected) {
+                controller.removeListener(playerListener)
+                controller.release()
+                mediaController = null
+            }
+        }
+
+        val token = sessionToken
+            ?: SessionToken(context, ComponentName(context, PlaybackService::class.java)).also {
+                sessionToken = it
+            }
+        controllerConnectionInProgress = true
+        mutableControllerState.value = MediaControllerState.CONNECTING
+        val controllerFuture = MediaController.Builder(context, token).buildAsync()
+        controllerFuture.addListener(
+            {
+                controllerConnectionInProgress = false
+                try {
                     mediaController = controllerFuture.get()
                     logger.info("MediaController created - isConnected=${mediaController?.isConnected}")
                     mediaController?.addListener(playerListener)
                     updateControllerState()
-                    loadPlaylistWhenMediaControllerIsReady(tracksUrls, playWhenReady)
-                },
-                ContextCompat.getMainExecutor(context)
-            )
-        } else {
-            loadPlaylistWhenMediaControllerIsReady(tracksUrls, playWhenReady)
-        }
+                    consumePendingOperations()
+                } catch (error: Exception) {
+                    logger.error("Failed to create MediaController", error)
+                    sessionToken = null
+                    mutableControllerState.value = MediaControllerState.DISCONNECTED
+                }
+            },
+            ContextCompat.getMainExecutor(context)
+        )
     }
 
-    private fun loadPlaylistWhenMediaControllerIsReady(tracksUrls: List<String>, playWhenReady: Boolean) {
-        mediaController?.let {
-            it.clearMediaItems()
-            tracksUrls.forEach { url ->
-                it.addMediaItem(MediaItem.fromUri(url))
+    private fun consumePendingOperations() {
+        val controller = mediaController?.takeIf { it.isConnected } ?: return
+        pendingPlaylist?.let { playlist ->
+            pendingPlaylist = null
+            controller.run {
+                clearMediaItems()
+                playlist.tracksUrls.forEach { url ->
+                    addMediaItem(MediaItem.fromUri(url))
+                }
+                prepare()
+                this.playWhenReady = playlist.playWhenReady
+                mutableIsActive.value = true
+                updateControllerState()
+                if (playlist.playWhenReady) {
+                    startProgressPolling()
+                }
+                // Apply pending track index if one was set before playlist was ready
+                val targetIndex = pendingTrackIndex
+                if (targetIndex != null) {
+                    seekTo(targetIndex, pendingTrackPositionMs)
+                    pendingTrackIndex = null
+                    pendingTrackPositionMs = 0L
+                    mutableCurrentTrackIndex.value = targetIndex
+                } else {
+                    // Emit initial track index - the listener only fires on
+                    // EVENT_POSITION_DISCONTINUITY which doesn't happen on first load
+                    mutableCurrentTrackIndex.value = currentMediaItemIndex
+                }
             }
-            it.prepare()
-            it.playWhenReady = playWhenReady
-            mutableIsActive.value = true
-            updateControllerState()
-            if (playWhenReady) {
-                startProgressPolling()
+        }
+
+        if (pendingMediaItems.isNotEmpty()) {
+            pendingMediaItems.forEach { url ->
+                controller.addMediaItem(MediaItem.fromUri(url))
             }
-            // Apply pending track index if one was set before playlist was ready
-            val targetIndex = pendingTrackIndex
-            if (targetIndex != null) {
-                it.seekTo(targetIndex, pendingTrackPositionMs)
-                pendingTrackIndex = null
-                pendingTrackPositionMs = 0L
-                mutableCurrentTrackIndex.value = targetIndex
-            } else {
-                // Emit initial track index - the listener only fires on
-                // EVENT_POSITION_DISCONTINUITY which doesn't happen on first load
-                mutableCurrentTrackIndex.value = it.currentMediaItemIndex
-            }
+            pendingMediaItems.clear()
         }
     }
 
@@ -466,6 +513,10 @@ internal class ExoPlatformPlayer(
         stopProgressPolling()
         autoRetryJob?.cancel()
         autoRetryJob = null
+        pendingPlaylist = null
+        pendingMediaItems.clear()
+        pendingTrackIndex = null
+        pendingTrackPositionMs = 0L
         mediaController?.stop()
         mediaController?.clearMediaItems()
         mutableIsActive.value = false
@@ -496,10 +547,20 @@ internal class ExoPlatformPlayer(
     }
 
     override fun addMediaItems(tracksUrls: List<String>) {
-        mediaController?.let { controller ->
+        val playlist = pendingPlaylist
+        if (playlist != null) {
+            pendingPlaylist = playlist.copy(tracksUrls = playlist.tracksUrls + tracksUrls)
+            return
+        }
+
+        val controller = mediaController?.takeIf { it.isConnected }
+        if (controller != null) {
             tracksUrls.forEach { url ->
                 controller.addMediaItem(MediaItem.fromUri(url))
             }
+        } else {
+            pendingMediaItems += tracksUrls
+            connectControllerIfNeeded()
         }
     }
 
