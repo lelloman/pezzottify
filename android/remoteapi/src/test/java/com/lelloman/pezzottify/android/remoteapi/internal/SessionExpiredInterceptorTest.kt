@@ -48,7 +48,7 @@ class SessionExpiredInterceptorTest {
     }
 
     @Test
-    fun `triggers handler on 403 response when refresh not available`() {
+    fun `does not refresh or logout on 403 response`() {
         val chain = createChain(
             requestUrl = "http://localhost/v1/content/album/123",
             responseCode = 403
@@ -56,8 +56,8 @@ class SessionExpiredInterceptorTest {
 
         interceptor.intercept(chain)
 
-        coVerify(exactly = 1) { tokenRefresher.refreshTokens() }
-        verify(exactly = 1) { sessionExpiredHandler.onSessionExpired() }
+        coVerify(exactly = 0) { tokenRefresher.refreshTokens() }
+        verify(exactly = 0) { sessionExpiredHandler.onSessionExpired() }
     }
 
     @Test

@@ -11,7 +11,7 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * OkHttp interceptor that handles session expiration (401/403 responses)
+ * OkHttp interceptor that handles session expiration (401 responses)
  * by attempting to refresh the token before triggering logout.
  *
  * Also handles 429 (Too Many Requests) responses with exponential backoff.
@@ -65,7 +65,9 @@ internal class SessionExpiredInterceptor(
         }
 
         // Check for unauthorized responses
-        if (response.code == 401 || response.code == 403) {
+        // A 403 means the authenticated user lacks permission; refreshing or logging out
+        // would turn a normal authorization failure into an unexpected session loss.
+        if (response.code == 401) {
             logger.warn("Unauthorized response (${response.code}) for ${request.url}, attempting token refresh")
 
             // Attempt to refresh the token
