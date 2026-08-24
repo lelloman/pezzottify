@@ -347,6 +347,25 @@ lazy_static! {
         &["job_id"]
     ).expect("Failed to create background_job_running metric");
 
+    pub static ref BACKGROUND_JOB_QUEUED: GaugeVec = GaugeVec::new(
+        Opts::new(format!("{PREFIX}_background_job_queued"), "Background jobs waiting for scheduler capacity"),
+        &["resource_class"]
+    ).expect("Failed to create background_job_queued metric");
+
+    pub static ref BACKGROUND_JOB_ACTIVE: GaugeVec = GaugeVec::new(
+        Opts::new(format!("{PREFIX}_background_job_active"), "Background jobs actively executing"),
+        &["resource_class"]
+    ).expect("Failed to create background_job_active metric");
+
+    pub static ref BACKGROUND_JOB_QUEUE_WAIT_SECONDS: HistogramVec = HistogramVec::new(
+        HistogramOpts::new(
+            format!("{PREFIX}_background_job_queue_wait_seconds"),
+            "Time background jobs wait for global and resource-class capacity"
+        )
+        .buckets(vec![0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 30.0, 60.0]),
+        &["resource_class"]
+    ).expect("Failed to create background_job_queue_wait_seconds metric");
+
     // Homelab Storage Metrics (standardized format for monitoring)
     pub static ref HOMELAB_STORAGE_BYTES: GaugeVec = GaugeVec::new(
         Opts::new("homelab_storage_bytes", "Storage usage in bytes"),
@@ -407,6 +426,9 @@ pub fn init_metrics() {
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_EXECUTIONS_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_DURATION_SECONDS.clone()));
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_RUNNING.clone()));
+    let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_QUEUED.clone()));
+    let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_ACTIVE.clone()));
+    let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_QUEUE_WAIT_SECONDS.clone()));
     let _ = REGISTRY.register(Box::new(HOMELAB_STORAGE_BYTES.clone()));
 
     tracing::info!("Metrics system initialized successfully");
@@ -778,6 +800,30 @@ pub fn set_background_job_running(job_id: &str, running: bool) {
         .set(if running { 1.0 } else { 0.0 });
 }
 
+pub(crate) fn background_job_waiting(resource_class: &str, waiting: bool) {
+    let metric = BACKGROUND_JOB_QUEUED.with_label_values(&[resource_class]);
+    if waiting {
+        metric.inc();
+    } else {
+        metric.dec();
+    }
+}
+
+pub(crate) fn background_job_started(resource_class: &str, queue_wait: Duration) {
+    BACKGROUND_JOB_QUEUE_WAIT_SECONDS
+        .with_label_values(&[resource_class])
+        .observe(queue_wait.as_secs_f64());
+    BACKGROUND_JOB_ACTIVE
+        .with_label_values(&[resource_class])
+        .inc();
+}
+
+pub(crate) fn background_job_finished(resource_class: &str) {
+    BACKGROUND_JOB_ACTIVE
+        .with_label_values(&[resource_class])
+        .dec();
+}
+
 /// Update process memory usage
 async fn update_memory_usage(filesystem_work: &FilesystemWorkPool) {
     // Get current process memory usage
@@ -1046,6 +1092,10 @@ mod tests {
         blocking_work_started("password", Duration::from_millis(2));
         blocking_work_finished("password", Duration::from_millis(3));
         record_blocking_work_outcome("password", ExecutorOutcome::Success);
+        background_job_waiting("io_bound", true);
+        background_job_waiting("io_bound", false);
+        background_job_started("io_bound", Duration::from_millis(4));
+        background_job_finished("io_bound");
 
         let metric_names = REGISTRY
             .gather()
@@ -1063,6 +1113,9 @@ mod tests {
             "pezzottify_blocking_work_operations_total",
             "pezzottify_blocking_work_waiting",
             "pezzottify_blocking_work_active",
+            "pezzottify_background_job_queued",
+            "pezzottify_background_job_active",
+            "pezzottify_background_job_queue_wait_seconds",
         ] {
             assert!(metric_names.contains(expected), "missing metric {expected}");
         }
