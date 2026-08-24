@@ -8,6 +8,8 @@ interface PlatformPlayer : ControlsAndStatePlayer {
 
     fun removeMediaItem(index: Int)
 
+    fun moveMediaItem(fromIndex: Int, toIndex: Int)
+
     /**
      * Loads a track at [index] and seeks to [positionMs].
      *

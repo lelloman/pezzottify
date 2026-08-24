@@ -114,7 +114,8 @@ internal class ExoPlatformPlayer(
                         updateControllerState()
                     }
 
-                    Player.EVENT_POSITION_DISCONTINUITY -> {
+                    Player.EVENT_POSITION_DISCONTINUITY,
+                    Player.EVENT_TIMELINE_CHANGED -> {
                         mutableCurrentTrackIndex.value = player.currentMediaItemIndex
                     }
                 }
@@ -566,6 +567,10 @@ internal class ExoPlatformPlayer(
 
     override fun removeMediaItem(index: Int) {
         mediaController?.removeMediaItem(index)
+    }
+
+    override fun moveMediaItem(fromIndex: Int, toIndex: Int) {
+        mediaController?.moveMediaItem(fromIndex, toIndex)
     }
 
     override fun toggleShuffle() {
