@@ -17,4 +17,4 @@ pub use job::{
     BackgroundJob, HookEvent, JobError, JobExecutionPolicy, JobResourceClass, JobSchedule,
     ShutdownBehavior,
 };
-pub use scheduler::{create_scheduler, JobScheduler};
+pub use scheduler::{create_scheduler, JobScheduler, JobSchedulerConfig};

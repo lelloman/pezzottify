@@ -1,16 +1,129 @@
 use super::context::JobContext;
 use super::handle::{SchedulerCommand, SharedJobState};
-use super::job::{BackgroundJob, HookEvent, JobError, JobSchedule, ShutdownBehavior};
+use super::job::{
+    BackgroundJob, HookEvent, JobError, JobResourceClass, JobSchedule, ShutdownBehavior,
+};
 use crate::server::metrics;
 use crate::server_store::{JobRunStatus, ServerStore};
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{mpsc, RwLock, Semaphore};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
+
+#[derive(Debug, Clone)]
+pub struct JobSchedulerConfig {
+    pub max_concurrent_jobs: usize,
+    pub max_general_jobs: usize,
+    pub max_lightweight_jobs: usize,
+    pub max_io_bound_jobs: usize,
+    pub max_cpu_bound_jobs: usize,
+}
+
+impl Default for JobSchedulerConfig {
+    fn default() -> Self {
+        Self {
+            max_concurrent_jobs: 4,
+            max_general_jobs: 4,
+            max_lightweight_jobs: 4,
+            max_io_bound_jobs: 2,
+            max_cpu_bound_jobs: 1,
+        }
+    }
+}
+
+#[derive(Clone)]
+struct JobExecutionLimits {
+    global: Arc<Semaphore>,
+    general: Arc<Semaphore>,
+    lightweight: Arc<Semaphore>,
+    io_bound: Arc<Semaphore>,
+    cpu_bound: Arc<Semaphore>,
+}
+
+impl JobExecutionLimits {
+    fn new(config: &JobSchedulerConfig) -> Self {
+        assert!(
+            config.max_concurrent_jobs > 0,
+            "job concurrency must be non-zero"
+        );
+        assert!(
+            config.max_general_jobs > 0,
+            "general job concurrency must be non-zero"
+        );
+        assert!(
+            config.max_lightweight_jobs > 0,
+            "lightweight job concurrency must be non-zero"
+        );
+        assert!(
+            config.max_io_bound_jobs > 0,
+            "I/O job concurrency must be non-zero"
+        );
+        assert!(
+            config.max_cpu_bound_jobs > 0,
+            "CPU job concurrency must be non-zero"
+        );
+        Self {
+            global: Arc::new(Semaphore::new(config.max_concurrent_jobs)),
+            general: Arc::new(Semaphore::new(config.max_general_jobs)),
+            lightweight: Arc::new(Semaphore::new(config.max_lightweight_jobs)),
+            io_bound: Arc::new(Semaphore::new(config.max_io_bound_jobs)),
+            cpu_bound: Arc::new(Semaphore::new(config.max_cpu_bound_jobs)),
+        }
+    }
+
+    fn class(&self, resource_class: JobResourceClass) -> Arc<Semaphore> {
+        match resource_class {
+            JobResourceClass::General => self.general.clone(),
+            JobResourceClass::Lightweight => self.lightweight.clone(),
+            JobResourceClass::IoBound => self.io_bound.clone(),
+            JobResourceClass::CpuBound => self.cpu_bound.clone(),
+        }
+    }
+}
+
+fn classify_job_result(
+    job_id: &str,
+    elapsed: Duration,
+    result: Result<Result<(), JobError>, tokio::task::JoinError>,
+) -> (JobRunStatus, Option<String>, &'static str) {
+    match result {
+        Ok(Ok(())) => {
+            info!("Job {} completed successfully in {:?}", job_id, elapsed);
+            (JobRunStatus::Completed, None, "success")
+        }
+        Ok(Err(JobError::Cancelled)) => {
+            info!("Job {} was cancelled after {:?}", job_id, elapsed);
+            (
+                JobRunStatus::Failed,
+                Some("Cancelled".to_string()),
+                "cancelled",
+            )
+        }
+        Ok(Err(error_value)) => {
+            error!("Job {} failed after {:?}: {}", job_id, elapsed, error_value);
+            (
+                JobRunStatus::Failed,
+                Some(error_value.to_string()),
+                "failed",
+            )
+        }
+        Err(join_error) => {
+            error!(
+                "Job {} panicked after {:?}: {}",
+                job_id, elapsed, join_error
+            );
+            (
+                JobRunStatus::Failed,
+                Some(format!("Task panic: {join_error}")),
+                "panic",
+            )
+        }
+    }
+}
 
 /// Manages background job scheduling and execution.
 pub struct JobScheduler {
@@ -37,6 +150,8 @@ pub struct JobScheduler {
 
     /// Shared context provided to jobs during execution.
     job_context: JobContext,
+
+    execution_limits: JobExecutionLimits,
 }
 
 impl JobScheduler {
@@ -58,7 +173,13 @@ impl JobScheduler {
             command_receiver,
             shutdown_token,
             job_context,
+            execution_limits: JobExecutionLimits::new(&JobSchedulerConfig::default()),
         }
+    }
+
+    pub fn with_execution_config(mut self, config: JobSchedulerConfig) -> Self {
+        self.execution_limits = JobExecutionLimits::new(&config);
+        self
     }
 
     /// Register a job with the scheduler.
@@ -461,53 +582,99 @@ impl JobScheduler {
         let cancel_token = self.job_context.cancellation_token.child_token();
         self.job_cancel_tokens
             .insert(job_id.to_string(), cancel_token.clone());
+        let run_cancel_token = cancel_token.clone();
 
         // Preserve the shared executor and all typed handles for every run.
         let ctx = self.job_context.with_cancellation_token(cancel_token);
+        let policy = job.execution_policy();
+        let execution_limits = self.execution_limits.clone();
+        let resource_class = policy.resource_class.as_str();
+        metrics::background_job_waiting(resource_class, true);
 
         let server_store = Arc::clone(&self.server_store);
         let job_id_owned = job_id.to_string();
         let shared_state = Arc::clone(&self.shared_state);
 
-        // Spawn the job in a blocking task since jobs are synchronous
+        // Queue asynchronously for global and resource-class capacity before
+        // entering Tokio's blocking pool.
         let handle = tokio::spawn(async move {
             let start_time = Instant::now();
-            let result =
-                tokio::task::spawn_blocking(move || job.execute_with_params(&ctx, params)).await;
-            let elapsed = start_time.elapsed();
-
-            // Record job completion
-            let (status, error_msg, status_label) = match result {
-                Ok(Ok(())) => {
-                    info!(
-                        "Job {} completed successfully in {:?}",
-                        job_id_owned, elapsed
-                    );
-                    (JobRunStatus::Completed, None, "success")
-                }
-                Ok(Err(e)) => match e {
-                    JobError::Cancelled => {
-                        info!("Job {} was cancelled after {:?}", job_id_owned, elapsed);
-                        (
-                            JobRunStatus::Failed,
-                            Some("Cancelled".to_string()),
-                            "cancelled",
-                        )
+            let class_semaphore = execution_limits.class(policy.resource_class);
+            let acquire_capacity = async {
+                let class_permit = class_semaphore
+                    .acquire_owned()
+                    .await
+                    .map_err(|_| JobError::Cancelled)?;
+                let global_permit = execution_limits
+                    .global
+                    .clone()
+                    .acquire_owned()
+                    .await
+                    .map_err(|_| JobError::Cancelled)?;
+                Ok::<_, JobError>((class_permit, global_permit))
+            };
+            let permits = tokio::select! {
+                _ = run_cancel_token.cancelled() => Err(JobError::Cancelled),
+                result = tokio::time::timeout(policy.queue_timeout, acquire_capacity) => {
+                    match result {
+                        Ok(result) => result,
+                        Err(_) => Err(JobError::Timeout),
                     }
-                    _ => {
-                        error!("Job {} failed after {:?}: {}", job_id_owned, elapsed, e);
-                        (JobRunStatus::Failed, Some(e.to_string()), "failed")
-                    }
-                },
-                Err(e) => {
-                    error!("Job {} panicked after {:?}: {}", job_id_owned, elapsed, e);
-                    (
-                        JobRunStatus::Failed,
-                        Some(format!("Task panic: {}", e)),
-                        "panic",
-                    )
                 }
             };
+            let queue_wait = start_time.elapsed();
+            metrics::background_job_waiting(resource_class, false);
+
+            let (status, error_msg, status_label) = match permits {
+                Err(JobError::Timeout) => {
+                    warn!(
+                        "Job {} exceeded its {:?} queue budget",
+                        job_id_owned, policy.queue_timeout
+                    );
+                    (
+                        JobRunStatus::Failed,
+                        Some("Queue timeout".to_string()),
+                        "queue_timeout",
+                    )
+                }
+                Err(_) => (
+                    JobRunStatus::Failed,
+                    Some("Cancelled".to_string()),
+                    "cancelled",
+                ),
+                Ok(_permits) => {
+                    metrics::background_job_started(resource_class, queue_wait);
+                    let execution_started = Instant::now();
+                    let mut blocking_task =
+                        tokio::task::spawn_blocking(move || job.execute_with_params(&ctx, params));
+                    let completion = if let Some(max_runtime) = policy.max_runtime {
+                        tokio::select! {
+                            result = &mut blocking_task => {
+                                classify_job_result(&job_id_owned, execution_started.elapsed(), result)
+                            }
+                            _ = tokio::time::sleep(max_runtime) => {
+                                warn!(
+                                    "Job {} exceeded its {:?} runtime budget; requesting cancellation",
+                                    job_id_owned, max_runtime
+                                );
+                                run_cancel_token.cancel();
+                                let _ = blocking_task.await;
+                                (
+                                    JobRunStatus::Failed,
+                                    Some("Job timed out".to_string()),
+                                    "timeout",
+                                )
+                            }
+                        }
+                    } else {
+                        let result = blocking_task.await;
+                        classify_job_result(&job_id_owned, execution_started.elapsed(), result)
+                    };
+                    metrics::background_job_finished(resource_class);
+                    completion
+                }
+            };
+            let elapsed = start_time.elapsed();
 
             // Record metrics
             metrics::record_background_job_execution(&job_id_owned, status_label, elapsed);
@@ -705,6 +872,7 @@ mod tests {
         active: Arc<AtomicUsize>,
         max_active: Arc<AtomicUsize>,
         release: Arc<AtomicBool>,
+        policy: JobExecutionPolicy,
     }
 
     struct PolicyTestJob;
@@ -737,6 +905,41 @@ mod tests {
         }
     }
 
+    struct DeadlineTestJob {
+        cancelled: Arc<AtomicBool>,
+    }
+
+    impl BackgroundJob for DeadlineTestJob {
+        fn id(&self) -> &'static str {
+            "deadline_job"
+        }
+
+        fn name(&self) -> &'static str {
+            "Deadline Test Job"
+        }
+
+        fn description(&self) -> &'static str {
+            "Waits for the scheduler runtime deadline"
+        }
+
+        fn schedule(&self) -> JobSchedule {
+            JobSchedule::Manual
+        }
+
+        fn execution_policy(&self) -> JobExecutionPolicy {
+            JobExecutionPolicy::new(JobResourceClass::CpuBound)
+                .with_max_runtime(Duration::from_millis(75))
+        }
+
+        fn execute(&self, ctx: &JobContext) -> Result<(), JobError> {
+            while !ctx.is_cancelled() {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            self.cancelled.store(true, Ordering::SeqCst);
+            Err(JobError::Cancelled)
+        }
+    }
+
     impl BackgroundJob for BlockingTestJob {
         fn id(&self) -> &'static str {
             self.id
@@ -752,6 +955,10 @@ mod tests {
 
         fn schedule(&self) -> JobSchedule {
             JobSchedule::Manual
+        }
+
+        fn execution_policy(&self) -> JobExecutionPolicy {
+            self.policy
         }
 
         fn execute(&self, ctx: &JobContext) -> Result<(), JobError> {
@@ -862,6 +1069,23 @@ mod tests {
             create_scheduler(server_store, hook_receiver, shutdown_token, job_context);
 
         (scheduler, handle, temp_dir, hook_sender)
+    }
+
+    fn create_test_scheduler_with_config(
+        config: JobSchedulerConfig,
+    ) -> (
+        JobScheduler,
+        super::super::handle::SchedulerHandle,
+        TempDir,
+        mpsc::Sender<HookEvent>,
+    ) {
+        let (scheduler, handle, temp_dir, hook_sender) = create_test_scheduler();
+        (
+            scheduler.with_execution_config(config),
+            handle,
+            temp_dir,
+            hook_sender,
+        )
     }
 
     #[tokio::test]
@@ -1378,6 +1602,7 @@ mod tests {
                     active: active.clone(),
                     max_active: max_active.clone(),
                     release: release.clone(),
+                    policy: JobExecutionPolicy::default(),
                 }))
                 .await;
         }
@@ -1418,6 +1643,214 @@ mod tests {
             handle.get_job_history("blocking_two", 1).unwrap()[0].status,
             "completed"
         );
+
+        shutdown_token.cancel();
+        let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;
+    }
+
+    #[tokio::test]
+    async fn global_execution_limit_serializes_distinct_jobs() {
+        let config = JobSchedulerConfig {
+            max_concurrent_jobs: 1,
+            ..JobSchedulerConfig::default()
+        };
+        let (mut scheduler, handle, _temp_dir, _hook_sender) =
+            create_test_scheduler_with_config(config);
+        let shutdown_token = scheduler.shutdown_token.clone();
+        let started = Arc::new(AtomicUsize::new(0));
+        let active = Arc::new(AtomicUsize::new(0));
+        let max_active = Arc::new(AtomicUsize::new(0));
+        let release = Arc::new(AtomicBool::new(false));
+
+        for id in ["limited_one", "limited_two"] {
+            scheduler
+                .register_job(Arc::new(BlockingTestJob {
+                    id,
+                    started: started.clone(),
+                    active: active.clone(),
+                    max_active: max_active.clone(),
+                    release: release.clone(),
+                    policy: JobExecutionPolicy::default(),
+                }))
+                .await;
+        }
+
+        let scheduler_task = tokio::spawn(async move { scheduler.run().await });
+        handle.trigger_job("limited_one", None).await.unwrap();
+        handle.trigger_job("limited_two", None).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        assert_eq!(started.load(Ordering::SeqCst), 1);
+        assert_eq!(max_active.load(Ordering::SeqCst), 1);
+
+        release.store(true, Ordering::SeqCst);
+        for _ in 0..100 {
+            if !handle.is_job_running("limited_one").await
+                && !handle.is_job_running("limited_two").await
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(started.load(Ordering::SeqCst), 2);
+        assert_eq!(max_active.load(Ordering::SeqCst), 1);
+
+        shutdown_token.cancel();
+        let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;
+    }
+
+    #[tokio::test]
+    async fn queued_job_fails_after_its_queue_budget() {
+        let config = JobSchedulerConfig {
+            max_concurrent_jobs: 1,
+            ..JobSchedulerConfig::default()
+        };
+        let (mut scheduler, handle, _temp_dir, _hook_sender) =
+            create_test_scheduler_with_config(config);
+        let shutdown_token = scheduler.shutdown_token.clone();
+        let started = Arc::new(AtomicUsize::new(0));
+        let active = Arc::new(AtomicUsize::new(0));
+        let max_active = Arc::new(AtomicUsize::new(0));
+        let release = Arc::new(AtomicBool::new(false));
+
+        scheduler
+            .register_job(Arc::new(BlockingTestJob {
+                id: "queue_blocker",
+                started: started.clone(),
+                active: active.clone(),
+                max_active: max_active.clone(),
+                release: release.clone(),
+                policy: JobExecutionPolicy::default(),
+            }))
+            .await;
+        scheduler
+            .register_job(Arc::new(BlockingTestJob {
+                id: "queue_timeout",
+                started: started.clone(),
+                active,
+                max_active,
+                release: release.clone(),
+                policy: JobExecutionPolicy::default().with_queue_timeout(Duration::from_millis(50)),
+            }))
+            .await;
+
+        let scheduler_task = tokio::spawn(async move { scheduler.run().await });
+        handle.trigger_job("queue_blocker", None).await.unwrap();
+        for _ in 0..50 {
+            if started.load(Ordering::SeqCst) == 1 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        handle.trigger_job("queue_timeout", None).await.unwrap();
+
+        for _ in 0..100 {
+            let history = handle.get_job_history("queue_timeout", 1).unwrap();
+            if history
+                .first()
+                .and_then(|run| run.finished_at.as_ref())
+                .is_some()
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let history = handle.get_job_history("queue_timeout", 1).unwrap();
+        assert_eq!(history[0].status, "failed");
+        assert_eq!(history[0].error_message.as_deref(), Some("Queue timeout"));
+        assert_eq!(started.load(Ordering::SeqCst), 1);
+
+        release.store(true, Ordering::SeqCst);
+        shutdown_token.cancel();
+        let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;
+    }
+
+    #[tokio::test]
+    async fn resource_class_limit_does_not_block_other_classes() {
+        let config = JobSchedulerConfig {
+            max_concurrent_jobs: 2,
+            max_io_bound_jobs: 1,
+            ..JobSchedulerConfig::default()
+        };
+        let (mut scheduler, handle, _temp_dir, _hook_sender) =
+            create_test_scheduler_with_config(config);
+        let shutdown_token = scheduler.shutdown_token.clone();
+        let started = Arc::new(AtomicUsize::new(0));
+        let active = Arc::new(AtomicUsize::new(0));
+        let max_active = Arc::new(AtomicUsize::new(0));
+        let release = Arc::new(AtomicBool::new(false));
+
+        for (id, resource_class) in [
+            ("io_one", JobResourceClass::IoBound),
+            ("io_two", JobResourceClass::IoBound),
+            ("light_one", JobResourceClass::Lightweight),
+        ] {
+            scheduler
+                .register_job(Arc::new(BlockingTestJob {
+                    id,
+                    started: started.clone(),
+                    active: active.clone(),
+                    max_active: max_active.clone(),
+                    release: release.clone(),
+                    policy: JobExecutionPolicy::new(resource_class),
+                }))
+                .await;
+        }
+
+        let scheduler_task = tokio::spawn(async move { scheduler.run().await });
+        handle.trigger_job("io_one", None).await.unwrap();
+        handle.trigger_job("io_two", None).await.unwrap();
+        handle.trigger_job("light_one", None).await.unwrap();
+        for _ in 0..100 {
+            if started.load(Ordering::SeqCst) == 2 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        assert_eq!(started.load(Ordering::SeqCst), 2);
+        assert_eq!(max_active.load(Ordering::SeqCst), 2);
+
+        release.store(true, Ordering::SeqCst);
+        shutdown_token.cancel();
+        let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;
+    }
+
+    #[tokio::test]
+    async fn runtime_budget_requests_cooperative_cancellation() {
+        let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
+        let shutdown_token = scheduler.shutdown_token.clone();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        scheduler
+            .register_job(Arc::new(DeadlineTestJob {
+                cancelled: cancelled.clone(),
+            }))
+            .await;
+
+        let scheduler_task = tokio::spawn(async move { scheduler.run().await });
+        handle.trigger_job("deadline_job", None).await.unwrap();
+        for _ in 0..100 {
+            if cancelled.load(Ordering::SeqCst) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(cancelled.load(Ordering::SeqCst));
+
+        for _ in 0..100 {
+            let history = handle.get_job_history("deadline_job", 1).unwrap();
+            if history
+                .first()
+                .and_then(|run| run.finished_at.as_ref())
+                .is_some()
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let history = handle.get_job_history("deadline_job", 1).unwrap();
+        assert_eq!(history[0].status, "failed");
+        assert_eq!(history[0].error_message.as_deref(), Some("Job timed out"));
 
         shutdown_token.cancel();
         let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;
