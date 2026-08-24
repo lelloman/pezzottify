@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use axum::{
-    extract::MatchedPath,
+    extract::{MatchedPath, State},
     http::{Extensions, StatusCode},
     response::IntoResponse,
 };
@@ -15,6 +15,8 @@ use std::time::{Duration, Instant};
 use walkdir::WalkDir;
 
 use crate::db_executor::{DbLane, DbPriority};
+
+use super::filesystem_work::FilesystemWorkPool;
 
 /// Metric name prefix for all Pezzottify metrics
 const PREFIX: &str = "pezzottify";
@@ -777,12 +779,15 @@ pub fn set_background_job_running(job_id: &str, running: bool) {
 }
 
 /// Update process memory usage
-pub fn update_memory_usage() {
+async fn update_memory_usage(filesystem_work: &FilesystemWorkPool) {
     // Get current process memory usage
     #[cfg(target_os = "linux")]
     {
-        if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
-            for line in status.lines() {
+        if let Ok(Ok(status)) = filesystem_work
+            .read(std::path::PathBuf::from("/proc/self/status"))
+            .await
+        {
+            for line in String::from_utf8_lossy(&status).lines() {
                 if line.starts_with("VmRSS:") {
                     // Parse the RSS (Resident Set Size) in kB
                     if let Some(kb_str) = line.split_whitespace().nth(1) {
@@ -797,16 +802,21 @@ pub fn update_memory_usage() {
         }
     }
 
+    #[cfg(not(target_os = "linux"))]
+    let _ = filesystem_work;
+
     // Fallback for non-Linux systems or if reading fails
     // We'll just not update the metric
 }
 
 /// Handler for the /metrics endpoint
-pub async fn metrics_handler() -> impl IntoResponse {
+pub(super) async fn metrics_handler(
+    State(filesystem_work): State<FilesystemWorkPool>,
+) -> impl IntoResponse {
     let request_started = Instant::now();
 
     // Update memory usage before returning metrics
-    update_memory_usage();
+    update_memory_usage(&filesystem_work).await;
 
     let encoder = TextEncoder::new();
     let gather_started = Instant::now();
@@ -973,6 +983,44 @@ pub fn update_storage_metrics(db_dir: &Path, media_path: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn metrics_handler_stays_responsive_when_filesystem_capacity_is_exhausted() {
+        let pool = crate::server::filesystem_work::FilesystemWorkPool::with_limits(
+            1,
+            Duration::from_millis(20),
+            Duration::from_secs(1),
+        );
+        let gate = std::sync::Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let blocker_pool = pool.clone();
+        let blocker_gate = gate.clone();
+        let blocker = tokio::spawn(async move {
+            blocker_pool
+                .run(move || {
+                    started_tx.send(()).unwrap();
+                    let (lock, condvar) = &*blocker_gate;
+                    let mut released = lock.lock().unwrap();
+                    while !*released {
+                        released = condvar.wait(released).unwrap();
+                    }
+                })
+                .await
+        });
+        started_rx.await.unwrap();
+
+        let started = Instant::now();
+        let response = metrics_handler(axum::extract::State(pool))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(started.elapsed() < Duration::from_millis(200));
+
+        let (lock, condvar) = &*gate;
+        *lock.lock().unwrap() = true;
+        condvar.notify_all();
+        blocker.await.unwrap().unwrap();
+    }
 
     #[test]
     fn executor_observability_metrics_are_registered() {

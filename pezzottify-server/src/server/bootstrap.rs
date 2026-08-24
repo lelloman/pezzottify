@@ -345,7 +345,9 @@ pub async fn run_server(
     .await?;
 
     // Create a minimal metrics-only server (always HTTP, internal use)
-    let metrics_app = Router::new().route("/metrics", get(super::metrics::metrics_handler));
+    let metrics_app = Router::new()
+        .route("/metrics", get(super::metrics::metrics_handler))
+        .with_state(super::filesystem_work::FilesystemWorkPool::default());
     let metrics_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", metrics_port))
         .await
         .unwrap();
