@@ -95,10 +95,14 @@ class OidcTokenRefresher @Inject constructor(
         logger.debug("refreshTokens() attempting OIDC token refresh")
         return when (val oidcResult = oidcAuthManager.refreshTokens(refreshToken)) {
             is OidcAuthManager.RefreshResult.Success -> {
-                // Use new ID token if available, otherwise keep the old one
-                // (some OIDC providers don't return ID token on refresh)
-                val newAuthToken = oidcResult.idToken ?: currentState.authToken
-                logger.info("refreshTokens() success, hasNewIdToken=${oidcResult.idToken != null}")
+                val newAuthToken = oidcResult.idToken
+                if (newAuthToken.isNullOrBlank()) {
+                    // The API authenticates with the ID token. Retrying with the token that just
+                    // received a 401 would report a false refresh success and leave the app stuck.
+                    logger.warn("refreshTokens() response did not include a fresh ID token")
+                    return TokenRefresher.RefreshResult.Failed("No fresh ID token received")
+                }
+                logger.info("refreshTokens() success")
                 val newState = currentState.copy(
                     authToken = newAuthToken,
                     refreshToken = oidcResult.refreshToken,
