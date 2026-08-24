@@ -3,6 +3,62 @@ use anyhow::Result;
 use serde_json::Value as JsonValue;
 use std::time::Duration;
 
+/// Coarse resource domain used to isolate jobs that compete for the same host capacity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum JobResourceClass {
+    General,
+    Lightweight,
+    IoBound,
+    CpuBound,
+}
+
+impl JobResourceClass {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::General => "general",
+            Self::Lightweight => "lightweight",
+            Self::IoBound => "io_bound",
+            Self::CpuBound => "cpu_bound",
+        }
+    }
+}
+
+/// Scheduler-enforced execution budgets declared by each background job.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct JobExecutionPolicy {
+    pub resource_class: JobResourceClass,
+    pub queue_timeout: Duration,
+    pub max_runtime: Option<Duration>,
+}
+
+impl JobExecutionPolicy {
+    pub const fn new(resource_class: JobResourceClass) -> Self {
+        Self {
+            resource_class,
+            queue_timeout: Duration::from_secs(30),
+            max_runtime: None,
+        }
+    }
+
+    pub fn with_queue_timeout(mut self, timeout: Duration) -> Self {
+        assert!(!timeout.is_zero(), "job queue timeout must be non-zero");
+        self.queue_timeout = timeout;
+        self
+    }
+
+    pub fn with_max_runtime(mut self, timeout: Duration) -> Self {
+        assert!(!timeout.is_zero(), "job runtime budget must be non-zero");
+        self.max_runtime = Some(timeout);
+        self
+    }
+}
+
+impl Default for JobExecutionPolicy {
+    fn default() -> Self {
+        Self::new(JobResourceClass::General)
+    }
+}
+
 /// Schedule for when a job should run.
 #[derive(Debug, Clone)]
 pub enum JobSchedule {
@@ -99,6 +155,11 @@ pub trait BackgroundJob: Send + Sync {
 
     /// When this job should be scheduled to run.
     fn schedule(&self) -> JobSchedule;
+
+    /// Resource class and execution budgets enforced by the scheduler.
+    fn execution_policy(&self) -> JobExecutionPolicy {
+        JobExecutionPolicy::default()
+    }
 
     /// How this job should be handled during shutdown.
     fn shutdown_behavior(&self) -> ShutdownBehavior {

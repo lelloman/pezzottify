@@ -647,6 +647,7 @@ pub fn create_scheduler(
 
 #[cfg(test)]
 mod tests {
+    use super::super::job::{JobExecutionPolicy, JobResourceClass};
     use super::*;
     use crate::catalog_store::NullCatalogStore;
     use crate::server_store::SqliteServerStore;
@@ -704,6 +705,36 @@ mod tests {
         active: Arc<AtomicUsize>,
         max_active: Arc<AtomicUsize>,
         release: Arc<AtomicBool>,
+    }
+
+    struct PolicyTestJob;
+
+    impl BackgroundJob for PolicyTestJob {
+        fn id(&self) -> &'static str {
+            "policy_job"
+        }
+
+        fn name(&self) -> &'static str {
+            "Policy Test Job"
+        }
+
+        fn description(&self) -> &'static str {
+            "Exposes an explicit scheduler execution policy"
+        }
+
+        fn schedule(&self) -> JobSchedule {
+            JobSchedule::Manual
+        }
+
+        fn execution_policy(&self) -> JobExecutionPolicy {
+            JobExecutionPolicy::new(JobResourceClass::IoBound)
+                .with_queue_timeout(Duration::from_secs(7))
+                .with_max_runtime(Duration::from_secs(90))
+        }
+
+        fn execute(&self, _ctx: &JobContext) -> Result<(), JobError> {
+            Ok(())
+        }
     }
 
     impl BackgroundJob for BlockingTestJob {
@@ -928,6 +959,20 @@ mod tests {
         assert_eq!(jobs[0].description, "A test job for unit tests");
         assert!(!jobs[0].is_running);
         assert!(jobs[0].last_run.is_none());
+        assert_eq!(jobs[0].policy.resource_class, "general");
+        assert_eq!(jobs[0].policy.queue_timeout_secs, 30);
+        assert_eq!(jobs[0].policy.max_runtime_secs, None);
+    }
+
+    #[tokio::test]
+    async fn explicit_execution_policy_is_exposed_by_scheduler_handle() {
+        let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
+        scheduler.register_job(Arc::new(PolicyTestJob)).await;
+
+        let job = handle.get_job("policy_job").await.unwrap().unwrap();
+        assert_eq!(job.policy.resource_class, "io_bound");
+        assert_eq!(job.policy.queue_timeout_secs, 7);
+        assert_eq!(job.policy.max_runtime_secs, Some(90));
     }
 
     #[tokio::test]
