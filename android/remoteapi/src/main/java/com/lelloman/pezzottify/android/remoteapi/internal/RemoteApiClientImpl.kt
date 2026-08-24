@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.remoteapi.internal
 
 import com.lelloman.pezzottify.android.domain.listening.ListeningEventSyncData
+import com.lelloman.pezzottify.android.domain.auth.bearerAuthorization
 import com.lelloman.pezzottify.android.domain.remoteapi.DeviceInfo
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiCredentialsProvider
@@ -93,7 +94,7 @@ internal class RemoteApiClientImpl(
     private val logger: Logger? = null,
 ) : RemoteApiClient {
 
-    private val authToken get() = credentialsProvider.authToken
+    private val authToken get() = bearerAuthorization(credentialsProvider.authToken)
 
     private fun isValidHttpUrl(url: String): Boolean {
         if (url.isBlank()) return false

@@ -104,7 +104,7 @@ class SessionExpiredInterceptorTest {
 
         interceptor.intercept(chain)
 
-        assertThat(retryRequest?.header("Authorization")).isEqualTo("new-token-123")
+        assertThat(retryRequest?.header("Authorization")).isEqualTo("Bearer new-token-123")
     }
 
     @Test

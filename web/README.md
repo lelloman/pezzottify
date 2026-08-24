@@ -60,4 +60,6 @@ The app uses OIDC (OpenID Connect) for authentication with the following flow:
 5. Tokens are stored in localStorage and used for API requests
 6. On token expiry (401 response), tokens are automatically refreshed
 
-The app sends the ID token in the `Authorization` header for API requests and sets a session cookie for WebSocket connections.
+The app sends the ID token as `Authorization: Bearer <token>` for API, media, and service-worker
+requests. The backend exchanges it for an HTTP-only session cookie when needed by browser
+WebSocket connections.
