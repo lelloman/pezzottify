@@ -52,6 +52,18 @@ class CatalogApiClient:
             await resp.read()
             return resp.status
 
+    async def stream_track_range(self, track_id: str, byte_range: str) -> bytes:
+        """Read a byte range from a track and require a partial-content response."""
+        session = await self._ensure_session()
+        async with session.get(
+            f"{self.base_url}/v1/content/stream/{track_id}",
+            headers={"Range": byte_range},
+        ) as resp:
+            if resp.status != 206:
+                resp.raise_for_status()
+                raise AssertionError(f"expected HTTP 206, got {resp.status}")
+            return await resp.read()
+
     async def get_embedding_coverage(self) -> dict:
         """Return the administrative track and album embedding coverage report."""
         session = await self._ensure_session()
