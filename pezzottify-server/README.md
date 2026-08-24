@@ -629,12 +629,24 @@ Requires `ViewAnalytics` permission.
 
 Requires `ServerAdmin` permission.
 
-| Method | Endpoint                         | Description                                   |
-| ------ | -------------------------------- | --------------------------------------------- |
-| GET    | `/jobs`                          | List registered background jobs               |
-| GET    | `/jobs/{job_id}`                 | Get job status and schedule details           |
-| POST   | `/jobs/{job_id}/trigger`         | Trigger a job manually, optionally with JSON params |
-| GET    | `/jobs/{job_id}/history`         | Get recent job audit history                  |
+| Method | Endpoint                                   | Description                                             |
+| ------ | ------------------------------------------ | ------------------------------------------------------- |
+| GET    | `/jobs`                                    | List jobs, execution policies, and breaker state        |
+| GET    | `/jobs/{job_id}`                           | Get job status, schedule, policy, and breaker state     |
+| POST   | `/jobs/{job_id}/trigger`                   | Trigger a job manually, optionally with JSON params     |
+| POST   | `/jobs/{job_id}/cancel`                    | Request cooperative cancellation                       |
+| GET    | `/jobs/{job_id}/history`                   | Get recent job execution history                        |
+| GET    | `/jobs/{job_id}/audit`                     | Get the job's structured audit entries                  |
+| GET    | `/jobs/controls`                           | Get persistent global, resource-class, and job pauses   |
+| PUT    | `/jobs/controls/global`                    | Pause or resume all jobs                                |
+| PUT    | `/jobs/controls/classes/{resource_class}`  | Pause or resume one resource class                      |
+| PUT    | `/jobs/{job_id}/pause`                     | Pause or resume one job                                 |
+
+Pause writes use `{"paused": true|false, "cancel_running": true|false}`. Pauses are persisted across restarts. Setting `cancel_running` requests cooperative cancellation from matching cancellable jobs; it does not forcibly terminate blocking code.
+
+Every active job declares a `lightweight`, `io_bound`, or `cpu_bound` resource class, a queue budget, a runtime budget, and a circuit-breaker policy. The scheduler enforces bounded global and per-class concurrency. Repeated execution failures open the job's persisted circuit breaker until its cooldown expires; administrative cancellation and scheduler queue pressure do not count as job failures.
+
+Prometheus exposes scheduler queue/active/wait metrics and per-job circuit state/trip counts under the `pezzottify_background_job_*` prefix.
 
 `metadata_enrichment_v1` supports trigger params such as `{"batch_size": 10, "entity_types": ["artist", "track"]}`.
 
