@@ -6,7 +6,10 @@
 
 use crate::background_jobs::{
     context::JobContext,
-    job::{BackgroundJob, JobError, JobSchedule, ShutdownBehavior},
+    job::{
+        BackgroundJob, JobError, JobExecutionPolicy, JobResourceClass, JobSchedule,
+        ShutdownBehavior,
+    },
     JobAuditLogger,
 };
 use crate::config::IntervalJobSettings;
@@ -64,6 +67,13 @@ impl BackgroundJob for WhatsNewBatchJob {
     fn schedule(&self) -> JobSchedule {
         // Run every configured interval (no startup run - wait for albums to accumulate)
         JobSchedule::Interval(Duration::from_secs(self.interval_hours * 60 * 60))
+    }
+
+    fn execution_policy(&self) -> JobExecutionPolicy {
+        JobExecutionPolicy::new(JobResourceClass::Lightweight)
+            .with_queue_timeout(Duration::from_secs(10))
+            .with_max_runtime(Duration::from_secs(2 * 60))
+            .with_circuit_breaker(3, Duration::from_secs(15 * 60))
     }
 
     fn shutdown_behavior(&self) -> ShutdownBehavior {
@@ -171,6 +181,18 @@ mod tests {
             }
             _ => panic!("Expected Interval schedule"),
         }
+    }
+
+    #[test]
+    fn execution_policy_bounds_lightweight_batch_work() {
+        let policy = WhatsNewBatchJob::new().execution_policy();
+
+        assert_eq!(policy.resource_class, JobResourceClass::Lightweight);
+        assert_eq!(policy.queue_timeout, Duration::from_secs(10));
+        assert_eq!(policy.max_runtime, Some(Duration::from_secs(2 * 60)));
+        let breaker = policy.circuit_breaker.unwrap();
+        assert_eq!(breaker.failure_threshold, 3);
+        assert_eq!(breaker.cooldown, Duration::from_secs(15 * 60));
     }
 
     // Integration tests for the job are in e2e_changelog_tests.rs
