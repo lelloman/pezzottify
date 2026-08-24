@@ -77,6 +77,31 @@ async fn test_trigger_job_rejects_non_admin() {
 }
 
 #[tokio::test]
+async fn test_job_controls_reject_unauthenticated_and_non_admin_users() {
+    let server = TestServer::builder().with_scheduler().spawn().await;
+
+    let anonymous = TestClient::new(server.base_url.clone());
+    assert_eq!(anonymous.admin_get_job_controls().await.status(), 401);
+    assert_eq!(
+        anonymous
+            .admin_set_global_job_pause(true, false)
+            .await
+            .status(),
+        401
+    );
+
+    let regular_user = TestClient::authenticated(server.base_url.clone()).await;
+    assert_eq!(regular_user.admin_get_job_controls().await.status(), 403);
+    assert_eq!(
+        regular_user
+            .admin_set_global_job_pause(true, false)
+            .await
+            .status(),
+        403
+    );
+}
+
+#[tokio::test]
 async fn test_get_job_history_rejects_unauthenticated() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -177,5 +202,53 @@ async fn configured_scheduler_preserves_missing_job_contracts() {
     assert_eq!(
         history.json::<serde_json::Value>().await.unwrap(),
         serde_json::json!({"history": []})
+    );
+}
+
+#[tokio::test]
+async fn configured_scheduler_exposes_and_persists_global_pause_control() {
+    let server = TestServer::builder().with_scheduler().spawn().await;
+    let client = TestClient::authenticated_admin(server.base_url.clone()).await;
+
+    let initial = client.admin_get_job_controls().await;
+    assert_eq!(initial.status(), 200);
+    assert_eq!(
+        initial.json::<serde_json::Value>().await.unwrap(),
+        serde_json::json!({
+            "global_paused": false,
+            "paused_resource_classes": [],
+            "paused_jobs": [],
+        })
+    );
+
+    let paused = client.admin_set_global_job_pause(true, false).await;
+    assert_eq!(paused.status(), 200);
+    assert_eq!(
+        paused.json::<serde_json::Value>().await.unwrap(),
+        serde_json::json!({
+            "global_paused": true,
+            "paused_resource_classes": [],
+            "paused_jobs": [],
+        })
+    );
+
+    let persisted = server
+        .server_store
+        .get_state("background_jobs.pause_state.v1")
+        .unwrap()
+        .expect("pause state must be persisted");
+    let persisted: serde_json::Value = serde_json::from_str(&persisted).unwrap();
+    assert_eq!(persisted["global_paused"], true);
+
+    let resumed = client.admin_set_global_job_pause(false, false).await;
+    assert_eq!(resumed.status(), 200);
+    assert_eq!(
+        client
+            .admin_get_job_controls()
+            .await
+            .json::<serde_json::Value>()
+            .await
+            .unwrap()["global_paused"],
+        false
     );
 }

@@ -1,4 +1,6 @@
-use super::job::{BackgroundJob, JobError, JobExecutionPolicy, JobSchedule};
+use super::controls::JobPauseScope;
+use super::job::{BackgroundJob, JobError, JobExecutionPolicy, JobResourceClass, JobSchedule};
+use super::JobPauseState;
 use crate::server_store::{JobAuditEntry, JobRun, ServerStore};
 use anyhow::Result;
 use serde::Serialize;
@@ -127,7 +129,7 @@ impl From<JobRun> for JobRunInfo {
 }
 
 /// Command sent to the scheduler.
-pub enum SchedulerCommand {
+pub(crate) enum SchedulerCommand {
     TriggerJob {
         job_id: String,
         params: Option<serde_json::Value>,
@@ -136,6 +138,12 @@ pub enum SchedulerCommand {
     CancelJob {
         job_id: String,
         response: oneshot::Sender<Result<(), JobError>>,
+    },
+    SetPaused {
+        scope: JobPauseScope,
+        paused: bool,
+        cancel_running: bool,
+        response: oneshot::Sender<Result<JobPauseState, JobError>>,
     },
 }
 
@@ -156,19 +164,22 @@ pub struct SchedulerHandle {
     shared_state: Arc<RwLock<SharedJobState>>,
     /// Server store for job history queries
     server_store: Arc<dyn ServerStore>,
+    pause_state: Arc<RwLock<JobPauseState>>,
 }
 
 impl SchedulerHandle {
     /// Create a new scheduler handle.
-    pub fn new(
+    pub(crate) fn new(
         command_tx: mpsc::Sender<SchedulerCommand>,
         shared_state: Arc<RwLock<SharedJobState>>,
         server_store: Arc<dyn ServerStore>,
+        pause_state: Arc<RwLock<JobPauseState>>,
     ) -> Self {
         Self {
             command_tx,
             shared_state,
             server_store,
+            pause_state,
         }
     }
 
@@ -270,6 +281,68 @@ impl SchedulerHandle {
         response_rx
             .await
             .map_err(|_| JobError::ExecutionFailed("Scheduler did not respond".to_string()))?
+    }
+
+    pub async fn get_pause_state(&self) -> JobPauseState {
+        self.pause_state.read().await.clone()
+    }
+
+    async fn set_paused(
+        &self,
+        scope: JobPauseScope,
+        paused: bool,
+        cancel_running: bool,
+    ) -> Result<JobPauseState, JobError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.command_tx
+            .send(SchedulerCommand::SetPaused {
+                scope,
+                paused,
+                cancel_running,
+                response: response_tx,
+            })
+            .await
+            .map_err(|_| JobError::ExecutionFailed("Scheduler not available".to_string()))?;
+        response_rx
+            .await
+            .map_err(|_| JobError::ExecutionFailed("Scheduler did not respond".to_string()))?
+    }
+
+    pub async fn set_global_paused(
+        &self,
+        paused: bool,
+        cancel_running: bool,
+    ) -> Result<JobPauseState, JobError> {
+        self.set_paused(JobPauseScope::Global, paused, cancel_running)
+            .await
+    }
+
+    pub async fn set_resource_class_paused(
+        &self,
+        resource_class: JobResourceClass,
+        paused: bool,
+        cancel_running: bool,
+    ) -> Result<JobPauseState, JobError> {
+        self.set_paused(
+            JobPauseScope::ResourceClass(resource_class),
+            paused,
+            cancel_running,
+        )
+        .await
+    }
+
+    pub async fn set_job_paused(
+        &self,
+        job_id: &str,
+        paused: bool,
+        cancel_running: bool,
+    ) -> Result<JobPauseState, JobError> {
+        self.set_paused(
+            JobPauseScope::Job(job_id.to_string()),
+            paused,
+            cancel_running,
+        )
+        .await
     }
 
     /// Get job execution history.

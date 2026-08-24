@@ -1,8 +1,10 @@
 use super::context::JobContext;
+use super::controls::{JobPauseScope, PAUSE_STATE_KEY};
 use super::handle::{SchedulerCommand, SharedJobState};
 use super::job::{
     BackgroundJob, HookEvent, JobError, JobResourceClass, JobSchedule, ShutdownBehavior,
 };
+use super::JobPauseState;
 use crate::server::metrics;
 use crate::server_store::{JobRunStatus, ServerStore};
 use rand::Rng;
@@ -152,17 +154,19 @@ pub struct JobScheduler {
     job_context: JobContext,
 
     execution_limits: JobExecutionLimits,
+    pause_state: Arc<RwLock<JobPauseState>>,
 }
 
 impl JobScheduler {
     /// Create a new job scheduler and return a handle for interacting with it.
-    pub fn new(
+    pub(crate) fn new(
         server_store: Arc<dyn ServerStore>,
         hook_receiver: mpsc::Receiver<HookEvent>,
         command_receiver: mpsc::Receiver<SchedulerCommand>,
         shutdown_token: CancellationToken,
         job_context: JobContext,
         shared_state: Arc<RwLock<SharedJobState>>,
+        pause_state: Arc<RwLock<JobPauseState>>,
     ) -> Self {
         Self {
             shared_state,
@@ -174,6 +178,7 @@ impl JobScheduler {
             shutdown_token,
             job_context,
             execution_limits: JobExecutionLimits::new(&JobSchedulerConfig::default()),
+            pause_state,
         }
     }
 
@@ -319,7 +324,76 @@ impl JobScheduler {
                 let result = self.cancel_job(&job_id).await;
                 let _ = response.send(result);
             }
+            SchedulerCommand::SetPaused {
+                scope,
+                paused,
+                cancel_running,
+                response,
+            } => {
+                let result = self.set_paused(scope, paused, cancel_running).await;
+                let _ = response.send(result);
+            }
         }
+    }
+
+    async fn set_paused(
+        &mut self,
+        scope: JobPauseScope,
+        paused: bool,
+        cancel_running: bool,
+    ) -> Result<JobPauseState, JobError> {
+        if let JobPauseScope::Job(job_id) = &scope {
+            if !self.shared_state.read().await.jobs.contains_key(job_id) {
+                return Err(JobError::NotFound);
+            }
+        }
+
+        let mut next_state = self.pause_state.read().await.clone();
+        match &scope {
+            JobPauseScope::Global => next_state.global_paused = paused,
+            JobPauseScope::ResourceClass(resource_class) => {
+                if paused {
+                    next_state.paused_resource_classes.insert(*resource_class);
+                } else {
+                    next_state.paused_resource_classes.remove(resource_class);
+                }
+            }
+            JobPauseScope::Job(job_id) => {
+                if paused {
+                    next_state.paused_jobs.insert(job_id.clone());
+                } else {
+                    next_state.paused_jobs.remove(job_id);
+                }
+            }
+        }
+
+        let serialized = serde_json::to_string(&next_state).map_err(|error| {
+            JobError::ExecutionFailed(format!("Failed to serialize pause state: {error}"))
+        })?;
+        self.server_store
+            .set_state(PAUSE_STATE_KEY, &serialized)
+            .map_err(|error| {
+                JobError::ExecutionFailed(format!("Failed to persist pause state: {error}"))
+            })?;
+        *self.pause_state.write().await = next_state.clone();
+
+        if paused && cancel_running {
+            let state = self.shared_state.read().await;
+            for job_id in &state.running_jobs {
+                let Some(job) = state.jobs.get(job_id) else {
+                    continue;
+                };
+                if scope.matches(job_id, job.execution_policy().resource_class)
+                    && job.shutdown_behavior() == ShutdownBehavior::Cancellable
+                {
+                    if let Some(token) = self.job_cancel_tokens.get(job_id) {
+                        token.cancel();
+                    }
+                }
+            }
+        }
+
+        Ok(next_state)
     }
 
     /// Manually trigger a job by ID with optional parameters.
@@ -336,7 +410,17 @@ impl JobScheduler {
         if state.running_jobs.contains(job_id) {
             return Err(JobError::AlreadyRunning);
         }
+        let resource_class = state.jobs[job_id].execution_policy().resource_class;
         drop(state);
+
+        if self
+            .pause_state
+            .read()
+            .await
+            .is_paused(job_id, resource_class)
+        {
+            return Err(JobError::Paused);
+        }
 
         self.spawn_job(job_id, "manual", params).await;
         Ok(())
@@ -376,10 +460,14 @@ impl JobScheduler {
         let mut min_duration = Duration::from_secs(60); // Default check interval
         let now = chrono::Utc::now();
 
+        let pause_state = self.pause_state.read().await.clone();
         let state = self.shared_state.read().await;
         for (job_id, job) in &state.jobs {
             if state.running_jobs.contains(job_id) {
                 continue; // Skip already running jobs
+            }
+            if pause_state.is_paused(job_id, job.execution_policy().resource_class) {
+                continue;
             }
 
             if let Some(next_run) = self.get_next_run_time(job_id, job.schedule(), now) {
@@ -469,9 +557,13 @@ impl JobScheduler {
         let mut jobs_to_run = Vec::new();
 
         {
+            let pause_state = self.pause_state.read().await.clone();
             let state = self.shared_state.read().await;
             for (job_id, job) in &state.jobs {
                 if state.running_jobs.contains(job_id) {
+                    continue;
+                }
+                if pause_state.is_paused(job_id, job.execution_policy().resource_class) {
                     continue;
                 }
 
@@ -493,10 +585,14 @@ impl JobScheduler {
         let mut jobs_to_trigger = Vec::new();
 
         {
+            let pause_state = self.pause_state.read().await.clone();
             let state = self.shared_state.read().await;
             for (job_id, job) in &state.jobs {
                 if state.running_jobs.contains(job_id) {
                     debug!("Skipping hook trigger for already running job: {}", job_id);
+                    continue;
+                }
+                if pause_state.is_paused(job_id, job.execution_policy().resource_class) {
                     continue;
                 }
 
@@ -797,6 +893,14 @@ pub fn create_scheduler(
         jobs: HashMap::new(),
         running_jobs: HashSet::new(),
     }));
+    let pause_state = Arc::new(RwLock::new(
+        server_store
+            .get_state(PAUSE_STATE_KEY)
+            .ok()
+            .flatten()
+            .and_then(|value| serde_json::from_str(&value).ok())
+            .unwrap_or_default(),
+    ));
 
     let scheduler = JobScheduler::new(
         server_store.clone(),
@@ -805,9 +909,11 @@ pub fn create_scheduler(
         shutdown_token,
         job_context,
         Arc::clone(&shared_state),
+        Arc::clone(&pause_state),
     );
 
-    let handle = super::handle::SchedulerHandle::new(command_tx, shared_state, server_store);
+    let handle =
+        super::handle::SchedulerHandle::new(command_tx, shared_state, server_store, pause_state);
 
     (scheduler, handle)
 }
@@ -876,6 +982,34 @@ mod tests {
     }
 
     struct PolicyTestJob;
+
+    struct ManualTestJob {
+        id: &'static str,
+        execution_count: Arc<AtomicUsize>,
+    }
+
+    impl BackgroundJob for ManualTestJob {
+        fn id(&self) -> &'static str {
+            self.id
+        }
+
+        fn name(&self) -> &'static str {
+            "Manual Test Job"
+        }
+
+        fn description(&self) -> &'static str {
+            "A manually triggered test job"
+        }
+
+        fn schedule(&self) -> JobSchedule {
+            JobSchedule::Manual
+        }
+
+        fn execute(&self, _ctx: &JobContext) -> Result<(), JobError> {
+            self.execution_count.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+    }
 
     impl BackgroundJob for PolicyTestJob {
         fn id(&self) -> &'static str {
@@ -1851,6 +1985,119 @@ mod tests {
         let history = handle.get_job_history("deadline_job", 1).unwrap();
         assert_eq!(history[0].status, "failed");
         assert_eq!(history[0].error_message.as_deref(), Some("Job timed out"));
+
+        shutdown_token.cancel();
+        let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;
+    }
+
+    #[tokio::test]
+    async fn global_pause_rejects_manual_triggers_until_resumed() {
+        let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
+        let shutdown_token = scheduler.shutdown_token.clone();
+        scheduler.register_job(Arc::new(PolicyTestJob)).await;
+        let scheduler_task = tokio::spawn(async move { scheduler.run().await });
+
+        handle.set_global_paused(true, false).await.unwrap();
+        assert!(matches!(
+            handle.trigger_job("policy_job", None).await,
+            Err(JobError::Paused)
+        ));
+        assert!(handle.get_pause_state().await.global_paused);
+
+        handle.set_global_paused(false, false).await.unwrap();
+        handle.trigger_job("policy_job", None).await.unwrap();
+
+        shutdown_token.cancel();
+        let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;
+    }
+
+    #[tokio::test]
+    async fn resource_and_job_pause_scopes_only_block_matching_jobs() {
+        let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
+        let shutdown_token = scheduler.shutdown_token.clone();
+        scheduler.register_job(Arc::new(PolicyTestJob)).await;
+        let count = Arc::new(AtomicUsize::new(0));
+        scheduler
+            .register_job(Arc::new(ManualTestJob {
+                id: "general_job",
+                execution_count: count.clone(),
+            }))
+            .await;
+        let scheduler_task = tokio::spawn(async move { scheduler.run().await });
+
+        handle
+            .set_resource_class_paused(JobResourceClass::IoBound, true, false)
+            .await
+            .unwrap();
+        assert!(matches!(
+            handle.trigger_job("policy_job", None).await,
+            Err(JobError::Paused)
+        ));
+        handle.trigger_job("general_job", None).await.unwrap();
+        for _ in 0..100 {
+            if !handle.is_job_running("general_job").await {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(!handle.is_job_running("general_job").await);
+
+        handle
+            .set_resource_class_paused(JobResourceClass::IoBound, false, false)
+            .await
+            .unwrap();
+        handle
+            .set_job_paused("general_job", true, false)
+            .await
+            .unwrap();
+        assert!(matches!(
+            handle.trigger_job("general_job", None).await,
+            Err(JobError::Paused)
+        ));
+        handle.trigger_job("policy_job", None).await.unwrap();
+
+        let pause_state = handle.get_pause_state().await;
+        assert_eq!(pause_state.paused_jobs.len(), 1);
+        assert!(pause_state.paused_jobs.contains("general_job"));
+        assert!(pause_state.paused_resource_classes.is_empty());
+
+        shutdown_token.cancel();
+        let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;
+    }
+
+    #[tokio::test]
+    async fn pausing_with_cancel_running_requests_cooperative_cancellation() {
+        let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
+        let shutdown_token = scheduler.shutdown_token.clone();
+        let started = Arc::new(AtomicBool::new(false));
+        let cancelled = Arc::new(AtomicBool::new(false));
+        scheduler
+            .register_job(Arc::new(CancellableTestJob {
+                id: "pause_cancel_job",
+                started: started.clone(),
+                cancelled: cancelled.clone(),
+            }))
+            .await;
+        let scheduler_task = tokio::spawn(async move { scheduler.run().await });
+
+        handle.trigger_job("pause_cancel_job", None).await.unwrap();
+        for _ in 0..100 {
+            if started.load(Ordering::SeqCst) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        handle
+            .set_job_paused("pause_cancel_job", true, true)
+            .await
+            .unwrap();
+        for _ in 0..100 {
+            if cancelled.load(Ordering::SeqCst) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(cancelled.load(Ordering::SeqCst));
 
         shutdown_token.cancel();
         let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;

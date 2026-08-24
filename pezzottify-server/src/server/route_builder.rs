@@ -284,7 +284,14 @@ pub(super) fn admin_routes(state: &ServerState, limits: &RouteLimits) -> Router 
         .route("/storage", get(admin_get_storage_report))
         .route("/jobs", get(admin_list_jobs))
         .route("/jobs/audit", get(admin_get_job_audit_log))
+        .route("/jobs/controls", get(admin_get_job_controls))
+        .route("/jobs/controls/global", put(admin_set_global_job_pause))
+        .route(
+            "/jobs/controls/classes/{resource_class}",
+            put(admin_set_resource_class_job_pause),
+        )
         .route("/jobs/{job_id}", get(admin_get_job))
+        .route("/jobs/{job_id}/pause", put(admin_set_job_pause))
         .route("/jobs/{job_id}/trigger", post(admin_trigger_job))
         .route("/jobs/{job_id}/cancel", post(admin_cancel_job))
         .route("/jobs/{job_id}/history", get(admin_get_job_history))

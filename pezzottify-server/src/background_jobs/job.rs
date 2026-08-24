@@ -1,10 +1,12 @@
 use super::context::JobContext;
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::time::Duration;
 
 /// Coarse resource domain used to isolate jobs that compete for the same host capacity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum JobResourceClass {
     General,
     Lightweight,
@@ -19,6 +21,16 @@ impl JobResourceClass {
             Self::Lightweight => "lightweight",
             Self::IoBound => "io_bound",
             Self::CpuBound => "cpu_bound",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "general" => Some(Self::General),
+            "lightweight" => Some(Self::Lightweight),
+            "io_bound" => Some(Self::IoBound),
+            "cpu_bound" => Some(Self::CpuBound),
+            _ => None,
         }
     }
 }
@@ -119,6 +131,7 @@ pub enum JobError {
     NotFound,
     AlreadyRunning,
     NotRunning,
+    Paused,
     ExecutionFailed(String),
     Cancelled,
     Timeout,
@@ -130,6 +143,7 @@ impl std::fmt::Display for JobError {
             JobError::NotFound => write!(f, "Job not found"),
             JobError::AlreadyRunning => write!(f, "Job is already running"),
             JobError::NotRunning => write!(f, "Job is not running"),
+            JobError::Paused => write!(f, "Job execution is paused"),
             JobError::ExecutionFailed(msg) => write!(f, "Execution failed: {}", msg),
             JobError::Cancelled => write!(f, "Job was cancelled"),
             JobError::Timeout => write!(f, "Job timed out"),

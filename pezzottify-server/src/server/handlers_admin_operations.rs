@@ -69,6 +69,127 @@ struct ListJobsResponse {
     jobs: Vec<JobInfo>,
 }
 
+#[derive(Debug, Deserialize)]
+struct JobPauseRequest {
+    paused: bool,
+    #[serde(default)]
+    cancel_running: bool,
+}
+
+async fn admin_get_job_controls(
+    State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
+) -> Response {
+    match scheduler_handle {
+        Some(handle) => (StatusCode::OK, Json(handle.get_pause_state().await)).into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Job scheduler not available"})),
+        )
+            .into_response(),
+    }
+}
+
+async fn admin_set_global_job_pause(
+    session: Session,
+    State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
+    Json(request): Json<JobPauseRequest>,
+) -> Response {
+    let Some(handle) = scheduler_handle else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Job scheduler not available"})),
+        )
+            .into_response();
+    };
+    info!(
+        "User {} set global job pause={} cancel_running={}",
+        session.user_id, request.paused, request.cancel_running
+    );
+    match handle
+        .set_global_paused(request.paused, request.cancel_running)
+        .await
+    {
+        Ok(state) => (StatusCode::OK, Json(state)).into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": error.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+async fn admin_set_resource_class_job_pause(
+    session: Session,
+    State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
+    Path(resource_class): Path<String>,
+    Json(request): Json<JobPauseRequest>,
+) -> Response {
+    let Some(resource_class) = JobResourceClass::parse(&resource_class) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Invalid job resource class"})),
+        )
+            .into_response();
+    };
+    let Some(handle) = scheduler_handle else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Job scheduler not available"})),
+        )
+            .into_response();
+    };
+    info!(
+        "User {} set {:?} job pause={} cancel_running={}",
+        session.user_id, resource_class, request.paused, request.cancel_running
+    );
+    match handle
+        .set_resource_class_paused(resource_class, request.paused, request.cancel_running)
+        .await
+    {
+        Ok(state) => (StatusCode::OK, Json(state)).into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": error.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+async fn admin_set_job_pause(
+    session: Session,
+    State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
+    Path(job_id): Path<String>,
+    Json(request): Json<JobPauseRequest>,
+) -> Response {
+    let Some(handle) = scheduler_handle else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Job scheduler not available"})),
+        )
+            .into_response();
+    };
+    info!(
+        "User {} set job {} pause={} cancel_running={}",
+        session.user_id, job_id, request.paused, request.cancel_running
+    );
+    match handle
+        .set_job_paused(&job_id, request.paused, request.cancel_running)
+        .await
+    {
+        Ok(state) => (StatusCode::OK, Json(state)).into_response(),
+        Err(JobError::NotFound) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Job not found"})),
+        )
+            .into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": error.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
 #[derive(Serialize)]
 struct AdminAudioEmbeddingSpecInfo {
     model: String,
@@ -302,6 +423,11 @@ async fn admin_trigger_job(
         Err(JobError::AlreadyRunning) => (
             StatusCode::CONFLICT,
             Json(serde_json::json!({"error": "Job is already running"})),
+        )
+            .into_response(),
+        Err(JobError::Paused) => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({"error": "Job execution is paused"})),
         )
             .into_response(),
         Err(e) => {
