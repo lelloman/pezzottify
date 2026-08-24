@@ -15,7 +15,10 @@
 
 use crate::background_jobs::{
     context::JobContext,
-    job::{BackgroundJob, HookEvent, JobError, JobSchedule, ShutdownBehavior},
+    job::{
+        BackgroundJob, HookEvent, JobError, JobExecutionPolicy, JobResourceClass, JobSchedule,
+        ShutdownBehavior,
+    },
     JobAuditLogger,
 };
 use crate::catalog_store::SearchableContentType;
@@ -192,6 +195,13 @@ impl BackgroundJob for PopularContentJob {
             interval: Some(Duration::from_secs(self.interval_hours * 60 * 60)),
             hooks: vec![HookEvent::OnStartup],
         }
+    }
+
+    fn execution_policy(&self) -> JobExecutionPolicy {
+        JobExecutionPolicy::new(JobResourceClass::CpuBound)
+            .with_queue_timeout(Duration::from_secs(30))
+            .with_max_runtime(Duration::from_secs(30 * 60))
+            .with_circuit_breaker(3, Duration::from_secs(30 * 60))
     }
 
     fn shutdown_behavior(&self) -> ShutdownBehavior {
@@ -639,6 +649,18 @@ mod tests {
             }
             _ => panic!("Expected Combined schedule"),
         }
+    }
+
+    #[test]
+    fn execution_policy_serializes_popularity_computation() {
+        let policy = PopularContentJob::new().execution_policy();
+
+        assert_eq!(policy.resource_class, JobResourceClass::CpuBound);
+        assert_eq!(policy.queue_timeout, Duration::from_secs(30));
+        assert_eq!(policy.max_runtime, Some(Duration::from_secs(30 * 60)));
+        let breaker = policy.circuit_breaker.unwrap();
+        assert_eq!(breaker.failure_threshold, 3);
+        assert_eq!(breaker.cooldown, Duration::from_secs(30 * 60));
     }
 
     #[test]
