@@ -5,7 +5,10 @@
 
 use crate::background_jobs::{
     context::JobContext,
-    job::{BackgroundJob, JobError, JobSchedule, ShutdownBehavior},
+    job::{
+        BackgroundJob, JobError, JobExecutionPolicy, JobResourceClass, JobSchedule,
+        ShutdownBehavior,
+    },
     JobAuditLogger,
 };
 use crate::catalog_store::EntityEmbeddingUpsert;
@@ -302,6 +305,13 @@ impl BackgroundJob for TrackEmbeddingSyncJob {
         }
     }
 
+    fn execution_policy(&self) -> JobExecutionPolicy {
+        JobExecutionPolicy::new(JobResourceClass::IoBound)
+            .with_queue_timeout(Duration::from_secs(60))
+            .with_max_runtime(Duration::from_secs(2 * 60 * 60))
+            .with_circuit_breaker(3, Duration::from_secs(60 * 60))
+    }
+
     fn shutdown_behavior(&self) -> ShutdownBehavior {
         ShutdownBehavior::Cancellable
     }
@@ -356,6 +366,19 @@ mod tests {
             }
             other => panic!("unexpected schedule: {:?}", other),
         }
+    }
+
+    #[test]
+    fn execution_policy_isolates_remote_embedding_generation() {
+        let policy =
+            TrackEmbeddingSyncJob::new(test_settings(), PathBuf::from("/media")).execution_policy();
+
+        assert_eq!(policy.resource_class, JobResourceClass::IoBound);
+        assert_eq!(policy.queue_timeout, Duration::from_secs(60));
+        assert_eq!(policy.max_runtime, Some(Duration::from_secs(2 * 60 * 60)));
+        let breaker = policy.circuit_breaker.unwrap();
+        assert_eq!(breaker.failure_threshold, 3);
+        assert_eq!(breaker.cooldown, Duration::from_secs(60 * 60));
     }
 
     #[test]
