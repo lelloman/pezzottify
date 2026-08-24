@@ -437,7 +437,29 @@ class PlayerImpl(
     }
 
     override fun moveTrack(fromIndex: Int, toIndex: Int) {
-        logger.warn("moveTrack(fromIndex=$fromIndex, toIndex=$toIndex) is not yet implemented")
+        runOnPlayerThread {
+            val currentPlaylist = mutablePlaybackPlaylist.value ?: return@runOnPlayerThread
+            if (fromIndex !in currentPlaylist.tracksIds.indices ||
+                toIndex !in currentPlaylist.tracksIds.indices ||
+                fromIndex == toIndex
+            ) {
+                return@runOnPlayerThread
+            }
+
+            val reorderedTracks = currentPlaylist.tracksIds.toMutableList().apply {
+                add(toIndex, removeAt(fromIndex))
+            }
+            val newContext = when (val ctx = currentPlaylist.context) {
+                is PlaybackPlaylistContext.Album -> PlaybackPlaylistContext.UserMix
+                is PlaybackPlaylistContext.UserPlaylist -> ctx.copy(isEdited = true)
+                is PlaybackPlaylistContext.UserMix -> ctx
+                is PlaybackPlaylistContext.Radio -> ctx.copy(isEdited = true)
+            }
+
+            platformPlayer.moveMediaItem(fromIndex, toIndex)
+            mutablePlaybackPlaylist.value = PlaybackPlaylist(newContext, reorderedTracks)
+            logger.info("Moved track from index $fromIndex to $toIndex")
+        }
     }
 
     override fun addTracksToPlaylist(tracksIds: List<String>) {
