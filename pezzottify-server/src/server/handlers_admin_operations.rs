@@ -430,6 +430,11 @@ async fn admin_trigger_job(
             Json(serde_json::json!({"error": "Job execution is paused"})),
         )
             .into_response(),
+        Err(JobError::CircuitOpen) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Job circuit breaker is open"})),
+        )
+            .into_response(),
         Err(e) => {
             error!("Failed to trigger job {}: {}", job_id, e);
             (

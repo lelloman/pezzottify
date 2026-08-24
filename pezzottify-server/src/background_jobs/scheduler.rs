@@ -1,3 +1,4 @@
+use super::circuit_breaker::{CircuitBreakerRegistry, CIRCUIT_BREAKER_STATE_KEY};
 use super::context::JobContext;
 use super::controls::{JobPauseScope, PAUSE_STATE_KEY};
 use super::handle::{SchedulerCommand, SharedJobState};
@@ -155,21 +156,28 @@ pub struct JobScheduler {
 
     execution_limits: JobExecutionLimits,
     pause_state: Arc<RwLock<JobPauseState>>,
+    circuit_breakers: Arc<RwLock<CircuitBreakerRegistry>>,
+}
+
+#[derive(Clone)]
+struct SchedulerSharedState {
+    jobs: Arc<RwLock<SharedJobState>>,
+    pause: Arc<RwLock<JobPauseState>>,
+    circuit_breakers: Arc<RwLock<CircuitBreakerRegistry>>,
 }
 
 impl JobScheduler {
     /// Create a new job scheduler and return a handle for interacting with it.
-    pub(crate) fn new(
+    fn new(
         server_store: Arc<dyn ServerStore>,
         hook_receiver: mpsc::Receiver<HookEvent>,
         command_receiver: mpsc::Receiver<SchedulerCommand>,
         shutdown_token: CancellationToken,
         job_context: JobContext,
-        shared_state: Arc<RwLock<SharedJobState>>,
-        pause_state: Arc<RwLock<JobPauseState>>,
+        shared: SchedulerSharedState,
     ) -> Self {
         Self {
-            shared_state,
+            shared_state: shared.jobs,
             running_handles: HashMap::new(),
             job_cancel_tokens: HashMap::new(),
             server_store,
@@ -178,7 +186,8 @@ impl JobScheduler {
             shutdown_token,
             job_context,
             execution_limits: JobExecutionLimits::new(&JobSchedulerConfig::default()),
-            pause_state,
+            pause_state: shared.pause,
+            circuit_breakers: shared.circuit_breakers,
         }
     }
 
@@ -410,7 +419,8 @@ impl JobScheduler {
         if state.running_jobs.contains(job_id) {
             return Err(JobError::AlreadyRunning);
         }
-        let resource_class = state.jobs[job_id].execution_policy().resource_class;
+        let policy = state.jobs[job_id].execution_policy();
+        let resource_class = policy.resource_class;
         drop(state);
 
         if self
@@ -420,6 +430,15 @@ impl JobScheduler {
             .is_paused(job_id, resource_class)
         {
             return Err(JobError::Paused);
+        }
+        if policy.circuit_breaker.is_some()
+            && self
+                .circuit_breakers
+                .read()
+                .await
+                .is_open(job_id, chrono::Utc::now().timestamp_millis())
+        {
+            return Err(JobError::CircuitOpen);
         }
 
         self.spawn_job(job_id, "manual", params).await;
@@ -461,6 +480,8 @@ impl JobScheduler {
         let now = chrono::Utc::now();
 
         let pause_state = self.pause_state.read().await.clone();
+        let circuit_breakers = self.circuit_breakers.read().await.clone();
+        let now_millis = now.timestamp_millis();
         let state = self.shared_state.read().await;
         for (job_id, job) in &state.jobs {
             if state.running_jobs.contains(job_id) {
@@ -468,6 +489,14 @@ impl JobScheduler {
             }
             if pause_state.is_paused(job_id, job.execution_policy().resource_class) {
                 continue;
+            }
+            if job.execution_policy().circuit_breaker.is_some() {
+                if let Some(remaining_millis) =
+                    circuit_breakers.remaining_open_millis(job_id, now_millis)
+                {
+                    min_duration = min_duration.min(Duration::from_millis(remaining_millis));
+                    continue;
+                }
             }
 
             if let Some(next_run) = self.get_next_run_time(job_id, job.schedule(), now) {
@@ -558,12 +587,19 @@ impl JobScheduler {
 
         {
             let pause_state = self.pause_state.read().await.clone();
+            let circuit_breakers = self.circuit_breakers.read().await.clone();
+            let now_millis = now.timestamp_millis();
             let state = self.shared_state.read().await;
             for (job_id, job) in &state.jobs {
                 if state.running_jobs.contains(job_id) {
                     continue;
                 }
                 if pause_state.is_paused(job_id, job.execution_policy().resource_class) {
+                    continue;
+                }
+                if job.execution_policy().circuit_breaker.is_some()
+                    && circuit_breakers.is_open(job_id, now_millis)
+                {
                     continue;
                 }
 
@@ -586,6 +622,8 @@ impl JobScheduler {
 
         {
             let pause_state = self.pause_state.read().await.clone();
+            let circuit_breakers = self.circuit_breakers.read().await.clone();
+            let now_millis = chrono::Utc::now().timestamp_millis();
             let state = self.shared_state.read().await;
             for (job_id, job) in &state.jobs {
                 if state.running_jobs.contains(job_id) {
@@ -593,6 +631,11 @@ impl JobScheduler {
                     continue;
                 }
                 if pause_state.is_paused(job_id, job.execution_policy().resource_class) {
+                    continue;
+                }
+                if job.execution_policy().circuit_breaker.is_some()
+                    && circuit_breakers.is_open(job_id, now_millis)
+                {
                     continue;
                 }
 
@@ -690,6 +733,7 @@ impl JobScheduler {
         let server_store = Arc::clone(&self.server_store);
         let job_id_owned = job_id.to_string();
         let shared_state = Arc::clone(&self.shared_state);
+        let circuit_breakers = Arc::clone(&self.circuit_breakers);
 
         // Queue asynchronously for global and resource-class capacity before
         // entering Tokio's blocking pool.
@@ -778,6 +822,45 @@ impl JobScheduler {
 
             if let Err(e) = server_store.record_job_finish(run_id, status, error_msg) {
                 error!("Failed to record job finish for {}: {}", job_id_owned, e);
+            }
+
+            if let Some(breaker_policy) = policy.circuit_breaker {
+                let mut registry = circuit_breakers.write().await;
+                let circuit_opened = match status_label {
+                    "success" => {
+                        registry.record_success(&job_id_owned);
+                        metrics::set_background_job_circuit_open(&job_id_owned, false);
+                        false
+                    }
+                    "failed" | "panic" | "timeout" => registry.record_failure(
+                        &job_id_owned,
+                        breaker_policy.failure_threshold,
+                        breaker_policy.cooldown.as_millis().min(i64::MAX as u128) as i64,
+                        chrono::Utc::now().timestamp_millis(),
+                    ),
+                    _ => false,
+                };
+                if circuit_opened {
+                    warn!("Job {} circuit breaker opened", job_id_owned);
+                    metrics::record_background_job_circuit_trip(&job_id_owned);
+                    metrics::set_background_job_circuit_open(&job_id_owned, true);
+                }
+                match serde_json::to_string(&*registry) {
+                    Ok(serialized) => {
+                        if let Err(error) =
+                            server_store.set_state(CIRCUIT_BREAKER_STATE_KEY, &serialized)
+                        {
+                            error!(
+                                "Failed to persist circuit breaker state for {}: {}",
+                                job_id_owned, error
+                            );
+                        }
+                    }
+                    Err(error) => error!(
+                        "Failed to serialize circuit breaker state for {}: {}",
+                        job_id_owned, error
+                    ),
+                }
             }
 
             // Mark job as not running in shared state
@@ -901,19 +984,36 @@ pub fn create_scheduler(
             .and_then(|value| serde_json::from_str(&value).ok())
             .unwrap_or_default(),
     ));
+    let circuit_breakers = Arc::new(RwLock::new(
+        server_store
+            .get_state(CIRCUIT_BREAKER_STATE_KEY)
+            .ok()
+            .flatten()
+            .and_then(|value| serde_json::from_str(&value).ok())
+            .unwrap_or_default(),
+    ));
 
+    let shared = SchedulerSharedState {
+        jobs: shared_state,
+        pause: pause_state,
+        circuit_breakers,
+    };
     let scheduler = JobScheduler::new(
         server_store.clone(),
         hook_receiver,
         command_rx,
         shutdown_token,
         job_context,
-        Arc::clone(&shared_state),
-        Arc::clone(&pause_state),
+        shared.clone(),
     );
 
-    let handle =
-        super::handle::SchedulerHandle::new(command_tx, shared_state, server_store, pause_state);
+    let handle = super::handle::SchedulerHandle::new(
+        command_tx,
+        shared.jobs,
+        server_store,
+        shared.pause,
+        shared.circuit_breakers,
+    );
 
     (scheduler, handle)
 }
@@ -1041,6 +1141,42 @@ mod tests {
 
     struct DeadlineTestJob {
         cancelled: Arc<AtomicBool>,
+    }
+
+    struct CircuitBreakerTestJob {
+        should_fail: Arc<AtomicBool>,
+        execution_count: Arc<AtomicUsize>,
+    }
+
+    impl BackgroundJob for CircuitBreakerTestJob {
+        fn id(&self) -> &'static str {
+            "circuit_breaker_job"
+        }
+
+        fn name(&self) -> &'static str {
+            "Circuit Breaker Test Job"
+        }
+
+        fn description(&self) -> &'static str {
+            "Fails until the test allows recovery"
+        }
+
+        fn schedule(&self) -> JobSchedule {
+            JobSchedule::Manual
+        }
+
+        fn execution_policy(&self) -> JobExecutionPolicy {
+            JobExecutionPolicy::default().with_circuit_breaker(2, Duration::from_millis(100))
+        }
+
+        fn execute(&self, _ctx: &JobContext) -> Result<(), JobError> {
+            self.execution_count.fetch_add(1, Ordering::SeqCst);
+            if self.should_fail.load(Ordering::SeqCst) {
+                Err(JobError::ExecutionFailed("expected failure".to_string()))
+            } else {
+                Ok(())
+            }
+        }
     }
 
     impl BackgroundJob for DeadlineTestJob {
@@ -2098,6 +2234,75 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
         assert!(cancelled.load(Ordering::SeqCst));
+
+        shutdown_token.cancel();
+        let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;
+    }
+
+    #[tokio::test]
+    async fn circuit_breaker_opens_after_threshold_and_recovers_after_cooldown() {
+        let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
+        let server_store = scheduler.server_store.clone();
+        let shutdown_token = scheduler.shutdown_token.clone();
+        let should_fail = Arc::new(AtomicBool::new(true));
+        let execution_count = Arc::new(AtomicUsize::new(0));
+        scheduler
+            .register_job(Arc::new(CircuitBreakerTestJob {
+                should_fail: should_fail.clone(),
+                execution_count: execution_count.clone(),
+            }))
+            .await;
+        let scheduler_task = tokio::spawn(async move { scheduler.run().await });
+
+        for expected_count in 1..=2 {
+            handle
+                .trigger_job("circuit_breaker_job", None)
+                .await
+                .unwrap();
+            for _ in 0..100 {
+                if execution_count.load(Ordering::SeqCst) == expected_count
+                    && !handle.is_job_running("circuit_breaker_job").await
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }
+
+        assert!(matches!(
+            handle.trigger_job("circuit_breaker_job", None).await,
+            Err(JobError::CircuitOpen)
+        ));
+        assert_eq!(execution_count.load(Ordering::SeqCst), 2);
+        let persisted = server_store
+            .get_state("background_jobs.circuit_breakers.v1")
+            .unwrap()
+            .expect("open circuit must be persisted");
+        assert!(persisted.contains("circuit_breaker_job"));
+
+        tokio::time::sleep(Duration::from_millis(120)).await;
+        should_fail.store(false, Ordering::SeqCst);
+        handle
+            .trigger_job("circuit_breaker_job", None)
+            .await
+            .unwrap();
+        for _ in 0..100 {
+            if execution_count.load(Ordering::SeqCst) == 3
+                && !handle.is_job_running("circuit_breaker_job").await
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(execution_count.load(Ordering::SeqCst), 3);
+        assert!(
+            !handle
+                .get_job("circuit_breaker_job")
+                .await
+                .unwrap()
+                .unwrap()
+                .circuit_breaker_open
+        );
 
         shutdown_token.cancel();
         let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;

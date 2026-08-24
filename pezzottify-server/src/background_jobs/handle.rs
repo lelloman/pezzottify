@@ -1,3 +1,4 @@
+use super::circuit_breaker::CircuitBreakerRegistry;
 use super::controls::JobPauseScope;
 use super::job::{BackgroundJob, JobError, JobExecutionPolicy, JobResourceClass, JobSchedule};
 use super::JobPauseState;
@@ -19,6 +20,8 @@ pub struct JobInfo {
     pub last_run: Option<JobRunInfo>,
     pub next_run_at: Option<String>,
     pub policy: JobExecutionPolicyInfo,
+    pub circuit_breaker_open: bool,
+    pub circuit_breaker_open_until: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -26,6 +29,8 @@ pub struct JobExecutionPolicyInfo {
     pub resource_class: &'static str,
     pub queue_timeout_secs: u64,
     pub max_runtime_secs: Option<u64>,
+    pub circuit_breaker_failure_threshold: Option<u32>,
+    pub circuit_breaker_cooldown_secs: Option<u64>,
 }
 
 impl From<JobExecutionPolicy> for JobExecutionPolicyInfo {
@@ -34,6 +39,12 @@ impl From<JobExecutionPolicy> for JobExecutionPolicyInfo {
             resource_class: policy.resource_class.as_str(),
             queue_timeout_secs: policy.queue_timeout.as_secs(),
             max_runtime_secs: policy.max_runtime.map(|duration| duration.as_secs()),
+            circuit_breaker_failure_threshold: policy
+                .circuit_breaker
+                .map(|breaker| breaker.failure_threshold),
+            circuit_breaker_cooldown_secs: policy
+                .circuit_breaker
+                .map(|breaker| breaker.cooldown.as_secs()),
         }
     }
 }
@@ -165,6 +176,7 @@ pub struct SchedulerHandle {
     /// Server store for job history queries
     server_store: Arc<dyn ServerStore>,
     pause_state: Arc<RwLock<JobPauseState>>,
+    circuit_breakers: Arc<RwLock<CircuitBreakerRegistry>>,
 }
 
 impl SchedulerHandle {
@@ -174,12 +186,14 @@ impl SchedulerHandle {
         shared_state: Arc<RwLock<SharedJobState>>,
         server_store: Arc<dyn ServerStore>,
         pause_state: Arc<RwLock<JobPauseState>>,
+        circuit_breakers: Arc<RwLock<CircuitBreakerRegistry>>,
     ) -> Self {
         Self {
             command_tx,
             shared_state,
             server_store,
             pause_state,
+            circuit_breakers,
         }
     }
 
@@ -196,6 +210,15 @@ impl SchedulerHandle {
                 .map(JobRunInfo::from);
             let schedule_state = self.server_store.get_schedule_state(job_id)?;
             let next_run_at = schedule_state.map(|s| s.next_run_at.to_rfc3339());
+            let now_millis = chrono::Utc::now().timestamp_millis();
+            let breakers = self.circuit_breakers.read().await;
+            let circuit_breaker_open = breakers.is_open(job_id, now_millis);
+            let circuit_breaker_open_until = circuit_breaker_open
+                .then(|| breakers.open_until_millis(job_id))
+                .flatten()
+                .and_then(chrono::DateTime::from_timestamp_millis)
+                .map(|value| value.to_rfc3339());
+            drop(breakers);
 
             jobs.push(JobInfo {
                 id: job_id.clone(),
@@ -206,6 +229,8 @@ impl SchedulerHandle {
                 last_run,
                 next_run_at,
                 policy: job.execution_policy().into(),
+                circuit_breaker_open,
+                circuit_breaker_open_until,
             });
         }
 
@@ -226,6 +251,15 @@ impl SchedulerHandle {
                 .map(JobRunInfo::from);
             let schedule_state = self.server_store.get_schedule_state(job_id)?;
             let next_run_at = schedule_state.map(|s| s.next_run_at.to_rfc3339());
+            let now_millis = chrono::Utc::now().timestamp_millis();
+            let breakers = self.circuit_breakers.read().await;
+            let circuit_breaker_open = breakers.is_open(job_id, now_millis);
+            let circuit_breaker_open_until = circuit_breaker_open
+                .then(|| breakers.open_until_millis(job_id))
+                .flatten()
+                .and_then(chrono::DateTime::from_timestamp_millis)
+                .map(|value| value.to_rfc3339());
+            drop(breakers);
 
             Ok(Some(JobInfo {
                 id: job_id.to_string(),
@@ -236,6 +270,8 @@ impl SchedulerHandle {
                 last_run,
                 next_run_at,
                 policy: job.execution_policy().into(),
+                circuit_breaker_open,
+                circuit_breaker_open_until,
             }))
         } else {
             Ok(None)

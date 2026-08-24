@@ -366,6 +366,16 @@ lazy_static! {
         &["resource_class"]
     ).expect("Failed to create background_job_queue_wait_seconds metric");
 
+    pub static ref BACKGROUND_JOB_CIRCUIT_OPEN: GaugeVec = GaugeVec::new(
+        Opts::new(format!("{PREFIX}_background_job_circuit_open"), "Whether a job circuit breaker is currently open"),
+        &["job_id"]
+    ).expect("Failed to create background_job_circuit_open metric");
+
+    pub static ref BACKGROUND_JOB_CIRCUIT_TRIPS_TOTAL: CounterVec = CounterVec::new(
+        Opts::new(format!("{PREFIX}_background_job_circuit_trips_total"), "Background job circuit breaker trips"),
+        &["job_id"]
+    ).expect("Failed to create background_job_circuit_trips_total metric");
+
     // Homelab Storage Metrics (standardized format for monitoring)
     pub static ref HOMELAB_STORAGE_BYTES: GaugeVec = GaugeVec::new(
         Opts::new("homelab_storage_bytes", "Storage usage in bytes"),
@@ -429,6 +439,8 @@ pub fn init_metrics() {
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_QUEUED.clone()));
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_ACTIVE.clone()));
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_QUEUE_WAIT_SECONDS.clone()));
+    let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_CIRCUIT_OPEN.clone()));
+    let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_CIRCUIT_TRIPS_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(HOMELAB_STORAGE_BYTES.clone()));
 
     tracing::info!("Metrics system initialized successfully");
@@ -824,6 +836,18 @@ pub(crate) fn background_job_finished(resource_class: &str) {
         .dec();
 }
 
+pub(crate) fn set_background_job_circuit_open(job_id: &str, open: bool) {
+    BACKGROUND_JOB_CIRCUIT_OPEN
+        .with_label_values(&[job_id])
+        .set(if open { 1.0 } else { 0.0 });
+}
+
+pub(crate) fn record_background_job_circuit_trip(job_id: &str) {
+    BACKGROUND_JOB_CIRCUIT_TRIPS_TOTAL
+        .with_label_values(&[job_id])
+        .inc();
+}
+
 /// Update process memory usage
 async fn update_memory_usage(filesystem_work: &FilesystemWorkPool) {
     // Get current process memory usage
@@ -1096,6 +1120,9 @@ mod tests {
         background_job_waiting("io_bound", false);
         background_job_started("io_bound", Duration::from_millis(4));
         background_job_finished("io_bound");
+        set_background_job_circuit_open("test_job", true);
+        set_background_job_circuit_open("test_job", false);
+        record_background_job_circuit_trip("test_job");
 
         let metric_names = REGISTRY
             .gather()
@@ -1116,6 +1143,8 @@ mod tests {
             "pezzottify_background_job_queued",
             "pezzottify_background_job_active",
             "pezzottify_background_job_queue_wait_seconds",
+            "pezzottify_background_job_circuit_open",
+            "pezzottify_background_job_circuit_trips_total",
         ] {
             assert!(metric_names.contains(expected), "missing metric {expected}");
         }
