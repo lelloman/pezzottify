@@ -1,6 +1,7 @@
 import axios from "axios";
 import * as oidc from "./oidc";
 import { getCsrfToken } from "./csrf";
+import { authorizationHeaderValue } from "./authorization";
 
 let isRefreshing = false;
 let failedQueue = [];
@@ -71,7 +72,7 @@ export function setupAxiosInterceptors() {
 
       const idToken = await oidc.getIdToken();
       if (idToken) {
-        config.headers.Authorization = idToken;
+        config.headers.Authorization = authorizationHeaderValue(idToken);
       }
       return config;
     },
@@ -101,7 +102,7 @@ export function setupAxiosInterceptors() {
           failedQueue.push({ resolve, reject });
         })
           .then((token) => {
-            originalRequest.headers.Authorization = token;
+            originalRequest.headers.Authorization = authorizationHeaderValue(token);
             return axios(originalRequest);
           })
           .catch((err) => {
@@ -124,7 +125,7 @@ export function setupAxiosInterceptors() {
           processQueue(null, newToken);
 
           // Retry the original request with new token
-          originalRequest.headers.Authorization = newToken;
+          originalRequest.headers.Authorization = authorizationHeaderValue(newToken);
           return axios(originalRequest);
         } else {
           // Refresh failed, clear tokens and redirect to login

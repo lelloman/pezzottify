@@ -1,4 +1,5 @@
 import { UserManager, WebStorageStateStore } from "oidc-client-ts";
+import { authorizationHeaderValue } from "./authorization";
 
 // Track in-flight refresh to coalesce concurrent requests
 let inFlightRefresh = null;
@@ -74,7 +75,10 @@ function notifyServiceWorker(idToken) {
 
   const send = (worker) => {
     if (!worker) return;
-    worker.postMessage({ type: "SET_AUTH_TOKEN", token: idToken || null });
+    worker.postMessage({
+      type: "SET_AUTH_TOKEN",
+      token: idToken ? authorizationHeaderValue(idToken) : null,
+    });
   };
 
   if (navigator.serviceWorker.controller) {

@@ -118,6 +118,14 @@ class WebSocketManagerImplTest {
         advanceUntilIdle()
 
         assertThat(webSocketManager.connectionState.value).isEqualTo(ConnectionState.Connecting)
+        verify {
+            mockOkHttpClient.newWebSocket(
+                match { request ->
+                    request.header("Authorization") == "Bearer test-token"
+                },
+                any<WebSocketListener>()
+            )
+        }
     }
 
     @Test

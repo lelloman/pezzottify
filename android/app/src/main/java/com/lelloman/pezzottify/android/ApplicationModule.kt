@@ -16,6 +16,7 @@ import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import okio.Path.Companion.toOkioPath
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.domain.auth.bearerAuthorization
 import com.lelloman.pezzottify.android.domain.config.BuildInfo
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
@@ -182,7 +183,9 @@ private class CoilAuthTokenInterceptor(
 
         val oldRequest = chain.request
         val oldHeaders = oldRequest.httpHeaders
-        val newHeaders = oldHeaders.newBuilder().add("Authorization", "$authToken").build()
+        val newHeaders = oldHeaders.newBuilder()
+            .add("Authorization", bearerAuthorization(authToken))
+            .build()
         val newRequestBuilder = chain.request.newBuilder()
             .httpHeaders(newHeaders)
         return chain.withRequest(newRequestBuilder.build()).proceed()
@@ -313,7 +316,7 @@ private class OkHttpAuthInterceptor(
 
         val requestWithAuth = if (authToken != null) {
             chain.request().newBuilder()
-                .addHeader("Authorization", authToken)
+                .addHeader("Authorization", bearerAuthorization(authToken))
                 .build()
         } else {
             chain.request()

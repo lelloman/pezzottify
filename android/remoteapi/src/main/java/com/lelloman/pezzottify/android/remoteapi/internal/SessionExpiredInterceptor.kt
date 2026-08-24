@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.remoteapi.internal
 
 import com.lelloman.pezzottify.android.domain.auth.SessionExpiredHandler
 import com.lelloman.pezzottify.android.domain.auth.TokenRefresher
+import com.lelloman.pezzottify.android.domain.auth.bearerAuthorization
 import com.lelloman.pezzottify.android.logger.Logger
 import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
@@ -78,7 +79,7 @@ internal class SessionExpiredInterceptor(
 
                     // Retry the request with the new token
                     val newRequest = request.newBuilder()
-                        .header("Authorization", refreshResult.newAuthToken)
+                        .header("Authorization", bearerAuthorization(refreshResult.newAuthToken))
                         .build()
                     return chain.proceed(newRequest)
                 }

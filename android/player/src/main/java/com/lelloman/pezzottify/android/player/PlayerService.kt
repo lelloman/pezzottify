@@ -25,6 +25,7 @@ import coil3.request.allowHardware
 import coil3.toBitmap
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.domain.auth.bearerAuthorization
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider
 import com.lelloman.pezzottify.android.domain.player.TrackMetadata
@@ -80,7 +81,7 @@ class PlaybackService : MediaSessionService() {
             .addInterceptor {
                 it.proceed(
                     it.request().newBuilder()
-                        .addHeader("Authorization", authToken)
+                        .addHeader("Authorization", bearerAuthorization(authToken))
                         .build()
                 )
             }

@@ -4,6 +4,7 @@ import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.auth.SessionExpiredHandler
 import com.lelloman.pezzottify.android.domain.auth.TokenRefresher
+import com.lelloman.pezzottify.android.domain.auth.bearerAuthorization
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.websocket.ClientMessage
 import com.lelloman.pezzottify.android.domain.websocket.ConnectedPayload
@@ -111,7 +112,7 @@ internal class WebSocketManagerImpl(
 
         val request = Request.Builder()
             .url(wsUrl)
-            .header("Authorization", authToken)
+            .header("Authorization", bearerAuthorization(authToken))
             .build()
 
         webSocket = client.newWebSocket(request, createWebSocketListener())
