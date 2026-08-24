@@ -97,6 +97,18 @@ class OidcTokenRefresherTest {
     }
 
     @Test
+    fun `returns Failed when refresh response has no new ID token`() = runTest {
+        authStateFlow.value = createLoggedInState()
+        coEvery { oidcAuthManager.refreshTokens("refresh-token") } returns
+            OidcAuthManager.RefreshResult.Success(idToken = null, refreshToken = "rotated-refresh")
+
+        val result = tokenRefresher.refreshTokens()
+
+        assertThat(result).isEqualTo(TokenRefresher.RefreshResult.Failed("No fresh ID token received"))
+        coVerify(exactly = 0) { authStore.storeAuthState(any()) }
+    }
+
+    @Test
     fun `returns RateLimited when OIDC provider rate limits`() = runTest {
         authStateFlow.value = createLoggedInState()
         coEvery { oidcAuthManager.refreshTokens("refresh-token") } returns
