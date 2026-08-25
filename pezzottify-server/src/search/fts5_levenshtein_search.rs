@@ -14,7 +14,8 @@
 
 use super::levenshtein::Vocabulary;
 use super::{
-    HashedItemType, ImpressionSource, IndexState, SearchIndexItem, SearchResult, SearchVault,
+    CandidateCoordinator, CandidateDelivery, HashedItemType, ImpressionSource, IndexState,
+    ProviderEvidence, RankedCandidate, SearchIndexItem, SearchResult, SearchVault,
     SearchVaultStats,
 };
 use crate::catalog_store::{CatalogStore, SearchableContentType};
@@ -25,15 +26,13 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
 use tracing::{debug, error, info, warn};
 
+const SEARCH_INDEX_SCHEMA_VERSION: i64 = 2;
+const ACTIVE_INDEX: &str = "search_index";
+const BUILD_INDEX: &str = "search_index_building";
+const PREVIOUS_INDEX: &str = "search_index_previous";
+
 /// Batch size for progressive indexing (items per batch)
 const INDEX_BATCH_SIZE: usize = 50_000;
-
-/// Sub-batch size for upsert/remove operations (items per chunk)
-/// Smaller chunks allow concurrent writes to proceed between chunks
-const UPSERT_SUB_BATCH_SIZE: usize = 10;
-
-/// Sleep duration between sub-batches to yield to concurrent writers
-const UPSERT_SUB_BATCH_YIELD_MS: u64 = 10;
 
 const IMPRESSION_USER_DAILY_BUDGET: i64 = 500;
 const IMPRESSION_DEVICE_DAILY_BUDGET: i64 = 200;
@@ -110,6 +109,8 @@ impl Fts5LevenshteinSearchVault {
             .map(|v| v == "true")
             .unwrap_or(false);
         let index_count = Self::get_index_item_count(&write_conn).unwrap_or(0);
+        let active_schema_version = Self::get_metadata(&write_conn, "active_search_schema_version")
+            .and_then(|value| value.parse::<i64>().ok());
 
         let (vocabulary, state) = if build_in_progress {
             // Partial build detected - load what we have and prepare to resume
@@ -137,13 +138,27 @@ impl Fts5LevenshteinSearchVault {
                     total: build_total,
                 },
             )
-        } else if index_count > 0 {
-            info!("Loading existing search index with {} items", index_count);
+        } else if index_count > 0
+            && active_schema_version == Some(SEARCH_INDEX_SCHEMA_VERSION)
+            && Self::is_enriched_index(&write_conn, ACTIVE_INDEX)?
+        {
+            info!(
+                schema_version = SEARCH_INDEX_SCHEMA_VERSION,
+                "Loading existing search index with {} items", index_count
+            );
             let vocab = Self::load_vocabulary_from_index(&write_conn)?;
             (vocab, IndexState::Ready)
         } else {
-            info!("Search index is empty, waiting for background build");
-            (Vocabulary::new(), IndexState::Empty)
+            if index_count > 0 {
+                info!(active_schema_version = ?active_schema_version, "Serving legacy search index while waiting for enriched background build");
+                (
+                    Self::load_vocabulary_from_index(&write_conn)?,
+                    IndexState::Empty,
+                )
+            } else {
+                info!("Search index is empty, waiting for background build");
+                (Vocabulary::new(), IndexState::Empty)
+            }
         };
 
         Ok(Self {
@@ -267,7 +282,16 @@ impl Fts5LevenshteinSearchVault {
         catalog_store: Arc<dyn CatalogStore>,
         resume_offset: Option<usize>,
     ) -> Result<()> {
-        let start_offset = resume_offset.unwrap_or(0);
+        let mut start_offset = resume_offset.unwrap_or(0);
+        if start_offset > 0 {
+            let conn = self.write_conn.lock().unwrap();
+            if !Self::table_exists(&conn, BUILD_INDEX)?
+                || !Self::is_enriched_index(&conn, BUILD_INDEX)?
+            {
+                warn!(start_offset, "Interrupted legacy build has no enriched side table; restarting migration build");
+                start_offset = 0;
+            }
+        }
         if start_offset > 0 {
             info!(
                 "Resuming progressive index build from offset {}...",
@@ -298,30 +322,38 @@ impl Fts5LevenshteinSearchVault {
             Self::set_metadata(&conn, "build_in_progress", "true")?;
             Self::set_metadata(&conn, "build_total", &total.to_string())?;
 
-            // Only clear index if starting fresh
+            // Build beside the active table so legacy/enriched queries continue
+            // to be served until validation and activation complete.
             if start_offset == 0 {
-                conn.execute("DELETE FROM search_index", [])?;
+                conn.execute_batch(&format!("DROP TABLE IF EXISTS {BUILD_INDEX};"))?;
+                Self::create_enriched_index(&conn, BUILD_INDEX)?;
+                conn.execute("DELETE FROM search_index_mutations", [])?;
                 Self::set_metadata(&conn, "build_offset", "0")?;
+                Self::set_metadata(
+                    &conn,
+                    "building_search_schema_version",
+                    &SEARCH_INDEX_SCHEMA_VERSION.to_string(),
+                )?;
             }
         }
 
         // Load existing vocabulary if resuming
-        let mut vocabulary = if start_offset > 0 {
-            let conn = self.write_conn.lock().unwrap();
-            Self::load_vocabulary_from_index(&conn)?
-        } else {
-            Vocabulary::new()
-        };
+        let mut vocabulary = Vocabulary::new();
+        for item in searchable.iter().take(start_offset) {
+            let (primary, artist, album, extra) = Self::document_parts(item);
+            vocabulary.add_text(&format!("{primary} {artist} {album} {extra}"));
+        }
 
         let mut processed = start_offset;
 
         // Skip already-indexed items and process remaining in batches
-        let remaining_items: Vec<_> = searchable.into_iter().skip(start_offset).collect();
+        let remaining_items: Vec<_> = searchable.iter().skip(start_offset).cloned().collect();
 
         for batch in remaining_items.chunks(INDEX_BATCH_SIZE) {
             // Build vocabulary for this batch
             for item in batch {
-                vocabulary.add_text(&item.name);
+                let (primary, artist, album, extra) = Self::document_parts(item);
+                vocabulary.add_text(&format!("{primary} {artist} {album} {extra}"));
             }
 
             // Insert batch into index
@@ -330,7 +362,9 @@ impl Fts5LevenshteinSearchVault {
                 conn.execute("BEGIN IMMEDIATE", [])?;
 
                 let mut stmt = conn.prepare(
-                    "INSERT INTO search_index (item_id, item_type, name) VALUES (?, ?, ?)",
+                    "INSERT INTO search_index_building
+                     (item_id, item_type, display_name, primary_name, artist_text, album_text, extra_text)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)",
                 )?;
                 let mut avail_stmt = conn.prepare(
                     "INSERT OR REPLACE INTO item_availability (item_id, item_type, is_available) VALUES (?, ?, ?)",
@@ -342,7 +376,7 @@ impl Fts5LevenshteinSearchVault {
                         SearchableContentType::Album => "album",
                         SearchableContentType::Track => "track",
                     };
-                    stmt.execute([&item.id, type_str, &item.name])?;
+                    Self::insert_searchable_item(&mut stmt, item)?;
                     avail_stmt.execute(rusqlite::params![
                         &item.id,
                         type_str,
@@ -362,12 +396,6 @@ impl Fts5LevenshteinSearchVault {
 
             processed += batch.len();
 
-            // Update vocabulary (make searchable with current progress)
-            {
-                let mut vocab_lock = self.vocabulary.write().unwrap();
-                *vocab_lock = vocabulary.clone();
-            }
-
             // Update state
             {
                 let mut state = self.state.write().unwrap();
@@ -385,14 +413,14 @@ impl Fts5LevenshteinSearchVault {
             );
         }
 
-        // Build complete - clear progress metadata and store catalog version
+        // Validate and atomically activate. Active queries keep using the old
+        // table until this transaction commits.
         {
             let conn = self.write_conn.lock().unwrap();
-            Self::set_stored_catalog_version(&conn, 0)?;
-            Self::delete_metadata(&conn, "build_in_progress")?;
-            Self::delete_metadata(&conn, "build_offset")?;
-            Self::delete_metadata(&conn, "build_total")?;
+            Self::activate_built_index(&conn, &searchable)?;
         }
+
+        *self.vocabulary.write().unwrap() = vocabulary.clone();
 
         // Mark as ready
         {
@@ -401,7 +429,8 @@ impl Fts5LevenshteinSearchVault {
         }
 
         info!(
-            "Index build complete: {} items, vocabulary has {} words",
+            schema_version = SEARCH_INDEX_SCHEMA_VERSION,
+            "Index build complete and activated: {} items, vocabulary has {} words",
             total,
             vocabulary.len()
         );
@@ -412,55 +441,26 @@ impl Fts5LevenshteinSearchVault {
     /// Check if the search index needs to be rebuilt.
     fn check_needs_rebuild(
         conn: &Connection,
-        current_catalog_version: i64,
-        expected_item_count: usize,
+        _current_catalog_version: i64,
+        _expected_item_count: usize,
     ) -> bool {
-        let stored_version = Self::get_stored_catalog_version(conn);
-        let index_item_count = Self::get_index_item_count(conn);
-
-        match (stored_version, index_item_count) {
-            (Some(v), Some(count)) if v == current_catalog_version => {
-                if count != expected_item_count {
-                    info!(
-                        "Search index item count mismatch (index: {}, catalog: {}), rebuilding",
-                        count, expected_item_count
-                    );
-                    true
-                } else {
-                    debug!(
-                        "Search index is up to date (version {}, {} items)",
-                        current_catalog_version, count
-                    );
-                    false
-                }
-            }
-            (Some(v), _) => {
-                info!(
-                    "Catalog version changed ({} -> {}), rebuilding search index",
-                    v, current_catalog_version
-                );
-                true
-            }
-            (None, _) => {
-                info!("No stored catalog version, building search index");
-                true
-            }
+        let schema_version = Self::get_metadata(conn, "active_search_schema_version")
+            .and_then(|value| value.parse::<i64>().ok());
+        let structurally_enriched = Self::is_enriched_index(conn, ACTIVE_INDEX).unwrap_or(false);
+        let needs_rebuild =
+            schema_version != Some(SEARCH_INDEX_SCHEMA_VERSION) || !structurally_enriched;
+        if needs_rebuild {
+            info!(
+                active_schema_version = ?schema_version,
+                target_schema_version = SEARCH_INDEX_SCHEMA_VERSION,
+                "Search index schema migration required"
+            );
         }
+        needs_rebuild
     }
 
     /// Create all required tables
     fn create_tables(conn: &Connection) -> Result<()> {
-        conn.execute_batch(
-            r#"
-            CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(
-                item_id UNINDEXED,
-                item_type UNINDEXED,
-                name,
-                tokenize='trigram'
-            );
-        "#,
-        )?;
-
         conn.execute_batch(
             r#"
             CREATE TABLE IF NOT EXISTS item_popularity (
@@ -512,6 +512,18 @@ impl Fts5LevenshteinSearchVault {
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS search_index_mutations (
+                sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                operation TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                item_type TEXT NOT NULL,
+                display_name TEXT,
+                primary_name TEXT,
+                artist_text TEXT,
+                album_text TEXT,
+                extra_text TEXT
+            );
         "#,
         )?;
 
@@ -529,21 +541,108 @@ impl Fts5LevenshteinSearchVault {
         "#,
         )?;
 
+        if !Self::table_exists(conn, ACTIVE_INDEX)? {
+            Self::create_enriched_index(conn, ACTIVE_INDEX)?;
+            info!(
+                schema_version = SEARCH_INDEX_SCHEMA_VERSION,
+                "Created empty enriched search index"
+            );
+        }
+
+        Self::maintain_previous_index(conn)?;
+
         Ok(())
     }
 
-    /// Get the stored catalog version from metadata
-    fn get_stored_catalog_version(conn: &Connection) -> Option<i64> {
-        conn.query_row(
-            "SELECT value FROM search_metadata WHERE key = 'catalog_version'",
-            [],
-            |row| {
-                let value: String = row.get(0)?;
-                Ok(value.parse::<i64>().ok())
-            },
-        )
-        .ok()
-        .flatten()
+    fn maintain_previous_index(conn: &Connection) -> Result<()> {
+        if !Self::table_exists(conn, PREVIOUS_INDEX)? {
+            return Ok(());
+        }
+
+        // A structurally unhealthy new index is rolled back before it can be
+        // advertised as healthy on restart.
+        let active_is_healthy = Self::is_enriched_index(conn, ACTIVE_INDEX)?
+            && conn
+                .execute(
+                    &format!("INSERT INTO {ACTIVE_INDEX}({ACTIVE_INDEX}, rank) VALUES('integrity-check', 1)"),
+                    [],
+                )
+                .is_ok();
+        if !active_is_healthy {
+            warn!("Active search index failed restart validation; rolling back to previous table");
+            conn.execute("BEGIN IMMEDIATE", [])?;
+            let rollback_result = (|| -> Result<()> {
+                conn.execute_batch(&format!(
+                    "DROP TABLE IF EXISTS search_index_failed;
+                     ALTER TABLE {ACTIVE_INDEX} RENAME TO search_index_failed;
+                     ALTER TABLE {PREVIOUS_INDEX} RENAME TO {ACTIVE_INDEX};"
+                ))?;
+                Self::delete_metadata(conn, "active_search_schema_version")?;
+                Self::delete_metadata(conn, "previous_index_retained")?;
+                Ok(())
+            })();
+            return match rollback_result {
+                Ok(()) => {
+                    conn.execute("COMMIT", [])?;
+                    Ok(())
+                }
+                Err(error) => {
+                    let _ = conn.execute("ROLLBACK", []);
+                    Err(error)
+                }
+            };
+        }
+
+        match Self::get_metadata(conn, "previous_index_retained").as_deref() {
+            Some("pending_restart") => {
+                Self::set_metadata(conn, "previous_index_retained", "healthy_restart")?;
+                info!("Previous search index retained through healthy restart");
+            }
+            Some("healthy_restart") => {
+                conn.execute_batch(&format!("DROP TABLE {PREVIOUS_INDEX};"))?;
+                Self::delete_metadata(conn, "previous_index_retained")?;
+                info!("Removed previous search index after healthy restart");
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn table_exists(conn: &Connection, table: &str) -> Result<bool> {
+        Ok(conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
+            [table],
+            |row| row.get(0),
+        )?)
+    }
+
+    fn is_enriched_index(conn: &Connection, table: &str) -> Result<bool> {
+        if !Self::table_exists(conn, table)? {
+            return Ok(false);
+        }
+        let sql: String = conn.query_row(
+            "SELECT sql FROM sqlite_master WHERE name = ?1",
+            [table],
+            |row| row.get(0),
+        )?;
+        Ok(sql.contains("primary_name") && sql.contains("artist_text"))
+    }
+
+    fn create_enriched_index(conn: &Connection, table: &str) -> Result<()> {
+        // Table names are constants controlled by this module, never user input.
+        conn.execute_batch(&format!(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS {table} USING fts5(
+                item_id UNINDEXED,
+                item_type UNINDEXED,
+                display_name UNINDEXED,
+                primary_name,
+                artist_text,
+                album_text,
+                extra_text,
+                tokenize='unicode61 remove_diacritics 2'
+            );"
+        ))?;
+        Ok(())
     }
 
     /// Get a metadata value by key
@@ -592,7 +691,12 @@ impl Fts5LevenshteinSearchVault {
     /// Load vocabulary from existing index (without rebuilding)
     fn load_vocabulary_from_index(conn: &Connection) -> Result<Vocabulary> {
         let mut vocabulary = Vocabulary::new();
-        let mut stmt = conn.prepare("SELECT name FROM search_index")?;
+        let text_column = if Self::is_enriched_index(conn, ACTIVE_INDEX)? {
+            "primary_name || ' ' || artist_text || ' ' || album_text || ' ' || extra_text"
+        } else {
+            "name"
+        };
+        let mut stmt = conn.prepare(&format!("SELECT {text_column} FROM {ACTIVE_INDEX}"))?;
         let rows = stmt.query_map([], |row| {
             let name: String = row.get(0)?;
             Ok(name)
@@ -609,6 +713,101 @@ impl Fts5LevenshteinSearchVault {
         Ok(vocabulary)
     }
 
+    fn normalize_text(text: &str) -> String {
+        fn fold(character: char) -> char {
+            match character {
+                'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' | 'ā' | 'ă' | 'ą' => 'a',
+                'ç' | 'ć' | 'ĉ' | 'ċ' | 'č' => 'c',
+                'ď' | 'đ' => 'd',
+                'è' | 'é' | 'ê' | 'ë' | 'ē' | 'ĕ' | 'ė' | 'ę' | 'ě' => 'e',
+                'ĝ' | 'ğ' | 'ġ' | 'ģ' => 'g',
+                'ĥ' | 'ħ' => 'h',
+                'ì' | 'í' | 'î' | 'ï' | 'ĩ' | 'ī' | 'ĭ' | 'į' | 'ı' => 'i',
+                'ĵ' => 'j',
+                'ķ' => 'k',
+                'ĺ' | 'ļ' | 'ľ' | 'ŀ' | 'ł' => 'l',
+                'ñ' | 'ń' | 'ņ' | 'ň' => 'n',
+                'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø' | 'ō' | 'ŏ' | 'ő' => 'o',
+                'ŕ' | 'ŗ' | 'ř' => 'r',
+                'ś' | 'ŝ' | 'ş' | 'š' => 's',
+                'ţ' | 'ť' | 'ŧ' => 't',
+                'ù' | 'ú' | 'û' | 'ü' | 'ũ' | 'ū' | 'ŭ' | 'ů' | 'ű' | 'ų' => 'u',
+                'ŵ' => 'w',
+                'ý' | 'ÿ' | 'ŷ' => 'y',
+                'ź' | 'ż' | 'ž' => 'z',
+                _ => character,
+            }
+        }
+
+        let mut normalized = String::with_capacity(text.len());
+        let mut last_was_space = true;
+        for character in text.to_lowercase().chars().map(fold) {
+            if character.is_alphanumeric() {
+                normalized.push(character);
+                last_was_space = false;
+            } else if !last_was_space {
+                normalized.push(' ');
+                last_was_space = true;
+            }
+        }
+        if normalized.ends_with(' ') {
+            normalized.pop();
+        }
+        normalized
+    }
+
+    fn document_parts(
+        item: &crate::catalog_store::SearchableItem,
+    ) -> (String, String, String, String) {
+        Self::metadata_document_parts(&item.name, &item.additional_text)
+    }
+
+    fn index_item_document_parts(item: &SearchIndexItem) -> (String, String, String, String) {
+        Self::metadata_document_parts(&item.name, &item.additional_text)
+    }
+
+    fn metadata_document_parts(
+        name: &str,
+        additional_text: &[String],
+    ) -> (String, String, String, String) {
+        let mut artists = Vec::new();
+        let mut albums = Vec::new();
+        let mut extras = Vec::new();
+        for value in additional_text {
+            if let Some(value) = value.strip_prefix("artist:") {
+                artists.push(value);
+            } else if let Some(value) = value.strip_prefix("album:") {
+                albums.push(value);
+            } else if let Some(value) = value.strip_prefix("extra:") {
+                extras.push(value);
+            } else {
+                extras.push(value);
+            }
+        }
+        (
+            Self::normalize_text(name),
+            Self::normalize_text(&artists.join(" ")),
+            Self::normalize_text(&albums.join(" ")),
+            Self::normalize_text(&extras.join(" ")),
+        )
+    }
+
+    fn insert_searchable_item(
+        stmt: &mut rusqlite::Statement<'_>,
+        item: &crate::catalog_store::SearchableItem,
+    ) -> Result<()> {
+        let type_str = match item.content_type {
+            SearchableContentType::Artist => "artist",
+            SearchableContentType::Album => "album",
+            SearchableContentType::Track => "track",
+        };
+        let (primary, artist, album, extra) = Self::document_parts(item);
+        stmt.execute(rusqlite::params![
+            &item.id, type_str, &item.name, primary, artist, album, extra
+        ])?;
+        Ok(())
+    }
+
     /// Internal rebuild that works with a connection reference (blocking).
     fn rebuild_index_internal(
         conn: &Connection,
@@ -619,29 +818,31 @@ impl Fts5LevenshteinSearchVault {
         let count = searchable.len();
 
         let mut vocabulary = Vocabulary::new();
-        for item in &searchable {
-            vocabulary.add_text(&item.name);
-        }
+        conn.execute_batch(&format!("DROP TABLE IF EXISTS {BUILD_INDEX};"))?;
+        Self::create_enriched_index(conn, BUILD_INDEX)?;
+        conn.execute("DELETE FROM search_index_mutations", [])?;
 
         conn.execute("BEGIN IMMEDIATE", [])?;
-
         let result = (|| -> Result<()> {
-            conn.execute("DELETE FROM search_index", [])?;
             conn.execute("DELETE FROM item_availability", [])?;
-
-            let mut stmt = conn
-                .prepare("INSERT INTO search_index (item_id, item_type, name) VALUES (?, ?, ?)")?;
+            let mut stmt = conn.prepare(
+                "INSERT INTO search_index_building
+                 (item_id, item_type, display_name, primary_name, artist_text, album_text, extra_text)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)",
+            )?;
             let mut avail_stmt = conn.prepare(
                 "INSERT OR REPLACE INTO item_availability (item_id, item_type, is_available) VALUES (?, ?, ?)",
             )?;
 
             for item in &searchable {
+                let (primary, artist, album, extra) = Self::document_parts(item);
+                vocabulary.add_text(&format!("{primary} {artist} {album} {extra}"));
                 let type_str = match item.content_type {
                     SearchableContentType::Artist => "artist",
                     SearchableContentType::Album => "album",
                     SearchableContentType::Track => "track",
                 };
-                stmt.execute([&item.id, type_str, &item.name])?;
+                Self::insert_searchable_item(&mut stmt, item)?;
                 avail_stmt.execute(rusqlite::params![
                     &item.id,
                     type_str,
@@ -649,15 +850,16 @@ impl Fts5LevenshteinSearchVault {
                 ])?;
             }
 
-            Self::set_stored_catalog_version(conn, catalog_version)?;
-
             Ok(())
         })();
 
         match result {
             Ok(()) => {
                 conn.execute("COMMIT", [])?;
+                Self::activate_built_index(conn, &searchable)?;
+                Self::set_stored_catalog_version(conn, catalog_version)?;
                 info!(
+                    schema_version = SEARCH_INDEX_SCHEMA_VERSION,
                     "Search index built with {} items, vocabulary has {} words",
                     count,
                     vocabulary.len()
@@ -669,6 +871,125 @@ impl Fts5LevenshteinSearchVault {
                     warn!("Failed to rollback transaction: {}", rollback_err);
                 }
                 Err(e)
+            }
+        }
+    }
+
+    fn activate_built_index(
+        conn: &Connection,
+        expected: &[crate::catalog_store::SearchableItem],
+    ) -> Result<()> {
+        let expected_counts = [
+            (
+                "artist",
+                expected
+                    .iter()
+                    .filter(|item| item.content_type == SearchableContentType::Artist)
+                    .count(),
+            ),
+            (
+                "album",
+                expected
+                    .iter()
+                    .filter(|item| item.content_type == SearchableContentType::Album)
+                    .count(),
+            ),
+            (
+                "track",
+                expected
+                    .iter()
+                    .filter(|item| item.content_type == SearchableContentType::Track)
+                    .count(),
+            ),
+        ];
+        for (item_type, expected_count) in expected_counts {
+            let actual: usize = conn.query_row(
+                &format!("SELECT COUNT(*) FROM {BUILD_INDEX} WHERE item_type = ?1"),
+                [item_type],
+                |row| row.get(0),
+            )?;
+            if actual != expected_count {
+                warn!(
+                    item_type,
+                    expected_count, actual, "Search index validation failed"
+                );
+                anyhow::bail!("search index {item_type} count mismatch: expected {expected_count}, got {actual}");
+            }
+        }
+        conn.execute(
+            &format!("INSERT INTO {BUILD_INDEX}({BUILD_INDEX}, rank) VALUES('integrity-check', 1)"),
+            [],
+        )?;
+
+        conn.execute("BEGIN IMMEDIATE", [])?;
+        let result = (|| -> Result<()> {
+            // Replay writes captured after the build snapshot was read.
+            let mut mutations = conn.prepare(
+                "SELECT operation, item_id, item_type, display_name, primary_name,
+                        artist_text, album_text, extra_text
+                 FROM search_index_mutations ORDER BY sequence",
+            )?;
+            let rows = mutations.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<String>>(6)?,
+                    row.get::<_, Option<String>>(7)?,
+                ))
+            })?;
+            for row in rows {
+                let (operation, id, item_type, display, primary, artist, album, extra) = row?;
+                conn.execute(
+                    &format!("DELETE FROM {BUILD_INDEX} WHERE item_id = ?1 AND item_type = ?2"),
+                    rusqlite::params![id, item_type],
+                )?;
+                if operation == "upsert" {
+                    conn.execute(
+                        &format!("INSERT INTO {BUILD_INDEX}
+                          (item_id,item_type,display_name,primary_name,artist_text,album_text,extra_text)
+                          VALUES(?1,?2,?3,?4,?5,?6,?7)"),
+                        rusqlite::params![id, item_type, display, primary, artist, album, extra],
+                    )?;
+                }
+            }
+            drop(mutations);
+
+            if Self::table_exists(conn, PREVIOUS_INDEX)? {
+                conn.execute_batch(&format!("DROP TABLE {PREVIOUS_INDEX};"))?;
+            }
+            conn.execute_batch(&format!(
+                "ALTER TABLE {ACTIVE_INDEX} RENAME TO {PREVIOUS_INDEX};
+                 ALTER TABLE {BUILD_INDEX} RENAME TO {ACTIVE_INDEX};"
+            ))?;
+            Self::set_metadata(
+                conn,
+                "active_search_schema_version",
+                &SEARCH_INDEX_SCHEMA_VERSION.to_string(),
+            )?;
+            Self::set_metadata(conn, "previous_index_retained", "pending_restart")?;
+            Self::delete_metadata(conn, "building_search_schema_version")?;
+            Self::delete_metadata(conn, "build_in_progress")?;
+            Self::delete_metadata(conn, "build_offset")?;
+            Self::delete_metadata(conn, "build_total")?;
+            conn.execute("DELETE FROM search_index_mutations", [])?;
+            Ok(())
+        })();
+        match result {
+            Ok(()) => {
+                conn.execute("COMMIT", [])?;
+                info!(
+                    schema_version = SEARCH_INDEX_SCHEMA_VERSION,
+                    "Search index swap complete"
+                );
+                Ok(())
+            }
+            Err(error) => {
+                let _ = conn.execute("ROLLBACK", []);
+                Err(error)
             }
         }
     }
@@ -725,32 +1046,35 @@ impl Fts5LevenshteinSearchVault {
         }
 
         let conn = self.write_conn.lock().unwrap();
-
         conn.execute("BEGIN IMMEDIATE", [])?;
-
-        let chunk_size = UPSERT_SUB_BATCH_SIZE;
-        let total_chunks = items.len().div_ceil(chunk_size);
-        let mut delete_stmt =
-            conn.prepare("DELETE FROM search_index WHERE item_id = ? AND item_type = ?")?;
-        let mut insert_stmt =
-            conn.prepare("INSERT INTO search_index (item_id, item_type, name) VALUES (?, ?, ?)")?;
-
         let result = (|| -> Result<()> {
-            for (chunk_idx, chunk) in items.chunks(chunk_size).enumerate() {
-                for item in chunk {
-                    let type_str = Self::item_type_to_str(&item.item_type);
-                    delete_stmt.execute([&item.id, type_str])?;
-                    insert_stmt.execute([&item.id, type_str, &item.name])?;
+            let enriched = Self::is_enriched_index(&conn, ACTIVE_INDEX)?;
+            for item in items {
+                let type_str = Self::item_type_to_str(&item.item_type);
+                conn.execute(
+                    "DELETE FROM search_index WHERE item_id = ?1 AND item_type = ?2",
+                    rusqlite::params![item.id, type_str],
+                )?;
+                let (primary, artist, album, extra) = Self::index_item_document_parts(item);
+                if enriched {
+                    conn.execute(
+                        "INSERT INTO search_index
+                         (item_id,item_type,display_name,primary_name,artist_text,album_text,extra_text)
+                         VALUES(?1,?2,?3,?4,?5,?6,?7)",
+                        rusqlite::params![item.id, type_str, item.name, primary, artist, album, extra],
+                    )?;
+                } else {
+                    conn.execute(
+                        "INSERT INTO search_index(item_id,item_type,name) VALUES(?1,?2,?3)",
+                        rusqlite::params![item.id, type_str, item.name],
+                    )?;
                 }
-
-                if chunk_idx < total_chunks - 1 {
-                    drop(delete_stmt);
-                    drop(insert_stmt);
-                    std::thread::sleep(std::time::Duration::from_millis(UPSERT_SUB_BATCH_YIELD_MS));
-                    delete_stmt = conn
-                        .prepare("DELETE FROM search_index WHERE item_id = ? AND item_type = ?")?;
-                    insert_stmt = conn.prepare(
-                        "INSERT INTO search_index (item_id, item_type, name) VALUES (?, ?, ?)",
+                if Self::get_metadata(&conn, "build_in_progress").as_deref() == Some("true") {
+                    conn.execute(
+                        "INSERT INTO search_index_mutations
+                         (operation,item_id,item_type,display_name,primary_name,artist_text,album_text,extra_text)
+                         VALUES('upsert',?1,?2,?3,?4,?5,?6,?7)",
+                        rusqlite::params![item.id, type_str, item.name, primary, artist, album, extra],
                     )?;
                 }
             }
@@ -783,26 +1107,20 @@ impl Fts5LevenshteinSearchVault {
         }
 
         let conn = self.write_conn.lock().unwrap();
-        let mut stmt =
-            conn.prepare("DELETE FROM search_index WHERE item_id = ? AND item_type = ?")?;
-
         conn.execute("BEGIN IMMEDIATE", [])?;
-
-        let chunk_size = UPSERT_SUB_BATCH_SIZE;
-        let total_chunks = items.len().div_ceil(chunk_size);
-
         let result = (|| -> Result<()> {
-            for (chunk_idx, chunk) in items.chunks(chunk_size).enumerate() {
-                for (id, item_type) in chunk {
-                    let type_str = Self::item_type_to_str(item_type);
-                    stmt.execute([id.as_str(), type_str])?;
-                }
-
-                if chunk_idx < total_chunks - 1 {
-                    drop(stmt);
-                    std::thread::sleep(std::time::Duration::from_millis(UPSERT_SUB_BATCH_YIELD_MS));
-                    stmt = conn
-                        .prepare("DELETE FROM search_index WHERE item_id = ? AND item_type = ?")?;
+            for (id, item_type) in items {
+                let type_str = Self::item_type_to_str(item_type);
+                conn.execute(
+                    "DELETE FROM search_index WHERE item_id = ?1 AND item_type = ?2",
+                    rusqlite::params![id, type_str],
+                )?;
+                if Self::get_metadata(&conn, "build_in_progress").as_deref() == Some("true") {
+                    conn.execute(
+                        "INSERT INTO search_index_mutations(operation,item_id,item_type)
+                         VALUES('remove',?1,?2)",
+                        rusqlite::params![id, type_str],
+                    )?;
                 }
             }
             Ok(())
@@ -1099,6 +1417,15 @@ impl Fts5LevenshteinSearchVault {
         filter: Option<Vec<HashedItemType>>,
         available_only: bool,
     ) -> Vec<SearchResult> {
+        let enriched = self
+            .read_conn
+            .lock()
+            .ok()
+            .and_then(|conn| Self::is_enriched_index(&conn, ACTIVE_INDEX).ok())
+            .unwrap_or(false);
+        if enriched {
+            return self.search_enriched(query, max_results, filter, available_only);
+        }
         if !available_only {
             // Fall back to regular search
             return SearchVault::search(self, query, max_results, filter);
@@ -1217,9 +1544,224 @@ impl Fts5LevenshteinSearchVault {
             }
         }
     }
+
+    fn query_enriched_channel(
+        &self,
+        conn: &Connection,
+        match_expression: &str,
+        max_results: usize,
+        filter: &Option<Vec<HashedItemType>>,
+        available_only: bool,
+    ) -> Vec<RankedCandidate> {
+        let availability_join = if available_only {
+            "INNER JOIN item_availability a ON s.item_id = a.item_id AND s.item_type = a.item_type AND a.is_available = 1"
+        } else {
+            ""
+        };
+        let (type_clause, type_values) = if let Some(types) = filter {
+            if types.is_empty() {
+                return Vec::new();
+            }
+            (
+                format!(
+                    " AND s.item_type IN ({})",
+                    std::iter::repeat_n("?", types.len())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                ),
+                types.iter().map(Self::item_type_to_str).collect::<Vec<_>>(),
+            )
+        } else {
+            (String::new(), Vec::new())
+        };
+        let sql = format!(
+            "SELECT s.item_id, s.item_type, s.display_name,
+                    COALESCE(p.score, 0.0),
+                    bm25(search_index, 0.0, 0.0, 0.0, 10.0, 6.0, 3.0, 1.0) AS text_score
+             FROM search_index s
+             {availability_join}
+             LEFT JOIN item_popularity p
+               ON s.item_id = p.item_id AND s.item_type = p.item_type
+             WHERE search_index MATCH ?{type_clause}
+             ORDER BY text_score, s.item_type, s.item_id
+             LIMIT ?"
+        );
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> =
+            vec![Box::new(match_expression.to_string())];
+        for item_type in type_values {
+            params.push(Box::new(item_type.to_string()));
+        }
+        params.push(Box::new(max_results as i64));
+        let refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|value| value.as_ref()).collect();
+        let mut stmt = match conn.prepare(&sql) {
+            Ok(stmt) => stmt,
+            Err(error) => {
+                warn!(%error, "Enriched search channel preparation failed");
+                return Vec::new();
+            }
+        };
+        let rows = match stmt.query_map(refs.as_slice(), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, f64>(3)?,
+            ))
+        }) {
+            Ok(rows) => rows,
+            Err(error) => {
+                warn!(%error, expression = match_expression, "Enriched search channel failed");
+                return Vec::new();
+            }
+        };
+        rows.filter_map(Result::ok)
+            .filter_map(|(item_id, item_type, display_name, popularity)| {
+                Some(RankedCandidate {
+                    item_id,
+                    item_type: Self::str_to_item_type(&item_type)?,
+                    evidence: 1.0,
+                    matchable_text: display_name,
+                    popularity,
+                })
+            })
+            .collect()
+    }
+
+    fn quoted_phrase(query: &str) -> Option<&str> {
+        let trimmed = query.trim();
+        (trimmed.len() >= 2 && trimmed.starts_with('"') && trimmed.ends_with('"'))
+            .then(|| &trimmed[1..trimmed.len() - 1])
+    }
+
+    fn fts_phrase(text: &str) -> String {
+        format!("\"{}\"", text.replace('"', "\"\""))
+    }
+
+    fn search_enriched(
+        &self,
+        query: &str,
+        max_results: usize,
+        filter: Option<Vec<HashedItemType>>,
+        available_only: bool,
+    ) -> Vec<SearchResult> {
+        if max_results == 0 {
+            return Vec::new();
+        }
+        let explicit_phrase = Self::quoted_phrase(query);
+        let normalized = Self::normalize_text(explicit_phrase.unwrap_or(query));
+        if normalized.is_empty() {
+            return Vec::new();
+        }
+        let tokens: Vec<_> = normalized.split_whitespace().collect();
+        let candidate_limit = max_results.saturating_mul(4).clamp(max_results, 400);
+        let conn = self.read_conn.lock().unwrap();
+        let mut channels = Vec::new();
+
+        if explicit_phrase.is_some() {
+            channels.push(ProviderEvidence {
+                provider_id: "lexical.phrase".into(),
+                delivery: CandidateDelivery::Immediate,
+                weight: 4.0,
+                candidates: self.query_enriched_channel(
+                    &conn,
+                    &Self::fts_phrase(&normalized),
+                    candidate_limit,
+                    &filter,
+                    available_only,
+                ),
+            });
+        } else {
+            channels.push(ProviderEvidence {
+                provider_id: "lexical.primary_phrase".into(),
+                delivery: CandidateDelivery::Immediate,
+                weight: 4.0,
+                candidates: self.query_enriched_channel(
+                    &conn,
+                    &format!("primary_name : {}", Self::fts_phrase(&normalized)),
+                    candidate_limit,
+                    &filter,
+                    available_only,
+                ),
+            });
+            channels.push(ProviderEvidence {
+                provider_id: "lexical.all_tokens".into(),
+                delivery: CandidateDelivery::Immediate,
+                weight: 2.0,
+                candidates: self.query_enriched_channel(
+                    &conn,
+                    &tokens
+                        .iter()
+                        .map(|token| Self::fts_phrase(token))
+                        .collect::<Vec<_>>()
+                        .join(" AND "),
+                    candidate_limit,
+                    &filter,
+                    available_only,
+                ),
+            });
+            channels.push(ProviderEvidence {
+                provider_id: "lexical.any_token".into(),
+                delivery: CandidateDelivery::Immediate,
+                weight: 1.0,
+                candidates: self.query_enriched_channel(
+                    &conn,
+                    &tokens
+                        .iter()
+                        .map(|token| Self::fts_phrase(token))
+                        .collect::<Vec<_>>()
+                        .join(" OR "),
+                    candidate_limit,
+                    &filter,
+                    available_only,
+                ),
+            });
+
+            let corrected = Self::normalize_text(&self.correct_query(&normalized));
+            let typo_expression = self
+                .expanded_query_variants(&normalized)
+                .into_iter()
+                .map(|variant| Self::normalize_text(&variant))
+                .chain(std::iter::once(corrected))
+                .filter(|variant| !variant.is_empty() && variant != &normalized)
+                .take(EXPANDED_MAX_VARIANTS)
+                .map(|variant| Self::fts_phrase(&variant))
+                .collect::<Vec<_>>()
+                .join(" OR ");
+            if !typo_expression.is_empty() {
+                channels.push(ProviderEvidence {
+                    provider_id: "lexical.typo".into(),
+                    delivery: CandidateDelivery::Immediate,
+                    weight: 0.5,
+                    candidates: self.query_enriched_channel(
+                        &conn,
+                        &typo_expression,
+                        candidate_limit,
+                        &filter,
+                        available_only,
+                    ),
+                });
+            }
+        }
+        drop(conn);
+
+        CandidateCoordinator
+            .fuse(channels, max_results)
+            .into_iter()
+            .map(|candidate| {
+                let scaled = (candidate.score * 1_000_000.0).round().max(1.0) as i64;
+                SearchResult {
+                    item_id: candidate.item_id,
+                    item_type: candidate.item_type,
+                    score: scaled.min(u32::MAX as i64) as u32,
+                    adjusted_score: scaled,
+                    matchable_text: candidate.matchable_text,
+                }
+            })
+            .collect()
+    }
 }
 
-/// Weight factor for popularity boost (0.5 = max 50% boost for most popular items)
+/// Weight used only by the legacy index while an enriched side-build is active.
 const POPULARITY_WEIGHT: f64 = 0.5;
 const EXPANDED_TOKEN_CANDIDATES: usize = 3;
 const EXPANDED_MAX_VARIANTS: usize = 16;
@@ -1231,6 +1773,15 @@ impl SearchVault for Fts5LevenshteinSearchVault {
         max_results: usize,
         filter: Option<Vec<HashedItemType>>,
     ) -> Vec<SearchResult> {
+        let enriched = self
+            .read_conn
+            .lock()
+            .ok()
+            .and_then(|conn| Self::is_enriched_index(&conn, ACTIVE_INDEX).ok())
+            .unwrap_or(false);
+        if enriched {
+            return self.search_enriched(query, max_results, filter, false);
+        }
         // Search works even during building (with partial results)
         let corrected_query = self.correct_query(query);
 
@@ -1353,6 +1904,15 @@ impl SearchVault for Fts5LevenshteinSearchVault {
         max_results: usize,
         filter: Option<Vec<HashedItemType>>,
     ) -> Vec<SearchResult> {
+        if self
+            .read_conn
+            .lock()
+            .ok()
+            .and_then(|conn| Self::is_enriched_index(&conn, ACTIVE_INDEX).ok())
+            .unwrap_or(false)
+        {
+            return SearchVault::search(self, query, max_results, filter);
+        }
         let mut results = SearchVault::search(self, query, max_results, filter.clone());
         if results.len() >= max_results {
             return results;
@@ -1394,6 +1954,15 @@ impl SearchVault for Fts5LevenshteinSearchVault {
         filter: Option<Vec<HashedItemType>>,
         available_only: bool,
     ) -> Vec<SearchResult> {
+        if self
+            .read_conn
+            .lock()
+            .ok()
+            .and_then(|conn| Self::is_enriched_index(&conn, ACTIVE_INDEX).ok())
+            .unwrap_or(false)
+        {
+            return self.search_with_availability(query, max_results, filter, available_only);
+        }
         let mut results =
             self.search_with_availability(query, max_results, filter.clone(), available_only);
         if results.len() >= max_results {
@@ -1971,14 +2540,25 @@ mod tests {
             Fts5LevenshteinSearchVault::new(catalog, &db_path, &crate::backup::DbRegistry::new())
                 .unwrap();
 
-        assert!(vault.search("fucio palla", 10, None).is_empty());
-        assert!(vault.search("fucio alla", 10, None).is_empty());
+        // Schema v2 includes the typo channel in the normal fused search.
+        assert!(vault
+            .search("fucio palla", 10, None)
+            .iter()
+            .any(|item| item.item_id == "lucio_dalla"));
+        assert!(vault
+            .search("fucio alla", 10, None)
+            .iter()
+            .any(|item| item.item_id == "lucio_dalla"));
 
         let palla_results = vault.search_expanded("fucio palla", 10, None);
-        assert_eq!(palla_results[0].item_id, "lucio_dalla");
+        assert!(palla_results
+            .iter()
+            .any(|item| item.item_id == "lucio_dalla"));
 
         let alla_results = vault.search_expanded("fucio alla", 10, None);
-        assert_eq!(alla_results[0].item_id, "lucio_dalla");
+        assert!(alla_results
+            .iter()
+            .any(|item| item.item_id == "lucio_dalla"));
     }
 
     #[test]
@@ -2038,12 +2618,14 @@ mod tests {
 
             // Insert some items (simulating partial progress)
             conn.execute(
-                "INSERT INTO search_index (item_id, item_type, name) VALUES ('a1', 'artist', 'The Beatles')",
+                "INSERT INTO search_index (item_id,item_type,display_name,primary_name,artist_text,album_text,extra_text)
+                 VALUES ('a1','artist','The Beatles','the beatles','','','')",
                 [],
             )
             .unwrap();
             conn.execute(
-                "INSERT INTO search_index (item_id, item_type, name) VALUES ('a2', 'artist', 'Pink Floyd')",
+                "INSERT INTO search_index (item_id,item_type,display_name,primary_name,artist_text,album_text,extra_text)
+                 VALUES ('a2','artist','Pink Floyd','pink floyd','','','')",
                 [],
             )
             .unwrap();
@@ -2126,12 +2708,14 @@ mod tests {
 
             // Insert first 2 items (simulating partial progress)
             conn.execute(
-                "INSERT INTO search_index (item_id, item_type, name) VALUES ('a1', 'artist', 'The Beatles')",
+                "INSERT INTO search_index (item_id,item_type,display_name,primary_name,artist_text,album_text,extra_text)
+                 VALUES ('a1','artist','The Beatles','the beatles','','','')",
                 [],
             )
             .unwrap();
             conn.execute(
-                "INSERT INTO search_index (item_id, item_type, name) VALUES ('a2', 'artist', 'Pink Floyd')",
+                "INSERT INTO search_index (item_id,item_type,display_name,primary_name,artist_text,album_text,extra_text)
+                 VALUES ('a2','artist','Pink Floyd','pink floyd','','','')",
                 [],
             )
             .unwrap();
@@ -2533,5 +3117,207 @@ mod tests {
             })
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn enriched_search_normalizes_accents_and_ranks_cross_field_matches() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+        let items = vec![
+            SearchableItem {
+                id: "chopin".into(),
+                name: "Frédéric Chopin".into(),
+                content_type: SearchableContentType::Artist,
+                additional_text: vec!["extra:romantic classical".into()],
+                is_available: true,
+            },
+            SearchableItem {
+                id: "chopin_etude".into(),
+                name: "Étude, Op. 10 No. 3".into(),
+                content_type: SearchableContentType::Track,
+                additional_text: vec![
+                    "artist:Frédéric Chopin".into(),
+                    "album:Complete Études".into(),
+                ],
+                is_available: true,
+            },
+            SearchableItem {
+                id: "rach_etude".into(),
+                name: "Étude-tableau".into(),
+                content_type: SearchableContentType::Track,
+                additional_text: vec!["artist:Sergei Rachmaninoff".into()],
+                is_available: true,
+            },
+        ];
+        let vault = Fts5LevenshteinSearchVault::new(
+            Arc::new(MockCatalogStore::new(items)),
+            &db_path,
+            &crate::backup::DbRegistry::new(),
+        )
+        .unwrap();
+
+        assert_eq!(vault.search("etude", 10, None)[0].item_id, "chopin_etude");
+        let results = vault.search("chopin etude", 10, None);
+        assert_eq!(results[0].item_id, "chopin_etude");
+        assert!(
+            results
+                .iter()
+                .position(|item| item.item_id == "chopin_etude")
+                < results.iter().position(|item| item.item_id == "rach_etude")
+        );
+        assert_eq!(
+            vault.search("Etude—Op. 10", 10, None)[0].item_id,
+            "chopin_etude"
+        );
+        assert_eq!(
+            vault.search("\"etude op 10\"", 10, None)[0].item_id,
+            "chopin_etude"
+        );
+        assert!(vault.search("\"chopin etude\"", 10, None).is_empty());
+    }
+
+    #[test]
+    fn enriched_search_applies_filters_availability_dedup_and_limits() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+        let items = vec![
+            SearchableItem {
+                id: "artist".into(),
+                name: "Chopin".into(),
+                content_type: SearchableContentType::Artist,
+                additional_text: vec![],
+                is_available: true,
+            },
+            SearchableItem {
+                id: "available".into(),
+                name: "Chopin Etude".into(),
+                content_type: SearchableContentType::Track,
+                additional_text: vec![],
+                is_available: true,
+            },
+            SearchableItem {
+                id: "missing".into(),
+                name: "Chopin Etude".into(),
+                content_type: SearchableContentType::Track,
+                additional_text: vec![],
+                is_available: false,
+            },
+        ];
+        let vault = Fts5LevenshteinSearchVault::new(
+            Arc::new(MockCatalogStore::new(items)),
+            &db_path,
+            &crate::backup::DbRegistry::new(),
+        )
+        .unwrap();
+        let results =
+            vault.search_with_availability("chopin", 1, Some(vec![HashedItemType::Track]), true);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].item_id, "available");
+        let repeated = vault.search("chopin etude", 10, None);
+        assert_eq!(
+            repeated
+                .iter()
+                .filter(|item| item.item_id == "available")
+                .count(),
+            1
+        );
+        assert_eq!(
+            repeated
+                .iter()
+                .map(|item| (&item.item_type, &item.item_id))
+                .collect::<Vec<_>>(),
+            vault
+                .search("chopin etude", 10, None)
+                .iter()
+                .map(|item| (&item.item_type, &item.item_id))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn legacy_index_serves_during_side_build_and_swaps_atomically() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE VIRTUAL TABLE search_index USING fts5(
+                item_id UNINDEXED, item_type UNINDEXED, name, tokenize='trigram');
+             INSERT INTO search_index(item_id,item_type,name) VALUES('legacy','artist','Legacy Artist');",
+        ).unwrap();
+        drop(conn);
+
+        let vault = Arc::new(
+            Fts5LevenshteinSearchVault::new_lazy(&db_path, &crate::backup::DbRegistry::new())
+                .unwrap(),
+        );
+        assert_eq!(vault.search("Legacy", 10, None)[0].item_id, "legacy");
+        vault.start_background_build(Arc::new(MockCatalogStore::new(vec![SearchableItem {
+            id: "new".into(),
+            name: "Étude Collection".into(),
+            content_type: SearchableContentType::Album,
+            additional_text: vec!["artist:Chopin".into()],
+            is_available: true,
+        }])));
+        for _ in 0..100 {
+            if vault.get_stats().state == IndexState::Ready {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert_eq!(vault.search("chopin etude", 10, None)[0].item_id, "new");
+        let conn = Connection::open(&db_path).unwrap();
+        assert!(Fts5LevenshteinSearchVault::is_enriched_index(&conn, ACTIVE_INDEX).unwrap());
+        assert!(Fts5LevenshteinSearchVault::table_exists(&conn, PREVIOUS_INDEX).unwrap());
+        assert_eq!(
+            Fts5LevenshteinSearchVault::get_metadata(&conn, "active_search_schema_version")
+                .as_deref(),
+            Some("2")
+        );
+    }
+
+    #[test]
+    fn side_build_replays_incremental_mutations_before_activation() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+        let vault =
+            Fts5LevenshteinSearchVault::new_lazy(&db_path, &crate::backup::DbRegistry::new())
+                .unwrap();
+        let baseline = SearchableItem {
+            id: "baseline".into(),
+            name: "Baseline".into(),
+            content_type: SearchableContentType::Track,
+            additional_text: vec![],
+            is_available: true,
+        };
+        {
+            let conn = vault.write_conn.lock().unwrap();
+            Fts5LevenshteinSearchVault::create_enriched_index(&conn, BUILD_INDEX).unwrap();
+            let mut stmt = conn
+                .prepare(
+                    "INSERT INTO search_index_building
+                 (item_id,item_type,display_name,primary_name,artist_text,album_text,extra_text)
+                 VALUES(?1,?2,?3,?4,?5,?6,?7)",
+                )
+                .unwrap();
+            Fts5LevenshteinSearchVault::insert_searchable_item(&mut stmt, &baseline).unwrap();
+            drop(stmt);
+            Fts5LevenshteinSearchVault::set_metadata(&conn, "build_in_progress", "true").unwrap();
+        }
+        vault
+            .upsert_items(&[SearchIndexItem {
+                id: "during_build".into(),
+                name: "Mutation Étude".into(),
+                item_type: HashedItemType::Track,
+                additional_text: vec!["artist:Chopin".into()],
+            }])
+            .unwrap();
+        {
+            let conn = vault.write_conn.lock().unwrap();
+            Fts5LevenshteinSearchVault::activate_built_index(&conn, &[baseline]).unwrap();
+        }
+        assert_eq!(
+            vault.search("mutation etude", 10, None)[0].item_id,
+            "during_build"
+        );
     }
 }
