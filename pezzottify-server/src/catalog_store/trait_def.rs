@@ -206,6 +206,27 @@ pub trait CatalogStore: Send + Sync {
     /// Get all searchable content for building the search index.
     fn get_searchable_content(&self) -> Result<Vec<SearchableItem>>;
 
+    /// Read one stable keyset page for search indexing. The returned rowid is
+    /// an opaque per-entity cursor and must be persisted only with its type.
+    fn get_searchable_content_page(
+        &self,
+        content_type: SearchableContentType,
+        after_rowid: i64,
+        limit: usize,
+    ) -> Result<Vec<(i64, SearchableItem)>> {
+        Ok(self
+            .get_searchable_content()?
+            .into_iter()
+            .filter(|item| item.content_type == content_type)
+            .enumerate()
+            .filter_map(|(index, item)| {
+                let rowid = index as i64 + 1;
+                (rowid > after_rowid).then_some((rowid, item))
+            })
+            .take(limit)
+            .collect())
+    }
+
     // =========================================================================
     // Integrity Support
     // =========================================================================
