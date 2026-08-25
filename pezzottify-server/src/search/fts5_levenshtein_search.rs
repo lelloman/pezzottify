@@ -30,6 +30,37 @@ const SEARCH_INDEX_SCHEMA_VERSION: i64 = 2;
 const ACTIVE_INDEX: &str = "search_index";
 const BUILD_INDEX: &str = "search_index_building";
 const PREVIOUS_INDEX: &str = "search_index_previous";
+const MAX_VOCABULARY_SOURCE_ROWS: usize = 500_000;
+
+#[derive(Clone, Copy)]
+struct SearchIndexCounts {
+    artists: usize,
+    albums: usize,
+    tracks: usize,
+}
+
+impl SearchIndexCounts {
+    fn total(self) -> usize {
+        self.artists
+            .saturating_add(self.albums)
+            .saturating_add(self.tracks)
+    }
+
+    fn from_catalog(catalog_store: &dyn CatalogStore) -> Result<Self> {
+        Ok(catalog_store
+            .get_catalog_cardinality_stats()?
+            .map(|stats| Self {
+                artists: stats.artists,
+                albums: stats.albums,
+                tracks: stats.tracks,
+            })
+            .unwrap_or_else(|| Self {
+                artists: catalog_store.get_artists_count(),
+                albums: catalog_store.get_albums_count(),
+                tracks: catalog_store.get_tracks_count(),
+            }))
+    }
+}
 
 /// Batch size for progressive indexing (items per batch)
 const INDEX_BATCH_SIZE: usize = 50_000;
@@ -273,10 +304,8 @@ impl Fts5LevenshteinSearchVault {
 
     /// Build the index progressively in batches.
     ///
-    /// Items are fetched and indexed by popularity order, so the most commonly
-    /// searched content becomes available first.
-    ///
-    /// If `resume_offset` is provided, the build resumes from that position.
+    /// Items are fetched with a stable per-type rowid cursor. At most one batch
+    /// is resident in memory, including across interrupted/resumed builds.
     fn build_index_progressively(
         &self,
         catalog_store: Arc<dyn CatalogStore>,
@@ -301,9 +330,8 @@ impl Fts5LevenshteinSearchVault {
             info!("Starting progressive index build...");
         }
 
-        // Get all searchable content (already ordered by popularity)
-        let searchable = catalog_store.get_searchable_content()?;
-        let total = searchable.len();
+        let counts = SearchIndexCounts::from_catalog(catalog_store.as_ref())?;
+        let total = counts.total();
 
         info!("Found {} items to index", total);
 
@@ -329,6 +357,8 @@ impl Fts5LevenshteinSearchVault {
                 Self::create_enriched_index(&conn, BUILD_INDEX)?;
                 conn.execute("DELETE FROM search_index_mutations", [])?;
                 Self::set_metadata(&conn, "build_offset", "0")?;
+                Self::set_metadata(&conn, "build_entity_type", "artist")?;
+                Self::set_metadata(&conn, "build_after_rowid", "0")?;
                 Self::set_metadata(
                     &conn,
                     "building_search_schema_version",
@@ -337,87 +367,133 @@ impl Fts5LevenshteinSearchVault {
             }
         }
 
-        // Load existing vocabulary if resuming
-        let mut vocabulary = Vocabulary::new();
-        for item in searchable.iter().take(start_offset) {
-            let (primary, artist, album, extra) = Self::document_parts(item);
-            vocabulary.add_text(&format!("{primary} {artist} {album} {extra}"));
-        }
+        let mut vocabulary = if start_offset > 0 {
+            let conn = self.write_conn.lock().unwrap();
+            Self::load_vocabulary_from_table(&conn, BUILD_INDEX)?
+        } else {
+            Vocabulary::new()
+        };
 
         let mut processed = start_offset;
+        let resume_type = {
+            let conn = self.write_conn.lock().unwrap();
+            Self::get_metadata(&conn, "build_entity_type").unwrap_or_else(|| "artist".into())
+        };
+        let phases = [
+            ("artist", SearchableContentType::Artist),
+            ("album", SearchableContentType::Album),
+            ("track", SearchableContentType::Track),
+        ];
+        let start_phase = phases
+            .iter()
+            .position(|(name, _)| *name == resume_type)
+            .unwrap_or(0);
 
-        // Skip already-indexed items and process remaining in batches
-        let remaining_items: Vec<_> = searchable.iter().skip(start_offset).cloned().collect();
-
-        for batch in remaining_items.chunks(INDEX_BATCH_SIZE) {
-            // Build vocabulary for this batch
-            for item in batch {
-                let (primary, artist, album, extra) = Self::document_parts(item);
-                vocabulary.add_text(&format!("{primary} {artist} {album} {extra}"));
-            }
-
-            // Insert batch into index
-            {
+        for (phase_index, (phase_name, content_type)) in phases.iter().enumerate().skip(start_phase)
+        {
+            let mut after_rowid = if phase_index == start_phase {
                 let conn = self.write_conn.lock().unwrap();
-                conn.execute("BEGIN IMMEDIATE", [])?;
+                Self::get_metadata(&conn, "build_after_rowid")
+                    .and_then(|value| value.parse().ok())
+                    .unwrap_or(0)
+            } else {
+                0
+            };
 
-                let mut stmt = conn.prepare(
-                    "INSERT INTO search_index_building
-                     (item_id, item_type, display_name, primary_name, artist_text, album_text, extra_text)
-                     VALUES (?, ?, ?, ?, ?, ?, ?)",
+            loop {
+                let page = catalog_store.get_searchable_content_page(
+                    *content_type,
+                    after_rowid,
+                    INDEX_BATCH_SIZE,
                 )?;
-                let mut avail_stmt = conn.prepare(
-                    "INSERT OR REPLACE INTO item_availability (item_id, item_type, is_available) VALUES (?, ?, ?)",
-                )?;
+                if page.is_empty() {
+                    break;
+                }
+                let next_rowid = page.last().map(|(rowid, _)| *rowid).unwrap_or(after_rowid);
+                let batch_len = page.len();
 
-                for item in batch {
-                    let type_str = match item.content_type {
-                        SearchableContentType::Artist => "artist",
-                        SearchableContentType::Album => "album",
-                        SearchableContentType::Track => "track",
-                    };
-                    Self::insert_searchable_item(&mut stmt, item)?;
-                    avail_stmt.execute(rusqlite::params![
-                        &item.id,
-                        type_str,
-                        if item.is_available { 1 } else { 0 }
-                    ])?;
+                if vocabulary.len() < MAX_VOCABULARY_SOURCE_ROWS {
+                    for (_, item) in &page {
+                        let (primary, artist, album, extra) = Self::document_parts(item);
+                        vocabulary.add_text(&format!("{primary} {artist} {album} {extra}"));
+                    }
                 }
 
-                conn.execute("COMMIT", [])?;
+                let conn = self.write_conn.lock().unwrap();
+                conn.execute("BEGIN IMMEDIATE", [])?;
+                let insert_result = (|| -> Result<()> {
+                    let mut stmt = conn.prepare(
+                        "INSERT INTO search_index_building
+                         (item_id,item_type,display_name,primary_name,artist_text,album_text,extra_text)
+                         VALUES(?,?,?,?,?,?,?)",
+                    )?;
+                    let mut avail_stmt = conn.prepare(
+                        "INSERT OR REPLACE INTO item_availability
+                         (item_id,item_type,is_available) VALUES(?,?,?)",
+                    )?;
+                    for (_, item) in &page {
+                        Self::insert_searchable_item(&mut stmt, item)?;
+                        avail_stmt.execute(rusqlite::params![
+                            item.id,
+                            phase_name,
+                            if item.is_available { 1 } else { 0 }
+                        ])?;
+                    }
+                    Self::set_metadata(&conn, "build_entity_type", phase_name)?;
+                    Self::set_metadata(&conn, "build_after_rowid", &next_rowid.to_string())?;
+                    Self::set_metadata(
+                        &conn,
+                        "build_offset",
+                        &(processed + batch_len).to_string(),
+                    )?;
+                    Ok(())
+                })();
+                match insert_result {
+                    Ok(()) => {
+                        conn.execute("COMMIT", [])?;
+                    }
+                    Err(error) => {
+                        let _ = conn.execute("ROLLBACK", []);
+                        return Err(error);
+                    }
+                }
+                drop(conn);
 
-                // Persist progress after each batch
-                Self::set_metadata(
-                    &conn,
-                    "build_offset",
-                    &(processed + batch.len()).to_string(),
-                )?;
-            }
-
-            processed += batch.len();
-
-            // Update state
-            {
-                let mut state = self.state.write().unwrap();
-                *state = IndexState::Building {
+                processed += batch_len;
+                after_rowid = next_rowid;
+                *self.state.write().unwrap() = IndexState::Building {
                     processed,
                     total: Some(total),
                 };
+                info!(
+                    entity_type = phase_name,
+                    after_rowid,
+                    processed,
+                    total,
+                    progress_percent = if total == 0 {
+                        100.0
+                    } else {
+                        processed as f64 / total as f64 * 100.0
+                    },
+                    "Search index build progress"
+                );
             }
 
-            info!(
-                "Indexed {}/{} items ({:.1}%)",
-                processed,
-                total,
-                (processed as f64 / total as f64) * 100.0
-            );
+            if let Some((next_name, _)) = phases.get(phase_index + 1) {
+                let conn = self.write_conn.lock().unwrap();
+                Self::set_metadata(&conn, "build_entity_type", next_name)?;
+                Self::set_metadata(&conn, "build_after_rowid", "0")?;
+            }
         }
 
         // Validate and atomically activate. Active queries keep using the old
         // table until this transaction commits.
         {
+            // The catalog can change during a full build. Re-read its counts
+            // immediately before replaying the mutation journal and swapping.
+            let final_counts = SearchIndexCounts::from_catalog(catalog_store.as_ref())?;
             let conn = self.write_conn.lock().unwrap();
-            Self::activate_built_index(&conn, &searchable)?;
+            Self::activate_built_index_counts(&conn, final_counts)?;
         }
 
         *self.vocabulary.write().unwrap() = vocabulary.clone();
@@ -690,13 +766,19 @@ impl Fts5LevenshteinSearchVault {
 
     /// Load vocabulary from existing index (without rebuilding)
     fn load_vocabulary_from_index(conn: &Connection) -> Result<Vocabulary> {
+        Self::load_vocabulary_from_table(conn, ACTIVE_INDEX)
+    }
+
+    fn load_vocabulary_from_table(conn: &Connection, table: &str) -> Result<Vocabulary> {
         let mut vocabulary = Vocabulary::new();
-        let text_column = if Self::is_enriched_index(conn, ACTIVE_INDEX)? {
+        let text_column = if Self::is_enriched_index(conn, table)? {
             "primary_name || ' ' || artist_text || ' ' || album_text || ' ' || extra_text"
         } else {
             "name"
         };
-        let mut stmt = conn.prepare(&format!("SELECT {text_column} FROM {ACTIVE_INDEX}"))?;
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {text_column} FROM {table} LIMIT {MAX_VOCABULARY_SOURCE_ROWS}"
+        ))?;
         let rows = stmt.query_map([], |row| {
             let name: String = row.get(0)?;
             Ok(name)
@@ -879,48 +961,26 @@ impl Fts5LevenshteinSearchVault {
         conn: &Connection,
         expected: &[crate::catalog_store::SearchableItem],
     ) -> Result<()> {
-        let expected_counts = [
-            (
-                "artist",
-                expected
+        Self::activate_built_index_counts(
+            conn,
+            SearchIndexCounts {
+                artists: expected
                     .iter()
                     .filter(|item| item.content_type == SearchableContentType::Artist)
                     .count(),
-            ),
-            (
-                "album",
-                expected
+                albums: expected
                     .iter()
                     .filter(|item| item.content_type == SearchableContentType::Album)
                     .count(),
-            ),
-            (
-                "track",
-                expected
+                tracks: expected
                     .iter()
                     .filter(|item| item.content_type == SearchableContentType::Track)
                     .count(),
-            ),
-        ];
-        for (item_type, expected_count) in expected_counts {
-            let actual: usize = conn.query_row(
-                &format!("SELECT COUNT(*) FROM {BUILD_INDEX} WHERE item_type = ?1"),
-                [item_type],
-                |row| row.get(0),
-            )?;
-            if actual != expected_count {
-                warn!(
-                    item_type,
-                    expected_count, actual, "Search index validation failed"
-                );
-                anyhow::bail!("search index {item_type} count mismatch: expected {expected_count}, got {actual}");
-            }
-        }
-        conn.execute(
-            &format!("INSERT INTO {BUILD_INDEX}({BUILD_INDEX}, rank) VALUES('integrity-check', 1)"),
-            [],
-        )?;
+            },
+        )
+    }
 
+    fn activate_built_index_counts(conn: &Connection, expected: SearchIndexCounts) -> Result<()> {
         conn.execute("BEGIN IMMEDIATE", [])?;
         let result = (|| -> Result<()> {
             // Replay writes captured after the build snapshot was read.
@@ -958,6 +1018,35 @@ impl Fts5LevenshteinSearchVault {
             }
             drop(mutations);
 
+            // Validate the final candidate after mutation replay. Doing this
+            // against the pre-replay snapshot rejects legitimate additions
+            // made while a multi-hour build is running.
+            let expected_counts = [
+                ("artist", expected.artists),
+                ("album", expected.albums),
+                ("track", expected.tracks),
+            ];
+            for (item_type, expected_count) in expected_counts {
+                let actual: usize = conn.query_row(
+                    &format!("SELECT COUNT(*) FROM {BUILD_INDEX} WHERE item_type = ?1"),
+                    [item_type],
+                    |row| row.get(0),
+                )?;
+                if actual != expected_count {
+                    warn!(
+                        item_type,
+                        expected_count, actual, "Search index validation failed"
+                    );
+                    anyhow::bail!("search index {item_type} count mismatch: expected {expected_count}, got {actual}");
+                }
+            }
+            conn.execute(
+                &format!(
+                    "INSERT INTO {BUILD_INDEX}({BUILD_INDEX}, rank) VALUES('integrity-check', 1)"
+                ),
+                [],
+            )?;
+
             if Self::table_exists(conn, PREVIOUS_INDEX)? {
                 conn.execute_batch(&format!("DROP TABLE {PREVIOUS_INDEX};"))?;
             }
@@ -975,6 +1064,8 @@ impl Fts5LevenshteinSearchVault {
             Self::delete_metadata(conn, "build_in_progress")?;
             Self::delete_metadata(conn, "build_offset")?;
             Self::delete_metadata(conn, "build_total")?;
+            Self::delete_metadata(conn, "build_entity_type")?;
+            Self::delete_metadata(conn, "build_after_rowid")?;
             conn.execute("DELETE FROM search_index_mutations", [])?;
             Ok(())
         })();
@@ -2194,13 +2285,22 @@ mod tests {
                 None
             }
             fn get_artists_count(&self) -> usize {
-                0
+                self.items
+                    .iter()
+                    .filter(|item| item.content_type == SearchableContentType::Artist)
+                    .count()
             }
             fn get_albums_count(&self) -> usize {
-                0
+                self.items
+                    .iter()
+                    .filter(|item| item.content_type == SearchableContentType::Album)
+                    .count()
             }
             fn get_tracks_count(&self) -> usize {
-                0
+                self.items
+                    .iter()
+                    .filter(|item| item.content_type == SearchableContentType::Track)
+                    .count()
             }
             fn get_searchable_content(&self) -> anyhow::Result<Vec<SearchableItem>> {
                 Ok(self.items.clone())
@@ -2706,15 +2806,17 @@ mod tests {
             conn.pragma_update(None, "journal_mode", "WAL").unwrap();
             Fts5LevenshteinSearchVault::create_tables(&conn).unwrap();
 
-            // Insert first 2 items (simulating partial progress)
+            // Insert the first two items into the side-build table and persist
+            // the stable artist cursor, simulating an interrupted process.
+            Fts5LevenshteinSearchVault::create_enriched_index(&conn, BUILD_INDEX).unwrap();
             conn.execute(
-                "INSERT INTO search_index (item_id,item_type,display_name,primary_name,artist_text,album_text,extra_text)
+                "INSERT INTO search_index_building (item_id,item_type,display_name,primary_name,artist_text,album_text,extra_text)
                  VALUES ('a1','artist','The Beatles','the beatles','','','')",
                 [],
             )
             .unwrap();
             conn.execute(
-                "INSERT INTO search_index (item_id,item_type,display_name,primary_name,artist_text,album_text,extra_text)
+                "INSERT INTO search_index_building (item_id,item_type,display_name,primary_name,artist_text,album_text,extra_text)
                  VALUES ('a2','artist','Pink Floyd','pink floyd','','','')",
                 [],
             )
@@ -2724,6 +2826,8 @@ mod tests {
             Fts5LevenshteinSearchVault::set_metadata(&conn, "build_in_progress", "true").unwrap();
             Fts5LevenshteinSearchVault::set_metadata(&conn, "build_offset", "2").unwrap();
             Fts5LevenshteinSearchVault::set_metadata(&conn, "build_total", "5").unwrap();
+            Fts5LevenshteinSearchVault::set_metadata(&conn, "build_entity_type", "artist").unwrap();
+            Fts5LevenshteinSearchVault::set_metadata(&conn, "build_after_rowid", "2").unwrap();
         }
 
         // Create vault and resume build
@@ -3313,7 +3417,14 @@ mod tests {
             .unwrap();
         {
             let conn = vault.write_conn.lock().unwrap();
-            Fts5LevenshteinSearchVault::activate_built_index(&conn, &[baseline]).unwrap();
+            let mutation = SearchableItem {
+                id: "during_build".into(),
+                name: "Mutation Étude".into(),
+                content_type: SearchableContentType::Track,
+                additional_text: vec!["artist:Chopin".into()],
+                is_available: true,
+            };
+            Fts5LevenshteinSearchVault::activate_built_index(&conn, &[baseline, mutation]).unwrap();
         }
         assert_eq!(
             vault.search("mutation etude", 10, None)[0].item_id,
