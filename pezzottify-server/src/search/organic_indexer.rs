@@ -291,12 +291,28 @@ impl OrganicIndexer {
             &resolved_artist.artist.id,
             &resolved_artist.artist.name,
             HashedItemType::Artist,
+            resolved_artist
+                .artist
+                .genres
+                .iter()
+                .map(|genre| format!("extra:{genre}"))
+                .collect(),
         );
 
         // Index related artists
         for related in &resolved_artist.related_artists {
             if !self.is_indexed(&related.id, HashedItemType::Artist) {
-                self.add_to_batch(batch, &related.id, &related.name, HashedItemType::Artist);
+                self.add_to_batch(
+                    batch,
+                    &related.id,
+                    &related.name,
+                    HashedItemType::Artist,
+                    related
+                        .genres
+                        .iter()
+                        .map(|genre| format!("extra:{genre}"))
+                        .collect(),
+                );
             }
         }
 
@@ -310,7 +326,13 @@ impl OrganicIndexer {
         ) {
             for album in discography.albums.iter() {
                 if !self.is_indexed(&album.id, HashedItemType::Album) {
-                    self.add_to_batch(batch, &album.id, &album.name, HashedItemType::Album);
+                    self.add_to_batch(
+                        batch,
+                        &album.id,
+                        &album.name,
+                        HashedItemType::Album,
+                        vec![format!("artist:{}", resolved_artist.artist.name)],
+                    );
                 }
             }
         }
@@ -347,12 +369,27 @@ impl OrganicIndexer {
             &resolved_album.album.id,
             &resolved_album.album.name,
             HashedItemType::Album,
+            resolved_album
+                .artists
+                .iter()
+                .map(|artist| format!("artist:{}", artist.name))
+                .collect(),
         );
 
         // Index all artists on the album
         for artist in &resolved_album.artists {
             if !self.is_indexed(&artist.id, HashedItemType::Artist) {
-                self.add_to_batch(batch, &artist.id, &artist.name, HashedItemType::Artist);
+                self.add_to_batch(
+                    batch,
+                    &artist.id,
+                    &artist.name,
+                    HashedItemType::Artist,
+                    artist
+                        .genres
+                        .iter()
+                        .map(|genre| format!("extra:{genre}"))
+                        .collect(),
+                );
             }
         }
 
@@ -360,7 +397,19 @@ impl OrganicIndexer {
         for disc in &resolved_album.discs {
             for track in &disc.tracks {
                 if !self.is_indexed(&track.id, HashedItemType::Track) {
-                    self.add_to_batch(batch, &track.id, &track.name, HashedItemType::Track);
+                    let mut metadata: Vec<String> = resolved_album
+                        .artists
+                        .iter()
+                        .map(|artist| format!("artist:{}", artist.name))
+                        .collect();
+                    metadata.push(format!("album:{}", resolved_album.album.name));
+                    self.add_to_batch(
+                        batch,
+                        &track.id,
+                        &track.name,
+                        HashedItemType::Track,
+                        metadata,
+                    );
                 }
             }
         }
@@ -397,6 +446,15 @@ impl OrganicIndexer {
             &resolved_track.track.id,
             &resolved_track.track.name,
             HashedItemType::Track,
+            {
+                let mut metadata: Vec<String> = resolved_track
+                    .artists
+                    .iter()
+                    .map(|artist| format!("artist:{}", artist.artist.name))
+                    .collect();
+                metadata.push(format!("album:{}", resolved_track.album.name));
+                metadata
+            },
         );
 
         // Index the album
@@ -406,6 +464,11 @@ impl OrganicIndexer {
                 &resolved_track.album.id,
                 &resolved_track.album.name,
                 HashedItemType::Album,
+                resolved_track
+                    .artists
+                    .iter()
+                    .map(|artist| format!("artist:{}", artist.artist.name))
+                    .collect(),
             );
         }
 
@@ -417,6 +480,12 @@ impl OrganicIndexer {
                     &track_artist.artist.id,
                     &track_artist.artist.name,
                     HashedItemType::Artist,
+                    track_artist
+                        .artist
+                        .genres
+                        .iter()
+                        .map(|genre| format!("extra:{genre}"))
+                        .collect(),
                 );
             }
         }
@@ -429,6 +498,7 @@ impl OrganicIndexer {
         id: &str,
         name: &str,
         item_type: HashedItemType,
+        additional_text: Vec<String>,
     ) {
         // Double-check to avoid duplicates in the same batch
         if self.is_indexed(id, item_type) {
@@ -439,6 +509,7 @@ impl OrganicIndexer {
             id: id.to_string(),
             name: name.to_string(),
             item_type,
+            additional_text,
         });
 
         // Mark as indexed immediately to prevent duplicates
@@ -544,9 +615,9 @@ mod tests {
         };
         let mut batch = Vec::new();
 
-        indexer.add_to_batch(&mut batch, "same", "Artist", HashedItemType::Artist);
-        indexer.add_to_batch(&mut batch, "same", "Artist", HashedItemType::Artist);
-        indexer.add_to_batch(&mut batch, "same", "Album", HashedItemType::Album);
+        indexer.add_to_batch(&mut batch, "same", "Artist", HashedItemType::Artist, vec![]);
+        indexer.add_to_batch(&mut batch, "same", "Artist", HashedItemType::Artist, vec![]);
+        indexer.add_to_batch(&mut batch, "same", "Album", HashedItemType::Album, vec![]);
 
         assert_eq!(batch.len(), 2);
         assert_eq!(indexer.indexed_count(), 2);

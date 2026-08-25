@@ -85,6 +85,9 @@ pub struct SearchIndexItem {
     pub id: String,
     pub name: String,
     pub item_type: HashedItemType,
+    /// Structured metadata entries (`artist:`, `album:`, `extra:`) used by the
+    /// enriched lexical index. Display text remains in `name`.
+    pub additional_text: Vec<String>,
 }
 
 pub trait SearchVault: Send + Sync {

@@ -518,30 +518,45 @@ impl CatalogStore for SqliteCatalogStore {
         info!("Indexing all catalog content");
         let mut items = Vec::new();
 
-        let mut artist_stmt = conn
-            .prepare("SELECT id, name, artist_available FROM artists ORDER BY popularity DESC")?;
+        let mut artist_stmt = conn.prepare(
+            "SELECT a.id, a.name, a.artist_available,
+                    COALESCE((SELECT group_concat(ag.genre, char(31))
+                              FROM artist_genres ag WHERE ag.artist_rowid = a.rowid), '')
+             FROM artists a ORDER BY a.popularity DESC",
+        )?;
         let artist_iter = artist_stmt.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, i32>(2)? != 0,
+                row.get::<_, String>(3)?,
             ))
         })?;
 
         for result in artist_iter {
-            let (id, name, is_available) = result?;
+            let (id, name, is_available, genres) = result?;
             items.push(SearchableItem {
                 id,
                 name,
                 content_type: SearchableContentType::Artist,
-                additional_text: vec![],
+                additional_text: genres
+                    .split('\u{1f}')
+                    .filter(|genre| !genre.is_empty())
+                    .map(|genre| format!("extra:{genre}"))
+                    .collect(),
                 is_available,
             });
         }
         info!("Loaded {} artists for indexing", items.len());
 
-        let mut album_stmt = conn
-            .prepare("SELECT id, name, album_availability FROM albums ORDER BY popularity DESC")?;
+        let mut album_stmt = conn.prepare(
+            "SELECT al.id, al.name, al.album_availability,
+                    COALESCE((SELECT group_concat(ar.name, char(31))
+                              FROM artist_albums aa
+                              JOIN artists ar ON ar.rowid = aa.artist_rowid
+                              WHERE aa.album_rowid = al.rowid), '')
+             FROM albums al ORDER BY al.popularity DESC",
+        )?;
         let album_iter = album_stmt.query_map([], |row| {
             let availability: String = row.get(2)?;
             // Album is available if it has at least some content (complete or partial)
@@ -550,40 +565,60 @@ impl CatalogStore for SqliteCatalogStore {
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
                 is_available,
+                row.get::<_, String>(3)?,
             ))
         })?;
 
         let album_start = items.len();
         for result in album_iter {
-            let (id, name, is_available) = result?;
+            let (id, name, is_available, artists) = result?;
             items.push(SearchableItem {
                 id,
                 name,
                 content_type: SearchableContentType::Album,
-                additional_text: vec![],
+                additional_text: artists
+                    .split('\u{1f}')
+                    .filter(|artist| !artist.is_empty())
+                    .map(|artist| format!("artist:{artist}"))
+                    .collect(),
                 is_available,
             });
         }
         info!("Loaded {} albums for indexing", items.len() - album_start);
 
-        let mut track_stmt =
-            conn.prepare("SELECT id, name, track_available FROM tracks ORDER BY popularity DESC")?;
+        let mut track_stmt = conn.prepare(
+            "SELECT t.id, t.name, t.track_available, al.name,
+                    COALESCE((SELECT group_concat(ar.name, char(31))
+                              FROM track_artists ta
+                              JOIN artists ar ON ar.rowid = ta.artist_rowid
+                              WHERE ta.track_rowid = t.rowid), '')
+             FROM tracks t JOIN albums al ON al.rowid = t.album_rowid
+             ORDER BY t.popularity DESC",
+        )?;
         let track_iter = track_stmt.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, i32>(2)? != 0,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
             ))
         })?;
 
         let track_start = items.len();
         for result in track_iter {
-            let (id, name, is_available) = result?;
+            let (id, name, is_available, album, artists) = result?;
+            let mut additional_text: Vec<String> = artists
+                .split('\u{1f}')
+                .filter(|artist| !artist.is_empty())
+                .map(|artist| format!("artist:{artist}"))
+                .collect();
+            additional_text.push(format!("album:{album}"));
             items.push(SearchableItem {
                 id,
                 name,
                 content_type: SearchableContentType::Track,
-                additional_text: vec![],
+                additional_text,
                 is_available,
             });
         }
