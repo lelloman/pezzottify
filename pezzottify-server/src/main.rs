@@ -264,11 +264,11 @@ async fn main() -> Result<()> {
                     &db_registry,
                 )?);
 
-                // No background build - search index grows organically via OrganicIndexer
-                // when users browse content (artists, albums, tracks)
-                info!(
-                "Search vault ready (organic indexing mode - index grows as content is accessed)"
-            );
+                // Build or migrate the full index without interrupting queries.
+                // A legacy index remains active until the enriched side-build
+                // validates and is atomically swapped into place.
+                vault.start_background_build(catalog_store.clone() as Arc<dyn CatalogStore>);
+                info!("Search vault ready (background full-catalog indexing enabled)");
 
                 // Box the Arc directly - SearchVault is implemented for Arc<T>
                 Box::new(vault)
