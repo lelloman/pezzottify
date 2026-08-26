@@ -264,11 +264,15 @@ async fn main() -> Result<()> {
                     &db_registry,
                 )?);
 
-                // Build or migrate the full index without interrupting queries.
-                // A legacy index remains active until the enriched side-build
-                // validates and is atomically swapped into place.
-                vault.start_background_build(catalog_store.clone() as Arc<dyn CatalogStore>);
-                info!("Search vault ready (background full-catalog indexing enabled)");
+                if app_config.search.build_on_start {
+                    // Build or migrate the full index without interrupting queries.
+                    // A legacy index remains active until the enriched side-build
+                    // validates and is atomically swapped into place.
+                    vault.start_background_build(catalog_store.clone() as Arc<dyn CatalogStore>);
+                    info!("Search vault ready (background full-catalog indexing enabled)");
+                } else {
+                    info!("Search vault ready (background index build disabled)");
+                }
 
                 // Box the Arc directly - SearchVault is implemented for Arc<T>
                 Box::new(vault)

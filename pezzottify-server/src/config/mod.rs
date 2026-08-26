@@ -20,6 +20,8 @@ use std::path::PathBuf;
 pub struct SearchSettings {
     /// Search engine to use: "fts5-levenshtein" or "noop"
     pub engine: String,
+    /// Whether to start or resume a full-catalog index build at boot.
+    pub build_on_start: bool,
     pub streaming: StreamingSearchSettings,
 }
 
@@ -393,6 +395,7 @@ impl AppConfig {
 
         let search = SearchSettings {
             engine: search_engine,
+            build_on_start: search_file.build_on_start.unwrap_or(true),
             streaming,
         };
 
@@ -1167,6 +1170,7 @@ mod tests {
         assert_eq!(config.event_retention_days, 60);
         assert_eq!(config.prune_interval_hours, 12);
         assert!(config.download_manager.enabled);
+        assert!(config.search.build_on_start);
     }
 
     #[test]
@@ -1192,6 +1196,10 @@ mod tests {
             allow_legacy_raw_authorization: Some(false),
             login_rate_limit_per_minute: Some(250),
             login_rate_limit_per_hour: Some(2_000),
+            search: Some(SearchConfig {
+                build_on_start: Some(false),
+                ..Default::default()
+            }),
             ..Default::default()
         };
 
@@ -1210,6 +1218,7 @@ mod tests {
         assert!(!config.allow_legacy_raw_authorization);
         assert_eq!(config.login_rate_limit_per_minute, 250);
         assert_eq!(config.login_rate_limit_per_hour, 2_000);
+        assert!(!config.search.build_on_start);
     }
 
     #[test]
