@@ -20,6 +20,7 @@ use super::{
 };
 use crate::catalog_store::{CatalogStore, SearchableContentType};
 use anyhow::{bail, Result};
+use rayon::prelude::*;
 use rusqlite::Connection;
 use std::collections::HashSet;
 use std::path::Path;
@@ -64,8 +65,38 @@ impl SearchIndexCounts {
     }
 }
 
-/// Batch size for progressive indexing (items per batch)
-const INDEX_BATCH_SIZE: usize = 50_000;
+const DEFAULT_INDEX_BATCH_SIZE: usize = 50_000;
+
+#[derive(Clone, Copy, Debug)]
+pub struct SearchBuildOptions {
+    pub batch_size: usize,
+    pub preparation_threads: usize,
+    /// Store only available entities in `item_availability`. Absence is
+    /// equivalent to `is_available = 0` for every availability-filtered query.
+    /// This is intended for offline builds where no legacy search traffic is
+    /// using the table while a fresh build resets it.
+    pub sparse_availability: bool,
+}
+
+impl Default for SearchBuildOptions {
+    fn default() -> Self {
+        Self {
+            batch_size: DEFAULT_INDEX_BATCH_SIZE,
+            preparation_threads: 1,
+            sparse_availability: false,
+        }
+    }
+}
+
+struct PreparedSearchDocument {
+    item_id: String,
+    display_name: String,
+    primary_name: String,
+    artist_text: String,
+    album_text: String,
+    extra_text: String,
+    is_available: bool,
+}
 
 const IMPRESSION_USER_DAILY_BUDGET: i64 = 500;
 const IMPRESSION_DEVICE_DAILY_BUDGET: i64 = 200;
@@ -97,6 +128,7 @@ pub struct Fts5LevenshteinSearchVault {
     vocabulary: RwLock<Vocabulary>,
     /// Maximum edit distance for typo correction (default: 2)
     max_edit_distance: usize,
+    build_options: SearchBuildOptions,
     /// Current indexing state
     state: RwLock<IndexState>,
 }
@@ -152,6 +184,20 @@ impl Fts5LevenshteinSearchVault {
     /// If a valid index already exists on disk, it will be loaded.
     /// If a partial build was interrupted, it will be detected and can be resumed.
     pub fn new_lazy(db_path: &Path, db_registry: &crate::backup::DbRegistry) -> Result<Self> {
+        Self::new_lazy_with_build_options(db_path, db_registry, SearchBuildOptions::default())
+    }
+
+    pub fn new_lazy_with_build_options(
+        db_path: &Path,
+        db_registry: &crate::backup::DbRegistry,
+        build_options: SearchBuildOptions,
+    ) -> Result<Self> {
+        if build_options.batch_size == 0 {
+            bail!("search build batch size must be greater than zero");
+        }
+        if build_options.preparation_threads == 0 {
+            bail!("search build preparation thread count must be greater than zero");
+        }
         // Create write connection first (handles table creation)
         let write_conn = Connection::open(db_path)?;
         crate::sqlite_persistence::configure_connection(&write_conn)?;
@@ -225,6 +271,7 @@ impl Fts5LevenshteinSearchVault {
             write_conn: Mutex::new(write_conn),
             vocabulary: RwLock::new(vocabulary),
             max_edit_distance: 2,
+            build_options,
             state: RwLock::new(state),
         })
     }
@@ -266,6 +313,7 @@ impl Fts5LevenshteinSearchVault {
             write_conn: Mutex::new(write_conn),
             vocabulary: RwLock::new(vocabulary),
             max_edit_distance,
+            build_options: SearchBuildOptions::default(),
             state: RwLock::new(IndexState::Ready),
         })
     }
@@ -384,6 +432,9 @@ impl Fts5LevenshteinSearchVault {
                 conn.execute_batch(&format!("DROP TABLE IF EXISTS {BUILD_INDEX};"))?;
                 Self::create_enriched_index(&conn, BUILD_INDEX)?;
                 conn.execute("DELETE FROM search_index_mutations", [])?;
+                if self.build_options.sparse_availability {
+                    conn.execute("DELETE FROM item_availability", [])?;
+                }
                 Self::set_metadata(&conn, "build_offset", "0")?;
                 Self::set_metadata(&conn, "build_entity_type", "artist")?;
                 Self::set_metadata(&conn, "build_after_rowid", "0")?;
@@ -401,6 +452,10 @@ impl Fts5LevenshteinSearchVault {
         } else {
             Vocabulary::new()
         };
+        let preparation_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(self.build_options.preparation_threads)
+            .thread_name(|index| format!("search-prepare-{index}"))
+            .build()?;
 
         let mut processed = start_offset;
         let resume_type = {
@@ -432,18 +487,25 @@ impl Fts5LevenshteinSearchVault {
                 let page = catalog_store.get_searchable_content_page(
                     *content_type,
                     after_rowid,
-                    INDEX_BATCH_SIZE,
+                    self.build_options.batch_size,
                 )?;
                 if page.is_empty() {
                     break;
                 }
                 let next_rowid = page.last().map(|(rowid, _)| *rowid).unwrap_or(after_rowid);
                 let batch_len = page.len();
+                let prepared = preparation_pool.install(|| {
+                    page.par_iter()
+                        .map(|(_, item)| Self::prepare_searchable_item(item))
+                        .collect::<Vec<_>>()
+                });
 
                 if vocabulary.len() < MAX_VOCABULARY_SOURCE_ROWS {
-                    for (_, item) in &page {
-                        let (primary, artist, album, extra) = Self::document_parts(item);
-                        vocabulary.add_text(&format!("{primary} {artist} {album} {extra}"));
+                    for item in &prepared {
+                        vocabulary.add_text(&format!(
+                            "{} {} {} {}",
+                            item.primary_name, item.artist_text, item.album_text, item.extra_text
+                        ));
                     }
                 }
 
@@ -459,13 +521,23 @@ impl Fts5LevenshteinSearchVault {
                         "INSERT OR REPLACE INTO item_availability
                          (item_id,item_type,is_available) VALUES(?,?,?)",
                     )?;
-                    for (_, item) in &page {
-                        Self::insert_searchable_item(&mut stmt, item)?;
-                        avail_stmt.execute(rusqlite::params![
-                            item.id,
+                    for item in &prepared {
+                        stmt.execute(rusqlite::params![
+                            &item.item_id,
                             phase_name,
-                            if item.is_available { 1 } else { 0 }
+                            &item.display_name,
+                            &item.primary_name,
+                            &item.artist_text,
+                            &item.album_text,
+                            &item.extra_text
                         ])?;
+                        if !self.build_options.sparse_availability || item.is_available {
+                            avail_stmt.execute(rusqlite::params![
+                                &item.item_id,
+                                phase_name,
+                                if item.is_available { 1 } else { 0 }
+                            ])?;
+                        }
                     }
                     Self::set_metadata(&conn, "build_entity_type", phase_name)?;
                     Self::set_metadata(&conn, "build_after_rowid", &next_rowid.to_string())?;
@@ -871,6 +943,21 @@ impl Fts5LevenshteinSearchVault {
         item: &crate::catalog_store::SearchableItem,
     ) -> (String, String, String, String) {
         Self::metadata_document_parts(&item.name, &item.additional_text)
+    }
+
+    fn prepare_searchable_item(
+        item: &crate::catalog_store::SearchableItem,
+    ) -> PreparedSearchDocument {
+        let (primary_name, artist_text, album_text, extra_text) = Self::document_parts(item);
+        PreparedSearchDocument {
+            item_id: item.id.clone(),
+            display_name: item.name.clone(),
+            primary_name,
+            artist_text,
+            album_text,
+            extra_text,
+            is_available: item.is_available,
+        }
     }
 
     fn index_item_document_parts(item: &SearchIndexItem) -> (String, String, String, String) {
@@ -2955,6 +3042,65 @@ mod tests {
             Fts5LevenshteinSearchVault::new_lazy(&db_path, &crate::backup::DbRegistry::new())
                 .unwrap();
         assert_eq!(vault2.get_stats().state, IndexState::Ready);
+    }
+
+    #[test]
+    fn sparse_availability_still_indexes_unavailable_content() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+        let registry = crate::backup::DbRegistry::new();
+        let vault = Arc::new(
+            Fts5LevenshteinSearchVault::new_lazy_with_build_options(
+                &db_path,
+                &registry,
+                SearchBuildOptions {
+                    batch_size: 1,
+                    preparation_threads: 2,
+                    sparse_availability: true,
+                },
+            )
+            .unwrap(),
+        );
+        let catalog = Arc::new(MockCatalogStore::new(vec![
+            SearchableItem {
+                id: "available".into(),
+                name: "Available Etude".into(),
+                content_type: SearchableContentType::Track,
+                additional_text: vec!["artist:Chopin".into()],
+                is_available: true,
+            },
+            SearchableItem {
+                id: "unavailable".into(),
+                name: "Unavailable Etude".into(),
+                content_type: SearchableContentType::Track,
+                additional_text: vec!["artist:Chopin".into()],
+                is_available: false,
+            },
+        ]));
+
+        vault.start_background_build(catalog);
+        for _ in 0..100 {
+            if vault.get_stats().state == IndexState::Ready {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert_eq!(vault.get_stats().state, IndexState::Ready);
+
+        let conn = Connection::open(&db_path).unwrap();
+        let indexed: i64 = conn
+            .query_row("SELECT COUNT(*) FROM search_index", [], |row| row.get(0))
+            .unwrap();
+        let availability_rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM item_availability", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            indexed, 2,
+            "both available and unavailable content is indexed"
+        );
+        assert_eq!(availability_rows, 1, "only the available ID is stored");
     }
 
     #[test]

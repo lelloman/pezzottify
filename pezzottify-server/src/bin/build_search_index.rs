@@ -2,7 +2,9 @@ use anyhow::{bail, Context, Result};
 use clap::Parser;
 use pezzottify_server::backup::DbRegistry;
 use pezzottify_server::catalog_store::{CatalogStore, SqliteCatalogStore};
-use pezzottify_server::search::{Fts5LevenshteinSearchVault, IndexState, SearchVault};
+use pezzottify_server::search::{
+    Fts5LevenshteinSearchVault, IndexState, SearchBuildOptions, SearchVault,
+};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -23,6 +25,17 @@ struct Args {
 
     #[arg(long, default_value_t = 10)]
     poll_interval_secs: u64,
+
+    #[arg(long, default_value_t = 200_000)]
+    batch_size: usize,
+
+    #[arg(long, default_value_t = 8)]
+    preparation_threads: usize,
+
+    /// Store only available IDs in the availability lookup. Unavailable
+    /// entities are still fully indexed in FTS.
+    #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+    sparse_availability: bool,
 }
 
 fn main() -> Result<()> {
@@ -59,9 +72,14 @@ fn main() -> Result<()> {
         args.catalog_read_pool_size,
         &registry,
     )?);
-    let vault = Arc::new(Fts5LevenshteinSearchVault::new_lazy(
+    let vault = Arc::new(Fts5LevenshteinSearchVault::new_lazy_with_build_options(
         &args.search_db,
         &registry,
+        SearchBuildOptions {
+            batch_size: args.batch_size,
+            preparation_threads: args.preparation_threads,
+            sparse_availability: args.sparse_availability,
+        },
     )?);
 
     vault.start_background_build(catalog as Arc<dyn CatalogStore>);
