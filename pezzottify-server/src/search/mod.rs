@@ -8,7 +8,7 @@ mod search_vault;
 pub mod streaming;
 
 pub(crate) use candidate_provider::*;
-pub use fts5_levenshtein_search::Fts5LevenshteinSearchVault;
+pub use fts5_levenshtein_search::{Fts5LevenshteinSearchVault, SearchBuildOptions};
 pub use organic_indexer::OrganicIndexer;
 pub use relevance_filter::RelevanceFilterConfig;
 pub use search_vault::*;
