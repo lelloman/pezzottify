@@ -19,7 +19,7 @@ use super::{
     SearchVaultStats,
 };
 use crate::catalog_store::{CatalogStore, SearchableContentType};
-use anyhow::Result;
+use anyhow::{bail, Result};
 use rusqlite::Connection;
 use std::collections::HashSet;
 use std::path::Path;
@@ -31,6 +31,8 @@ const ACTIVE_INDEX: &str = "search_index";
 const BUILD_INDEX: &str = "search_index_building";
 const PREVIOUS_INDEX: &str = "search_index_previous";
 const MAX_VOCABULARY_SOURCE_ROWS: usize = 500_000;
+const BUILD_CHECKPOINT_RETRIES: usize = 3;
+const BUILD_CHECKPOINT_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(1);
 
 #[derive(Clone, Copy)]
 struct SearchIndexCounts {
@@ -100,6 +102,32 @@ pub struct Fts5LevenshteinSearchVault {
 }
 
 impl Fts5LevenshteinSearchVault {
+    /// Bound build WAL growth at a batch boundary. A failed checkpoint stops
+    /// the resumable build instead of allowing the WAL to grow without limit.
+    fn checkpoint_build_wal(conn: &Connection) -> Result<()> {
+        for attempt in 1..=BUILD_CHECKPOINT_RETRIES {
+            let (busy, total, checkpointed): (i64, i64, i64) =
+                conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                })?;
+            if busy == 0 {
+                info!(total, checkpointed, "Search build WAL checkpoint complete");
+                return Ok(());
+            }
+            warn!(
+                attempt,
+                total, checkpointed, "Search build WAL checkpoint blocked"
+            );
+            if attempt < BUILD_CHECKPOINT_RETRIES {
+                std::thread::sleep(BUILD_CHECKPOINT_RETRY_DELAY);
+            }
+        }
+        bail!(
+            "search build stopped because the WAL could not be truncated after {} attempts",
+            BUILD_CHECKPOINT_RETRIES
+        )
+    }
+
     /// Create a new FTS5 + Levenshtein search vault (blocking).
     ///
     /// This constructor blocks until the index is fully built.
@@ -451,6 +479,7 @@ impl Fts5LevenshteinSearchVault {
                 match insert_result {
                     Ok(()) => {
                         conn.execute("COMMIT", [])?;
+                        Self::checkpoint_build_wal(&conn)?;
                     }
                     Err(error) => {
                         let _ = conn.execute("ROLLBACK", []);
@@ -2169,6 +2198,32 @@ mod tests {
     use crate::catalog_store::SearchableItem;
     use std::sync::Arc;
     use tempfile::TempDir;
+
+    #[test]
+    fn build_checkpoint_truncates_wal() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+        let conn = Connection::open(&db_path).unwrap();
+        crate::backup::DbRegistry::new()
+            .register(db_path.clone(), &conn)
+            .unwrap();
+        conn.execute("CREATE TABLE checkpoint_test(value TEXT)", [])
+            .unwrap();
+        conn.execute(
+            "INSERT INTO checkpoint_test(value) VALUES(zeroblob(1048576))",
+            [],
+        )
+        .unwrap();
+
+        Fts5LevenshteinSearchVault::checkpoint_build_wal(&conn).unwrap();
+
+        let mut wal_path = db_path.into_os_string();
+        wal_path.push("-wal");
+        let wal_size = std::fs::metadata(std::path::PathBuf::from(wal_path))
+            .map(|metadata| metadata.len())
+            .unwrap_or(0);
+        assert_eq!(wal_size, 0);
+    }
 
     mod mock {
         use super::*;

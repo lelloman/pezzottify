@@ -20,6 +20,8 @@ use std::path::PathBuf;
 pub struct SearchSettings {
     /// Search engine to use: "fts5-levenshtein" or "noop"
     pub engine: String,
+    /// Search database path, including its adjacent WAL and SHM files.
+    pub db_path: PathBuf,
     /// Whether to start or resume a full-catalog index build at boot.
     pub build_on_start: bool,
     pub streaming: StreamingSearchSettings,
@@ -355,6 +357,25 @@ impl AppConfig {
         let search_engine = search_file
             .engine
             .unwrap_or_else(|| "fts5-levenshtein".to_string());
+        let search_db_path = search_file
+            .db_path
+            .map(PathBuf::from)
+            .unwrap_or_else(|| db_dir.join("search.db"));
+        let search_db_parent = search_db_path
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("search.db_path must have a parent directory"))?;
+        if !search_db_parent.exists() {
+            bail!(
+                "Search database directory does not exist: {:?}",
+                search_db_parent
+            );
+        }
+        if !search_db_parent.is_dir() {
+            bail!(
+                "Search database parent is not a directory: {:?}",
+                search_db_parent
+            );
+        }
 
         // Streaming search settings from file config
         let streaming_defaults = StreamingSearchSettings::default();
@@ -395,6 +416,7 @@ impl AppConfig {
 
         let search = SearchSettings {
             engine: search_engine,
+            db_path: search_db_path,
             build_on_start: search_file.build_on_start.unwrap_or(true),
             streaming,
         };
@@ -608,7 +630,7 @@ impl AppConfig {
     }
 
     pub fn search_db_path(&self) -> PathBuf {
-        self.db_dir.join("search.db")
+        self.search.db_path.clone()
     }
 
     pub fn enrichment_db_path(&self) -> PathBuf {
@@ -1219,6 +1241,58 @@ mod tests {
         assert_eq!(config.login_rate_limit_per_minute, 250);
         assert_eq!(config.login_rate_limit_per_hour, 2_000);
         assert!(!config.search.build_on_start);
+    }
+
+    #[test]
+    fn test_resolve_custom_search_db_path() {
+        let temp_dir = make_temp_db_dir();
+        let search_dir = temp_dir.path().join("external-search");
+        std::fs::create_dir(&search_dir).unwrap();
+        let search_db_path = search_dir.join("search.db");
+        let cli = CliConfig {
+            db_dir: Some(temp_dir.path().to_path_buf()),
+            ..Default::default()
+        };
+        let file_config = FileConfig {
+            search: Some(SearchConfig {
+                db_path: Some(search_db_path.to_string_lossy().to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let config = AppConfig::resolve(&cli, Some(file_config)).unwrap();
+
+        assert_eq!(config.search_db_path(), search_db_path);
+    }
+
+    #[test]
+    fn test_rejects_search_db_path_with_missing_parent() {
+        let temp_dir = make_temp_db_dir();
+        let cli = CliConfig {
+            db_dir: Some(temp_dir.path().to_path_buf()),
+            ..Default::default()
+        };
+        let file_config = FileConfig {
+            search: Some(SearchConfig {
+                db_path: Some(
+                    temp_dir
+                        .path()
+                        .join("missing")
+                        .join("search.db")
+                        .to_string_lossy()
+                        .to_string(),
+                ),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let error = AppConfig::resolve(&cli, Some(file_config)).unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("Search database directory does not exist"));
     }
 
     #[test]

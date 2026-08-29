@@ -157,6 +157,9 @@ pub struct FeaturedAlbumsJobConfig {
 pub struct SearchConfig {
     /// Search engine: "fts5-levenshtein" (default), "noop" (disabled)
     pub engine: Option<String>,
+    /// Optional search database path. Defaults to `<db_dir>/search.db`.
+    /// Use a dedicated volume for full-catalog indexes.
+    pub db_path: Option<String>,
     /// Whether to start or resume a full-catalog index build at boot.
     pub build_on_start: Option<bool>,
     /// Streaming search configuration
