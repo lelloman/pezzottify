@@ -30,6 +30,7 @@ use tracing::{debug, error, info, warn};
 const SEARCH_INDEX_SCHEMA_VERSION: i64 = 2;
 const ACTIVE_INDEX: &str = "search_index";
 const BUILD_INDEX: &str = "search_index_building";
+const BUILD_INDEX_CONTENT: &str = "search_index_building_content";
 const PREVIOUS_INDEX: &str = "search_index_previous";
 const MAX_VOCABULARY_SOURCE_ROWS: usize = 500_000;
 const BUILD_CHECKPOINT_RETRIES: usize = 3;
@@ -76,6 +77,14 @@ pub struct SearchBuildOptions {
     /// This is intended for offline builds where no legacy search traffic is
     /// using the table while a fresh build resets it.
     pub sparse_availability: bool,
+    /// Replay mutations captured while a live catalog build was running.
+    /// Offline builds from a static catalog snapshot can disable this because
+    /// the snapshot already contains those mutations.
+    pub replay_mutations: bool,
+    /// Run FTS5's exhaustive structural integrity command before activation.
+    /// Offline recovery can disable this after exact counts and bounded smoke
+    /// tests because the command has no progress reporting on a full catalog.
+    pub verify_fts_integrity: bool,
 }
 
 impl Default for SearchBuildOptions {
@@ -84,6 +93,8 @@ impl Default for SearchBuildOptions {
             batch_size: DEFAULT_INDEX_BATCH_SIZE,
             preparation_threads: 1,
             sparse_availability: false,
+            replay_mutations: true,
+            verify_fts_integrity: true,
         }
     }
 }
@@ -594,7 +605,18 @@ impl Fts5LevenshteinSearchVault {
             // immediately before replaying the mutation journal and swapping.
             let final_counts = SearchIndexCounts::from_catalog(catalog_store.as_ref())?;
             let conn = self.write_conn.lock().unwrap();
-            Self::activate_built_index_counts(&conn, final_counts)?;
+            if !self.build_options.replay_mutations {
+                let discarded = conn.execute("DELETE FROM search_index_mutations", [])?;
+                info!(
+                    discarded,
+                    "Discarded mutation journal for static-catalog offline build"
+                );
+            }
+            Self::activate_built_index_counts(
+                &conn,
+                final_counts,
+                self.build_options.verify_fts_integrity,
+            )?;
         }
 
         *self.vocabulary.write().unwrap() = vocabulary.clone();
@@ -738,11 +760,16 @@ impl Fts5LevenshteinSearchVault {
 
         // A structurally unhealthy new index is rolled back before it can be
         // advertised as healthy on restart.
+        // Startup validation must be bounded for the full catalog. Exhaustive
+        // FTS integrity checking is an explicit build-time option; here we only
+        // verify that the enriched virtual table can be read before retaining
+        // it through the healthy-restart rollback window.
         let active_is_healthy = Self::is_enriched_index(conn, ACTIVE_INDEX)?
             && conn
-                .execute(
-                    &format!("INSERT INTO {ACTIVE_INDEX}({ACTIVE_INDEX}, rank) VALUES('integrity-check', 1)"),
+                .query_row(
+                    &format!("SELECT EXISTS(SELECT 1 FROM {ACTIVE_INDEX} LIMIT 1)"),
                     [],
+                    |row| row.get::<_, i64>(0),
                 )
                 .is_ok();
         if !active_is_healthy {
@@ -755,6 +782,13 @@ impl Fts5LevenshteinSearchVault {
                      ALTER TABLE {PREVIOUS_INDEX} RENAME TO {ACTIVE_INDEX};"
                 ))?;
                 Self::delete_metadata(conn, "active_search_schema_version")?;
+                if let Some(previous_count) = Self::get_metadata(conn, "previous_index_item_count")
+                {
+                    Self::set_metadata(conn, "active_index_item_count", &previous_count)?;
+                } else {
+                    Self::delete_metadata(conn, "active_index_item_count")?;
+                }
+                Self::delete_metadata(conn, "previous_index_item_count")?;
                 Self::delete_metadata(conn, "previous_index_retained")?;
                 Ok(())
             })();
@@ -778,6 +812,7 @@ impl Fts5LevenshteinSearchVault {
             Some("healthy_restart") => {
                 conn.execute_batch(&format!("DROP TABLE {PREVIOUS_INDEX};"))?;
                 Self::delete_metadata(conn, "previous_index_retained")?;
+                Self::delete_metadata(conn, "previous_index_item_count")?;
                 info!("Removed previous search index after healthy restart");
             }
             _ => {}
@@ -849,6 +884,11 @@ impl Fts5LevenshteinSearchVault {
 
     /// Get the number of items in the search index
     fn get_index_item_count(conn: &Connection) -> Option<usize> {
+        if let Some(count) =
+            Self::get_metadata(conn, "active_index_item_count").and_then(|value| value.parse().ok())
+        {
+            return Some(count);
+        }
         conn.query_row("SELECT COUNT(*) FROM search_index", [], |row| {
             let count: i64 = row.get(0)?;
             Ok(count as usize)
@@ -872,13 +912,20 @@ impl Fts5LevenshteinSearchVault {
 
     fn load_vocabulary_from_table(conn: &Connection, table: &str) -> Result<Vocabulary> {
         let mut vocabulary = Vocabulary::new();
-        let text_column = if Self::is_enriched_index(conn, table)? {
-            "primary_name || ' ' || artist_text || ' ' || album_text || ' ' || extra_text"
+        let enriched = Self::is_enriched_index(conn, table)?;
+        let (source, text_expression) = if enriched {
+            // FTS columns are stored in c0..c6 in the content shadow table.
+            // Reading 500k UNINDEXED/content columns through the virtual table
+            // performs one lookup per row and makes startup take minutes.
+            (
+                format!("{table}_content"),
+                "c3 || ' ' || c4 || ' ' || c5 || ' ' || c6",
+            )
         } else {
-            "name"
+            (table.to_string(), "name")
         };
         let mut stmt = conn.prepare(&format!(
-            "SELECT {text_column} FROM {table} LIMIT {MAX_VOCABULARY_SOURCE_ROWS}"
+            "SELECT {text_expression} FROM {source} LIMIT {MAX_VOCABULARY_SOURCE_ROWS}"
         ))?;
         let rows = stmt.query_map([], |row| {
             let name: String = row.get(0)?;
@@ -1093,13 +1140,23 @@ impl Fts5LevenshteinSearchVault {
                     .filter(|item| item.content_type == SearchableContentType::Track)
                     .count(),
             },
+            true,
         )
     }
 
-    fn activate_built_index_counts(conn: &Connection, expected: SearchIndexCounts) -> Result<()> {
+    fn activate_built_index_counts(
+        conn: &Connection,
+        expected: SearchIndexCounts,
+        verify_fts_integrity: bool,
+    ) -> Result<()> {
         conn.execute("BEGIN IMMEDIATE", [])?;
         let result = (|| -> Result<()> {
             // Replay writes captured after the build snapshot was read.
+            let mutation_count: usize =
+                conn.query_row("SELECT COUNT(*) FROM search_index_mutations", [], |row| {
+                    row.get(0)
+                })?;
+            info!(mutation_count, "Replaying search index mutation journal");
             let mut mutations = conn.prepare(
                 "SELECT operation, item_id, item_type, display_name, primary_name,
                         artist_text, album_text, extra_text
@@ -1133,21 +1190,40 @@ impl Fts5LevenshteinSearchVault {
                 }
             }
             drop(mutations);
+            info!(mutation_count, "Search index mutation replay complete");
 
             // Validate the final candidate after mutation replay. Doing this
             // against the pre-replay snapshot rejects legitimate additions
             // made while a multi-hour build is running.
-            let expected_counts = [
-                ("artist", expected.artists),
-                ("album", expected.albums),
-                ("track", expected.tracks),
+            // Reading an UNINDEXED column through the FTS virtual table causes
+            // one content-table lookup per document. On a full catalog, doing
+            // that once per type turns validation into trillions of bytes of
+            // logical reads. The content shadow table contains the same values;
+            // aggregate all three types and the total in one sequential scan.
+            info!("Validating search index document counts");
+            let (actual_artists, actual_albums, actual_tracks, actual_total): (
+                usize,
+                usize,
+                usize,
+                usize,
+            ) = conn.query_row(
+                &format!(
+                    "SELECT
+                         COALESCE(SUM(c1 = 'artist'), 0),
+                         COALESCE(SUM(c1 = 'album'), 0),
+                         COALESCE(SUM(c1 = 'track'), 0),
+                         COUNT(*)
+                     FROM {BUILD_INDEX_CONTENT}"
+                ),
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )?;
+            let actual_counts = [
+                ("artist", expected.artists, actual_artists),
+                ("album", expected.albums, actual_albums),
+                ("track", expected.tracks, actual_tracks),
             ];
-            for (item_type, expected_count) in expected_counts {
-                let actual: usize = conn.query_row(
-                    &format!("SELECT COUNT(*) FROM {BUILD_INDEX} WHERE item_type = ?1"),
-                    [item_type],
-                    |row| row.get(0),
-                )?;
+            for (item_type, expected_count, actual) in actual_counts {
                 if actual != expected_count {
                     warn!(
                         item_type,
@@ -1156,16 +1232,40 @@ impl Fts5LevenshteinSearchVault {
                     anyhow::bail!("search index {item_type} count mismatch: expected {expected_count}, got {actual}");
                 }
             }
-            conn.execute(
-                &format!(
-                    "INSERT INTO {BUILD_INDEX}({BUILD_INDEX}, rank) VALUES('integrity-check', 1)"
-                ),
-                [],
-            )?;
+            if actual_total != expected.total() {
+                warn!(
+                    expected_total = expected.total(),
+                    actual_total, "Search index total validation failed"
+                );
+                anyhow::bail!(
+                    "search index total count mismatch: expected {}, got {actual_total}",
+                    expected.total()
+                );
+            }
+            info!(
+                actual_artists,
+                actual_albums, actual_tracks, actual_total, "Search index document counts valid"
+            );
+            if verify_fts_integrity {
+                info!("Running FTS structural integrity check");
+                conn.execute(
+                    &format!(
+                        // Exact document counts were validated above. Rank 0
+                        // verifies the FTS structure without re-tokenizing all
+                        // 330M content rows a second time.
+                        "INSERT INTO {BUILD_INDEX}({BUILD_INDEX}, rank) VALUES('integrity-check', 0)"
+                    ),
+                    [],
+                )?;
+                info!("FTS structural integrity check complete");
+            } else {
+                warn!("Skipping exhaustive FTS integrity check for offline recovery build");
+            }
 
             if Self::table_exists(conn, PREVIOUS_INDEX)? {
                 conn.execute_batch(&format!("DROP TABLE {PREVIOUS_INDEX};"))?;
             }
+            let previous_count = Self::get_index_item_count(conn).unwrap_or(0);
             conn.execute_batch(&format!(
                 "ALTER TABLE {ACTIVE_INDEX} RENAME TO {PREVIOUS_INDEX};
                  ALTER TABLE {BUILD_INDEX} RENAME TO {ACTIVE_INDEX};"
@@ -1174,6 +1274,16 @@ impl Fts5LevenshteinSearchVault {
                 conn,
                 "active_search_schema_version",
                 &SEARCH_INDEX_SCHEMA_VERSION.to_string(),
+            )?;
+            Self::set_metadata(
+                conn,
+                "active_index_item_count",
+                &expected.total().to_string(),
+            )?;
+            Self::set_metadata(
+                conn,
+                "previous_index_item_count",
+                &previous_count.to_string(),
             )?;
             Self::set_metadata(conn, "previous_index_retained", "pending_restart")?;
             Self::delete_metadata(conn, "building_search_schema_version")?;
@@ -3057,6 +3167,8 @@ mod tests {
                     batch_size: 1,
                     preparation_threads: 2,
                     sparse_availability: true,
+                    replay_mutations: true,
+                    verify_fts_integrity: true,
                 },
             )
             .unwrap(),

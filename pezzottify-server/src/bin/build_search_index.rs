@@ -36,6 +36,15 @@ struct Args {
     /// entities are still fully indexed in FTS.
     #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
     sparse_availability: bool,
+
+    /// Replay mutations captured by a simultaneously running server. Keep
+    /// disabled for an offline build from a static catalog snapshot.
+    #[arg(long, default_value_t = false, action = clap::ArgAction::Set)]
+    replay_mutations: bool,
+
+    /// Run SQLite FTS5's exhaustive integrity command before activation.
+    #[arg(long, default_value_t = false, action = clap::ArgAction::Set)]
+    verify_fts_integrity: bool,
 }
 
 fn main() -> Result<()> {
@@ -79,6 +88,8 @@ fn main() -> Result<()> {
             batch_size: args.batch_size,
             preparation_threads: args.preparation_threads,
             sparse_availability: args.sparse_availability,
+            replay_mutations: args.replay_mutations,
+            verify_fts_integrity: args.verify_fts_integrity,
         },
     )?);
 
