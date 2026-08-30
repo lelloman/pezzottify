@@ -17,6 +17,9 @@ monitoring/.env
 # Pezzottify server production config (may contain secrets)
 pezzottify-server/config.toml
 
+# Local runtime databases
+pezzottify-server/shows.db
+
 # Dynamic DNS updater
 infra/dns-config.json
 infra/.current-ip
