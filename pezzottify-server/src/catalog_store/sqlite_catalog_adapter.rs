@@ -732,6 +732,115 @@ impl CatalogStore for SqliteCatalogStore {
         }
     }
 
+    fn get_available_searchable_content_page(
+        &self,
+        content_type: SearchableContentType,
+        after_rowid: i64,
+        limit: usize,
+    ) -> Result<Vec<(i64, SearchableItem)>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+        let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+
+        match content_type {
+            SearchableContentType::Artist => {
+                let mut stmt = conn.prepare(
+                    "SELECT a.rowid, a.id, a.name,
+                            COALESCE((SELECT group_concat(ag.genre, char(31))
+                                      FROM artist_genres ag WHERE ag.artist_rowid = a.rowid), '')
+                     FROM artists a INDEXED BY idx_artists_available
+                     WHERE a.artist_available = 1 AND a.rowid > ?1
+                     ORDER BY a.rowid LIMIT ?2",
+                )?;
+                let rows = stmt.query_map(params![after_rowid, limit], |row| {
+                    let genres: String = row.get(3)?;
+                    Ok((
+                        row.get(0)?,
+                        SearchableItem {
+                            id: row.get(1)?,
+                            name: row.get(2)?,
+                            content_type,
+                            additional_text: genres
+                                .split('\u{1f}')
+                                .filter(|genre| !genre.is_empty())
+                                .map(|genre| format!("extra:{genre}"))
+                                .collect(),
+                            is_available: true,
+                        },
+                    ))
+                })?;
+                Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+            }
+            SearchableContentType::Album => {
+                let mut stmt = conn.prepare(
+                    "SELECT al.rowid, al.id, al.name,
+                            COALESCE((SELECT group_concat(ar.name, char(31))
+                                      FROM artist_albums aa
+                                      JOIN artists ar ON ar.rowid = aa.artist_rowid
+                                      WHERE aa.album_rowid = al.rowid), '')
+                     FROM albums al INDEXED BY idx_albums_availability
+                     WHERE al.album_availability IN ('complete', 'partial') AND al.rowid > ?1
+                     ORDER BY al.rowid LIMIT ?2",
+                )?;
+                let rows = stmt.query_map(params![after_rowid, limit], |row| {
+                    let artists: String = row.get(3)?;
+                    Ok((
+                        row.get(0)?,
+                        SearchableItem {
+                            id: row.get(1)?,
+                            name: row.get(2)?,
+                            content_type,
+                            additional_text: artists
+                                .split('\u{1f}')
+                                .filter(|artist| !artist.is_empty())
+                                .map(|artist| format!("artist:{artist}"))
+                                .collect(),
+                            is_available: true,
+                        },
+                    ))
+                })?;
+                Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+            }
+            SearchableContentType::Track => {
+                let mut stmt = conn.prepare(
+                    "SELECT t.rowid, t.id, t.name, al.name,
+                            COALESCE((SELECT group_concat(ar.name, char(31))
+                                      FROM track_artists ta
+                                      JOIN artists ar ON ar.rowid = ta.artist_rowid
+                                      WHERE ta.track_rowid = t.rowid), '')
+                     FROM tracks t INDEXED BY idx_tracks_available
+                     JOIN albums al ON al.rowid = t.album_rowid
+                     WHERE t.track_available = 1 AND t.rowid > ?1
+                     ORDER BY t.rowid LIMIT ?2",
+                )?;
+                let rows = stmt.query_map(params![after_rowid, limit], |row| {
+                    let album: String = row.get(3)?;
+                    let artists: String = row.get(4)?;
+                    let mut additional_text: Vec<String> = artists
+                        .split('\u{1f}')
+                        .filter(|artist| !artist.is_empty())
+                        .map(|artist| format!("artist:{artist}"))
+                        .collect();
+                    additional_text.push(format!("album:{album}"));
+                    Ok((
+                        row.get(0)?,
+                        SearchableItem {
+                            id: row.get(1)?,
+                            name: row.get(2)?,
+                            content_type,
+                            additional_text,
+                            is_available: true,
+                        },
+                    ))
+                })?;
+                Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+            }
+        }
+    }
+
     fn list_all_track_ids(&self) -> Result<Vec<String>> {
         let read_conn = self.get_read_conn();
         let conn = read_conn.lock().unwrap();
