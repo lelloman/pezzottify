@@ -29,6 +29,7 @@ pub struct FileConfig {
 
     // Feature configs
     pub download_manager: Option<DownloadManagerConfig>,
+    pub proxy_mode: Option<ProxyModeConfig>,
     pub background_jobs: Option<BackgroundJobsConfig>,
     pub search: Option<SearchConfig>,
     pub oidc: Option<OidcConfig>,
@@ -39,6 +40,17 @@ pub struct FileConfig {
     pub related_artists: Option<RelatedArtistsConfig>,
     pub audio_analysis: Option<AudioAnalysisConfig>,
     pub audio_embeddings: Option<AudioEmbeddingsConfig>,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct ProxyModeConfig {
+    pub enabled: Option<bool>,
+    pub max_track_size_mib: Option<u64>,
+    pub memory_budget_mib: Option<u64>,
+    pub max_foreground_downloads: Option<usize>,
+    pub max_prefetch_downloads: Option<usize>,
+    pub no_progress_timeout_secs: Option<u64>,
 }
 
 /// Configuration for AI-generated shows and TTS synthesis.

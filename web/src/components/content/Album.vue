@@ -493,7 +493,7 @@ const showDownloadSection = computed(() => {
     "isAlbumUnavailable:",
     unavailable,
   );
-  return canRequest && unavailable;
+  return canRequest && unavailable && !userStore.isProxyModeEnabled;
 });
 
 const syncedDownloadRequest = computed(() => {

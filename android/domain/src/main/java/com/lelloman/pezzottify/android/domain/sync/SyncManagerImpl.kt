@@ -123,6 +123,10 @@ class SyncManagerImpl internal constructor(
 
                 // Update permissions
                 permissionsStore.setPermissions(syncState.permissions.toSet())
+                userSettingsStore.setProxyStreamingAvailable(
+                    syncState.features.proxyStreaming &&
+                        Permission.UseProxyStreaming in syncState.permissions
+                )
                 logger.debug("Applied permissions: ${syncState.permissions}")
 
                 // Apply settings
@@ -549,6 +553,9 @@ class SyncManagerImpl internal constructor(
             }
             is UserSetting.SmartContinuationEnabled -> {
                 userSettingsStore.setSmartContinuationEnabled(setting.value)
+            }
+            is UserSetting.ProxyModeEnabled -> {
+                userSettingsStore.setProxyModeEnabled(setting.value)
             }
         }
     }

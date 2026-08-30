@@ -118,11 +118,13 @@ class MockDownloaderHandler(BaseHTTPRequestHandler):
         """Send a JSON error response."""
         self.send_json({"error": message}, status)
 
-    def send_binary(self, data, content_type):
+    def send_binary(self, data, content_type, audio_extension=None):
         """Send a binary response."""
         self.send_response(200)
         self.send_header('Content-Type', content_type)
         self.send_header('Content-Length', len(data))
+        if audio_extension:
+            self.send_header('X-Pezzottify-Audio-Extension', audio_extension)
         self.end_headers()
         self.wfile.write(data)
 
@@ -238,7 +240,7 @@ class MockDownloaderHandler(BaseHTTPRequestHandler):
             if len(parts) > 3 and parts[3] == 'audio':
                 # Return dummy FLAC-like data
                 dummy_audio = b'fLaC' + b'\x00' * 1000
-                self.send_binary(dummy_audio, 'audio/flac')
+                self.send_binary(dummy_audio, 'audio/flac', 'flac')
                 return
 
             # Track metadata

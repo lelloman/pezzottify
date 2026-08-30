@@ -19,6 +19,9 @@ import com.lelloman.pezzottify.android.ui.R
 fun PlaybackSettingsSection(
     smartContinuationEnabled: Boolean,
     onSmartContinuationChanged: (Boolean) -> Unit,
+    proxyStreamingAvailable: Boolean = false,
+    proxyModeEnabled: Boolean = true,
+    onProxyModeChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
@@ -29,6 +32,24 @@ fun PlaybackSettingsSection(
         )
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        if (proxyStreamingAvailable) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.proxy_streaming), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        stringResource(R.string.proxy_streaming_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(checked = proxyModeEnabled, onCheckedChange = onProxyModeChanged)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),

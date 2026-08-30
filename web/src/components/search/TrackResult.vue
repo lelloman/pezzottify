@@ -38,6 +38,9 @@ import ClickableArtistsNames from "@/components/common/ClickableArtistsNames.vue
 import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
 import TrackName from "../common/TrackName.vue";
 import TrackContextMenu from "@/components/common/contextmenu/TrackContextMenu.vue";
+import { useUserStore } from "@/store/user";
+
+const userStore = useUserStore();
 
 const props = defineProps({
   result: {
@@ -51,7 +54,11 @@ const imageUrl = computedImageUrl(props.result.album_id);
 const duration = formatDuration(props.result.duration);
 
 const isTrackAvailable = computed(() => {
-  return !props.result.availability || props.result.availability === "available";
+  return (
+    userStore.isProxyModeEnabled ||
+    !props.result.availability ||
+    props.result.availability === "available"
+  );
 });
 
 const isTrackFetching = computed(() => {

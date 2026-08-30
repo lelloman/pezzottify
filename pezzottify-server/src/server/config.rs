@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::config::{
     AgentSettings, AudioEmbeddingsSettings, DownloadManagerSettings, IngestionSettings,
-    ShowsSettings, StreamingSearchSettings,
+    ProxyModeSettings, ShowsSettings, StreamingSearchSettings,
 };
 
 use super::RequestsLoggingLevel;
@@ -30,6 +30,11 @@ pub struct ServerConfig {
     pub streaming_search: StreamingSearchSettings,
     /// Download manager configuration.
     pub download_manager: DownloadManagerSettings,
+    /// Progressive proxy streaming configuration.
+    pub proxy_mode: ProxyModeSettings,
+    /// External downloader endpoint used by proxy streaming.
+    pub downloader_url: Option<String>,
+    pub downloader_timeout_sec: u64,
     /// Database directory path.
     pub db_dir: PathBuf,
     /// Media files path.
@@ -59,6 +64,9 @@ impl Default for ServerConfig {
             login_rate_limit_per_hour: 100,
             streaming_search: StreamingSearchSettings::default(),
             download_manager: DownloadManagerSettings::default(),
+            proxy_mode: ProxyModeSettings::default(),
+            downloader_url: None,
+            downloader_timeout_sec: 300,
             db_dir: PathBuf::from("."),
             media_path: PathBuf::from("."),
             agent: AgentSettings::default(),

@@ -616,6 +616,7 @@ async fn admin_add_user_extra_permission(
         "ViewAnalytics" => Permission::ViewAnalytics,
         "RequestContent" => Permission::RequestContent,
         "DownloadManagerAdmin" => Permission::DownloadManagerAdmin,
+        "UseProxyStreaming" => Permission::UseProxyStreaming,
         _ => return (StatusCode::BAD_REQUEST, "Invalid permission").into_response(),
     };
 
@@ -1142,6 +1143,7 @@ impl ServerState {
             organic_indexer,
             http_client,
             download_manager: None, // Will be set by make_app if download manager is enabled
+            track_materializer: None,
             ingestion_manager: None, // Will be set by make_app if ingestion is enabled
             enrichment_store,
             database,

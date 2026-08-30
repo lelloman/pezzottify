@@ -503,6 +503,11 @@ class InteractorsModule {
         override fun isSmartContinuationEnabled(): Boolean =
             userSettingsStore.isSmartContinuationEnabled.value
 
+        override fun isProxyModeEnabled(): Boolean = userSettingsStore.isProxyModeEnabled.value
+
+        override fun isProxyStreamingAvailable(): Boolean =
+            userSettingsStore.isProxyStreamingAvailable.value
+
         override fun getBackgroundSyncInterval() = userSettingsStore.backgroundSyncInterval.value
 
         override fun isSmartSearchEnabled(): Boolean = userSettingsStore.isSmartSearchEnabled.value
@@ -515,6 +520,11 @@ class InteractorsModule {
 
         override fun observeSmartContinuationEnabled(): Flow<Boolean> =
             userSettingsStore.isSmartContinuationEnabled
+
+        override fun observeProxyModeEnabled(): Flow<Boolean> = userSettingsStore.isProxyModeEnabled
+
+        override fun observeProxyStreamingAvailable(): Flow<Boolean> =
+            userSettingsStore.isProxyStreamingAvailable
 
         override fun observeBackgroundSyncInterval() = userSettingsStore.backgroundSyncInterval
 
@@ -530,6 +540,13 @@ class InteractorsModule {
 
         override suspend fun setSmartContinuationEnabled(enabled: Boolean) {
             updateSmartContinuationSetting(enabled)
+        }
+
+        override suspend fun setProxyModeEnabled(enabled: Boolean) {
+            userSettingsStore.setSyncedSetting(
+                com.lelloman.pezzottify.android.domain.sync.UserSetting.ProxyModeEnabled(enabled),
+                com.lelloman.pezzottify.android.domain.usercontent.SyncStatus.PendingSync,
+            )
         }
 
         override fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) {
@@ -747,7 +764,10 @@ class InteractorsModule {
             }
 
             override fun streamingSearch(query: String): Flow<StreamingSearchSection> {
-                val excludeUnavailable = userSettingsStore.isExcludeUnavailableEnabled.value
+                val proxyActive = userSettingsStore.isProxyStreamingAvailable.value &&
+                    userSettingsStore.isProxyModeEnabled.value
+                val excludeUnavailable =
+                    userSettingsStore.isExcludeUnavailableEnabled.value && !proxyActive
                 logger.debug("streamingSearch($query, excludeUnavailable=$excludeUnavailable)")
                 val baseUrl = configStore.baseUrl.value
                 return performStreamingSearch(query, excludeUnavailable).map { section ->
@@ -927,7 +947,11 @@ class InteractorsModule {
                             imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, result.imageId),
                             albumId = result.albumId,
                             durationMs = result.duration.toLong() * 1000,
-                            availability = DomainTrackAvailability.fromServerString(result.availability)
+                            availability = if (
+                                userSettingsStore.isProxyStreamingAvailable.value &&
+                                userSettingsStore.isProxyModeEnabled.value
+                            ) com.lelloman.pezzottify.android.ui.content.TrackAvailability.Available
+                            else DomainTrackAvailability.fromServerString(result.availability)
                                 .toTrackAvailability(),
                         )
                     }

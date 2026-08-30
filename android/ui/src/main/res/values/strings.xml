@@ -394,6 +394,7 @@
     <string name="permission_request_content">Request Content</string>
     <string name="permission_download_manager_admin">Download Manager Admin</string>
     <string name="permission_report_bug">Report Bug</string>
+    <string name="permission_use_proxy_streaming">Proxy streaming</string>
     <string name="permission_access_catalog_desc">Browse and play music from the catalog.</string>
     <string name="permission_like_content_desc">Like albums, artists, and tracks, make your personal library.</string>
     <string name="permission_own_playlists_desc">Create and manage personal playlists.</string>
@@ -404,6 +405,9 @@
     <string name="permission_request_content_desc">Search external music provider and request content downloads.</string>
     <string name="permission_download_manager_admin_desc">Manage download queue, view audit logs, and retry failed downloads.</string>
     <string name="permission_report_bug_desc">Submit bug reports with logs and screenshots.</string>
+    <string name="permission_use_proxy_streaming_desc">Stream and save catalog tracks that are not stored yet.</string>
+    <string name="proxy_streaming">Stream missing tracks</string>
+    <string name="proxy_streaming_description">Play catalog tracks immediately and save them while they download.</string>
     <!-- PERMISSIONS -->
 
     <!-- SEARCH FILTERS -->

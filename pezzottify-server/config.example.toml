@@ -31,6 +31,16 @@ downloader_timeout_sec = 300
 event_retention_days = 30
 prune_interval_hours = 24
 
+# Progressive proxy streaming. Disabled by default and additionally gated by
+# the UseProxyStreaming permission and each user's preference.
+[proxy_mode]
+enabled = false
+max_track_size_mib = 128
+memory_budget_mib = 256
+max_foreground_downloads = 2
+max_prefetch_downloads = 1
+no_progress_timeout_secs = 60
+
 # Download Manager settings
 # Enables passive download queue. Users submit requests, an external script
 # picks them up and fulfills them via the ingestion system.

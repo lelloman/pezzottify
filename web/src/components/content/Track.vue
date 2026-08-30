@@ -316,7 +316,7 @@ const trackContributors = computed(() =>
 
 const isTrackAvailable = computed(() => {
   const availability = track.value?.availability;
-  return !availability || availability === "available";
+  return userStore.isProxyModeEnabled || !availability || availability === "available";
 });
 
 const isTrackFetching = computed(
@@ -325,6 +325,7 @@ const isTrackFetching = computed(
 const showDownloadButton = computed(
   () =>
     userStore.canRequestContent &&
+    !userStore.isProxyModeEnabled &&
     !isTrackAvailable.value &&
     !isTrackFetching.value,
 );

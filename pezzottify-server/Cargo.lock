@@ -2366,6 +2366,7 @@ dependencies = [
  "axum-extra",
  "base64 0.22.1",
  "byte-unit",
+ "bytes",
  "chrono",
  "clap",
  "crossterm",

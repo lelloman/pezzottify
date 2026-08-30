@@ -43,6 +43,10 @@ sealed interface UserSetting {
     @Serializable
     @SerialName("smart_continuation_enabled")
     data class SmartContinuationEnabled(val value: Boolean) : UserSetting
+
+    @Serializable
+    @SerialName("proxy_mode_enabled")
+    data class ProxyModeEnabled(val value: Boolean) : UserSetting
 }
 
 /**
@@ -134,7 +138,8 @@ enum class Permission {
     ViewAnalytics,
     RequestContent,
     DownloadManagerAdmin,
-    ReportBug;
+    ReportBug,
+    UseProxyStreaming;
 
     companion object {
         /**

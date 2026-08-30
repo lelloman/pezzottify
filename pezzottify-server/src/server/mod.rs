@@ -22,6 +22,7 @@ mod storage_report;
 // mod skeleton;
 pub mod state;
 mod stream_track;
+mod track_materializer;
 pub mod websocket;
 
 pub(crate) use api_error::ApiError;

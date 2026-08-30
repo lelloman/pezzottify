@@ -19,6 +19,8 @@ interface SettingsScreenActions {
 
     fun setSmartContinuationEnabled(enabled: Boolean)
 
+    fun setProxyModeEnabled(enabled: Boolean) {}
+
     fun setBackgroundSyncInterval(interval: BackgroundSyncInterval)
 
     fun setSmartSearchEnabled(enabled: Boolean)

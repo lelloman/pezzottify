@@ -13,6 +13,7 @@ pub enum Permission {
     RequestContent,
     DownloadManagerAdmin,
     ReportBug,
+    UseProxyStreaming,
 }
 
 impl Permission {
@@ -28,6 +29,7 @@ impl Permission {
             Permission::RequestContent => 9,
             Permission::DownloadManagerAdmin => 10,
             Permission::ReportBug => 11,
+            Permission::UseProxyStreaming => 12,
         }
     }
 
@@ -43,6 +45,7 @@ impl Permission {
             9 => Some(Permission::RequestContent),
             10 => Some(Permission::DownloadManagerAdmin),
             11 => Some(Permission::ReportBug),
+            12 => Some(Permission::UseProxyStreaming),
             _ => None,
         }
     }
@@ -56,6 +59,7 @@ const ADMIN_PERMISSIONS: &[Permission] = &[
     Permission::ViewAnalytics,
     Permission::RequestContent,
     Permission::DownloadManagerAdmin,
+    Permission::UseProxyStreaming,
 ];
 const REGULAR_PERMISSIONS: &[Permission] = &[
     Permission::AccessCatalog,
@@ -123,6 +127,7 @@ mod tests {
         assert_eq!(Permission::RequestContent.as_int(), 9);
         assert_eq!(Permission::DownloadManagerAdmin.as_int(), 10);
         assert_eq!(Permission::ReportBug.as_int(), 11);
+        assert_eq!(Permission::UseProxyStreaming.as_int(), 12);
     }
 
     #[test]
@@ -141,12 +146,16 @@ mod tests {
             Some(Permission::DownloadManagerAdmin)
         );
         assert_eq!(Permission::from_int(11), Some(Permission::ReportBug));
+        assert_eq!(
+            Permission::from_int(12),
+            Some(Permission::UseProxyStreaming)
+        );
     }
 
     #[test]
     fn permission_from_int_invalid_values() {
         assert_eq!(Permission::from_int(0), None);
-        assert_eq!(Permission::from_int(12), None);
+        assert_eq!(Permission::from_int(13), None);
         assert_eq!(Permission::from_int(-1), None);
         assert_eq!(Permission::from_int(100), None);
         assert_eq!(Permission::from_int(i32::MAX), None);
@@ -166,6 +175,7 @@ mod tests {
             Permission::RequestContent,
             Permission::DownloadManagerAdmin,
             Permission::ReportBug,
+            Permission::UseProxyStreaming,
         ];
 
         for permission in &permissions {
@@ -179,7 +189,7 @@ mod tests {
     fn user_role_admin_permissions() {
         let admin_perms = UserRole::Admin.permissions();
 
-        assert_eq!(admin_perms.len(), 7);
+        assert_eq!(admin_perms.len(), 8);
         assert!(admin_perms.contains(&Permission::AccessCatalog));
         assert!(admin_perms.contains(&Permission::EditCatalog));
         assert!(admin_perms.contains(&Permission::ManagePermissions));
@@ -187,6 +197,7 @@ mod tests {
         assert!(admin_perms.contains(&Permission::ViewAnalytics));
         assert!(admin_perms.contains(&Permission::RequestContent));
         assert!(admin_perms.contains(&Permission::DownloadManagerAdmin));
+        assert!(admin_perms.contains(&Permission::UseProxyStreaming));
 
         assert!(!admin_perms.contains(&Permission::LikeContent));
         assert!(!admin_perms.contains(&Permission::OwnPlaylists));

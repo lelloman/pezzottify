@@ -25,6 +25,10 @@ interface UserSettingsStore {
      */
     val isSmartContinuationEnabled: StateFlow<Boolean>
 
+    /** User preference; the server still enforces its feature flag and permission. */
+    val isProxyModeEnabled: StateFlow<Boolean>
+    val isProxyStreamingAvailable: StateFlow<Boolean>
+
     /**
      * How often to run background sync when the app is not running.
      * This is a local-only setting.
@@ -50,6 +54,8 @@ interface UserSettingsStore {
     suspend fun setFileLoggingEnabled(enabled: Boolean)
     suspend fun setNotifyWhatsNewEnabled(enabled: Boolean)
     suspend fun setSmartContinuationEnabled(enabled: Boolean)
+    suspend fun setProxyModeEnabled(enabled: Boolean)
+    fun setProxyStreamingAvailable(available: Boolean)
     fun setBackgroundSyncInterval(interval: BackgroundSyncInterval)
     fun setSmartSearchEnabled(enabled: Boolean)
     fun setExcludeUnavailableEnabled(enabled: Boolean)

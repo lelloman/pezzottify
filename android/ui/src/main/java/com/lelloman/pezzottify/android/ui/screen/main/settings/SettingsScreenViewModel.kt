@@ -41,6 +41,8 @@ class SettingsScreenViewModel @Inject constructor(
                 storageInfo = interactor.getStorageInfo(),
                 notifyWhatsNewEnabled = interactor.isNotifyWhatsNewEnabled(),
                 smartContinuationEnabled = interactor.isSmartContinuationEnabled(),
+                proxyModeEnabled = interactor.isProxyModeEnabled(),
+                proxyStreamingAvailable = interactor.isProxyStreamingAvailable(),
                 backgroundSyncInterval = interactor.getBackgroundSyncInterval(),
                 smartSearchEnabled = interactor.isSmartSearchEnabled(),
                 excludeUnavailableEnabled = interactor.isExcludeUnavailableEnabled(),
@@ -85,6 +87,16 @@ class SettingsScreenViewModel @Inject constructor(
             launch {
                 interactor.observeSmartContinuationEnabled().collect { enabled ->
                     mutableState.update { it.copy(smartContinuationEnabled = enabled) }
+                }
+            }
+            launch {
+                interactor.observeProxyModeEnabled().collect { enabled ->
+                    mutableState.update { it.copy(proxyModeEnabled = enabled) }
+                }
+            }
+            launch {
+                interactor.observeProxyStreamingAvailable().collect { available ->
+                    mutableState.update { it.copy(proxyStreamingAvailable = available) }
                 }
             }
             launch {
@@ -170,6 +182,10 @@ class SettingsScreenViewModel @Inject constructor(
         viewModelScope.launch {
             interactor.setSmartContinuationEnabled(enabled)
         }
+    }
+
+    override fun setProxyModeEnabled(enabled: Boolean) {
+        viewModelScope.launch { interactor.setProxyModeEnabled(enabled) }
     }
 
     override fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) {
@@ -286,6 +302,8 @@ class SettingsScreenViewModel @Inject constructor(
         fun getStorageInfo(): StorageInfo?
         fun isNotifyWhatsNewEnabled(): Boolean
         fun isSmartContinuationEnabled(): Boolean
+        fun isProxyModeEnabled(): Boolean = true
+        fun isProxyStreamingAvailable(): Boolean = false
         fun getBackgroundSyncInterval(): BackgroundSyncInterval
         fun isSmartSearchEnabled(): Boolean
         fun isExcludeUnavailableEnabled(): Boolean
@@ -296,6 +314,10 @@ class SettingsScreenViewModel @Inject constructor(
         fun observeStorageInfo(): kotlinx.coroutines.flow.Flow<StorageInfo>
         fun observeNotifyWhatsNewEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeSmartContinuationEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
+        fun observeProxyModeEnabled(): kotlinx.coroutines.flow.Flow<Boolean> =
+            kotlinx.coroutines.flow.flowOf(true)
+        fun observeProxyStreamingAvailable(): kotlinx.coroutines.flow.Flow<Boolean> =
+            kotlinx.coroutines.flow.flowOf(false)
         fun observeBackgroundSyncInterval(): kotlinx.coroutines.flow.Flow<BackgroundSyncInterval>
         fun observeSmartSearchEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeExcludeUnavailableEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
@@ -306,6 +328,7 @@ class SettingsScreenViewModel @Inject constructor(
         suspend fun setCacheEnabled(enabled: Boolean)
         suspend fun setNotifyWhatsNewEnabled(enabled: Boolean)
         suspend fun setSmartContinuationEnabled(enabled: Boolean)
+        suspend fun setProxyModeEnabled(enabled: Boolean) {}
         fun setBackgroundSyncInterval(interval: BackgroundSyncInterval)
         fun setSmartSearchEnabled(enabled: Boolean)
         fun setExcludeUnavailableEnabled(enabled: Boolean)

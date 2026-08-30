@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui
 
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
+import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import dagger.Module
 import dagger.Provides
@@ -17,6 +18,7 @@ class UiModule {
     @Singleton
     fun provideContentResolver(
         staticsProvider: StaticsProvider,
-        configStore: ConfigStore
-    ): ContentResolver = UiContentResolver(staticsProvider, configStore)
+        configStore: ConfigStore,
+        userSettingsStore: UserSettingsStore,
+    ): ContentResolver = UiContentResolver(staticsProvider, configStore, userSettingsStore)
 }

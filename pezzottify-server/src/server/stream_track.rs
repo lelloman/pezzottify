@@ -3,9 +3,11 @@
 use super::{
     api_error::ApiError,
     session::Session,
-    state::{DatabaseHandles, OptionalOrganicIndexer, ServerState},
+    state::{DatabaseHandles, OptionalOrganicIndexer, OptionalTrackMaterializer, ServerState},
 };
 use crate::db_executor::DbPriority;
+use crate::downloader::DownloadPriority;
+use crate::user::{Permission, UserSetting};
 use axum::{
     body::Body,
     extract::{FromRequestParts, Path, State},
@@ -183,10 +185,11 @@ fn audio_content_type(path: &FilePath) -> &'static str {
 }
 
 pub async fn stream_track(
-    _session: Session,
+    session: Session,
     byte_range: ByteRangeRequest,
     State(database): State<DatabaseHandles>,
     State(organic_indexer): State<OptionalOrganicIndexer>,
+    State(track_materializer): State<OptionalTrackMaterializer>,
     Path(id): Path<String>,
 ) -> Response {
     // Queue track for organic search index expansion
@@ -210,15 +213,81 @@ pub async fn stream_track(
                     None
                 }
             };
-            Ok(opened.map(|(file, path)| (track, file, path)))
+            Ok(Some((track, opened)))
         })
         .await;
-    let (track, file, path) = match loaded {
+    let (track, opened) = match loaded {
         Ok(Some(loaded)) => loaded,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
         Err(err) => return ApiError::from(err).into_response(),
     };
     debug!("Streaming track: {}", track.name);
+
+    let Some((file, path)) = opened else {
+        if !session.has_permission(Permission::UseProxyStreaming) {
+            return StatusCode::NOT_FOUND.into_response();
+        }
+        let Some(materializer) = track_materializer else {
+            return StatusCode::NOT_FOUND.into_response();
+        };
+        let user_id = session.user_id;
+        let enabled = database
+            .user_manager
+            .run(DbPriority::Interactive, move |manager| {
+                manager.get_user_setting(user_id, "proxy_mode_enabled")
+            })
+            .await;
+        let enabled = match enabled {
+            Ok(Some(UserSetting::ProxyModeEnabled(value))) => value,
+            Ok(None) => true,
+            Ok(Some(_)) => false,
+            Err(error) => return ApiError::user_database(error).into_response(),
+        };
+        if !enabled {
+            return StatusCode::NOT_FOUND.into_response();
+        }
+
+        let in_flight = materializer.get_or_start(&id, DownloadPriority::Foreground);
+        let metadata = match in_flight.metadata().await {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                debug!(track_id = %id, %error, "Proxy stream could not start");
+                return StatusCode::BAD_GATEWAY.into_response();
+            }
+        };
+        let resolved_range = match byte_range.0 {
+            Ok(None) => None,
+            Ok(Some(range)) => match range.resolve(metadata.content_length) {
+                Ok(range) => Some(range),
+                Err(_) => return range_not_satisfiable(metadata.content_length),
+            },
+            Err(_) => return range_not_satisfiable(metadata.content_length),
+        };
+        let (status, start, content_length) = match resolved_range {
+            Some(range) => (StatusCode::PARTIAL_CONTENT, range.start, range.length),
+            None => (StatusCode::OK, 0, metadata.content_length),
+        };
+        let mut response = Response::builder()
+            .status(status)
+            .header(header::CONTENT_TYPE, metadata.content_type)
+            .header(header::ACCEPT_RANGES, "bytes")
+            .header(header::CONTENT_LENGTH, content_length);
+        if let Some(range) = resolved_range {
+            response = response.header(
+                header::CONTENT_RANGE,
+                format!(
+                    "bytes {}-{}/{}",
+                    range.start, range.end, metadata.content_length
+                ),
+            );
+        }
+        return response
+            .body(Body::from_stream(
+                in_flight.range_stream(start, content_length),
+            ))
+            .expect("proxy stream response headers are valid");
+    };
+
     debug!("Streaming track from path {}", path.display());
 
     let mut file = File::from_std(file);

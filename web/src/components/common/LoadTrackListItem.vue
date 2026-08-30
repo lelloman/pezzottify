@@ -66,9 +66,11 @@ import { formatDuration } from "@/utils";
 import TrackName from "@/components/common/TrackName.vue";
 import LoadClickableArtistsNames from "@/components/common/LoadClickableArtistsNames.vue";
 import { useStaticsStore } from "@/store/statics";
+import { useUserStore } from "@/store/user";
 import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
 
 const staticsStore = useStaticsStore();
+const userStore = useUserStore();
 
 const props = defineProps({
   trackId: {
@@ -132,7 +134,11 @@ const loadTrackData = () => {
 
 const isTrackAvailable = computed(() => {
   if (!track.value) return true;
-  return !track.value.availability || track.value.availability === "available";
+  return (
+    userStore.isProxyModeEnabled ||
+    !track.value.availability ||
+    track.value.availability === "available"
+  );
 });
 
 const isTrackFetching = computed(() => {

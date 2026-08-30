@@ -50,6 +50,19 @@
 
     <div class="settingsSection">
       <h2 class="sectionTitle">Playback</h2>
+      <div v-if="userStore.canUseProxyStreaming" class="settingRow">
+        <div class="settingInfo">
+          <span class="settingLabel">Stream missing tracks</span>
+          <span class="settingDescription">
+            Start playing catalog tracks immediately and save them locally as
+            they download.
+          </span>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" v-model="proxyModeEnabled" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
       <div class="settingRow">
         <div class="settingInfo">
           <span class="settingLabel">Smart Continuation</span>
@@ -80,6 +93,10 @@ const userStore = useUserStore();
 const smartContinuationEnabled = computed({
   get: () => userStore.isSmartContinuationEnabled,
   set: (enabled) => userStore.setSmartContinuationEnabled(enabled),
+});
+const proxyModeEnabled = computed({
+  get: () => userStore.isProxyModeEnabled,
+  set: (enabled) => userStore.setProxyModeEnabled(enabled),
 });
 </script>
 
