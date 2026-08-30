@@ -11,7 +11,7 @@ pub use file_config::{
 };
 
 use crate::server::RequestsLoggingLevel;
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use clap::ValueEnum;
 use std::path::PathBuf;
 
@@ -116,6 +116,7 @@ pub struct AppConfig {
 
     // Feature configs (with defaults)
     pub download_manager: DownloadManagerSettings,
+    pub proxy_mode: ProxyModeSettings,
     pub background_jobs: BackgroundJobsSettings,
     pub search: SearchSettings,
     pub catalog_store: CatalogStoreSettings,
@@ -215,6 +216,40 @@ impl AppConfig {
             backoff_multiplier: dm_file.backoff_multiplier.unwrap_or(2.5),
             audit_log_retention_days: dm_file.audit_log_retention_days.unwrap_or(90),
         };
+
+        let proxy_file = file.proxy_mode.unwrap_or_default();
+        let mib = 1024_u64 * 1024;
+        let proxy_mode = ProxyModeSettings {
+            enabled: proxy_file.enabled.unwrap_or(false),
+            max_track_size_bytes: proxy_file
+                .max_track_size_mib
+                .unwrap_or(128)
+                .checked_mul(mib)
+                .context("proxy_mode.max_track_size_mib is too large")?,
+            memory_budget_bytes: proxy_file
+                .memory_budget_mib
+                .unwrap_or(256)
+                .checked_mul(mib)
+                .context("proxy_mode.memory_budget_mib is too large")?,
+            max_foreground_downloads: proxy_file.max_foreground_downloads.unwrap_or(2),
+            max_prefetch_downloads: proxy_file.max_prefetch_downloads.unwrap_or(1),
+            no_progress_timeout_secs: proxy_file.no_progress_timeout_secs.unwrap_or(60),
+        };
+        if proxy_mode.enabled && downloader_url.is_none() {
+            bail!("proxy_mode.enabled requires downloader_url");
+        }
+        if proxy_mode.memory_budget_bytes < proxy_mode.max_track_size_bytes {
+            bail!("proxy_mode.memory_budget_mib must be at least max_track_size_mib");
+        }
+        if proxy_mode.max_track_size_bytes == 0 {
+            bail!("proxy_mode.max_track_size_mib must be greater than zero");
+        }
+        if proxy_mode.max_foreground_downloads == 0 {
+            bail!("proxy_mode.max_foreground_downloads must be greater than zero");
+        }
+        if proxy_mode.no_progress_timeout_secs == 0 {
+            bail!("proxy_mode.no_progress_timeout_secs must be greater than zero");
+        }
 
         // Background jobs settings from file config
         let bg_jobs_file = file.background_jobs.unwrap_or_default();
@@ -601,6 +636,7 @@ impl AppConfig {
             event_retention_days,
             prune_interval_hours,
             download_manager,
+            proxy_mode,
             background_jobs,
             search,
             catalog_store,
@@ -647,6 +683,29 @@ impl AppConfig {
             .as_ref()
             .map(PathBuf::from)
             .unwrap_or_else(|| self.db_dir.join("ingestion_uploads"))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ProxyModeSettings {
+    pub enabled: bool,
+    pub max_track_size_bytes: u64,
+    pub memory_budget_bytes: u64,
+    pub max_foreground_downloads: usize,
+    pub max_prefetch_downloads: usize,
+    pub no_progress_timeout_secs: u64,
+}
+
+impl Default for ProxyModeSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            max_track_size_bytes: 128 * 1024 * 1024,
+            memory_budget_bytes: 256 * 1024 * 1024,
+            max_foreground_downloads: 2,
+            max_prefetch_downloads: 1,
+            no_progress_timeout_secs: 60,
+        }
     }
 }
 

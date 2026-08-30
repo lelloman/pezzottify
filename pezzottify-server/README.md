@@ -369,7 +369,22 @@ logging_level = "path"
 [download_manager]
 max_albums_per_hour = 10
 max_albums_per_day = 60
+
+# Stream missing tracks through the downloader and publish them into the catalog.
+# Requires downloader_url plus the per-user UseProxyStreaming permission.
+[proxy_mode]
+enabled = false
+max_track_size_mib = 128
+memory_budget_mib = 256
+max_foreground_downloads = 2
+max_prefetch_downloads = 1
+no_progress_timeout_secs = 60
 ```
+
+When proxy mode is enabled, the downloader's `GET /track/{id}/audio` response must
+be a full identity-encoded audio body with `Content-Length`, an `audio/*`
+`Content-Type`, and `X-Pezzottify-Audio-Extension`. Pezzottify sends
+`X-Pezzottify-Priority` as `foreground` or `prefetch`.
 
 ### Configuration Precedence
 

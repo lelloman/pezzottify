@@ -20,6 +20,10 @@ pub enum UserSetting {
     #[serde(rename = "smart_continuation_enabled")]
     SmartContinuationEnabled(bool),
 
+    /// Whether an authorized user wants missing tracks streamed on demand.
+    #[serde(rename = "proxy_mode_enabled")]
+    ProxyModeEnabled(bool),
+
     /// Legacy setting that has been removed. Kept for backwards compatibility
     /// with old sync events in the database. Should be filtered out when reading.
     #[serde(rename = "enable_external_search")]
@@ -34,6 +38,7 @@ impl UserSetting {
         match self {
             Self::NotifyWhatsNew(_) => "notify_whatsnew",
             Self::SmartContinuationEnabled(_) => "smart_continuation_enabled",
+            Self::ProxyModeEnabled(_) => "proxy_mode_enabled",
             Self::EnableExternalSearch(_) => "enable_external_search",
         }
     }
@@ -44,6 +49,7 @@ impl UserSetting {
         match self {
             Self::NotifyWhatsNew(enabled) => enabled.to_string(),
             Self::SmartContinuationEnabled(enabled) => enabled.to_string(),
+            Self::ProxyModeEnabled(enabled) => enabled.to_string(),
             Self::EnableExternalSearch(enabled) => enabled.to_string(),
         }
     }
@@ -73,6 +79,12 @@ impl UserSetting {
                     .map_err(|_| format!("Invalid boolean value for {}: {}", key, value))?;
                 Ok(Self::SmartContinuationEnabled(enabled))
             }
+            "proxy_mode_enabled" => {
+                let enabled = value
+                    .parse::<bool>()
+                    .map_err(|_| format!("Invalid boolean value for {}: {}", key, value))?;
+                Ok(Self::ProxyModeEnabled(enabled))
+            }
             // Legacy setting - still parseable for backwards compat but deprecated
             "enable_external_search" => {
                 let enabled = value
@@ -88,7 +100,10 @@ impl UserSetting {
     pub fn is_known_key(key: &str) -> bool {
         matches!(
             key,
-            "notify_whatsnew" | "smart_continuation_enabled" | "enable_external_search"
+            "notify_whatsnew"
+                | "smart_continuation_enabled"
+                | "proxy_mode_enabled"
+                | "enable_external_search"
         )
     }
 
@@ -98,6 +113,8 @@ impl UserSetting {
         match key {
             "notify_whatsnew" => Some(Self::NotifyWhatsNew(false)),
             "smart_continuation_enabled" => Some(Self::SmartContinuationEnabled(false)),
+            // Permission grants activate proxy mode unless the user explicitly opts out.
+            "proxy_mode_enabled" => Some(Self::ProxyModeEnabled(true)),
             // Don't provide defaults for deprecated settings
             "enable_external_search" => None,
             _ => None,
@@ -113,6 +130,10 @@ mod tests {
     fn test_key() {
         let setting = UserSetting::NotifyWhatsNew(true);
         assert_eq!(setting.key(), "notify_whatsnew");
+        assert_eq!(
+            UserSetting::ProxyModeEnabled(true).key(),
+            "proxy_mode_enabled"
+        );
     }
 
     #[test]
@@ -161,6 +182,10 @@ mod tests {
         assert_eq!(
             UserSetting::default_for_key("notify_whatsnew"),
             Some(UserSetting::NotifyWhatsNew(false))
+        );
+        assert_eq!(
+            UserSetting::default_for_key("proxy_mode_enabled"),
+            Some(UserSetting::ProxyModeEnabled(true))
         );
         assert_eq!(UserSetting::default_for_key("unknown_key"), None);
     }

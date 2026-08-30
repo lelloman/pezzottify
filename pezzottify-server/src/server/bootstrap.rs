@@ -106,6 +106,25 @@ async fn make_app_with_executor(
         state.database.catalog_read.clone(),
     ));
 
+    if config.proxy_mode.enabled {
+        if let Some(url) = &config.downloader_url {
+            let downloader = Arc::new(crate::downloader::DownloaderClient::new(
+                url.clone(),
+                config.downloader_timeout_sec,
+            ));
+            state.track_materializer = Some(super::track_materializer::TrackMaterializer::new(
+                downloader,
+                catalog_store.clone(),
+                search_vault.clone(),
+                config.media_path.clone(),
+                config.proxy_mode.clone(),
+            ));
+            info!("Progressive proxy streaming initialized");
+        } else {
+            error!("Proxy streaming enabled without downloader_url; feature unavailable");
+        }
+    }
+
     // Initialize download manager if enabled
     if config.download_manager.enabled {
         info!("Initializing download manager...");
@@ -295,6 +314,9 @@ pub async fn run_server(
     oidc_config: Option<crate::config::OidcConfig>,
     streaming_search: crate::config::StreamingSearchSettings,
     download_manager: crate::config::DownloadManagerSettings,
+    proxy_mode: crate::config::ProxyModeSettings,
+    downloader_url: Option<String>,
+    downloader_timeout_sec: u64,
     db_dir: std::path::PathBuf,
     media_path: std::path::PathBuf,
     agent: crate::config::AgentSettings,
@@ -323,6 +345,9 @@ pub async fn run_server(
         login_rate_limit_per_hour,
         streaming_search,
         download_manager,
+        proxy_mode,
+        downloader_url,
+        downloader_timeout_sec,
         db_dir,
         media_path,
         agent,

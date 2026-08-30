@@ -337,7 +337,8 @@ const fetchSuggestions = debounce(async (query) => {
           query: trimmed,
           resolve: true,
           limit: SUGGESTION_FETCH_LIMIT,
-          exclude_unavailable: excludeUnavailable.value,
+          exclude_unavailable:
+            excludeUnavailable.value && !userStore.isProxyModeEnabled,
           search_mode: "expanded",
         }),
         signal: suggestionAbortController.signal,
@@ -352,7 +353,10 @@ const fetchSuggestions = debounce(async (query) => {
     } else {
       const sections = await fetchStreamingSearchSections(
         trimmed,
-        { excludeUnavailable: excludeUnavailable.value },
+        {
+          excludeUnavailable:
+            excludeUnavailable.value && !userStore.isProxyModeEnabled,
+        },
         suggestionAbortController.signal,
       );
       searchSuggestions.value = sectionsToResults(sections).slice(

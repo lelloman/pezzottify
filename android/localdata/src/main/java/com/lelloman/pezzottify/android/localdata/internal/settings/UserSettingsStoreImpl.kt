@@ -88,6 +88,14 @@ internal class UserSettingsStoreImpl(
     }
     override val isSmartContinuationEnabled: StateFlow<Boolean> = mutableSmartContinuationEnabled.asStateFlow()
 
+    private val mutableProxyModeEnabled by lazy {
+        MutableStateFlow(prefs.getBoolean(KEY_PROXY_MODE_ENABLED, DEFAULT_PROXY_MODE_ENABLED))
+    }
+    override val isProxyModeEnabled: StateFlow<Boolean> = mutableProxyModeEnabled.asStateFlow()
+    private val mutableProxyStreamingAvailable = MutableStateFlow(false)
+    override val isProxyStreamingAvailable: StateFlow<Boolean> =
+        mutableProxyStreamingAvailable.asStateFlow()
+
     private val mutableBackgroundSyncInterval by lazy {
         val storedValue = prefs.getString(KEY_BACKGROUND_SYNC_INTERVAL, null)
         val interval = storedValue?.let { parseBackgroundSyncInterval(it) } ?: BackgroundSyncInterval.Default
@@ -133,6 +141,17 @@ internal class UserSettingsStoreImpl(
                 setting = UserSetting.SmartContinuationEnabled(enabled),
                 modifiedAt = modifiedAt,
                 syncStatus = smartContinuationStatus,
+            )
+        }
+        val proxyModeStatus = prefs.getString(KEY_PROXY_MODE_SYNC_STATUS, null)
+            ?.let { parseSyncStatus(it) }
+        if (proxyModeStatus != null && proxyModeStatus != SyncStatus.Synced) {
+            val enabled = prefs.getBoolean(KEY_PROXY_MODE_ENABLED, DEFAULT_PROXY_MODE_ENABLED)
+            val modifiedAt = prefs.getLong(KEY_PROXY_MODE_MODIFIED_AT, System.currentTimeMillis())
+            settings[KEY_SETTING_PROXY_MODE] = SyncedUserSetting(
+                setting = UserSetting.ProxyModeEnabled(enabled),
+                modifiedAt = modifiedAt,
+                syncStatus = proxyModeStatus,
             )
         }
         MutableStateFlow(settings.toMap())
@@ -202,6 +221,24 @@ internal class UserSettingsStoreImpl(
         }
     }
 
+    override suspend fun setProxyModeEnabled(enabled: Boolean) {
+        withContext(dispatcher) {
+            mutableProxyModeEnabled.value = enabled
+            prefs.edit()
+                .putBoolean(KEY_PROXY_MODE_ENABLED, enabled)
+                .putString(KEY_PROXY_MODE_SYNC_STATUS, SyncStatus.Synced.name)
+                .remove(KEY_PROXY_MODE_MODIFIED_AT)
+                .commit()
+            mutableSyncedSettings.value = mutableSyncedSettings.value.toMutableMap().also {
+                it.remove(KEY_SETTING_PROXY_MODE)
+            }
+        }
+    }
+
+    override fun setProxyStreamingAvailable(available: Boolean) {
+        mutableProxyStreamingAvailable.value = available
+    }
+
     override fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) {
         mutableBackgroundSyncInterval.value = interval
         prefs.edit().putString(KEY_BACKGROUND_SYNC_INTERVAL, interval.name).apply()
@@ -264,6 +301,26 @@ internal class UserSettingsStoreImpl(
                     }
                     mutableSyncedSettings.value = updatedSettings
                 }
+                is UserSetting.ProxyModeEnabled -> {
+                    val modifiedAt = System.currentTimeMillis()
+                    mutableProxyModeEnabled.value = setting.value
+                    prefs.edit()
+                        .putBoolean(KEY_PROXY_MODE_ENABLED, setting.value)
+                        .putString(KEY_PROXY_MODE_SYNC_STATUS, syncStatus.name)
+                        .putLong(KEY_PROXY_MODE_MODIFIED_AT, modifiedAt)
+                        .commit()
+                    val updatedSettings = mutableSyncedSettings.value.toMutableMap()
+                    if (syncStatus == SyncStatus.Synced) {
+                        updatedSettings.remove(KEY_SETTING_PROXY_MODE)
+                    } else {
+                        updatedSettings[KEY_SETTING_PROXY_MODE] = SyncedUserSetting(
+                            setting = setting,
+                            modifiedAt = modifiedAt,
+                            syncStatus = syncStatus,
+                        )
+                    }
+                    mutableSyncedSettings.value = updatedSettings
+                }
             }
         }
     }
@@ -309,6 +366,15 @@ internal class UserSettingsStoreImpl(
                         mutableSyncedSettings.value = updatedSettings
                     }
                 }
+                KEY_SETTING_PROXY_MODE -> {
+                    prefs.edit().putString(KEY_PROXY_MODE_SYNC_STATUS, status.name).commit()
+                    val updatedSettings = mutableSyncedSettings.value.toMutableMap()
+                    updatedSettings[settingKey]?.let { existing ->
+                        if (status == SyncStatus.Synced) updatedSettings.remove(settingKey)
+                        else updatedSettings[settingKey] = existing.copy(syncStatus = status)
+                        mutableSyncedSettings.value = updatedSettings
+                    }
+                }
             }
         }
     }
@@ -317,6 +383,8 @@ internal class UserSettingsStoreImpl(
         withContext(dispatcher) {
             mutableNotifyWhatsNewEnabled.value = DEFAULT_NOTIFY_WHATSNEW_ENABLED
             mutableSmartContinuationEnabled.value = DEFAULT_SMART_CONTINUATION_ENABLED
+            mutableProxyModeEnabled.value = DEFAULT_PROXY_MODE_ENABLED
+            mutableProxyStreamingAvailable.value = false
             prefs.edit()
                 .remove(KEY_NOTIFY_WHATSNEW_ENABLED)
                 .remove(KEY_NOTIFY_WHATSNEW_SYNC_STATUS)
@@ -324,6 +392,9 @@ internal class UserSettingsStoreImpl(
                 .remove(KEY_SMART_CONTINUATION_ENABLED)
                 .remove(KEY_SMART_CONTINUATION_SYNC_STATUS)
                 .remove(KEY_SMART_CONTINUATION_MODIFIED_AT)
+                .remove(KEY_PROXY_MODE_ENABLED)
+                .remove(KEY_PROXY_MODE_SYNC_STATUS)
+                .remove(KEY_PROXY_MODE_MODIFIED_AT)
                 .commit()
             mutableSyncedSettings.value = emptyMap()
         }
@@ -377,9 +448,14 @@ internal class UserSettingsStoreImpl(
         const val KEY_SMART_CONTINUATION_SYNC_STATUS = "SmartContinuationSyncStatus"
         const val KEY_SMART_CONTINUATION_MODIFIED_AT = "SmartContinuationModifiedAt"
         const val DEFAULT_SMART_CONTINUATION_ENABLED = false
+        const val KEY_PROXY_MODE_ENABLED = "ProxyModeEnabled"
+        const val KEY_PROXY_MODE_SYNC_STATUS = "ProxyModeSyncStatus"
+        const val KEY_PROXY_MODE_MODIFIED_AT = "ProxyModeModifiedAt"
+        const val DEFAULT_PROXY_MODE_ENABLED = true
         // Setting keys for synced settings map
         const val KEY_SETTING_NOTIFY_WHATSNEW = "notify_whatsnew"
         const val KEY_SETTING_SMART_CONTINUATION = "smart_continuation_enabled"
+        const val KEY_SETTING_PROXY_MODE = "proxy_mode_enabled"
         // Legacy value for migration - AmoledBlack was removed and converted to Amoled theme mode
         const val LEGACY_AMOLED_BLACK_PALETTE = "AmoledBlack"
         // Background sync interval (local only)

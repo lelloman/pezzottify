@@ -3,13 +3,41 @@
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use futures::{Stream, StreamExt};
+use reqwest::header::{ACCEPT_ENCODING, CONTENT_TYPE};
 use std::path::Path;
+use std::pin::Pin;
 use std::time::{Duration, Instant};
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 
-use super::models::{DownloaderAlbum, DownloaderArtist, DownloaderTrack};
 use crate::server::metrics;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DownloadPriority {
+    Foreground,
+    Normal,
+    Prefetch,
+}
+
+impl DownloadPriority {
+    fn as_header(self) -> &'static str {
+        match self {
+            Self::Foreground => "foreground",
+            Self::Normal => "normal",
+            Self::Prefetch => "prefetch",
+        }
+    }
+}
+
+pub type AudioByteStream = Pin<Box<dyn Stream<Item = Result<bytes::Bytes>> + Send + 'static>>;
+
+pub struct AudioDownload {
+    pub content_length: u64,
+    pub content_type: String,
+    pub extension: String,
+    pub stream: AudioByteStream,
+}
 
 /// Trait for downloading content from an external service.
 ///
@@ -20,17 +48,12 @@ pub trait Downloader: Send + Sync {
     /// Check if the downloader service is healthy.
     async fn health_check(&self) -> Result<()>;
 
-    /// Get artist metadata from the downloader.
-    async fn get_artist(&self, id: &str) -> Result<DownloaderArtist>;
-
-    /// Get album metadata from the downloader.
-    async fn get_album(&self, id: &str) -> Result<DownloaderAlbum>;
-
-    /// Get track metadata from the downloader.
-    async fn get_track(&self, id: &str) -> Result<DownloaderTrack>;
-
     /// Download track audio to a file.
     async fn download_track_audio(&self, id: &str, dest: &Path) -> Result<u64>;
+
+    /// Open a progressively readable full-track audio response.
+    async fn open_track_audio(&self, id: &str, priority: DownloadPriority)
+        -> Result<AudioDownload>;
 
     /// Download image to a file.
     async fn download_image(&self, id: &str, dest: &Path) -> Result<u64>;
@@ -50,7 +73,9 @@ impl DownloaderClient {
     /// * `timeout_sec` - Request timeout in seconds
     pub fn new(base_url: String, timeout_sec: u64) -> Self {
         let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(timeout_sec))
+            // Body progress is supervised by TrackMaterializer. A total request
+            // timeout would incorrectly abort a healthy, long progressive stream.
+            .connect_timeout(Duration::from_secs(timeout_sec))
             .build()
             .expect("Failed to create HTTP client");
 
@@ -105,31 +130,6 @@ impl DownloaderClient {
 
         Ok(bytes.len() as u64)
     }
-
-    /// Get the current status of the downloader service.
-    pub async fn get_status(&self) -> Result<super::models::DownloaderStatus> {
-        let url = format!("{}/status", self.base_url);
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .context("Failed to connect to downloader service")?;
-
-        if !response.status().is_success() {
-            anyhow::bail!(
-                "Downloader status request failed with status: {}",
-                response.status()
-            );
-        }
-
-        let status = response
-            .json()
-            .await
-            .context("Failed to parse downloader status response")?;
-
-        Ok(status)
-    }
 }
 
 #[async_trait]
@@ -159,100 +159,6 @@ impl Downloader for DownloaderClient {
         }
     }
 
-    async fn get_artist(&self, id: &str) -> Result<DownloaderArtist> {
-        let start = Instant::now();
-        let url = format!("{}/artist/{}", self.base_url, id);
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .inspect_err(|_| {
-                metrics::record_downloader_error("get_artist", "connection");
-            })
-            .context("Failed to fetch artist from downloader")?;
-
-        if !response.status().is_success() {
-            metrics::record_downloader_error("get_artist", "status");
-            anyhow::bail!(
-                "Failed to fetch artist {}: status {}",
-                id,
-                response.status()
-            );
-        }
-
-        let result = response
-            .json()
-            .await
-            .inspect_err(|_| {
-                metrics::record_downloader_error("get_artist", "parse");
-            })
-            .context("Failed to parse artist response")?;
-
-        metrics::record_downloader_request("get_artist", start.elapsed());
-        Ok(result)
-    }
-
-    async fn get_album(&self, id: &str) -> Result<DownloaderAlbum> {
-        let start = Instant::now();
-        let url = format!("{}/album/{}", self.base_url, id);
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .inspect_err(|_| {
-                metrics::record_downloader_error("get_album", "connection");
-            })
-            .context("Failed to fetch album from downloader")?;
-
-        if !response.status().is_success() {
-            metrics::record_downloader_error("get_album", "status");
-            anyhow::bail!("Failed to fetch album {}: status {}", id, response.status());
-        }
-
-        let result = response
-            .json()
-            .await
-            .inspect_err(|_| {
-                metrics::record_downloader_error("get_album", "parse");
-            })
-            .context("Failed to parse album response")?;
-
-        metrics::record_downloader_request("get_album", start.elapsed());
-        Ok(result)
-    }
-
-    async fn get_track(&self, id: &str) -> Result<DownloaderTrack> {
-        let start = Instant::now();
-        let url = format!("{}/track/{}", self.base_url, id);
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .inspect_err(|_| {
-                metrics::record_downloader_error("get_track", "connection");
-            })
-            .context("Failed to fetch track from downloader")?;
-
-        if !response.status().is_success() {
-            metrics::record_downloader_error("get_track", "status");
-            anyhow::bail!("Failed to fetch track {}: status {}", id, response.status());
-        }
-
-        let result = response
-            .json()
-            .await
-            .inspect_err(|_| {
-                metrics::record_downloader_error("get_track", "parse");
-            })
-            .context("Failed to parse track response")?;
-
-        metrics::record_downloader_request("get_track", start.elapsed());
-        Ok(result)
-    }
-
     async fn download_track_audio(&self, id: &str, dest: &Path) -> Result<u64> {
         let start = Instant::now();
         let url = format!("{}/track/{}/audio", self.base_url, id);
@@ -267,6 +173,61 @@ impl Downloader for DownloaderClient {
                 Err(e).with_context(|| format!("Failed to download audio for track {}", id))
             }
         }
+    }
+
+    async fn open_track_audio(
+        &self,
+        id: &str,
+        priority: DownloadPriority,
+    ) -> Result<AudioDownload> {
+        let start = Instant::now();
+        let url = format!("{}/track/{}/audio", self.base_url, id);
+        let response = self
+            .client
+            .get(url)
+            .header(ACCEPT_ENCODING, "identity")
+            .header("x-pezzottify-priority", priority.as_header())
+            .send()
+            .await
+            .context("Failed to connect for progressive audio download")?;
+
+        if !response.status().is_success() {
+            anyhow::bail!("Audio download failed with status: {}", response.status());
+        }
+
+        let content_length = response
+            .content_length()
+            .context("Downloader audio response is missing Content-Length")?;
+        let content_type = response
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .filter(|value| value.starts_with("audio/"))
+            .context("Downloader audio response has invalid Content-Type")?
+            .to_string();
+        let extension = response
+            .headers()
+            .get("x-pezzottify-audio-extension")
+            .and_then(|value| value.to_str().ok())
+            .filter(|value| {
+                matches!(
+                    *value,
+                    "aac" | "flac" | "m4a" | "mp3" | "ogg" | "opus" | "wav"
+                )
+            })
+            .context("Downloader audio response has invalid X-Pezzottify-Audio-Extension")?
+            .to_string();
+        let stream = response
+            .bytes_stream()
+            .map(|item| item.map_err(anyhow::Error::from));
+        metrics::record_downloader_request("open_audio", start.elapsed());
+
+        Ok(AudioDownload {
+            content_length,
+            content_type,
+            extension,
+            stream: Box::pin(stream),
+        })
     }
 
     async fn download_image(&self, id: &str, dest: &Path) -> Result<u64> {

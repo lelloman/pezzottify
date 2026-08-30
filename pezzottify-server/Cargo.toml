@@ -17,6 +17,7 @@ mock = ["mockall"] # dev feature, enables mockall for trait mocking in tests
 [dependencies]
 anyhow = "1.0.75"
 base64 = "0.22"
+bytes = "1"
 libc = "0.2"
 ctrlc = "3.4"
 argon2 = "0.5.3"

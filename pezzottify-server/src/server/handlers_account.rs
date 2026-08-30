@@ -316,12 +316,22 @@ async fn update_user_settings(
     headers: HeaderMap,
     State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
+    State(config): State<ServerConfig>,
     Json(body): Json<UpdateSettingsBody>,
 ) -> Response {
     let operation_id = match idempotency_key(&headers) {
         Ok(value) => value,
         Err(status) => return status.into_response(),
     };
+    if body
+        .settings
+        .iter()
+        .any(|setting| matches!(setting, UserSetting::ProxyModeEnabled(_)))
+        && (!config.proxy_mode.enabled
+            || !session.has_permission(Permission::UseProxyStreaming))
+    {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     let user_id = session.user_id;
     let stored_events = match database
         .user_manager

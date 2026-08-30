@@ -55,6 +55,12 @@ struct SyncStateResponse {
     playlists: Vec<PlaylistState>,
     permissions: Vec<Permission>,
     notifications: Vec<crate::notifications::Notification>,
+    features: SyncFeatures,
+}
+
+#[derive(Serialize)]
+struct SyncFeatures {
+    proxy_streaming: bool,
 }
 
 #[derive(Serialize)]
@@ -235,6 +241,8 @@ fn idempotency_key(headers: &HeaderMap) -> Result<Option<String>, StatusCode> {
 async fn get_sync_state(
     session: Session,
     State(database): State<DatabaseHandles>,
+    State(config): State<ServerConfig>,
+    State(track_materializer): State<OptionalTrackMaterializer>,
 ) -> Response {
     let user_id = session.user_id;
     let snapshot = match database
@@ -269,6 +277,9 @@ async fn get_sync_state(
         playlists,
         permissions: snapshot.permissions,
         notifications: snapshot.notifications,
+        features: SyncFeatures {
+            proxy_streaming: config.proxy_mode.enabled && track_materializer.is_some(),
+        },
     })
     .into_response()
 }

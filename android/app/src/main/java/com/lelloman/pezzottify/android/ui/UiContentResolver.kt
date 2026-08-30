@@ -5,6 +5,7 @@ import com.lelloman.pezzottify.android.mapping.toTrackAvailability
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.statics.StaticsItem
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
+import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.ui.content.Album
 import com.lelloman.pezzottify.android.ui.content.Artist
 import com.lelloman.pezzottify.android.ui.content.ArtistDiscography
@@ -13,6 +14,7 @@ import com.lelloman.pezzottify.android.ui.content.Content
 import com.lelloman.pezzottify.android.ui.content.ContentResolver
 import com.lelloman.pezzottify.android.ui.content.SearchResultContent
 import com.lelloman.pezzottify.android.ui.content.Track
+import com.lelloman.pezzottify.android.ui.content.TrackAvailability
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -22,8 +24,16 @@ import kotlinx.coroutines.flow.map
 
 class UiContentResolver(
     private val staticsProvider: StaticsProvider,
-    private val configStore: ConfigStore
+    private val configStore: ConfigStore,
+    private val userSettingsStore: UserSettingsStore,
 ) : ContentResolver {
+
+    private fun effectiveTrackAvailability(
+        availability: com.lelloman.pezzottify.android.domain.statics.TrackAvailability,
+    ): TrackAvailability = if (
+        userSettingsStore.isProxyStreamingAvailable.value &&
+        userSettingsStore.isProxyModeEnabled.value
+    ) TrackAvailability.Available else availability.toTrackAvailability()
 
     override fun resolveArtist(artistId: String): Flow<Content<Artist>> =
         staticsProvider.provideArtist(artistId).map {
@@ -97,7 +107,7 @@ class UiContentResolver(
                                     albumId = trackItem.data.albumId,
                                     artists = emptyList(),
                                     durationSeconds = trackItem.data.durationSeconds,
-                                    availability = trackItem.data.availability.toTrackAvailability(),
+                                    availability = effectiveTrackAvailability(trackItem.data.availability),
                                     enrichmentStatus = trackItem.data.enrichmentStatus,
                                     enrichment = trackItem.data.enrichment,
                                 )
@@ -112,7 +122,7 @@ class UiContentResolver(
                                     albumId = trackItem.data.albumId,
                                     artists = artists.toList(),
                                     durationSeconds = trackItem.data.durationSeconds,
-                                    availability = trackItem.data.availability.toTrackAvailability(),
+                                    availability = effectiveTrackAvailability(trackItem.data.availability),
                                     enrichmentStatus = trackItem.data.enrichmentStatus,
                                     enrichment = trackItem.data.enrichment,
                                 )
@@ -212,7 +222,7 @@ class UiContentResolver(
                                     durationSeconds = trackItem.data.durationSeconds,
                                     albumId = trackItem.data.albumId,
                                     albumImageUrl = albumImageUrl,
-                                    availability = trackItem.data.availability.toTrackAvailability(),
+                                    availability = effectiveTrackAvailability(trackItem.data.availability),
                                 )
                             )
                         }

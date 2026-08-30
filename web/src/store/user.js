@@ -14,6 +14,7 @@ export const useUserStore = defineStore("user", () => {
   const playlistRefs = {};
   const settings = ref({});
   const permissions = ref([]);
+  const serverFeatures = ref({ proxy_streaming: false });
   const notifications = ref([]);
   const downloadRequests = ref(new Map());
 
@@ -266,6 +267,23 @@ export const useUserStore = defineStore("user", () => {
   const isSmartContinuationEnabled = computed(() => {
     return isTruthySetting(settings.value.smart_continuation_enabled);
   });
+
+  const canUseProxyStreaming = computed(
+    () =>
+      serverFeatures.value.proxy_streaming === true &&
+      permissions.value.includes("UseProxyStreaming"),
+  );
+
+  // New accounts default on once the server and administrator allow the feature.
+  const isProxyModeEnabled = computed(() => {
+    if (!canUseProxyStreaming.value) return false;
+    if (!("proxy_mode_enabled" in settings.value)) return true;
+    return isTruthySetting(settings.value.proxy_mode_enabled);
+  });
+
+  const setProxyModeEnabled = (enabled) => {
+    return setSetting("proxy_mode_enabled", enabled);
+  };
 
   const setSmartContinuationEnabled = (enabled) => {
     return setSetting("smart_continuation_enabled", enabled);
@@ -602,6 +620,10 @@ export const useUserStore = defineStore("user", () => {
     permissions.value = newPermissions;
   };
 
+  const setServerFeatures = (features) => {
+    serverFeatures.value = { proxy_streaming: false, ...(features || {}) };
+  };
+
   const setNotifications = (notifs) => {
     notifications.value = notifs;
   };
@@ -615,6 +637,7 @@ export const useUserStore = defineStore("user", () => {
     settings.value = {};
     pendingSettings.value = {};
     permissions.value = [];
+    serverFeatures.value = { proxy_streaming: false };
     notifications.value = [];
     downloadRequests.value = new Map();
     isInitialized.value = false;
@@ -631,6 +654,7 @@ export const useUserStore = defineStore("user", () => {
     playlistsData,
     settings,
     permissions,
+    serverFeatures,
     notifications,
     downloadRequests,
     isInitialized,
@@ -653,6 +677,9 @@ export const useUserStore = defineStore("user", () => {
     setSetting,
     isSmartContinuationEnabled,
     setSmartContinuationEnabled,
+    canUseProxyStreaming,
+    isProxyModeEnabled,
+    setProxyModeEnabled,
     isSettingPending,
     hasPendingSettings,
     retryPendingSettings,
@@ -683,6 +710,7 @@ export const useUserStore = defineStore("user", () => {
     setAllSettings,
     setPlaylists,
     setPermissions,
+    setServerFeatures,
     setNotifications,
 
     // Lifecycle

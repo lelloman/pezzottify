@@ -335,6 +335,7 @@ const availablePermissions = [
   "ViewAnalytics",
   "RequestContent",
   "DownloadManagerAdmin",
+  "UseProxyStreaming",
 ];
 
 const loadUsers = async () => {

@@ -9,6 +9,7 @@ pub mod catalog_store;
 pub mod config;
 pub mod db_executor;
 pub mod download_manager;
+pub mod downloader;
 pub mod enrichment_store;
 pub mod ingestion;
 pub mod mcp;

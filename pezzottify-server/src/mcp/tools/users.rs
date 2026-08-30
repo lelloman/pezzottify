@@ -188,7 +188,7 @@ fn users_mutate_tool() -> super::super::registry::RegisteredTool {
                 },
                 "permission": {
                     "type": "string",
-                    "enum": ["AccessCatalog", "LikeContent", "OwnPlaylists", "EditCatalog", "ManagePermissions", "ServerAdmin", "ViewAnalytics", "RequestContent", "DownloadManagerAdmin", "ReportBug"],
+                    "enum": ["AccessCatalog", "LikeContent", "OwnPlaylists", "EditCatalog", "ManagePermissions", "ServerAdmin", "ViewAnalytics", "RequestContent", "DownloadManagerAdmin", "ReportBug", "UseProxyStreaming"],
                     "description": "Permission for grant_permission action (grants permanent extra permission)"
                 }
             },
@@ -252,6 +252,7 @@ fn parse_permission(permission: &Option<String>) -> Result<Permission, McpError>
         "RequestContent" => Ok(Permission::RequestContent),
         "DownloadManagerAdmin" => Ok(Permission::DownloadManagerAdmin),
         "ReportBug" => Ok(Permission::ReportBug),
+        "UseProxyStreaming" => Ok(Permission::UseProxyStreaming),
         _ => Err(McpError::InvalidParams(format!(
             "Invalid permission: {}",
             perm_str

@@ -164,6 +164,9 @@ private fun SettingsScreenInternal(
             PlaybackSettingsSection(
                 smartContinuationEnabled = currentState.smartContinuationEnabled,
                 onSmartContinuationChanged = actions::setSmartContinuationEnabled,
+                proxyStreamingAvailable = currentState.proxyStreamingAvailable,
+                proxyModeEnabled = currentState.proxyModeEnabled,
+                onProxyModeChanged = actions::setProxyModeEnabled,
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))

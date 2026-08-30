@@ -394,6 +394,7 @@
     <string name="permission_request_content">Richiedi contenuti</string>
     <string name="permission_download_manager_admin">Amministratore download</string>
     <string name="permission_report_bug">Segnala bug</string>
+    <string name="permission_use_proxy_streaming">Streaming proxy</string>
     <string name="permission_access_catalog_desc">Sfoglia e riproduci musica dal catalogo.</string>
     <string name="permission_like_content_desc">Metti mi piace ad album, artisti e brani, crea la tua libreria personale.</string>
     <string name="permission_own_playlists_desc">Crea e gestisci playlist personali.</string>
@@ -404,6 +405,9 @@
     <string name="permission_request_content_desc">Cerca su provider musicali esterni e richiedi download di contenuti.</string>
     <string name="permission_download_manager_admin_desc">Gestisci la coda download, visualizza log di audit e riprova download falliti.</string>
     <string name="permission_report_bug_desc">Invia segnalazioni di bug con log e screenshot.</string>
+    <string name="permission_use_proxy_streaming_desc">Riproduci e salva i brani del catalogo non ancora archiviati.</string>
+    <string name="proxy_streaming">Riproduci brani mancanti</string>
+    <string name="proxy_streaming_description">Avvia subito la riproduzione e salva il brano durante il download.</string>
     <!-- PERMISSIONS -->
 
     <!-- SEARCH FILTERS -->

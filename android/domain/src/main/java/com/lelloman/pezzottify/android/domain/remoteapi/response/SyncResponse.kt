@@ -23,6 +23,13 @@ data class SyncStateResponse(
     @Serializable(with = PermissionListSerializer::class)
     val permissions: List<Permission>,
     val notifications: List<Notification> = emptyList(),
+    val features: ServerFeatures = ServerFeatures(),
+)
+
+@Serializable
+data class ServerFeatures(
+    @SerialName("proxy_streaming")
+    val proxyStreaming: Boolean = false,
 )
 
 /**

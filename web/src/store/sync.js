@@ -197,6 +197,7 @@ export const useSyncStore = defineStore("sync", () => {
       userStore.setPlaylists(playlists);
 
       userStore.setPermissions(state.permissions || []);
+      userStore.setServerFeatures(state.features || {});
       userStore.setNotifications(state.notifications || []);
 
       // Update cursor
