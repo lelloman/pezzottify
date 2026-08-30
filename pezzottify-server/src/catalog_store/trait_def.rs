@@ -227,6 +227,29 @@ pub trait CatalogStore: Send + Sync {
             .collect())
     }
 
+    /// Read one stable keyset page containing only currently available
+    /// entities. Implementations backed by a database should override this so
+    /// bootstrapping the playable search index does not scan the full catalog.
+    fn get_available_searchable_content_page(
+        &self,
+        content_type: SearchableContentType,
+        after_rowid: i64,
+        limit: usize,
+    ) -> Result<Vec<(i64, SearchableItem)>> {
+        let mut cursor = after_rowid;
+        let mut available = Vec::new();
+        while available.len() < limit {
+            let page = self.get_searchable_content_page(content_type, cursor, limit)?;
+            if page.is_empty() {
+                break;
+            }
+            cursor = page.last().map(|(rowid, _)| *rowid).unwrap_or(cursor);
+            available.extend(page.into_iter().filter(|(_, item)| item.is_available));
+        }
+        available.truncate(limit);
+        Ok(available)
+    }
+
     // =========================================================================
     // Integrity Support
     // =========================================================================

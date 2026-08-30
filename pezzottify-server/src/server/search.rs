@@ -19,8 +19,9 @@ use axum::{
 };
 use futures::stream;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::convert::Infallible;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use super::api_error::ApiError;
 use super::session::Session;
@@ -90,6 +91,21 @@ fn run_search(
     match mode {
         SearchMode::Strict => search_vault.search(query, limit, filters),
         SearchMode::Expanded => search_vault.search_expanded(query, limit, filters),
+    }
+}
+
+fn run_available_search(
+    search_vault: &dyn SearchVault,
+    query: &str,
+    limit: usize,
+    filters: Option<Vec<HashedItemType>>,
+    mode: SearchMode,
+) -> Vec<SearchResult> {
+    match mode {
+        SearchMode::Strict => search_vault.search_with_availability(query, limit, filters, true),
+        SearchMode::Expanded => {
+            search_vault.search_expanded_with_availability(query, limit, filters, true)
+        }
     }
 }
 
@@ -261,11 +277,16 @@ async fn search(
         // For resolved results, fetch more upfront since we need to resolve anyway
         let query = payload.query;
         let mode = payload.search_mode;
+        let available_only = payload.exclude_unavailable;
         let search_results = match server_state
             .database
             .search_read
             .run(DbPriority::Interactive, move |search_vault| {
-                Ok(run_search(search_vault, &query, limit, filters, mode))
+                Ok(if available_only {
+                    run_available_search(search_vault, &query, limit, filters, mode)
+                } else {
+                    run_search(search_vault, &query, limit, filters, mode)
+                })
             })
             .await
         {
@@ -361,60 +382,128 @@ async fn streaming_search(
     State(server_state): State<ServerState>,
     Query(params): Query<StreamingSearchQuery>,
 ) -> Response {
-    // Run organic search first
-    let max_results = server_state.config.streaming_search.top_results_limit
-        + server_state.config.streaming_search.other_results_limit
-        + 50;
-    let query = params.q.clone();
-    let mode = params.search_mode;
-    let search_results = match server_state
-        .database
-        .search_read
-        .run(DbPriority::Interactive, move |search_vault| {
-            Ok(run_search(search_vault, &query, max_results, None, mode))
-        })
-        .await
-    {
-        Ok(results) => results,
-        Err(err) => return ApiError::from(err).into_response(),
-    };
+    let desired_results = server_state.config.streaming_search.top_results_limit
+        + server_state.config.streaming_search.other_results_limit;
+    let max_results = desired_results + 50;
+    let (sender, receiver) = tokio::sync::mpsc::channel::<Result<Event, Infallible>>(32);
+    tokio::spawn(async move {
+        let started = Instant::now();
+        let query = params.q.clone();
+        let mode = params.search_mode;
+        let available_results = match server_state
+            .database
+            .search_read
+            .run(DbPriority::Interactive, move |search_vault| {
+                Ok(run_available_search(
+                    search_vault,
+                    &query,
+                    max_results,
+                    None,
+                    mode,
+                ))
+            })
+            .await
+        {
+            Ok(results) => results,
+            Err(_) => return,
+        };
 
-    // Build the pipeline with config from server state
-    let pipeline_config = server_state.config.streaming_search.clone();
-    let user_manager = server_state.user_manager.clone();
-    let query = params.q.clone();
-    let sections = match server_state
-        .database
-        .catalog_read
-        .run(DbPriority::Interactive, move |catalog_store| {
-            let pipeline =
-                StreamingSearchPipeline::new(catalog_store, user_manager.as_ref(), pipeline_config);
-            Ok(pipeline.execute(&query, search_results))
-        })
-        .await
-    {
-        Ok(sections) => sections,
-        Err(err) => return ApiError::from(err).into_response(),
-    };
+        let available_count = available_results.len();
+        let seen: HashSet<_> = available_results
+            .iter()
+            .map(|result| (result.item_type, result.item_id.clone()))
+            .collect();
+        let pipeline_config = server_state.config.streaming_search.clone();
+        let user_manager = server_state.user_manager.clone();
+        let query = params.q.clone();
+        let available_sections = match server_state
+            .database
+            .catalog_read
+            .run(DbPriority::Interactive, move |catalog_store| {
+                let pipeline = StreamingSearchPipeline::new(
+                    catalog_store,
+                    user_manager.as_ref(),
+                    pipeline_config,
+                );
+                Ok(pipeline.execute(&query, available_results))
+            })
+            .await
+        {
+            Ok(sections) => filter_sections_by_availability(sections),
+            Err(_) => return,
+        };
 
-    // Apply availability filter if requested
-    let sections = if params.exclude_unavailable {
-        filter_sections_by_availability(sections)
-    } else {
-        sections
-    };
-
-    // Convert sections to SSE events
-    let events: Vec<_> = sections
-        .into_iter()
-        .map(|section| {
+        // Send the playable phase immediately. Its Done marker is replaced by
+        // one final marker after the optional full-catalog phase.
+        for section in available_sections
+            .into_iter()
+            .filter(|section| !matches!(section, SearchSection::Done { .. }))
+        {
             let json = serde_json::to_string(&section).unwrap_or_else(|_| "{}".to_string());
-            Event::default().data(json)
-        })
-        .collect();
+            if sender.send(Ok(Event::default().data(json))).await.is_err() {
+                return;
+            }
+        }
 
-    // Create a stream from the collected events
-    let stream = stream::iter(events.into_iter().map(Ok::<_, Infallible>));
+        if !params.exclude_unavailable && available_count < desired_results {
+            let query = params.q.clone();
+            let mode = params.search_mode;
+            if let Ok(full_results) = server_state
+                .database
+                .search_read
+                .run(DbPriority::Interactive, move |search_vault| {
+                    Ok(run_search(search_vault, &query, max_results, None, mode))
+                })
+                .await
+            {
+                let missing = desired_results.saturating_sub(available_count);
+                let supplemental: Vec<_> = full_results
+                    .into_iter()
+                    .filter(|result| !seen.contains(&(result.item_type, result.item_id.clone())))
+                    .collect();
+                if !supplemental.is_empty() {
+                    if let Ok(items) = server_state
+                        .database
+                        .catalog_read
+                        .run(DbPriority::Interactive, move |catalog_store| {
+                            Ok(supplemental
+                                .into_iter()
+                                .filter_map(|result| {
+                                    resolve::resolve_to_result(
+                                        catalog_store,
+                                        &result.item_id,
+                                        result.item_type,
+                                    )
+                                })
+                                .filter(|item| !is_result_available(item))
+                                .take(missing)
+                                .collect::<Vec<_>>())
+                        })
+                        .await
+                    {
+                        if !items.is_empty() {
+                            let section = SearchSection::MoreResults { items };
+                            let json = serde_json::to_string(&section)
+                                .unwrap_or_else(|_| "{}".to_string());
+                            if sender.send(Ok(Event::default().data(json))).await.is_err() {
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let done = SearchSection::Done {
+            total_time_ms: started.elapsed().as_millis() as u64,
+        };
+        let json = serde_json::to_string(&done).unwrap_or_else(|_| "{}".to_string());
+        let _ = sender.send(Ok(Event::default().data(json))).await;
+    });
+
+    let stream = stream::unfold(receiver, |mut receiver| async move {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
 
     Sse::new(stream)
         .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
