@@ -302,7 +302,7 @@ class SettingsScreenViewModel @Inject constructor(
         fun getStorageInfo(): StorageInfo?
         fun isNotifyWhatsNewEnabled(): Boolean
         fun isSmartContinuationEnabled(): Boolean
-        fun isProxyModeEnabled(): Boolean = true
+        fun isProxyModeEnabled(): Boolean = false
         fun isProxyStreamingAvailable(): Boolean = false
         fun getBackgroundSyncInterval(): BackgroundSyncInterval
         fun isSmartSearchEnabled(): Boolean
@@ -315,7 +315,7 @@ class SettingsScreenViewModel @Inject constructor(
         fun observeNotifyWhatsNewEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeSmartContinuationEnabled(): kotlinx.coroutines.flow.Flow<Boolean>
         fun observeProxyModeEnabled(): kotlinx.coroutines.flow.Flow<Boolean> =
-            kotlinx.coroutines.flow.flowOf(true)
+            kotlinx.coroutines.flow.flowOf(false)
         fun observeProxyStreamingAvailable(): kotlinx.coroutines.flow.Flow<Boolean> =
             kotlinx.coroutines.flow.flowOf(false)
         fun observeBackgroundSyncInterval(): kotlinx.coroutines.flow.Flow<BackgroundSyncInterval>

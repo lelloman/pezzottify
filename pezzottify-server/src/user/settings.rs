@@ -113,8 +113,7 @@ impl UserSetting {
         match key {
             "notify_whatsnew" => Some(Self::NotifyWhatsNew(false)),
             "smart_continuation_enabled" => Some(Self::SmartContinuationEnabled(false)),
-            // Permission grants activate proxy mode unless the user explicitly opts out.
-            "proxy_mode_enabled" => Some(Self::ProxyModeEnabled(true)),
+            "proxy_mode_enabled" => Some(Self::ProxyModeEnabled(false)),
             // Don't provide defaults for deprecated settings
             "enable_external_search" => None,
             _ => None,
@@ -185,7 +184,7 @@ mod tests {
         );
         assert_eq!(
             UserSetting::default_for_key("proxy_mode_enabled"),
-            Some(UserSetting::ProxyModeEnabled(true))
+            Some(UserSetting::ProxyModeEnabled(false))
         );
         assert_eq!(UserSetting::default_for_key("unknown_key"), None);
     }

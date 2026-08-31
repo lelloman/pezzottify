@@ -239,7 +239,7 @@ pub async fn stream_track(
             .await;
         let enabled = match enabled {
             Ok(Some(UserSetting::ProxyModeEnabled(value))) => value,
-            Ok(None) => true,
+            Ok(None) => false,
             Ok(Some(_)) => false,
             Err(error) => return ApiError::user_database(error).into_response(),
         };
