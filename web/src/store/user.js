@@ -274,10 +274,10 @@ export const useUserStore = defineStore("user", () => {
       permissions.value.includes("UseProxyStreaming"),
   );
 
-  // New accounts default on once the server and administrator allow the feature.
+  // Permission makes the option visible; the user must explicitly enable it.
   const isProxyModeEnabled = computed(() => {
     if (!canUseProxyStreaming.value) return false;
-    if (!("proxy_mode_enabled" in settings.value)) return true;
+    if (!("proxy_mode_enabled" in settings.value)) return false;
     return isTruthySetting(settings.value.proxy_mode_enabled);
   });
 

@@ -451,7 +451,7 @@ internal class UserSettingsStoreImpl(
         const val KEY_PROXY_MODE_ENABLED = "ProxyModeEnabled"
         const val KEY_PROXY_MODE_SYNC_STATUS = "ProxyModeSyncStatus"
         const val KEY_PROXY_MODE_MODIFIED_AT = "ProxyModeModifiedAt"
-        const val DEFAULT_PROXY_MODE_ENABLED = true
+        const val DEFAULT_PROXY_MODE_ENABLED = false
         // Setting keys for synced settings map
         const val KEY_SETTING_NOTIFY_WHATSNEW = "notify_whatsnew"
         const val KEY_SETTING_SMART_CONTINUATION = "smart_continuation_enabled"
