@@ -26,6 +26,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.toDomain
 import com.lelloman.pezzottify.android.domain.settings.BackgroundSyncInterval
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateNotifyWhatsNewSetting
+import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateProxyModeSetting
 import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateSmartContinuationSetting
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
@@ -467,6 +468,7 @@ class InteractorsModule {
         userSettingsStore: UserSettingsStore,
         storageMonitor: com.lelloman.pezzottify.android.domain.storage.StorageMonitor,
         updateNotifyWhatsNewSetting: UpdateNotifyWhatsNewSetting,
+        updateProxyModeSetting: UpdateProxyModeSetting,
         updateSmartContinuationSetting: UpdateSmartContinuationSetting,
         logFileManager: LogFileManager,
         configStore: ConfigStore,
@@ -543,10 +545,7 @@ class InteractorsModule {
         }
 
         override suspend fun setProxyModeEnabled(enabled: Boolean) {
-            userSettingsStore.setSyncedSetting(
-                com.lelloman.pezzottify.android.domain.sync.UserSetting.ProxyModeEnabled(enabled),
-                com.lelloman.pezzottify.android.domain.usercontent.SyncStatus.PendingSync,
-            )
+            updateProxyModeSetting(enabled)
         }
 
         override fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) {
@@ -1712,6 +1711,7 @@ class InteractorsModule {
         player: PezzottifyPlayer,
         playbackMetadataProvider: com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider,
         playbackModeManager: com.lelloman.pezzottify.android.domain.player.PlaybackModeManager,
+        userSettingsStore: UserSettingsStore,
         userPlaylistStore: UserPlaylistStore,
         getLikedStateUseCase: GetLikedStateUseCase,
         toggleLikeUseCase: ToggleLikeUseCase,
@@ -1777,7 +1777,14 @@ class InteractorsModule {
                                             )
                                         },
                                         durationSeconds = track.durationSeconds,
-                                        availability = track.availability.toTrackAvailability(),
+                                        availability = if (
+                                            userSettingsStore.isProxyStreamingAvailable.value &&
+                                            userSettingsStore.isProxyModeEnabled.value
+                                        ) {
+                                            com.lelloman.pezzottify.android.ui.content.TrackAvailability.Available
+                                        } else {
+                                            track.availability.toTrackAvailability()
+                                        },
                                     )
                                 },
                                 currentIndex = queueState.currentIndex,
