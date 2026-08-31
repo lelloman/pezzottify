@@ -201,6 +201,17 @@ pub trait SearchVault: Send + Sync {
         Ok(())
     }
 
+    /// Remove documents previously published through the proxy fast path.
+    fn unpublish_proxy_items(&self, items: &[(String, HashedItemType)]) -> anyhow::Result<()> {
+        self.update_availability(
+            &items
+                .iter()
+                .map(|(id, item_type)| (id.clone(), *item_type, false))
+                .collect::<Vec<_>>(),
+        );
+        Ok(())
+    }
+
     /// Search with availability filter built into the query.
     /// This is more efficient than post-filtering when available_only is true.
     ///
@@ -388,6 +399,10 @@ impl<T: SearchVault + ?Sized> SearchVault for std::sync::Arc<T> {
 
     fn publish_newly_available(&self, items: &[SearchIndexItem]) -> anyhow::Result<()> {
         (**self).publish_newly_available(items)
+    }
+
+    fn unpublish_proxy_items(&self, items: &[(String, HashedItemType)]) -> anyhow::Result<()> {
+        (**self).unpublish_proxy_items(items)
     }
 
     fn search_with_availability(

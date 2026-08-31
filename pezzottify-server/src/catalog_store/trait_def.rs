@@ -357,6 +357,12 @@ pub trait CatalogStore: Send + Sync {
     /// The audio_uri should be relative to the media base path (e.g., "tracks/{id}.ogg").
     fn set_track_audio_uri(&self, track_id: &str, audio_uri: &str) -> Result<()>;
 
+    /// Remove local audio from a track while retaining its catalog metadata.
+    fn clear_track_audio_uri(&self, track_id: &str) -> Result<()> {
+        let _ = track_id;
+        anyhow::bail!("Catalog store does not support clearing track audio")
+    }
+
     /// Recompute and update album availability based on its tracks' audio files.
     /// Returns the new availability status.
     fn recompute_album_availability(&self, album_id: &str) -> Result<super::AlbumAvailability>;

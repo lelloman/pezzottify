@@ -313,6 +313,39 @@ fn migrate_v5_to_v6(conn: &rusqlite::Connection) -> anyhow::Result<()> {
 }
 
 // =============================================================================
+// Version 7 - Proxy materialization retention ledger
+// =============================================================================
+
+const PROXY_MATERIALIZATIONS_TABLE_V7: Table = Table {
+    name: "proxy_materializations",
+    columns: &[
+        sqlite_column!("track_id", &SqlType::Text, is_primary_key = true),
+        sqlite_column!("materialized_at", &SqlType::Integer, non_null = true),
+    ],
+    indices: &[(
+        "idx_proxy_materializations_materialized_at",
+        "materialized_at",
+    )],
+    unique_constraints: &[],
+};
+
+fn migrate_v6_to_v7(conn: &rusqlite::Connection) -> anyhow::Result<()> {
+    conn.execute(
+        "CREATE TABLE proxy_materializations (
+            track_id TEXT PRIMARY KEY,
+            materialized_at INTEGER NOT NULL
+        )",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX idx_proxy_materializations_materialized_at
+         ON proxy_materializations(materialized_at)",
+        [],
+    )?;
+    Ok(())
+}
+
+// =============================================================================
 // Versioned Schema Definition
 // =============================================================================
 
@@ -324,6 +357,7 @@ fn migrate_v5_to_v6(conn: &rusqlite::Connection) -> anyhow::Result<()> {
 /// Version 4: Bug reports table
 /// Version 5: Catalog events table
 /// Version 6: What's New staging and batches
+/// Version 7: Proxy materialization retention ledger
 pub const SERVER_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
     VersionedSchema {
         version: 1,
@@ -386,6 +420,22 @@ pub const SERVER_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             WHATSNEW_BATCH_ALBUMS_TABLE_V6,
         ],
         migration: Some(migrate_v5_to_v6),
+    },
+    VersionedSchema {
+        version: 7,
+        tables: &[
+            JOB_RUNS_TABLE_V1,
+            JOB_SCHEDULES_TABLE_V1,
+            SERVER_STATE_TABLE_V2,
+            JOB_AUDIT_LOG_TABLE_V3,
+            BUG_REPORTS_TABLE_V4,
+            CATALOG_EVENTS_TABLE_V5,
+            WHATSNEW_PENDING_ALBUMS_TABLE_V6,
+            WHATSNEW_BATCHES_TABLE_V6,
+            WHATSNEW_BATCH_ALBUMS_TABLE_V6,
+            PROXY_MATERIALIZATIONS_TABLE_V7,
+        ],
+        migration: Some(migrate_v6_to_v7),
     },
 ];
 
@@ -908,5 +958,29 @@ mod tests {
             })
             .unwrap();
         assert_eq!(batch_album_count, 1);
+    }
+
+    #[test]
+    fn test_migration_v6_to_v7_creates_proxy_ledger() {
+        let conn = Connection::open_in_memory().unwrap();
+        SERVER_VERSIONED_SCHEMAS[5].create(&conn).unwrap();
+        SERVER_VERSIONED_SCHEMAS[6].migration.unwrap()(&conn).unwrap();
+        SERVER_VERSIONED_SCHEMAS[6].validate(&conn).unwrap();
+
+        conn.execute(
+            "INSERT INTO proxy_materializations (track_id, materialized_at)
+             VALUES ('track-1', 123)",
+            [],
+        )
+        .unwrap();
+        assert_eq!(
+            conn.query_row(
+                "SELECT materialized_at FROM proxy_materializations WHERE track_id = 'track-1'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap(),
+            123
+        );
     }
 }

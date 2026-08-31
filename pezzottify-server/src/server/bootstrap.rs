@@ -116,6 +116,7 @@ async fn make_app_with_executor(
                 downloader,
                 catalog_store.clone(),
                 search_vault.clone(),
+                state.server_store.clone(),
                 config.media_path.clone(),
                 config.proxy_mode.clone(),
             ));
