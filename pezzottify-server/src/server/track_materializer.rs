@@ -13,6 +13,7 @@ use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, Weak};
+use std::task::{Context as TaskContext, Poll};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::{Mutex as AsyncMutex, Notify, Semaphore};
@@ -20,6 +21,9 @@ use tracing::{debug, info, warn};
 
 const RESPONSE_CHUNK_SIZE: usize = 64 * 1024;
 const RECENT_JOB_LIMIT: usize = 50;
+const PERSIST_AFTER_STREAMED_PERCENT: u64 = 50;
+const ABANDONED_STREAM_GRACE: Duration = Duration::from_secs(15);
+const PREFETCH_RETENTION: Duration = Duration::from_secs(10 * 60);
 
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -29,11 +33,13 @@ pub enum ProxyJobPhase {
     Connecting,
     Downloading,
     Validating,
+    AwaitingConsumption,
     Saving,
     WaitingForPublication,
     UpdatingCatalog,
     UpdatingSearch,
     Completed,
+    Discarded,
     Failed,
 }
 
@@ -46,7 +52,10 @@ pub struct ProxyJobStatus {
     pub priority: &'static str,
     pub phase: ProxyJobPhase,
     pub bytes_downloaded: u64,
+    pub bytes_streamed: u64,
     pub total_bytes: Option<u64>,
+    pub persist_after_streamed_percent: u64,
+    pub active_streams: usize,
     pub started_at_ms: u64,
     pub updated_at_ms: u64,
     pub finished_at_ms: Option<u64>,
@@ -96,12 +105,23 @@ struct BufferState {
     error: Option<String>,
 }
 
+#[derive(Default)]
+struct ConsumptionState {
+    ranges: Vec<(u64, u64)>,
+    unique_bytes: u64,
+    active_streams: usize,
+    ever_streamed: bool,
+    retention_decision: Option<bool>,
+}
+
 pub struct InFlightTrack {
     track_id: String,
     state: Mutex<BufferState>,
     changed: Notify,
     _reservation: Mutex<Option<MemoryReservation>>,
     status: Mutex<ProxyJobStatus>,
+    consumption: Mutex<ConsumptionState>,
+    consumption_changed: Notify,
 }
 
 impl InFlightTrack {
@@ -112,6 +132,8 @@ impl InFlightTrack {
             state: Mutex::new(BufferState::default()),
             changed: Notify::new(),
             _reservation: Mutex::new(None),
+            consumption: Mutex::new(ConsumptionState::default()),
+            consumption_changed: Notify::new(),
             status: Mutex::new(ProxyJobStatus {
                 track_id,
                 track_name: None,
@@ -120,7 +142,10 @@ impl InFlightTrack {
                 priority: priority_name(priority),
                 phase: ProxyJobPhase::Queued,
                 bytes_downloaded: 0,
+                bytes_streamed: 0,
                 total_bytes: None,
+                persist_after_streamed_percent: PERSIST_AFTER_STREAMED_PERCENT,
+                active_streams: 0,
                 started_at_ms,
                 updated_at_ms: started_at_ms,
                 finished_at_ms: None,
@@ -153,6 +178,155 @@ impl InFlightTrack {
         let mut status = self.status.lock().expect("track status mutex poisoned");
         status.bytes_downloaded = status.bytes_downloaded.saturating_add(bytes as u64);
         status.updated_at_ms = now_ms();
+    }
+
+    fn start_stream(&self) -> bool {
+        let active_streams = {
+            let mut consumption = self
+                .consumption
+                .lock()
+                .expect("track consumption mutex poisoned");
+            if consumption.retention_decision == Some(false) {
+                return false;
+            }
+            consumption.active_streams += 1;
+            consumption.ever_streamed = true;
+            consumption.active_streams
+        };
+        let mut status = self.status.lock().expect("track status mutex poisoned");
+        status.active_streams = active_streams;
+        status.updated_at_ms = now_ms();
+        drop(status);
+        self.consumption_changed.notify_waiters();
+        true
+    }
+
+    fn finish_stream(&self) {
+        let active_streams = {
+            let mut consumption = self
+                .consumption
+                .lock()
+                .expect("track consumption mutex poisoned");
+            consumption.active_streams = consumption.active_streams.saturating_sub(1);
+            consumption.active_streams
+        };
+        let mut status = self.status.lock().expect("track status mutex poisoned");
+        status.active_streams = active_streams;
+        status.updated_at_ms = now_ms();
+        drop(status);
+        self.consumption_changed.notify_waiters();
+    }
+
+    fn record_streamed_range(&self, start: u64, end: u64) {
+        if start >= end {
+            return;
+        }
+        let (unique_bytes, reached_threshold) = {
+            let mut consumption = self
+                .consumption
+                .lock()
+                .expect("track consumption mutex poisoned");
+            consumption.ranges.push((start, end));
+            consumption.ranges.sort_unstable_by_key(|range| range.0);
+            let mut merged: Vec<(u64, u64)> = Vec::with_capacity(consumption.ranges.len());
+            for (range_start, range_end) in consumption.ranges.drain(..) {
+                if let Some(last) = merged.last_mut() {
+                    if range_start <= last.1 {
+                        last.1 = last.1.max(range_end);
+                        continue;
+                    }
+                }
+                merged.push((range_start, range_end));
+            }
+            consumption.unique_bytes = merged
+                .iter()
+                .map(|(range_start, range_end)| range_end.saturating_sub(*range_start))
+                .sum();
+            consumption.ranges = merged;
+            let total_bytes = self
+                .status
+                .lock()
+                .expect("track status mutex poisoned")
+                .total_bytes
+                .unwrap_or(0);
+            let reached_threshold = total_bytes > 0
+                && u128::from(consumption.unique_bytes) * 100
+                    >= u128::from(total_bytes) * u128::from(PERSIST_AFTER_STREAMED_PERCENT);
+            if reached_threshold {
+                consumption.retention_decision = Some(true);
+            }
+            (consumption.unique_bytes, reached_threshold)
+        };
+        let mut status = self.status.lock().expect("track status mutex poisoned");
+        status.bytes_streamed = unique_bytes;
+        status.updated_at_ms = now_ms();
+        drop(status);
+        if reached_threshold {
+            self.consumption_changed.notify_waiters();
+        }
+    }
+
+    fn decide_discard_if_inactive(&self) -> bool {
+        let mut consumption = self
+            .consumption
+            .lock()
+            .expect("track consumption mutex poisoned");
+        if consumption.retention_decision == Some(true) || consumption.active_streams > 0 {
+            return false;
+        }
+        consumption.retention_decision = Some(false);
+        true
+    }
+
+    async fn wait_for_retention(&self, priority: DownloadPriority) -> bool {
+        self.wait_for_retention_with_timeouts(priority, ABANDONED_STREAM_GRACE, PREFETCH_RETENTION)
+            .await
+    }
+
+    async fn wait_for_retention_with_timeouts(
+        &self,
+        priority: DownloadPriority,
+        abandoned_grace: Duration,
+        prefetch_retention: Duration,
+    ) -> bool {
+        let prefetch_deadline = tokio::time::Instant::now() + prefetch_retention;
+        loop {
+            let notified = self.consumption_changed.notified();
+            let (decision, active_streams, ever_streamed) = {
+                let consumption = self
+                    .consumption
+                    .lock()
+                    .expect("track consumption mutex poisoned");
+                (
+                    consumption.retention_decision,
+                    consumption.active_streams,
+                    consumption.ever_streamed,
+                )
+            };
+            if let Some(retain) = decision {
+                return retain;
+            }
+
+            if active_streams == 0 && (priority != DownloadPriority::Prefetch || ever_streamed) {
+                if tokio::time::timeout(abandoned_grace, notified)
+                    .await
+                    .is_err()
+                    && self.decide_discard_if_inactive()
+                {
+                    return false;
+                }
+            } else if priority == DownloadPriority::Prefetch && !ever_streamed {
+                if tokio::time::timeout_at(prefetch_deadline, notified)
+                    .await
+                    .is_err()
+                    && self.decide_discard_if_inactive()
+                {
+                    return false;
+                }
+            } else {
+                notified.await;
+            }
+        }
     }
 
     fn finish(&self, phase: ProxyJobPhase, error: Option<String>) {
@@ -193,7 +367,14 @@ impl InFlightTrack {
         length: u64,
     ) -> Pin<Box<dyn Stream<Item = io::Result<Bytes>> + Send>> {
         let end = start.saturating_add(length);
-        Box::pin(futures::stream::unfold(
+        let registered = self.start_stream();
+        if !registered {
+            return Box::pin(futures::stream::once(async {
+                Err(io::Error::other("proxy track was discarded"))
+            }));
+        }
+        let tracked = self.clone();
+        let inner = Box::pin(futures::stream::unfold(
             (self, start, end),
             |(track, cursor, end)| async move {
                 if cursor >= end {
@@ -224,6 +405,7 @@ impl InFlightTrack {
                     match outcome {
                         Some(Ok(bytes)) => {
                             let next = cursor + bytes.len() as u64;
+                            track.record_streamed_range(cursor, next);
                             return Some((Ok(bytes), (track.clone(), next, end)));
                         }
                         Some(Err(error)) => return Some((Err(error), (track.clone(), end, end))),
@@ -231,7 +413,30 @@ impl InFlightTrack {
                     }
                 }
             },
-        ))
+        ));
+        Box::pin(TrackedRangeStream {
+            inner,
+            track: tracked,
+        })
+    }
+}
+
+struct TrackedRangeStream {
+    inner: Pin<Box<dyn Stream<Item = io::Result<Bytes>> + Send>>,
+    track: Arc<InFlightTrack>,
+}
+
+impl Stream for TrackedRangeStream {
+    type Item = io::Result<Bytes>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<Option<Self::Item>> {
+        self.inner.as_mut().poll_next(cx)
+    }
+}
+
+impl Drop for TrackedRangeStream {
+    fn drop(&mut self) {
+        self.track.finish_stream();
     }
 }
 
@@ -499,6 +704,22 @@ impl TrackMaterializer {
             state.complete = true;
         }
         track.changed.notify_waiters();
+
+        // Download concurrency protects the downloader itself. Once the full
+        // response is validated, keep the bytes under the separate memory
+        // budget while waiting to learn whether the listener actually stayed.
+        drop(_slot);
+        track.set_phase(ProxyJobPhase::AwaitingConsumption);
+        if !track.wait_for_retention(priority).await {
+            track.finish(ProxyJobPhase::Discarded, None);
+            info!(
+                track_id = %track.track_id,
+                bytes_streamed = track.status().bytes_streamed,
+                "Proxy track discarded below persistence threshold"
+            );
+            return Ok(());
+        }
+
         self.publish(&track, &download.extension).await?;
         track.finish(ProxyJobPhase::Completed, None);
         info!(track_id = %track.track_id, bytes = download.content_length, "Proxy track published");
@@ -707,6 +928,9 @@ mod tests {
             Bytes::from_static(b"de")
         );
         assert!(stream.next().await.is_none());
+        assert_eq!(track.status().bytes_streamed, 4);
+        drop(stream);
+        assert_eq!(track.status().active_streams, 0);
     }
 
     #[tokio::test]
@@ -723,5 +947,66 @@ mod tests {
         });
         let error = stream.next().await.unwrap().unwrap_err();
         assert!(error.to_string().contains("source failed"));
+    }
+
+    #[test]
+    fn streamed_ranges_count_unique_coverage() {
+        let track = InFlightTrack::new("track".into(), DownloadPriority::Foreground);
+        track.set_total_bytes(100);
+
+        track.record_streamed_range(0, 30);
+        track.record_streamed_range(20, 40);
+        track.record_streamed_range(80, 90);
+
+        assert_eq!(track.status().bytes_streamed, 50);
+        assert_eq!(
+            track.consumption.lock().unwrap().retention_decision,
+            Some(true)
+        );
+    }
+
+    #[tokio::test]
+    async fn foreground_stream_below_half_is_discarded_after_grace() {
+        let track = InFlightTrack::new("track".into(), DownloadPriority::Foreground);
+        track.set_total_bytes(100);
+        assert!(track.start_stream());
+        track.record_streamed_range(0, 49);
+        track.finish_stream();
+
+        assert!(
+            !track
+                .wait_for_retention_with_timeouts(
+                    DownloadPriority::Foreground,
+                    Duration::from_millis(1),
+                    Duration::from_secs(1),
+                )
+                .await
+        );
+    }
+
+    #[tokio::test]
+    async fn prefetch_waits_for_playback_and_retains_at_half() {
+        let track = Arc::new(InFlightTrack::new(
+            "track".into(),
+            DownloadPriority::Prefetch,
+        ));
+        track.set_total_bytes(100);
+        let waiter_track = track.clone();
+        let waiter = tokio::spawn(async move {
+            waiter_track
+                .wait_for_retention_with_timeouts(
+                    DownloadPriority::Prefetch,
+                    Duration::from_millis(5),
+                    Duration::from_secs(1),
+                )
+                .await
+        });
+
+        tokio::task::yield_now().await;
+        assert!(!waiter.is_finished());
+        assert!(track.start_stream());
+        track.record_streamed_range(0, 50);
+        assert!(waiter.await.unwrap());
+        track.finish_stream();
     }
 }

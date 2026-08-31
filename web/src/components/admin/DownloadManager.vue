@@ -94,12 +94,23 @@
                 <div class="progressFill" :style="{ width: proxyProgress(job) + '%' }"></div>
               </div>
               <span class="progressText">
-                {{ formatBytes(job.bytes_downloaded) }} / {{ formatBytes(job.total_bytes) }}
+                Downloaded {{ formatBytes(job.bytes_downloaded) }} / {{ formatBytes(job.total_bytes) }}
                 · {{ formatProxyRate(job) }}
+              </span>
+            </div>
+            <div v-if="job.total_bytes" class="progressSection retentionProgress">
+              <div class="progressBar">
+                <div class="progressFill" :style="{ width: proxyStreamProgress(job) + '%' }"></div>
+                <div class="retentionMarker" :style="{ left: job.persist_after_streamed_percent + '%' }"></div>
+              </div>
+              <span class="progressText">
+                Streamed {{ formatBytes(job.bytes_streamed) }}
+                ({{ proxyStreamProgress(job) }}%) · saves at {{ job.persist_after_streamed_percent }}%
               </span>
             </div>
             <div class="queueItemDetails">
               <span class="detailItem">Running for {{ formatProxyDuration(job) }}</span>
+              <span class="detailItem">{{ job.active_streams }} active stream{{ job.active_streams === 1 ? "" : "s" }}</span>
               <span class="detailItem mono">{{ job.track_id }}</span>
             </div>
           </div>
@@ -124,12 +135,16 @@
                   <span v-if="job.album_name" class="proxyAlbum">— {{ job.album_name }}</span>
                 </span>
               </div>
-              <span class="statusBadge" :class="job.phase === 'failed' ? 'status-failed' : 'status-completed'">
+              <span
+                class="statusBadge"
+                :class="job.phase === 'failed' ? 'status-failed' : job.phase === 'discarded' ? 'status-discarded' : 'status-completed'"
+              >
                 {{ formatProxyPhase(job.phase) }}
               </span>
             </div>
             <div class="queueItemDetails">
               <span class="detailItem">{{ formatBytes(job.bytes_downloaded) }}</span>
+              <span class="detailItem">{{ proxyStreamProgress(job) }}% streamed</span>
               <span class="detailItem">{{ formatProxyDuration(job) }}</span>
               <span class="detailItem">{{ formatProxyDate(job.finished_at_ms) }}</span>
             </div>
@@ -1066,6 +1081,11 @@ const proxyProgress = (job) => {
   return Math.min(100, Math.round((job.bytes_downloaded / job.total_bytes) * 100));
 };
 
+const proxyStreamProgress = (job) => {
+  if (!job.total_bytes) return 0;
+  return Math.min(100, Math.round((job.bytes_streamed / job.total_bytes) * 100));
+};
+
 const formatProxyDuration = (job) => {
   const end = job.finished_at_ms || Date.now();
   const seconds = Math.max(0, Math.round((end - job.started_at_ms) / 1000));
@@ -1731,6 +1751,28 @@ onUnmounted(() => {
 
 .proxyJob .progressSection {
   margin-top: var(--spacing-3);
+}
+
+.retentionProgress .progressBar {
+  position: relative;
+}
+
+.retentionProgress .progressFill {
+  background-color: #60a5fa;
+}
+
+.retentionMarker {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--text-base);
+  opacity: 0.8;
+}
+
+.status-discarded {
+  background: rgba(161, 161, 170, 0.15);
+  color: var(--text-subdued);
 }
 
 .proxyAlbum {
