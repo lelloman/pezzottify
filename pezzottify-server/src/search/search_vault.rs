@@ -187,6 +187,20 @@ pub trait SearchVault: Send + Sync {
     /// * `items` - Slice of (item_id, item_type, is_available) tuples
     fn update_availability(&self, items: &[(String, HashedItemType, bool)]);
 
+    /// Publish documents that have just transitioned from unavailable to
+    /// available. Implementations can use this stronger transition guarantee
+    /// to avoid looking the documents up by ID in a large full-text index.
+    fn publish_newly_available(&self, items: &[SearchIndexItem]) -> anyhow::Result<()> {
+        self.upsert_items(items)?;
+        self.update_availability(
+            &items
+                .iter()
+                .map(|item| (item.id.clone(), item.item_type, true))
+                .collect::<Vec<_>>(),
+        );
+        Ok(())
+    }
+
     /// Search with availability filter built into the query.
     /// This is more efficient than post-filtering when available_only is true.
     ///
@@ -370,6 +384,10 @@ impl<T: SearchVault + ?Sized> SearchVault for std::sync::Arc<T> {
 
     fn update_availability(&self, items: &[(String, HashedItemType, bool)]) {
         (**self).update_availability(items)
+    }
+
+    fn publish_newly_available(&self, items: &[SearchIndexItem]) -> anyhow::Result<()> {
+        (**self).publish_newly_available(items)
     }
 
     fn search_with_availability(

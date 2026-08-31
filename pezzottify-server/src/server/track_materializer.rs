@@ -4,20 +4,82 @@ use crate::catalog_store::{CatalogStore, TrackAvailability};
 use crate::config::ProxyModeSettings;
 use crate::downloader::{DownloadPriority, Downloader};
 use crate::ingestion::FileHandler;
-use crate::search::{HashedItemType, SearchVault};
+use crate::search::{HashedItemType, SearchIndexItem, SearchVault};
 use anyhow::{Context, Result};
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
-use std::collections::HashMap;
+use serde::Serialize;
+use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, Weak};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::io::AsyncWriteExt;
-use tokio::sync::{Notify, Semaphore};
+use tokio::sync::{Mutex as AsyncMutex, Notify, Semaphore};
 use tracing::{debug, info, warn};
 
 const RESPONSE_CHUNK_SIZE: usize = 64 * 1024;
+const RECENT_JOB_LIMIT: usize = 50;
+
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProxyJobPhase {
+    Queued,
+    WaitingForCapacity,
+    Connecting,
+    Downloading,
+    Validating,
+    Saving,
+    WaitingForPublication,
+    UpdatingCatalog,
+    UpdatingSearch,
+    Completed,
+    Failed,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ProxyJobStatus {
+    pub track_id: String,
+    pub track_name: Option<String>,
+    pub album_id: Option<String>,
+    pub album_name: Option<String>,
+    pub priority: &'static str,
+    pub phase: ProxyJobPhase,
+    pub bytes_downloaded: u64,
+    pub total_bytes: Option<u64>,
+    pub started_at_ms: u64,
+    pub updated_at_ms: u64,
+    pub finished_at_ms: Option<u64>,
+    pub error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ProxyMaterializerStatus {
+    pub enabled: bool,
+    pub active: Vec<ProxyJobStatus>,
+    pub recent: Vec<ProxyJobStatus>,
+    pub memory_used_bytes: u64,
+    pub memory_limit_bytes: u64,
+    pub foreground_active: usize,
+    pub foreground_limit: usize,
+    pub prefetch_active: usize,
+    pub prefetch_limit: usize,
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
+fn priority_name(priority: DownloadPriority) -> &'static str {
+    match priority {
+        DownloadPriority::Foreground => "foreground",
+        DownloadPriority::Normal => "normal",
+        DownloadPriority::Prefetch => "prefetch",
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct TrackStreamMetadata {
@@ -39,16 +101,74 @@ pub struct InFlightTrack {
     state: Mutex<BufferState>,
     changed: Notify,
     _reservation: Mutex<Option<MemoryReservation>>,
+    status: Mutex<ProxyJobStatus>,
 }
 
 impl InFlightTrack {
-    fn new(track_id: String) -> Self {
+    fn new(track_id: String, priority: DownloadPriority) -> Self {
+        let started_at_ms = now_ms();
         Self {
-            track_id,
+            track_id: track_id.clone(),
             state: Mutex::new(BufferState::default()),
             changed: Notify::new(),
             _reservation: Mutex::new(None),
+            status: Mutex::new(ProxyJobStatus {
+                track_id,
+                track_name: None,
+                album_id: None,
+                album_name: None,
+                priority: priority_name(priority),
+                phase: ProxyJobPhase::Queued,
+                bytes_downloaded: 0,
+                total_bytes: None,
+                started_at_ms,
+                updated_at_ms: started_at_ms,
+                finished_at_ms: None,
+                error: None,
+            }),
         }
+    }
+
+    fn set_phase(&self, phase: ProxyJobPhase) {
+        let mut status = self.status.lock().expect("track status mutex poisoned");
+        status.phase = phase;
+        status.updated_at_ms = now_ms();
+    }
+
+    fn set_metadata_status(&self, name: String, album_id: String, album_name: String) {
+        let mut status = self.status.lock().expect("track status mutex poisoned");
+        status.track_name = Some(name);
+        status.album_id = Some(album_id);
+        status.album_name = Some(album_name);
+        status.updated_at_ms = now_ms();
+    }
+
+    fn set_total_bytes(&self, total: u64) {
+        let mut status = self.status.lock().expect("track status mutex poisoned");
+        status.total_bytes = Some(total);
+        status.updated_at_ms = now_ms();
+    }
+
+    fn add_downloaded_bytes(&self, bytes: usize) {
+        let mut status = self.status.lock().expect("track status mutex poisoned");
+        status.bytes_downloaded = status.bytes_downloaded.saturating_add(bytes as u64);
+        status.updated_at_ms = now_ms();
+    }
+
+    fn finish(&self, phase: ProxyJobPhase, error: Option<String>) {
+        let finished_at_ms = now_ms();
+        let mut status = self.status.lock().expect("track status mutex poisoned");
+        status.phase = phase;
+        status.updated_at_ms = finished_at_ms;
+        status.finished_at_ms = Some(finished_at_ms);
+        status.error = error;
+    }
+
+    fn status(&self) -> ProxyJobStatus {
+        self.status
+            .lock()
+            .expect("track status mutex poisoned")
+            .clone()
     }
 
     pub async fn metadata(&self) -> Result<TrackStreamMetadata> {
@@ -179,6 +299,8 @@ pub struct TrackMaterializer {
     media_path: std::path::PathBuf,
     settings: ProxyModeSettings,
     jobs: Mutex<HashMap<String, Arc<InFlightTrack>>>,
+    recent_jobs: Mutex<VecDeque<ProxyJobStatus>>,
+    publication_lock: AsyncMutex<()>,
     budget: Arc<MemoryBudget>,
     foreground_slots: Semaphore,
     prefetch_slots: Semaphore,
@@ -207,7 +329,47 @@ impl TrackMaterializer {
             prefetch_slots: Semaphore::new(settings.max_prefetch_downloads),
             settings,
             jobs: Mutex::new(HashMap::new()),
+            recent_jobs: Mutex::new(VecDeque::new()),
+            publication_lock: AsyncMutex::new(()),
         })
+    }
+
+    pub fn status(&self) -> ProxyMaterializerStatus {
+        let mut active = self
+            .jobs
+            .lock()
+            .expect("materializer jobs mutex poisoned")
+            .values()
+            .map(|job| job.status())
+            .collect::<Vec<_>>();
+        active.sort_by_key(|job| job.started_at_ms);
+        let recent = self
+            .recent_jobs
+            .lock()
+            .expect("materializer history mutex poisoned")
+            .iter()
+            .rev()
+            .cloned()
+            .collect();
+        let memory_used_bytes = *self
+            .budget
+            .used
+            .lock()
+            .expect("memory budget mutex poisoned");
+        let foreground_limit = self.settings.max_foreground_downloads;
+        let prefetch_limit = self.settings.max_prefetch_downloads;
+        ProxyMaterializerStatus {
+            enabled: true,
+            foreground_active: foreground_limit
+                .saturating_sub(self.foreground_slots.available_permits()),
+            foreground_limit,
+            prefetch_active: prefetch_limit.saturating_sub(self.prefetch_slots.available_permits()),
+            prefetch_limit,
+            active,
+            recent,
+            memory_used_bytes,
+            memory_limit_bytes: self.budget.limit,
+        }
     }
 
     pub fn get_or_start(
@@ -219,7 +381,7 @@ impl TrackMaterializer {
         if let Some(existing) = jobs.get(track_id) {
             return existing.clone();
         }
-        let track = Arc::new(InFlightTrack::new(track_id.to_string()));
+        let track = Arc::new(InFlightTrack::new(track_id.to_string(), priority));
         jobs.insert(track_id.to_string(), track.clone());
         drop(jobs);
 
@@ -231,6 +393,7 @@ impl TrackMaterializer {
                 .await
             {
                 warn!(track_id = %task_track.track_id, %error, "Proxy materialization failed");
+                task_track.finish(ProxyJobPhase::Failed, Some(error.to_string()));
                 let mut state = task_track
                     .state
                     .lock()
@@ -239,6 +402,16 @@ impl TrackMaterializer {
                 drop(state);
                 task_track.changed.notify_waiters();
             }
+            let completed_status = task_track.status();
+            let mut recent = materializer
+                .recent_jobs
+                .lock()
+                .expect("materializer history mutex poisoned");
+            recent.push_back(completed_status);
+            while recent.len() > RECENT_JOB_LIMIT {
+                recent.pop_front();
+            }
+            drop(recent);
             materializer
                 .jobs
                 .lock()
@@ -254,10 +427,15 @@ impl TrackMaterializer {
         priority: DownloadPriority,
     ) -> Result<()> {
         let timeout = Duration::from_secs(self.settings.no_progress_timeout_secs);
+        track.set_phase(ProxyJobPhase::WaitingForCapacity);
         let _slot = match priority {
             DownloadPriority::Prefetch => self.prefetch_slots.acquire().await?,
             _ => self.foreground_slots.acquire().await?,
         };
+        if let Some(resolved) = self.catalog.get_resolved_track(&track.track_id)? {
+            track.set_metadata_status(resolved.track.name, resolved.album.id, resolved.album.name);
+        }
+        track.set_phase(ProxyJobPhase::Connecting);
         let mut download = tokio::time::timeout(
             timeout,
             self.downloader.open_track_audio(&track.track_id, priority),
@@ -289,6 +467,8 @@ impl TrackMaterializer {
             });
             state.extension = Some(download.extension.clone());
         }
+        track.set_total_bytes(download.content_length);
+        track.set_phase(ProxyJobPhase::Downloading);
         track.changed.notify_waiters();
 
         while let Some(chunk) = tokio::time::timeout(timeout, download.stream.next())
@@ -302,9 +482,11 @@ impl TrackMaterializer {
             }
             state.bytes.extend_from_slice(&chunk);
             drop(state);
+            track.add_downloaded_bytes(chunk.len());
             track.changed.notify_waiters();
         }
 
+        track.set_phase(ProxyJobPhase::Validating);
         {
             let mut state = track.state.lock().expect("track buffer mutex poisoned");
             if state.bytes.len() as u64 != download.content_length {
@@ -318,6 +500,7 @@ impl TrackMaterializer {
         }
         track.changed.notify_waiters();
         self.publish(&track, &download.extension).await?;
+        track.finish(ProxyJobPhase::Completed, None);
         info!(track_id = %track.track_id, bytes = download.content_length, "Proxy track published");
 
         if priority != DownloadPriority::Prefetch {
@@ -327,6 +510,7 @@ impl TrackMaterializer {
     }
 
     async fn publish(&self, track: &InFlightTrack, extension: &str) -> Result<()> {
+        track.set_phase(ProxyJobPhase::Saving);
         let (dir1, dir2) = FileHandler::shard_dirs(&track.track_id);
         let relative = format!("audio/{dir1}/{dir2}/{}.{}", track.track_id, extension);
         let destination = self.media_path.join(&relative);
@@ -363,6 +547,44 @@ impl TrackMaterializer {
             return Err(error.into());
         }
 
+        // Album and artist availability are transitions shared by tracks from
+        // the same album. Serialize this short publication section so two
+        // simultaneous completions cannot both insert the same newly-
+        // available album or artist into the compact search index.
+        track.set_phase(ProxyJobPhase::WaitingForPublication);
+        let _publication = self.publication_lock.lock().await;
+        let resolved_track = self
+            .catalog
+            .get_resolved_track(&track.track_id)?
+            .context("published track is missing from catalog")?;
+        let resolved_album = self
+            .catalog
+            .get_resolved_album(&resolved_track.album.id)?
+            .context("published track album is missing from catalog")?;
+        let album_was_available = resolved_album.album.album_availability
+            != crate::catalog_store::AlbumAvailability::Missing;
+        let artist_was_available = resolved_album
+            .artists
+            .iter()
+            .map(|artist| (artist.id.clone(), artist.available))
+            .collect::<HashMap<_, _>>();
+
+        let mut newly_available = vec![SearchIndexItem {
+            id: resolved_track.track.id.clone(),
+            name: resolved_track.track.name.clone(),
+            item_type: HashedItemType::Track,
+            additional_text: resolved_track
+                .artists
+                .iter()
+                .map(|artist| format!("artist:{}", artist.artist.name))
+                .chain(std::iter::once(format!(
+                    "album:{}",
+                    resolved_track.album.name
+                )))
+                .collect(),
+        }];
+
+        track.set_phase(ProxyJobPhase::UpdatingCatalog);
         self.catalog
             .set_track_audio_uri(&track.track_id, &relative)?;
         let album_id = self
@@ -370,24 +592,46 @@ impl TrackMaterializer {
             .get_track_album_id(&track.track_id)
             .context("published track has no album")?;
         let album_availability = self.catalog.recompute_album_availability(&album_id)?;
-        self.search.update_availability(&[
-            (track.track_id.clone(), HashedItemType::Track, true),
-            (
-                album_id.clone(),
-                HashedItemType::Album,
-                album_availability != crate::catalog_store::AlbumAvailability::Missing,
-            ),
-        ]);
-        for artist_id in self.catalog.get_album_artist_ids(&album_id)? {
+        if !album_was_available
+            && album_availability != crate::catalog_store::AlbumAvailability::Missing
+        {
+            newly_available.push(SearchIndexItem {
+                id: resolved_album.album.id.clone(),
+                name: resolved_album.album.name.clone(),
+                item_type: HashedItemType::Album,
+                additional_text: resolved_album
+                    .artists
+                    .iter()
+                    .map(|artist| format!("artist:{}", artist.name))
+                    .collect(),
+            });
+        }
+        for artist in &resolved_album.artists {
+            let artist_id = &artist.id;
             match self.catalog.recompute_artist_availability(&artist_id) {
-                Ok(available) => self.search.update_availability(&[(
-                    artist_id,
-                    HashedItemType::Artist,
-                    available,
-                )]),
+                Ok(true)
+                    if !artist_was_available
+                        .get(artist_id)
+                        .copied()
+                        .unwrap_or(false) =>
+                {
+                    newly_available.push(SearchIndexItem {
+                        id: artist.id.clone(),
+                        name: artist.name.clone(),
+                        item_type: HashedItemType::Artist,
+                        additional_text: artist
+                            .genres
+                            .iter()
+                            .map(|genre| format!("extra:{genre}"))
+                            .collect(),
+                    });
+                }
+                Ok(_) => {}
                 Err(error) => debug!(%error, "Failed to recompute proxy artist availability"),
             }
         }
+        track.set_phase(ProxyJobPhase::UpdatingSearch);
+        self.search.publish_newly_available(&newly_available)?;
         Ok(())
     }
 
@@ -431,7 +675,10 @@ mod tests {
 
     #[tokio::test]
     async fn range_stream_releases_bytes_as_the_buffer_grows() {
-        let track = Arc::new(InFlightTrack::new("track".into()));
+        let track = Arc::new(InFlightTrack::new(
+            "track".into(),
+            DownloadPriority::Foreground,
+        ));
         {
             let mut state = track.state.lock().unwrap();
             state.metadata = Some(TrackStreamMetadata {
@@ -464,7 +711,10 @@ mod tests {
 
     #[tokio::test]
     async fn range_stream_propagates_download_failure() {
-        let track = Arc::new(InFlightTrack::new("track".into()));
+        let track = Arc::new(InFlightTrack::new(
+            "track".into(),
+            DownloadPriority::Foreground,
+        ));
         let mut stream = track.clone().range_stream(0, 1);
         let producer = track.clone();
         tokio::spawn(async move {
