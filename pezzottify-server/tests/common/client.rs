@@ -1171,6 +1171,15 @@ impl TestClient {
             .expect("Download admin stats request failed")
     }
 
+    /// GET /v1/download/admin/proxy
+    pub async fn download_admin_proxy(&self) -> Response {
+        self.client
+            .get(format!("{}/v1/download/admin/proxy", self.base_url))
+            .send()
+            .await
+            .expect("Download admin proxy request failed")
+    }
+
     /// GET /v1/download/admin/failed
     pub async fn download_admin_failed(&self) -> Response {
         self.client

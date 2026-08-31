@@ -269,6 +269,15 @@ async fn test_download_limits_rejects_user_without_request_content_permission() 
 }
 
 #[tokio::test]
+async fn test_download_admin_proxy_rejects_user_without_admin_permission() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+
+    let response = client.download_admin_proxy().await;
+    assert_eq!(response.status(), 403);
+}
+
+#[tokio::test]
 async fn test_download_my_requests_rejects_user_without_request_content_permission() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -332,6 +341,18 @@ async fn test_download_admin_stats_returns_503_when_not_configured() {
 
     let response = client.download_admin_stats().await;
     assert_eq!(response.status(), 503);
+}
+
+#[tokio::test]
+async fn test_download_admin_proxy_reports_disabled_when_not_configured() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated_admin(server.base_url.clone()).await;
+
+    let response = client.download_admin_proxy().await;
+    assert_eq!(response.status(), 200);
+    let body: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(body["enabled"], false);
+    assert_eq!(body["active"], serde_json::json!([]));
 }
 
 #[tokio::test]

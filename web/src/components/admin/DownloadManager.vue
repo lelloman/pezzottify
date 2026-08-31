@@ -49,6 +49,96 @@
       {{ loadError }}
     </div>
 
+    <!-- Proxy Downloads Tab -->
+    <div v-if="activeTab === 'proxy'" class="tabContent">
+      <div v-if="!proxyStatus?.enabled" class="emptyState">
+        Track proxy downloading is not enabled on this server.
+      </div>
+      <template v-else>
+        <div class="proxySummary">
+          <span class="statItem">
+            <strong>{{ proxyStatus.active.length }}</strong> active
+          </span>
+          <span class="statItem">
+            <strong>{{ proxyStatus.foreground_active }}/{{ proxyStatus.foreground_limit }}</strong>
+            foreground slots
+          </span>
+          <span class="statItem">
+            <strong>{{ proxyStatus.prefetch_active }}/{{ proxyStatus.prefetch_limit }}</strong>
+            prefetch slots
+          </span>
+          <span class="statItem">
+            <strong>{{ formatBytes(proxyStatus.memory_used_bytes) }}</strong>
+            / {{ formatBytes(proxyStatus.memory_limit_bytes) }} memory
+          </span>
+        </div>
+
+        <h3 class="proxySectionTitle">Active</h3>
+        <div v-if="proxyStatus.active.length === 0" class="emptyState compact">
+          No tracks are being materialized right now.
+        </div>
+        <div v-else class="queueList">
+          <div v-for="job in proxyStatus.active" :key="job.track_id" class="queueItem proxyJob">
+            <div class="queueItemHeader">
+              <div class="queueItemMain">
+                <span class="queueItemType">{{ job.priority }}</span>
+                <span class="queueItemName clickable" @click="goToProxyTrack(job)">
+                  {{ job.track_name || job.track_id }}
+                  <span v-if="job.album_name" class="proxyAlbum">— {{ job.album_name }}</span>
+                </span>
+              </div>
+              <span class="statusBadge proxyPhase">{{ formatProxyPhase(job.phase) }}</span>
+            </div>
+            <div v-if="job.total_bytes" class="progressSection">
+              <div class="progressBar">
+                <div class="progressFill" :style="{ width: proxyProgress(job) + '%' }"></div>
+              </div>
+              <span class="progressText">
+                {{ formatBytes(job.bytes_downloaded) }} / {{ formatBytes(job.total_bytes) }}
+                · {{ formatProxyRate(job) }}
+              </span>
+            </div>
+            <div class="queueItemDetails">
+              <span class="detailItem">Running for {{ formatProxyDuration(job) }}</span>
+              <span class="detailItem mono">{{ job.track_id }}</span>
+            </div>
+          </div>
+        </div>
+
+        <h3 class="proxySectionTitle">Recent</h3>
+        <div v-if="proxyStatus.recent.length === 0" class="emptyState compact">
+          No recent proxy downloads.
+        </div>
+        <div v-else class="queueList">
+          <div
+            v-for="job in proxyStatus.recent"
+            :key="`${job.track_id}-${job.started_at_ms}`"
+            class="queueItem proxyJob"
+            :class="{ 'status-failed': job.phase === 'failed' }"
+          >
+            <div class="queueItemHeader">
+              <div class="queueItemMain">
+                <span class="queueItemType">{{ job.priority }}</span>
+                <span class="queueItemName clickable" @click="goToProxyTrack(job)">
+                  {{ job.track_name || job.track_id }}
+                  <span v-if="job.album_name" class="proxyAlbum">— {{ job.album_name }}</span>
+                </span>
+              </div>
+              <span class="statusBadge" :class="job.phase === 'failed' ? 'status-failed' : 'status-completed'">
+                {{ formatProxyPhase(job.phase) }}
+              </span>
+            </div>
+            <div class="queueItemDetails">
+              <span class="detailItem">{{ formatBytes(job.bytes_downloaded) }}</span>
+              <span class="detailItem">{{ formatProxyDuration(job) }}</span>
+              <span class="detailItem">{{ formatProxyDate(job.finished_at_ms) }}</span>
+            </div>
+            <div v-if="job.error" class="queueItemError">{{ job.error }}</div>
+          </div>
+        </div>
+      </template>
+    </div>
+
     <!-- Queue Tab -->
     <div v-if="activeTab === 'queue'" class="tabContent">
       <div v-if="queueItems.length === 0" class="emptyState">
@@ -665,6 +755,7 @@ const isLoading = ref(false);
 const loadError = ref(null);
 
 const stats = ref(null);
+const proxyStatus = ref(null);
 const queueItems = ref([]);
 const failedItems = ref([]);
 const completedItems = ref([]);
@@ -921,6 +1012,7 @@ const lineChartOptions = {
 
 const tabs = computed(() => [
   { id: "queue", label: "Queue", count: queueItems.value.length },
+  { id: "proxy", label: "Track Proxy", count: proxyStatus.value?.active?.length || 0 },
   { id: "failed", label: "Failed", count: failedItems.value.length },
   { id: "downloaded", label: "Downloaded", count: completedItems.value.length },
   { id: "audit", label: "Audit Log" },
@@ -932,8 +1024,9 @@ const loadData = async () => {
   loadError.value = null;
 
   try {
-    const [statsResult, queueResult, failedResult, completedResult, auditResult] = await Promise.all([
+    const [statsResult, proxyResult, queueResult, failedResult, completedResult, auditResult] = await Promise.all([
       remoteStore.fetchDownloadStats(),
+      remoteStore.fetchProxyDownloadStatus(),
       remoteStore.fetchDownloadQueue(),
       remoteStore.fetchFailedDownloads(100, 0),
       remoteStore.fetchDownloadCompleted(100, 0),
@@ -941,6 +1034,7 @@ const loadData = async () => {
     ]);
 
     stats.value = statsResult;
+    proxyStatus.value = proxyResult;
     // API returns arrays directly, not wrapped in { items: [...] }
     queueItems.value = Array.isArray(queueResult) ? queueResult : (queueResult?.items || []);
     failedItems.value = Array.isArray(failedResult) ? failedResult : (failedResult?.items || []);
@@ -955,6 +1049,41 @@ const loadData = async () => {
   }
 
   isLoading.value = false;
+};
+
+const goToProxyTrack = (job) => {
+  router.push(`/track/${job.track_id}`);
+};
+
+const formatProxyPhase = (phase) =>
+  (phase || "unknown")
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
+const proxyProgress = (job) => {
+  if (!job.total_bytes) return 0;
+  return Math.min(100, Math.round((job.bytes_downloaded / job.total_bytes) * 100));
+};
+
+const formatProxyDuration = (job) => {
+  const end = job.finished_at_ms || Date.now();
+  const seconds = Math.max(0, Math.round((end - job.started_at_ms) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+};
+
+const formatProxyRate = (job) => {
+  const seconds = Math.max(0.001, (job.updated_at_ms - job.started_at_ms) / 1000);
+  return `${formatBytes(job.bytes_downloaded / seconds)}/s`;
+};
+
+const formatProxyDate = (timestampMs) =>
+  timestampMs ? new Date(timestampMs).toLocaleString() : "—";
+
+const loadProxyStatus = async () => {
+  const result = await remoteStore.fetchProxyDownloadStatus();
+  if (result) proxyStatus.value = result;
 };
 
 const handleRetry = async (itemId, force = false) => {
@@ -1553,17 +1682,24 @@ const formatAuditDetails = (entry) => {
 
 // Auto-refresh every 10 seconds
 const REFRESH_INTERVAL = 10000;
+const PROXY_REFRESH_INTERVAL = 2000;
 let refreshInterval = null;
+let proxyRefreshInterval = null;
 
 onMounted(() => {
   loadData();
   refreshInterval = setInterval(loadData, REFRESH_INTERVAL);
+  proxyRefreshInterval = setInterval(loadProxyStatus, PROXY_REFRESH_INTERVAL);
 });
 
 onUnmounted(() => {
   if (refreshInterval) {
     clearInterval(refreshInterval);
     refreshInterval = null;
+  }
+  if (proxyRefreshInterval) {
+    clearInterval(proxyRefreshInterval);
+    proxyRefreshInterval = null;
   }
 });
 </script>
@@ -1578,6 +1714,41 @@ onUnmounted(() => {
   font-weight: var(--font-bold);
   color: var(--text-base);
   margin: 0 0 var(--spacing-4) 0;
+}
+
+.proxySummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-3);
+  margin-bottom: var(--spacing-5);
+}
+
+.proxySectionTitle {
+  margin: var(--spacing-5) 0 var(--spacing-3);
+  color: var(--text-base);
+  font-size: var(--font-size-base);
+}
+
+.proxyJob .progressSection {
+  margin-top: var(--spacing-3);
+}
+
+.proxyAlbum {
+  color: var(--text-subdued);
+  font-weight: normal;
+}
+
+.proxyPhase {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+}
+
+.emptyState.compact {
+  padding: var(--spacing-4);
+}
+
+.mono {
+  font-family: monospace;
 }
 
 /* Action Buttons */

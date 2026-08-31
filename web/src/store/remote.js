@@ -821,6 +821,16 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  const fetchProxyDownloadStatus = async () => {
+    try {
+      const response = await axios.get("/v1/download/admin/proxy");
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch proxy download status:", error);
+      return null;
+    }
+  };
+
   const fetchDownloadQueue = async () => {
     try {
       // Fetch non-completed requests (includes both parent items and standalone tracks)
@@ -1464,6 +1474,7 @@ export const useRemoteStore = defineStore("remote", () => {
     requestTrackDownload,
     // Admin API - Download Manager
     fetchDownloadStats,
+    fetchProxyDownloadStatus,
     fetchDownloadQueue,
     fetchDownloadCompleted,
     fetchFailedDownloads,

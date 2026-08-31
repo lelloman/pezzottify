@@ -2023,6 +2023,66 @@ impl Fts5LevenshteinSearchVault {
         debug!("Updated availability for {} items", items.len());
     }
 
+    /// Insert documents that are known to have just become available.
+    ///
+    /// `item_id` and `item_type` are UNINDEXED FTS5 columns, so deleting or
+    /// selecting an FTS row by those columns scans the entire virtual table.
+    /// Proxy materialization has the document already and guarantees a
+    /// missing -> available transition, allowing a direct O(1) insertion.
+    pub fn publish_newly_available(&self, items: &[SearchIndexItem]) -> Result<()> {
+        if items.is_empty() {
+            return Ok(());
+        }
+
+        let conn = self.write_conn.lock().unwrap();
+        conn.execute("BEGIN IMMEDIATE", [])?;
+        let result = (|| -> Result<()> {
+            let enriched = Self::is_enriched_index(&conn, ACTIVE_INDEX)?;
+            let available_ready = Self::available_index_is_ready(&conn);
+            for item in items {
+                let type_str = Self::item_type_to_str(&item.item_type);
+                conn.execute(
+                    "INSERT OR REPLACE INTO item_availability
+                     (item_id, item_type, is_available) VALUES (?1, ?2, 1)",
+                    rusqlite::params![item.id, type_str],
+                )?;
+
+                if enriched && available_ready {
+                    let (primary, artist, album, extra) = Self::index_item_document_parts(item);
+                    conn.execute(
+                        &format!(
+                            "INSERT INTO {AVAILABLE_INDEX}
+                             (item_id,item_type,display_name,primary_name,artist_text,album_text,extra_text)
+                             VALUES(?1,?2,?3,?4,?5,?6,?7)"
+                        ),
+                        rusqlite::params![
+                            item.id,
+                            type_str,
+                            item.name,
+                            primary,
+                            artist,
+                            album,
+                            extra
+                        ],
+                    )?;
+                }
+            }
+            Ok(())
+        })();
+
+        match result {
+            Ok(()) => {
+                conn.execute("COMMIT", [])?;
+                debug!("Published {} newly available search documents", items.len());
+                Ok(())
+            }
+            Err(error) => {
+                let _ = conn.execute("ROLLBACK", []);
+                Err(error)
+            }
+        }
+    }
+
     /// Search with availability filter in the query itself.
     pub fn search_with_availability(
         &self,
@@ -2674,6 +2734,10 @@ impl SearchVault for Fts5LevenshteinSearchVault {
 
     fn update_availability(&self, items: &[(String, HashedItemType, bool)]) {
         Fts5LevenshteinSearchVault::update_availability(self, items)
+    }
+
+    fn publish_newly_available(&self, items: &[SearchIndexItem]) -> Result<()> {
+        Fts5LevenshteinSearchVault::publish_newly_available(self, items)
     }
 
     fn search_with_availability(
@@ -3726,6 +3790,39 @@ mod tests {
             "After second update, only 1 track should be available"
         );
         assert_eq!(results[0].item_id, "track2");
+    }
+
+    #[test]
+    fn test_publish_newly_available_inserts_prepared_document() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+        let catalog = Arc::new(MockCatalogStore::new(vec![SearchableItem {
+            id: "track-new".to_string(),
+            name: "Immediate Playback".to_string(),
+            content_type: SearchableContentType::Track,
+            additional_text: vec!["artist:Fast Artist".to_string()],
+            is_available: false,
+        }]));
+        let vault =
+            Fts5LevenshteinSearchVault::new(catalog, &db_path, &crate::backup::DbRegistry::new())
+                .unwrap();
+
+        assert!(vault
+            .search_with_availability("Immediate", 10, None, true)
+            .is_empty());
+
+        vault
+            .publish_newly_available(&[SearchIndexItem {
+                id: "track-new".to_string(),
+                name: "Immediate Playback".to_string(),
+                item_type: HashedItemType::Track,
+                additional_text: vec!["artist:Fast Artist".to_string()],
+            }])
+            .unwrap();
+
+        let results = vault.search_with_availability("Immediate", 10, None, true);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].item_id, "track-new");
     }
 
     #[test]
