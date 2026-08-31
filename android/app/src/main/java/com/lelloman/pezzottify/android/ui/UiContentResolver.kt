@@ -18,6 +18,7 @@ import com.lelloman.pezzottify.android.ui.content.TrackAvailability
 import com.lelloman.pezzottify.android.ui.screen.main.search.SearchScreenViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -28,12 +29,18 @@ class UiContentResolver(
     private val userSettingsStore: UserSettingsStore,
 ) : ContentResolver {
 
+    private val proxyActive: Flow<Boolean> = combine(
+        userSettingsStore.isProxyStreamingAvailable,
+        userSettingsStore.isProxyModeEnabled,
+    ) { available, enabled ->
+        available && enabled
+    }.distinctUntilChanged()
+
     private fun effectiveTrackAvailability(
         availability: com.lelloman.pezzottify.android.domain.statics.TrackAvailability,
-    ): TrackAvailability = if (
-        userSettingsStore.isProxyStreamingAvailable.value &&
-        userSettingsStore.isProxyModeEnabled.value
-    ) TrackAvailability.Available else availability.toTrackAvailability()
+        proxyActive: Boolean,
+    ): TrackAvailability =
+        if (proxyActive) TrackAvailability.Available else availability.toTrackAvailability()
 
     override fun resolveArtist(artistId: String): Flow<Content<Artist>> =
         staticsProvider.provideArtist(artistId).map {
@@ -98,36 +105,29 @@ class UiContentResolver(
                             }
                         }
                     }
-                    if (artistFlows.isEmpty()) {
-                        flowOf(
-                            Content.Resolved(
-                                trackItem.id, Track(
-                                    id = trackItem.id,
-                                    name = trackItem.data.name,
-                                    albumId = trackItem.data.albumId,
-                                    artists = emptyList(),
-                                    durationSeconds = trackItem.data.durationSeconds,
-                                    availability = effectiveTrackAvailability(trackItem.data.availability),
-                                    enrichmentStatus = trackItem.data.enrichmentStatus,
-                                    enrichment = trackItem.data.enrichment,
-                                )
-                            )
-                        )
+                    val artists = if (artistFlows.isEmpty()) {
+                        flowOf(emptyList())
                     } else {
                         combine(artistFlows) { artists ->
-                            Content.Resolved(
-                                trackItem.id, Track(
-                                    id = trackItem.id,
-                                    name = trackItem.data.name,
-                                    albumId = trackItem.data.albumId,
-                                    artists = artists.toList(),
-                                    durationSeconds = trackItem.data.durationSeconds,
-                                    availability = effectiveTrackAvailability(trackItem.data.availability),
-                                    enrichmentStatus = trackItem.data.enrichmentStatus,
-                                    enrichment = trackItem.data.enrichment,
-                                )
-                            )
+                            artists.toList()
                         }
+                    }
+                    artists.combine(proxyActive) { resolvedArtists, isProxyActive ->
+                        Content.Resolved(
+                            trackItem.id, Track(
+                                id = trackItem.id,
+                                name = trackItem.data.name,
+                                albumId = trackItem.data.albumId,
+                                artists = resolvedArtists,
+                                durationSeconds = trackItem.data.durationSeconds,
+                                availability = effectiveTrackAvailability(
+                                    trackItem.data.availability,
+                                    isProxyActive,
+                                ),
+                                enrichmentStatus = trackItem.data.enrichmentStatus,
+                                enrichment = trackItem.data.enrichment,
+                            )
+                        )
                     }
                 }
             }
@@ -211,9 +211,12 @@ class UiContentResolver(
                             }
                         }
                         val allFlows = listOf(albumFlow) + artistFlows
-                        combine(allFlows) { results ->
+                        val metadata = combine(allFlows) { results ->
                             val albumImageUrl = results[0] as String?
                             val artistNames = results.drop(1).map { it as String }
+                            albumImageUrl to artistNames
+                        }
+                        metadata.combine(proxyActive) { (albumImageUrl, artistNames), isProxyActive ->
                             Content.Resolved(
                                 trackItem.id, SearchResultContent.Track(
                                     id = trackItem.id,
@@ -222,7 +225,10 @@ class UiContentResolver(
                                     durationSeconds = trackItem.data.durationSeconds,
                                     albumId = trackItem.data.albumId,
                                     albumImageUrl = albumImageUrl,
-                                    availability = effectiveTrackAvailability(trackItem.data.availability),
+                                    availability = effectiveTrackAvailability(
+                                        trackItem.data.availability,
+                                        isProxyActive,
+                                    ),
                                 )
                             )
                         }

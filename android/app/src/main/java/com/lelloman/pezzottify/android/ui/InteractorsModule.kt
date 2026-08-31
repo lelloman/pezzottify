@@ -127,8 +127,10 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.json.JsonPrimitive
@@ -763,20 +765,26 @@ class InteractorsModule {
             }
 
             override fun streamingSearch(query: String): Flow<StreamingSearchSection> {
-                val proxyActive = userSettingsStore.isProxyStreamingAvailable.value &&
-                    userSettingsStore.isProxyModeEnabled.value
-                val excludeUnavailable =
-                    userSettingsStore.isExcludeUnavailableEnabled.value && !proxyActive
-                logger.debug("streamingSearch($query, excludeUnavailable=$excludeUnavailable)")
                 val baseUrl = configStore.baseUrl.value
-                return performStreamingSearch(query, excludeUnavailable).map { section ->
-                    mapToUiSection(section, baseUrl)
-                }.filterNotNull()
+                return combine(
+                    userSettingsStore.isProxyStreamingAvailable,
+                    userSettingsStore.isProxyModeEnabled,
+                ) { available, enabled ->
+                    available && enabled
+                }.distinctUntilChanged().flatMapLatest { proxyActive ->
+                    val excludeUnavailable =
+                        userSettingsStore.isExcludeUnavailableEnabled.value && !proxyActive
+                    logger.debug("streamingSearch($query, excludeUnavailable=$excludeUnavailable)")
+                    performStreamingSearch(query, excludeUnavailable).map { section ->
+                        mapToUiSection(section, baseUrl, proxyActive)
+                    }.filterNotNull()
+                }
             }
 
             private fun mapToUiSection(
                 section: SearchSection,
-                baseUrl: String
+                baseUrl: String,
+                proxyActive: Boolean,
             ): StreamingSearchSection? {
                 return when (section) {
                     is SearchSection.PrimaryArtist -> {
@@ -897,13 +905,13 @@ class InteractorsModule {
 
                     is SearchSection.MoreResults -> {
                         StreamingSearchSection.MoreResults(
-                            results = section.items.map { mapSearchResult(it, baseUrl) }
+                            results = section.items.map { mapSearchResult(it, baseUrl, proxyActive) }
                         )
                     }
 
                     is SearchSection.Results -> {
                         StreamingSearchSection.AllResults(
-                            results = section.items.map { mapSearchResult(it, baseUrl) }
+                            results = section.items.map { mapSearchResult(it, baseUrl, proxyActive) }
                         )
                     }
 
@@ -915,7 +923,8 @@ class InteractorsModule {
 
             private fun mapSearchResult(
                 result: ResolvedSearchResult,
-                baseUrl: String
+                baseUrl: String,
+                proxyActive: Boolean,
             ): StreamingSearchResult {
                 return when (result) {
                     is ResolvedSearchResult.Artist -> {
@@ -946,10 +955,8 @@ class InteractorsModule {
                             imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, result.imageId),
                             albumId = result.albumId,
                             durationMs = result.duration.toLong() * 1000,
-                            availability = if (
-                                userSettingsStore.isProxyStreamingAvailable.value &&
-                                userSettingsStore.isProxyModeEnabled.value
-                            ) com.lelloman.pezzottify.android.ui.content.TrackAvailability.Available
+                            availability = if (proxyActive)
+                                com.lelloman.pezzottify.android.ui.content.TrackAvailability.Available
                             else DomainTrackAvailability.fromServerString(result.availability)
                                 .toTrackAvailability(),
                         )
@@ -1777,14 +1784,7 @@ class InteractorsModule {
                                             )
                                         },
                                         durationSeconds = track.durationSeconds,
-                                        availability = if (
-                                            userSettingsStore.isProxyStreamingAvailable.value &&
-                                            userSettingsStore.isProxyModeEnabled.value
-                                        ) {
-                                            com.lelloman.pezzottify.android.ui.content.TrackAvailability.Available
-                                        } else {
-                                            track.availability.toTrackAvailability()
-                                        },
+                                        availability = track.availability.toTrackAvailability(),
                                     )
                                 },
                                 currentIndex = queueState.currentIndex,
@@ -1794,6 +1794,23 @@ class InteractorsModule {
                             )
                         } else {
                             null
+                        }
+                    }.combine(
+                        combine(
+                            userSettingsStore.isProxyStreamingAvailable,
+                            userSettingsStore.isProxyModeEnabled,
+                        ) { available, enabled -> available && enabled }.distinctUntilChanged()
+                    ) { queueState, proxyActive ->
+                        if (!proxyActive || queueState == null) {
+                            queueState
+                        } else {
+                            queueState.copy(
+                                tracks = queueState.tracks.map { track ->
+                                    track.copy(
+                                        availability = com.lelloman.pezzottify.android.ui.content.TrackAvailability.Available
+                                    )
+                                }
+                            )
                         }
                     }
 
