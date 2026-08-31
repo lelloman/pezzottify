@@ -667,6 +667,50 @@ impl ServerStore for SqliteServerStore {
         Ok(deleted)
     }
 
+    fn record_proxy_materialization(&self, track_id: &str, materialized_at: i64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO proxy_materializations (track_id, materialized_at)
+             VALUES (?1, ?2)
+             ON CONFLICT(track_id) DO NOTHING",
+            params![track_id, materialized_at],
+        )?;
+        Ok(())
+    }
+
+    fn list_proxy_materializations_before(
+        &self,
+        cutoff: i64,
+        limit: usize,
+    ) -> Result<Vec<super::ProxyMaterialization>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT track_id, materialized_at
+             FROM proxy_materializations
+             WHERE materialized_at < ?1
+             ORDER BY materialized_at ASC
+             LIMIT ?2",
+        )?;
+        let query_limit = limit.min(i64::MAX as usize) as i64;
+        let rows = stmt
+            .query_map(params![cutoff, query_limit], |row| {
+                Ok(super::ProxyMaterialization {
+                    track_id: row.get(0)?,
+                    materialized_at: row.get(1)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
+    fn delete_proxy_materialization(&self, track_id: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        Ok(conn.execute(
+            "DELETE FROM proxy_materializations WHERE track_id = ?1",
+            params![track_id],
+        )? > 0)
+    }
+
     fn add_pending_whatsnew_album(&self, album_id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
@@ -1654,5 +1698,28 @@ mod tests {
 
         let album_ids = store.get_whatsnew_batch_album_ids("nonexistent").unwrap();
         assert!(album_ids.is_empty());
+    }
+
+    #[test]
+    fn proxy_materialization_ledger_preserves_first_timestamp_and_filters_by_age() {
+        let test = create_test_store();
+        let store = &test.store;
+        store.record_proxy_materialization("old", 100).unwrap();
+        store.record_proxy_materialization("new", 300).unwrap();
+        store.record_proxy_materialization("old", 999).unwrap();
+
+        assert_eq!(
+            store.list_proxy_materializations_before(200, 10).unwrap(),
+            vec![crate::server_store::ProxyMaterialization {
+                track_id: "old".into(),
+                materialized_at: 100,
+            }]
+        );
+        assert!(store.delete_proxy_materialization("old").unwrap());
+        assert!(store
+            .list_proxy_materializations_before(i64::MAX, 10)
+            .unwrap()
+            .iter()
+            .all(|entry| entry.track_id != "old"));
     }
 }

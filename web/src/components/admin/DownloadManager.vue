@@ -101,11 +101,10 @@
             <div v-if="job.total_bytes" class="progressSection retentionProgress">
               <div class="progressBar">
                 <div class="progressFill" :style="{ width: proxyStreamProgress(job) + '%' }"></div>
-                <div class="retentionMarker" :style="{ left: job.persist_after_streamed_percent + '%' }"></div>
               </div>
               <span class="progressText">
                 Streamed {{ formatBytes(job.bytes_streamed) }}
-                ({{ proxyStreamProgress(job) }}%) · saves at {{ job.persist_after_streamed_percent }}%
+                ({{ proxyStreamProgress(job) }}%)
               </span>
             </div>
             <div class="queueItemDetails">
@@ -137,7 +136,7 @@
               </div>
               <span
                 class="statusBadge"
-                :class="job.phase === 'failed' ? 'status-failed' : job.phase === 'discarded' ? 'status-discarded' : 'status-completed'"
+                :class="job.phase === 'failed' ? 'status-failed' : 'status-completed'"
               >
                 {{ formatProxyPhase(job.phase) }}
               </span>
@@ -1759,20 +1758,6 @@ onUnmounted(() => {
 
 .retentionProgress .progressFill {
   background-color: #60a5fa;
-}
-
-.retentionMarker {
-  position: absolute;
-  top: -2px;
-  bottom: -2px;
-  width: 2px;
-  background: var(--text-base);
-  opacity: 0.8;
-}
-
-.status-discarded {
-  background: rgba(161, 161, 170, 0.15);
-  color: var(--text-subdued);
 }
 
 .proxyAlbum {

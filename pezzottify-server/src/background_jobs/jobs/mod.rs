@@ -16,6 +16,7 @@ pub mod featured_albums;
 pub mod ingestion_cleanup;
 pub mod metadata_enrichment;
 pub mod popular_content;
+pub mod proxy_retention;
 pub mod related_artists_enrichment;
 pub mod track_embedding_sync;
 pub mod whatsnew_batch;
@@ -34,6 +35,7 @@ pub use featured_albums::{FeaturedAlbum, FeaturedAlbumsJob, FeaturedAlbumsSnapsh
 pub use ingestion_cleanup::IngestionCleanupJob;
 pub use metadata_enrichment::MetadataEnrichmentJob;
 pub use popular_content::PopularContentJob;
+pub use proxy_retention::ProxyRetentionJob;
 pub use related_artists_enrichment::RelatedArtistsEnrichmentJob;
 pub use track_embedding_sync::TrackEmbeddingSyncJob;
 pub use whatsnew_batch::WhatsNewBatchJob;

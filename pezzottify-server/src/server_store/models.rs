@@ -232,6 +232,12 @@ pub struct JobScheduleState {
     pub last_run_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProxyMaterialization {
+    pub track_id: String,
+    pub materialized_at: i64,
+}
+
 // =============================================================================
 // What's New
 // =============================================================================

@@ -1169,6 +1169,27 @@ mod tests {
     }
 
     #[test]
+    fn track_listening_seconds_since_excludes_older_events() {
+        let (store, _temp_dir) = create_tmp_store();
+        let user_id = store.create_user("test_user").unwrap();
+        let mut old = create_test_listening_event(user_id, "track", 20241201);
+        old.started_at = 1_000;
+        old.duration_seconds = 40;
+        let mut recent = create_test_listening_event(user_id, "track", 20241201);
+        recent.started_at = 2_000;
+        recent.duration_seconds = 60;
+        store.record_listening_event(old).unwrap();
+        store.record_listening_event(recent).unwrap();
+
+        assert_eq!(
+            store
+                .get_track_listening_seconds_since("track", 1_500)
+                .unwrap(),
+            60
+        );
+    }
+
+    #[test]
     fn test_record_listening_event_update_with_session_id() {
         let (store, _temp_dir) = create_tmp_store();
         let user_id = store.create_user("test_user").unwrap();

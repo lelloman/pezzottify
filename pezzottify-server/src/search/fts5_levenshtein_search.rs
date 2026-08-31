@@ -21,7 +21,7 @@ use super::{
 use crate::catalog_store::{CatalogStore, SearchableContentType};
 use anyhow::{bail, Result};
 use rayon::prelude::*;
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
@@ -767,7 +767,8 @@ impl Fts5LevenshteinSearchVault {
             conn.execute_batch(&format!(
                 "ALTER TABLE {AVAILABLE_INDEX} RENAME TO {AVAILABLE_PREVIOUS_INDEX};
                  ALTER TABLE {AVAILABLE_BUILD_INDEX} RENAME TO {AVAILABLE_INDEX};
-                 DROP TABLE {AVAILABLE_PREVIOUS_INDEX};"
+                 DROP TABLE {AVAILABLE_PREVIOUS_INDEX};
+                 DELETE FROM proxy_available_rows;"
             ))?;
             Self::set_metadata(
                 &conn,
@@ -829,6 +830,13 @@ impl Fts5LevenshteinSearchVault {
                 PRIMARY KEY (item_id, item_type)
             );
             CREATE INDEX IF NOT EXISTS idx_popularity_type ON item_popularity(item_type);
+
+            CREATE TABLE IF NOT EXISTS proxy_available_rows (
+                item_id TEXT NOT NULL,
+                item_type TEXT NOT NULL,
+                available_rowid INTEGER NOT NULL,
+                PRIMARY KEY (item_id, item_type)
+            );
         "#,
         )?;
 
@@ -944,7 +952,8 @@ impl Fts5LevenshteinSearchVault {
                     conn.execute_batch(&format!(
                         "DROP TABLE IF EXISTS search_index_available_failed;
                          ALTER TABLE {AVAILABLE_INDEX} RENAME TO search_index_available_failed;
-                         ALTER TABLE {AVAILABLE_PREVIOUS_INDEX} RENAME TO {AVAILABLE_INDEX};"
+                         ALTER TABLE {AVAILABLE_PREVIOUS_INDEX} RENAME TO {AVAILABLE_INDEX};
+                         DELETE FROM proxy_available_rows;"
                     ))?;
                 }
                 Self::delete_metadata(conn, "active_search_schema_version")?;
@@ -1505,7 +1514,8 @@ impl Fts5LevenshteinSearchVault {
                 "ALTER TABLE {ACTIVE_INDEX} RENAME TO {PREVIOUS_INDEX};
                  ALTER TABLE {BUILD_INDEX} RENAME TO {ACTIVE_INDEX};
                  ALTER TABLE {AVAILABLE_INDEX} RENAME TO {AVAILABLE_PREVIOUS_INDEX};
-                 ALTER TABLE {AVAILABLE_BUILD_INDEX} RENAME TO {AVAILABLE_INDEX};"
+                 ALTER TABLE {AVAILABLE_BUILD_INDEX} RENAME TO {AVAILABLE_INDEX};
+                 DELETE FROM proxy_available_rows;"
             ))?;
             Self::set_metadata(
                 conn,
@@ -2065,6 +2075,12 @@ impl Fts5LevenshteinSearchVault {
                             extra
                         ],
                     )?;
+                    let available_rowid = conn.last_insert_rowid();
+                    conn.execute(
+                        "INSERT OR REPLACE INTO proxy_available_rows
+                         (item_id, item_type, available_rowid) VALUES (?1, ?2, ?3)",
+                        rusqlite::params![item.id, type_str, available_rowid],
+                    )?;
                 }
             }
             Ok(())
@@ -2074,6 +2090,52 @@ impl Fts5LevenshteinSearchVault {
             Ok(()) => {
                 conn.execute("COMMIT", [])?;
                 debug!("Published {} newly available search documents", items.len());
+                Ok(())
+            }
+            Err(error) => {
+                let _ = conn.execute("ROLLBACK", []);
+                Err(error)
+            }
+        }
+    }
+
+    pub fn unpublish_proxy_items(&self, items: &[(String, HashedItemType)]) -> Result<()> {
+        if items.is_empty() {
+            return Ok(());
+        }
+        let conn = self.write_conn.lock().unwrap();
+        conn.execute("BEGIN IMMEDIATE", [])?;
+        let result = (|| -> Result<()> {
+            for (id, item_type) in items {
+                let type_str = Self::item_type_to_str(item_type);
+                conn.execute(
+                    "DELETE FROM item_availability WHERE item_id = ?1 AND item_type = ?2",
+                    rusqlite::params![id, type_str],
+                )?;
+                let rowid = conn
+                    .query_row(
+                        "SELECT available_rowid FROM proxy_available_rows
+                         WHERE item_id = ?1 AND item_type = ?2",
+                        rusqlite::params![id, type_str],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .optional()?;
+                if let Some(rowid) = rowid {
+                    conn.execute(
+                        &format!("DELETE FROM {AVAILABLE_INDEX} WHERE rowid = ?1"),
+                        [rowid],
+                    )?;
+                }
+                conn.execute(
+                    "DELETE FROM proxy_available_rows WHERE item_id = ?1 AND item_type = ?2",
+                    rusqlite::params![id, type_str],
+                )?;
+            }
+            Ok(())
+        })();
+        match result {
+            Ok(()) => {
+                conn.execute("COMMIT", [])?;
                 Ok(())
             }
             Err(error) => {
@@ -2427,8 +2489,25 @@ impl Fts5LevenshteinSearchVault {
         }
         drop(conn);
 
-        CandidateCoordinator
-            .fuse(channels, max_results)
+        let mut candidates = CandidateCoordinator.fuse(channels, max_results);
+        if available_only {
+            let conn = self.read_conn.lock().unwrap();
+            candidates.retain(|candidate| {
+                conn.query_row(
+                    "SELECT EXISTS(
+                        SELECT 1 FROM item_availability
+                        WHERE item_id = ?1 AND item_type = ?2 AND is_available = 1
+                    )",
+                    rusqlite::params![
+                        candidate.item_id,
+                        Self::item_type_to_str(&candidate.item_type)
+                    ],
+                    |row| row.get::<_, bool>(0),
+                )
+                .unwrap_or(false)
+            });
+        }
+        candidates
             .into_iter()
             .map(|candidate| {
                 let scaled = (candidate.score * 1_000_000.0).round().max(1.0) as i64;
@@ -2738,6 +2817,10 @@ impl SearchVault for Fts5LevenshteinSearchVault {
 
     fn publish_newly_available(&self, items: &[SearchIndexItem]) -> Result<()> {
         Fts5LevenshteinSearchVault::publish_newly_available(self, items)
+    }
+
+    fn unpublish_proxy_items(&self, items: &[(String, HashedItemType)]) -> Result<()> {
+        Fts5LevenshteinSearchVault::unpublish_proxy_items(self, items)
     }
 
     fn search_with_availability(
@@ -3823,6 +3906,22 @@ mod tests {
         let results = vault.search_with_availability("Immediate", 10, None, true);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].item_id, "track-new");
+
+        vault
+            .unpublish_proxy_items(&[("track-new".to_string(), HashedItemType::Track)])
+            .unwrap();
+        assert!(vault
+            .search_with_availability("Immediate", 10, None, true)
+            .is_empty());
+        let mapped_rows: i64 = vault
+            .write_conn
+            .lock()
+            .unwrap()
+            .query_row("SELECT COUNT(*) FROM proxy_available_rows", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(mapped_rows, 0);
     }
 
     #[test]

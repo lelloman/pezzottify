@@ -305,6 +305,22 @@ impl UserListeningStore for SqliteUserStore {
         Ok(stats)
     }
 
+    fn get_track_listening_seconds_since(&self, track_id: &str, since: i64) -> Result<u64> {
+        let start = Instant::now();
+        let conn = self.conn.lock().unwrap();
+        let seconds: i64 = conn.query_row(
+            &format!(
+                "SELECT COALESCE(SUM(duration_seconds), 0)
+                 FROM {} WHERE track_id = ?1 AND started_at >= ?2",
+                LISTENING_EVENTS_TABLE_V_6.name
+            ),
+            params![track_id, since],
+            |row| row.get(0),
+        )?;
+        record_db_query("get_track_listening_seconds_since", start.elapsed());
+        Ok(seconds.max(0) as u64)
+    }
+
     fn get_daily_listening_stats(
         &self,
         start_date: u32,
@@ -445,4 +461,3 @@ impl UserListeningStore for SqliteUserStore {
         Ok(deleted)
     }
 }
-

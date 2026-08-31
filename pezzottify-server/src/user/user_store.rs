@@ -253,6 +253,12 @@ pub trait UserListeningStore: Send + Sync {
         end_date: u32,
     ) -> Result<TrackListeningStats>;
 
+    /// Actual listening seconds recorded for a track since a Unix timestamp.
+    fn get_track_listening_seconds_since(&self, track_id: &str, since: i64) -> Result<u64> {
+        let _ = (track_id, since);
+        Ok(0)
+    }
+
     /// Gets daily aggregated listening stats within a date range (admin).
     fn get_daily_listening_stats(
         &self,

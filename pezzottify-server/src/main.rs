@@ -12,8 +12,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 use pezzottify_server::background_jobs::jobs::{
     AlbumEmbeddingSyncJob, AudioAnalysisJob, CatalogAvailabilityStatsJob,
     CatalogCardinalityStatsJob, DevicePruningJob, FeaturedAlbumsJob, IngestionCleanupJob,
-    MetadataEnrichmentJob, PopularContentJob, RelatedArtistsEnrichmentJob, TrackEmbeddingSyncJob,
-    WhatsNewBatchJob,
+    MetadataEnrichmentJob, PopularContentJob, ProxyRetentionJob, RelatedArtistsEnrichmentJob,
+    TrackEmbeddingSyncJob, WhatsNewBatchJob,
 };
 use pezzottify_server::background_jobs::{create_scheduler, GuardedSearchVault, JobContext};
 use pezzottify_server::backup::DbRegistry;
@@ -350,6 +350,11 @@ async fn main() -> Result<()> {
     scheduler
         .register_job(Arc::new(DevicePruningJob::from_settings(
             &app_config.background_jobs.device_pruning,
+        )))
+        .await;
+    scheduler
+        .register_job(Arc::new(ProxyRetentionJob::new(
+            app_config.media_path.clone(),
         )))
         .await;
 

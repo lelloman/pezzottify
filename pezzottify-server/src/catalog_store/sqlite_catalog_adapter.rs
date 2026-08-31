@@ -1761,6 +1761,18 @@ impl CatalogStore for SqliteCatalogStore {
         Ok(())
     }
 
+    fn clear_track_audio_uri(&self, track_id: &str) -> Result<()> {
+        let conn = self.write_conn.lock().unwrap();
+        let rows_affected = conn.execute(
+            "UPDATE tracks SET audio_uri = NULL, track_available = 0 WHERE id = ?1",
+            params![track_id],
+        )?;
+        if rows_affected == 0 {
+            anyhow::bail!("Track with id '{}' not found", track_id);
+        }
+        Ok(())
+    }
+
     fn recompute_album_availability(&self, album_id: &str) -> Result<AlbumAvailability> {
         let conn = self.write_conn.lock().unwrap();
 

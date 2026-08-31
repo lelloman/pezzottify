@@ -5,9 +5,9 @@ mod sqlite_server_store;
 pub use models::{
     BugReport, BugReportSummary, CatalogContentType, CatalogEvent, CatalogEventPage,
     CatalogEventType, JobAuditEntry, JobAuditEventType, JobRun, JobRunStatus, JobScheduleState,
-    WhatsNewBatch, BUG_REPORT_ATTACHMENT_MAX_SIZE, BUG_REPORT_DESCRIPTION_MAX_SIZE,
-    BUG_REPORT_LOGS_MAX_SIZE, BUG_REPORT_MAX_ATTACHMENTS, BUG_REPORT_TITLE_MAX_LEN,
-    BUG_REPORT_TOTAL_MAX_SIZE,
+    ProxyMaterialization, WhatsNewBatch, BUG_REPORT_ATTACHMENT_MAX_SIZE,
+    BUG_REPORT_DESCRIPTION_MAX_SIZE, BUG_REPORT_LOGS_MAX_SIZE, BUG_REPORT_MAX_ATTACHMENTS,
+    BUG_REPORT_TITLE_MAX_LEN, BUG_REPORT_TOTAL_MAX_SIZE,
 };
 pub use schema::SERVER_VERSIONED_SCHEMAS;
 pub use sqlite_server_store::SqliteServerStore;
@@ -79,6 +79,24 @@ pub trait ServerStore: Send + Sync {
     fn get_catalog_events_page(&self, since_seq: i64, limit: usize) -> Result<CatalogEventPage>;
     /// Delete catalog events older than a given timestamp (for pruning).
     fn cleanup_old_catalog_events(&self, before_timestamp: i64) -> Result<usize>;
+
+    // Tracks materialized by on-demand proxy playback.
+    fn record_proxy_materialization(&self, track_id: &str, materialized_at: i64) -> Result<()> {
+        let _ = (track_id, materialized_at);
+        anyhow::bail!("Server store does not support proxy materializations")
+    }
+    fn list_proxy_materializations_before(
+        &self,
+        cutoff: i64,
+        limit: usize,
+    ) -> Result<Vec<ProxyMaterialization>> {
+        let _ = (cutoff, limit);
+        Ok(Vec::new())
+    }
+    fn delete_proxy_materialization(&self, track_id: &str) -> Result<bool> {
+        let _ = track_id;
+        Ok(false)
+    }
 
     // What's New - pending albums
     /// Add an album to the pending What's New list.
