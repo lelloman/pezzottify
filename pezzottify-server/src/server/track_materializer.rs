@@ -730,7 +730,7 @@ impl TrackMaterializer {
         }
         for artist in &resolved_album.artists {
             let artist_id = &artist.id;
-            match self.catalog.recompute_artist_availability(&artist_id) {
+            match self.catalog.recompute_artist_availability(artist_id) {
                 Ok(true)
                     if !artist_was_available
                         .get(artist_id)
