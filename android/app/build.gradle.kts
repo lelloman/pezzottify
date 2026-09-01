@@ -223,9 +223,9 @@ dependencies {
     implementation(project(":localdata"))
     implementation(project(":player"))
     implementation(project(":logger"))
-    implementation(project(":simple-ai-assistant"))
-    implementation(project(":simple-ai-provider-ollama"))
-    implementation(project(":simple-ai-provider-simpleai"))
+    implementation("com.lelloman.simpleandroidassistant:assistant-core:0.1.0-SNAPSHOT")
+    implementation("com.lelloman.simpleandroidassistant:provider-ollama:0.1.0-SNAPSHOT")
+    implementation("com.lelloman.simpleandroidassistant:provider-simpleai:0.1.0-SNAPSHOT")
     debugImplementation(project(":debuginterface"))
 
     // DuckMapper for automatic mapping code generation

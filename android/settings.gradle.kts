@@ -22,6 +22,7 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Pezzottify"
+includeBuild("../../simple-android-assistant")
 include(":app")
 include(":ui")
 include(":remoteapi")
@@ -30,6 +31,3 @@ include(":debuginterface")
 include(":player")
 include(":logger")
 include(":domain")
-include(":simple-ai-assistant")
-include(":simple-ai-provider-ollama")
-include(":simple-ai-provider-simpleai")

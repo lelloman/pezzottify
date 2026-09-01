@@ -59,7 +59,7 @@ dependencies {
     implementation(libs.coil.network)
     implementation(project(":domain"))
     implementation(project(":logger"))
-    implementation(project(":simple-ai-assistant"))
+    implementation("com.lelloman.simpleandroidassistant:assistant-compose:0.1.0-SNAPSHOT")
 
     implementation(libs.hilt)
     implementation(libs.hilt.navigation.compose)
