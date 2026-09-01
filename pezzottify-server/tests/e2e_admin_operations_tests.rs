@@ -1,4 +1,4 @@
-//! Characterization tests for server-store, shows, and backup admin operations.
+//! Characterization tests for server-store and backup admin operations.
 
 mod common;
 
@@ -78,8 +78,8 @@ async fn storage_report_preserves_complete_admin_response_contract() {
     assert!(report["total_bytes"].is_number());
     assert!(report["database_total_bytes"].is_number());
     assert!(report["filesystem_total_bytes"].is_number());
-    assert!(report["databases"].as_array().unwrap().len() >= 4);
-    assert_eq!(report["components"].as_array().unwrap().len(), 4);
+    assert!(report["databases"].as_array().unwrap().len() >= 3);
+    assert_eq!(report["components"].as_array().unwrap().len(), 3);
     assert_eq!(
         report["total_bytes"].as_u64().unwrap(),
         report["database_total_bytes"].as_u64().unwrap()
@@ -107,59 +107,6 @@ async fn embedding_coverage_preserves_complete_admin_response_contract() {
     assert!(coverage["album_derived"]["enabled"].is_boolean());
     assert!(coverage["album_derived"]["specs"].is_array());
     assert!(coverage["album_derived"]["coverage"].is_object());
-}
-
-#[tokio::test]
-async fn show_draft_is_admin_visible_publicly_hidden_and_deletable() {
-    let server = TestServer::builder().with_available_catalog().spawn().await;
-    let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
-
-    let response = admin
-        .client
-        .post(format!("{}/v1/content/admin/shows/drafts", server.base_url))
-        .json(&json!({
-            "brief": "A compact tour through the test catalog",
-            "target_duration_minutes": 30,
-            "language": "en"
-        }))
-        .send()
-        .await
-        .unwrap();
-    let status = response.status();
-    let response_body = response.text().await.unwrap();
-    assert_eq!(status, StatusCode::CREATED, "{response_body}");
-    let show: Value = serde_json::from_str(&response_body).unwrap();
-    let show_id = show["id"].as_str().unwrap();
-    assert_eq!(show["status"], "script_ready");
-
-    let response = admin
-        .client
-        .get(format!("{}/v1/content/admin/shows", server.base_url))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-    let shows: Vec<Value> = response.json().await.unwrap();
-    assert!(shows.iter().any(|show| show["id"] == show_id));
-
-    let response = admin
-        .client
-        .get(format!("{}/v1/content/show/{}", server.base_url, show_id))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
-
-    let response = admin
-        .client
-        .delete(format!(
-            "{}/v1/content/admin/shows/{}",
-            server.base_url, show_id
-        ))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::NO_CONTENT);
 }
 
 #[tokio::test]
@@ -237,7 +184,7 @@ async fn catalog_sync_and_backup_prepare_return_complete_response_shapes() {
     assert_eq!(response.status(), StatusCode::OK);
     let backup: Value = response.json().await.unwrap();
     assert_eq!(backup["all_succeeded"], true);
-    assert!(backup["databases"].as_array().unwrap().len() >= 4);
+    assert!(backup["databases"].as_array().unwrap().len() >= 3);
     assert!(backup["databases"]
         .as_array()
         .unwrap()

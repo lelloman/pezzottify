@@ -274,7 +274,6 @@ impl TestServer {
             media_path: media_path.clone(),
             agent: pezzottify_server::config::AgentSettings::default(),
             ingestion,
-            shows: pezzottify_server::config::ShowsSettings::default(),
             audio_embeddings: None,
         };
 

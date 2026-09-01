@@ -14,7 +14,7 @@ check_absent() {
 
 check_absent \
     "async handlers must use DatabaseHandles for mutable stores" \
-    'State\([^)]*\): State<(GuardedUserManager|GuardedServerStore|GuardedShowStore)>' \
+    'State\([^)]*\): State<(GuardedUserManager|GuardedServerStore)>' \
     src/server
 
 check_absent \

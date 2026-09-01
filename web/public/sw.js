@@ -12,7 +12,6 @@ function shouldAttachAuth(request) {
   if (url.origin !== self.location.origin) return false;
   return (
     url.pathname.startsWith("/v1/content/stream/") ||
-    url.pathname.startsWith("/v1/content/show/") ||
     url.pathname.startsWith("/v1/content/image/")
   );
 }

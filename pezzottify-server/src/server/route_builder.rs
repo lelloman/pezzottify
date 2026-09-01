@@ -85,7 +85,6 @@ pub(super) fn content_read_routes(
         .route("/batch", post(post_batch_content))
         .route("/genre/{name}/radio", get(get_genre_radio))
         .merge(cacheable_catalog_routes)
-        .merge(show_public_routes())
         .merge(embeddings::read_routes())
         .merge(recommendation_routes())
         .layer(GovernorLayer::new(limits.content_read.clone()))
@@ -268,7 +267,6 @@ pub(super) fn catalog_write_routes(state: &ServerState, limits: &RouteLimits) ->
         .route("/image/{id}", put(update_image))
         .route("/image/{id}", delete(delete_image))
         .merge(embeddings::write_routes())
-        .merge(show_admin_routes())
         .layer(GovernorLayer::new(limits.write.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),

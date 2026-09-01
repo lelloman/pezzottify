@@ -602,7 +602,6 @@ async fn main() -> Result<()> {
             app_config.agent.clone(),
             app_config.ingestion.clone(),
             app_config.audio_embeddings.clone(),
-            app_config.shows.clone(),
             db_registry.clone(),
             enrichment_store.clone().map(|store| store as Arc<dyn pezzottify_server::enrichment_store::EnrichmentStore>),
             db_executor,

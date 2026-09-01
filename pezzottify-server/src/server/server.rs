@@ -6,7 +6,7 @@
 #[path = "route_builder.rs"]
 mod route_builder;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::{
     net::SocketAddr,
     sync::Arc,
@@ -24,9 +24,6 @@ use crate::catalog_store::{CatalogStore, DiscographySort};
 use crate::config::{AlbumEmbeddingDerivationSpec, AudioEmbeddingSpec};
 use crate::db_executor::DbPriority;
 use crate::enrichment_store::EnrichmentStore;
-use crate::shows::{
-    admin_routes as show_admin_routes, public_routes as show_public_routes, SqliteShowStore,
-};
 use crate::{
     server::stream_track::stream_track,
     user::{

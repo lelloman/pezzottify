@@ -21,7 +21,6 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.NewReleases
-import androidx.compose.material.icons.outlined.Podcasts
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Queue
 import androidx.compose.material3.AlertDialog
@@ -61,7 +60,6 @@ fun ProfileDrawerContent(
     onNavigateToListeningHistory: () -> Unit,
     onNavigateToDevices: () -> Unit,
     onNavigateToWhatsNew: () -> Unit,
-    onNavigateToShows: () -> Unit,
     onNavigateToAbout: () -> Unit,
     onNavigateToLogin: () -> Unit,
     onCloseDrawer: () -> Unit,
@@ -78,7 +76,6 @@ fun ProfileDrawerContent(
         onNavigateToListeningHistory = onNavigateToListeningHistory,
         onNavigateToDevices = onNavigateToDevices,
         onNavigateToWhatsNew = onNavigateToWhatsNew,
-        onNavigateToShows = onNavigateToShows,
         onNavigateToAbout = onNavigateToAbout,
         onNavigateToLogin = onNavigateToLogin,
         onCloseDrawer = onCloseDrawer,
@@ -97,7 +94,6 @@ private fun ProfileDrawerContentInternal(
     onNavigateToListeningHistory: () -> Unit,
     onNavigateToDevices: () -> Unit,
     onNavigateToWhatsNew: () -> Unit,
-    onNavigateToShows: () -> Unit,
     onNavigateToAbout: () -> Unit,
     onNavigateToLogin: () -> Unit,
     onCloseDrawer: () -> Unit,
@@ -230,16 +226,6 @@ private fun ProfileDrawerContentInternal(
                 onClick = {
                     onCloseDrawer()
                     onNavigateToWhatsNew()
-                }
-            )
-
-            // Shows
-            DrawerMenuItem(
-                icon = Icons.Outlined.Podcasts,
-                label = stringResource(R.string.shows_title),
-                onClick = {
-                    onCloseDrawer()
-                    onNavigateToShows()
                 }
             )
 

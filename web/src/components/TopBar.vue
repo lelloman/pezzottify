@@ -254,12 +254,11 @@ const recentSearches = ref(loadRecentSearches());
 const quickLinks = computed(() => {
   const links = [
     { label: "Genres", path: "/genres" },
-    { label: "Shows", path: "/shows" },
     { label: "Devices", path: "/devices" },
   ];
 
   if (userStore.canRequestContent) {
-    links.splice(2, 0, { label: "Requests", path: "/requests" });
+    links.splice(1, 0, { label: "Requests", path: "/requests" });
   }
 
   return links;

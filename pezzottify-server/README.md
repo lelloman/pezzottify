@@ -112,7 +112,7 @@ The pezzottify server is the backend component of Pezzottify that provides:
 - **`agent/`**: LLM provider abstraction used by AI-assisted features
 
   - Ollama and OpenAI-compatible chat providers
-  - Shared `[agent.llm]` configuration for generated show scripts and metadata enrichment
+  - Shared `[agent.llm]` configuration for metadata enrichment
 
 - **`sqlite_persistence/`**: Database schema management
   - `versioned_schema.rs`: Schema migrations with version tracking
@@ -139,7 +139,7 @@ directly or create private blocking pools. Synchronous background-job entry poin
 the same scheduler through `DbHandle::run_blocking`.
 
 Each handle belongs to a concurrency lane. Read-heavy catalog and search work has
-separate read/write lanes, while user, server, shows, download, ingestion, enrichment,
+separate read/write lanes, while user, server, download, ingestion, enrichment,
 and MCP persistence use lanes sized for their locking models. Catalog writes, user
 writes, and other single-writer SQLite databases default to one concurrent operation.
 
@@ -1038,7 +1038,6 @@ pezzottify-server/
 │   ├── search/              # Search vaults, streaming search, organic index helpers
 │   ├── server/              # Axum routes, state, middleware, metrics, WebSocket support
 │   ├── server_store/        # Operational state such as job history and server metadata
-│   ├── shows/               # AI show scripts and generated show media
 │   ├── sqlite_persistence/  # Versioned schema migration helpers
 │   └── user/                # Users, permissions, auth tokens, settings, sync events
 ├── tests/                   # E2E HTTP tests and shared fixtures

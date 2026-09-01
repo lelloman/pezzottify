@@ -63,18 +63,6 @@ const router = createRouter({
           meta: { requiresAuth: true },
         },
         {
-          path: "/shows",
-          name: "shows",
-          component: HomeView,
-          meta: { requiresAuth: true },
-        },
-        {
-          path: "/show/:showId",
-          name: "show",
-          component: HomeView,
-          meta: { requiresAuth: true },
-        },
-        {
           path: "/devices",
           name: "devices",
           component: HomeView,
@@ -133,11 +121,6 @@ const router = createRouter({
           path: "ingestion",
           name: "admin-ingestion",
           meta: { requiresAuth: true, section: "ingestion" },
-        },
-        {
-          path: "shows",
-          name: "admin-shows",
-          meta: { requiresAuth: true, section: "shows" },
         },
       ],
     },

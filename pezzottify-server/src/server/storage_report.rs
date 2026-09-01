@@ -51,7 +51,6 @@ pub fn collect_storage_report(config: &ServerConfig, mut db_paths: Vec<PathBuf>)
             "Catalog images",
             &config.media_path.join("images"),
         ),
-        directory_component("shows_media", "Shows media", &config.shows_media_dir()),
         directory_component(
             "ingestion_uploads",
             "Ingestion uploads",
@@ -99,7 +98,6 @@ fn database_label(id: &str) -> String {
         "search" => "Search index database".to_string(),
         "enrichment" => "Enrichment database".to_string(),
         "ingestion" => "Ingestion database".to_string(),
-        "shows" => "Shows database".to_string(),
         other => format!("{} database", humanize_id(other)),
     }
 }

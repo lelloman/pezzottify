@@ -187,25 +187,6 @@ class TestAdminApi:
 
         run_async(_test())
 
-    def test_show_draft_lifecycle(self, config):
-        async def _test():
-            admin = CatalogApiClient(config.server_url)
-            show_id = None
-            try:
-                await admin.login(ADMIN_USER, ADMIN_PASS, device_uuid="admin-api-show")
-                show = await admin.create_show_draft("Docker E2E catalog tour")
-                show_id = show["id"]
-                assert show["status"] == "script_ready"
-                assert any(
-                    item["id"] == show_id for item in await admin.get_admin_shows()
-                )
-            finally:
-                if show_id is not None:
-                    await admin.delete_admin_show(show_id)
-                await admin.close()
-
-        run_async(_test())
-
     def test_bug_report_is_visible_to_admin(self, config):
         async def _test():
             user = CatalogApiClient(config.server_url)

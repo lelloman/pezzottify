@@ -130,8 +130,6 @@ sealed interface Screen {
         @Serializable
         data object GenreList : Main
 
-        @Serializable
-        data object Shows : Main
     }
 }
 
@@ -158,5 +156,3 @@ fun NavController.toGenre(genreName: String) = navigate(Screen.Main.Genre(genreN
 fun NavController.toDevices() = navigate(Screen.Main.Devices)
 
 fun NavController.toGenreList() = navigate(Screen.Main.GenreList)
-
-fun NavController.toShows() = navigate(Screen.Main.Shows)

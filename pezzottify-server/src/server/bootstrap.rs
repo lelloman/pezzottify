@@ -68,11 +68,6 @@ async fn make_app_with_executor(
         }
     };
 
-    let show_store: Arc<dyn crate::shows::ShowStore> = Arc::new(
-        SqliteShowStore::open(config.shows_db_path(), &db_registry)
-            .context("Failed to open shows database")?,
-    );
-
     let mut state = ServerState::new_with_guarded_search_vault(
         config.clone(),
         catalog_store.clone(),
@@ -81,7 +76,6 @@ async fn make_app_with_executor(
         user_store.clone(),
         scheduler_handle,
         server_store,
-        show_store,
         db_registry,
         enrichment_store,
         db_executor,
@@ -323,7 +317,6 @@ pub async fn run_server(
     agent: crate::config::AgentSettings,
     ingestion: crate::config::IngestionSettings,
     audio_embeddings: Option<crate::config::AudioEmbeddingsSettings>,
-    shows: crate::config::ShowsSettings,
     db_registry: Arc<crate::backup::DbRegistry>,
     enrichment_store: OptionalEnrichmentStore,
     db_executor: crate::db_executor::DbExecutor,
@@ -353,7 +346,6 @@ pub async fn run_server(
         media_path,
         agent,
         ingestion,
-        shows,
         audio_embeddings,
     };
 

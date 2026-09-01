@@ -78,7 +78,6 @@ pub enum DbLane {
     EnrichmentRead,
     EnrichmentWrite,
     Mcp,
-    Shows,
 }
 
 impl DbLane {
@@ -95,7 +94,6 @@ impl DbLane {
             Self::EnrichmentRead => "enrichment_read",
             Self::EnrichmentWrite => "enrichment_write",
             Self::Mcp => "mcp",
-            Self::Shows => "shows",
         }
     }
 }
@@ -142,7 +140,6 @@ impl Default for DbExecutorConfig {
         lane_limits.insert(DbLane::EnrichmentRead, 2);
         lane_limits.insert(DbLane::EnrichmentWrite, 1);
         lane_limits.insert(DbLane::Mcp, 2);
-        lane_limits.insert(DbLane::Shows, 1);
 
         Self {
             worker_threads: 8,

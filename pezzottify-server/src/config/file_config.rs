@@ -36,7 +36,6 @@ pub struct FileConfig {
     pub catalog_store: Option<CatalogStoreConfig>,
     pub agent: Option<AgentConfig>,
     pub ingestion: Option<IngestionConfig>,
-    pub shows: Option<ShowsConfig>,
     pub related_artists: Option<RelatedArtistsConfig>,
     pub audio_analysis: Option<AudioAnalysisConfig>,
     pub audio_embeddings: Option<AudioEmbeddingsConfig>,
@@ -51,16 +50,6 @@ pub struct ProxyModeConfig {
     pub max_foreground_downloads: Option<usize>,
     pub max_prefetch_downloads: Option<usize>,
     pub no_progress_timeout_secs: Option<u64>,
-}
-
-/// Configuration for AI-generated shows and TTS synthesis.
-#[derive(Debug, Deserialize, Default, Clone)]
-#[serde(default)]
-pub struct ShowsConfig {
-    pub simple_ai_base_url: Option<String>,
-    pub api_key_env: Option<String>,
-    pub default_voice_id: Option<String>,
-    pub max_speakers: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]

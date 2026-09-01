@@ -28,7 +28,6 @@ async fn protected_route_groups_remain_mounted_and_authenticated() {
             "/v1/ingestion/my-jobs",
             StatusCode::UNAUTHORIZED,
         ),
-        (Method::GET, "/v1/content/shows", StatusCode::UNAUTHORIZED),
         // Without WebSocket upgrade headers Axum rejects the request before the
         // Session extractor runs. The authenticated WebSocket suites cover the
         // upgraded MCP/playback paths separately.
