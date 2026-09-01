@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lelloman.simpleaiassistant.data.ChatRepository
 import com.lelloman.simpleaiassistant.llm.ProviderConfigStore
+import com.lelloman.simpleaiassistant.llm.ProviderConfigurationPolicy
 import com.lelloman.simpleaiassistant.llm.ProviderRegistry
 import com.lelloman.simpleaiassistant.mode.AssistantMode
 import com.lelloman.simpleaiassistant.mode.ModeManager
@@ -23,9 +24,12 @@ class AssistantViewModel @Inject constructor(
     private val chatRepository: ChatRepository,
     val providerRegistry: ProviderRegistry,
     val providerConfigStore: ProviderConfigStore,
+    providerConfigurationPolicy: ProviderConfigurationPolicy,
     private val modeManager: ModeManager,
     private val debugModePreferences: DebugModePreferences
 ) : ViewModel() {
+
+    val isProviderConfigurationVisible = providerConfigurationPolicy.isUserConfigurable
 
     private val _debugMode = MutableStateFlow(debugModePreferences.isDebugMode())
     private val _error = MutableStateFlow<String?>(null)

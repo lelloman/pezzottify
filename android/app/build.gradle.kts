@@ -47,6 +47,27 @@ val commitCount: Int by lazy {
 
 val appVersion = "$baseVersion.$commitCount"
 
+fun buildProperty(name: String, default: String): String =
+    providers.gradleProperty(name).orNull ?: localProperties.getProperty(name, default)
+
+fun String.asBuildConfigString(): String =
+    "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
+
+val assistantProvider = buildProperty("assistant.provider", "simpleai").lowercase()
+val supportedAssistantProviders = setOf("user", "simpleai", "ollama")
+require(assistantProvider in supportedAssistantProviders) {
+    "assistant.provider must be one of: ${supportedAssistantProviders.joinToString()}"
+}
+
+val assistantOllamaBaseUrl = buildProperty("assistant.ollama.baseUrl", "http://10.0.2.2:11434")
+val assistantOllamaModel = buildProperty("assistant.ollama.model", "gpt-oss:20b")
+val assistantOllamaTimeoutSeconds =
+    buildProperty("assistant.ollama.timeoutSeconds", "120").toLongOrNull()
+        ?: error("assistant.ollama.timeoutSeconds must be an integer")
+require(assistantOllamaTimeoutSeconds > 0) {
+    "assistant.ollama.timeoutSeconds must be positive"
+}
+
 android {
     namespace = "com.lelloman.pezzottify.android"
     compileSdk = 36
@@ -154,6 +175,18 @@ android.defaultConfig {
     // Server config from local.properties
     val defaultBaseUrl = localProperties.getProperty("server.baseUrl", "http://10.0.2.2:3001")
     buildConfigField("String", "DEFAULT_BASE_URL", "\"$defaultBaseUrl\"")
+
+    // Assistant provider policy. "user" keeps provider selection in runtime settings;
+    // a provider ID locks both the provider and its configuration at build time.
+    buildConfigField("boolean", "ASSISTANT_PROVIDER_CONFIGURABLE", (assistantProvider == "user").toString())
+    buildConfigField(
+        "String",
+        "ASSISTANT_PROVIDER_ID",
+        (if (assistantProvider == "user") "simpleai" else assistantProvider).asBuildConfigString()
+    )
+    buildConfigField("String", "ASSISTANT_OLLAMA_BASE_URL", assistantOllamaBaseUrl.asBuildConfigString())
+    buildConfigField("String", "ASSISTANT_OLLAMA_MODEL", assistantOllamaModel.asBuildConfigString())
+    buildConfigField("long", "ASSISTANT_OLLAMA_TIMEOUT_SECONDS", "${assistantOllamaTimeoutSeconds}L")
 }
 
 dependencies {

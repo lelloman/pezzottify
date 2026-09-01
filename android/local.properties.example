@@ -8,3 +8,14 @@ oidc.clientId=your-client-id
 # Server Configuration
 # Default base URL for the catalog server (defaults to http://10.0.2.2:3001 for emulator)
 # server.baseUrl=http://10.0.2.2:3001
+
+# Assistant provider policy
+# Builds are locked to SimpleAI by default. "user" explicitly enables runtime
+# provider selection and configuration; another provider ID locks that provider.
+# These can also be passed to Gradle, e.g. -Passistant.provider=ollama.
+# assistant.provider=simpleai
+# assistant.provider=user
+# assistant.provider=ollama
+# assistant.ollama.baseUrl=http://10.0.2.2:11434
+# assistant.ollama.model=gpt-oss:20b
+# assistant.ollama.timeoutSeconds=120

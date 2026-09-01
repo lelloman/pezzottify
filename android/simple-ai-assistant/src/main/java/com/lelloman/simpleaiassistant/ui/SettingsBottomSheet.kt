@@ -64,6 +64,7 @@ fun SettingsBottomSheet(
     currentProviderId: String?,
     currentConfig: Map<String, Any?>,
     debugMode: Boolean,
+    showProviderSettings: Boolean = true,
     onDebugModeChange: (Boolean) -> Unit,
     onSave: (providerId: String, config: Map<String, Any?>) -> Unit,
     onDismiss: () -> Unit,
@@ -114,27 +115,28 @@ fun SettingsBottomSheet(
                 )
             }
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+            if (showProviderSettings) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
-            // Provider settings
-            Text(
-                text = "LLM Provider",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
+                Text(
+                    text = "LLM Provider",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
 
-            ProviderSettingsContent(
-                registry = registry,
-                currentProviderId = currentProviderId,
-                currentConfig = currentConfig,
-                onSave = { providerId, config ->
-                    onSave(providerId, config)
-                    scope.launch {
-                        sheetState.hide()
-                        onDismiss()
+                ProviderSettingsContent(
+                    registry = registry,
+                    currentProviderId = currentProviderId,
+                    currentConfig = currentConfig,
+                    onSave = { providerId, config ->
+                        onSave(providerId, config)
+                        scope.launch {
+                            sheetState.hide()
+                            onDismiss()
+                        }
                     }
-                }
-            )
+                )
+            }
         }
     }
 }

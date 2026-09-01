@@ -35,6 +35,7 @@ fun AssistantScreen(
             currentProviderId = currentProviderId,
             currentConfig = currentConfig,
             debugMode = state.debugMode,
+            showProviderSettings = viewModel.isProviderConfigurationVisible,
             onDebugModeChange = { viewModel.setDebugMode(it) },
             onSave = { providerId, config ->
                 viewModel.saveProviderSettings(providerId, config)

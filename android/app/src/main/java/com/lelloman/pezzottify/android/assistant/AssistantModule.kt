@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.assistant
 
 import android.content.Context
 import androidx.room.Room
+import com.lelloman.pezzottify.android.BuildConfig
 import com.lelloman.pezzottify.android.assistant.tools.AddPlaylistToQueueTool
 import com.lelloman.pezzottify.android.assistant.tools.AddTracksToPlaylistTool
 import com.lelloman.pezzottify.android.assistant.tools.CreatePlaylistTool
@@ -45,8 +46,10 @@ import com.lelloman.simpleaiassistant.data.SystemPromptBuilder
 import com.lelloman.simpleaiassistant.data.local.ChatDatabase
 import com.lelloman.simpleaiassistant.data.local.ChatMessageDao
 import com.lelloman.simpleaiassistant.llm.DynamicLlmProvider
+import com.lelloman.simpleaiassistant.llm.FixedProviderConfigStore
 import com.lelloman.simpleaiassistant.llm.LlmProvider
 import com.lelloman.simpleaiassistant.llm.ProviderConfigStore
+import com.lelloman.simpleaiassistant.llm.ProviderConfigurationPolicy
 import com.lelloman.simpleaiassistant.llm.ProviderRegistry
 import com.lelloman.simpleaiassistant.mode.ModeManager
 import com.lelloman.simpleaiassistant.mode.ModePreferences
@@ -106,14 +109,34 @@ object AssistantModule {
             // Add more providers here when available:
             // AnthropicProviderFactory(),
             // OpenAiProviderFactory(),
-            defaultProviderId = "simpleai"
+            defaultProviderId = BuildConfig.ASSISTANT_PROVIDER_ID
         )
     }
 
     @Provides
     @Singleton
     fun provideProviderConfigStore(@ApplicationContext context: Context): ProviderConfigStore {
-        return SharedPrefsProviderConfigStore(context)
+        if (BuildConfig.ASSISTANT_PROVIDER_CONFIGURABLE) {
+            return SharedPrefsProviderConfigStore(context)
+        }
+
+        val config = when (BuildConfig.ASSISTANT_PROVIDER_ID) {
+            "ollama" -> mapOf(
+                OllamaProviderFactory.KEY_BASE_URL to BuildConfig.ASSISTANT_OLLAMA_BASE_URL,
+                OllamaProviderFactory.KEY_MODEL to BuildConfig.ASSISTANT_OLLAMA_MODEL,
+                OllamaProviderFactory.KEY_TIMEOUT_MS to BuildConfig.ASSISTANT_OLLAMA_TIMEOUT_SECONDS
+            )
+            else -> emptyMap()
+        }
+        return FixedProviderConfigStore(BuildConfig.ASSISTANT_PROVIDER_ID, config)
+    }
+
+    @Provides
+    @Singleton
+    fun provideProviderConfigurationPolicy(): ProviderConfigurationPolicy {
+        return ProviderConfigurationPolicy(
+            isUserConfigurable = BuildConfig.ASSISTANT_PROVIDER_CONFIGURABLE
+        )
     }
 
     @Provides
