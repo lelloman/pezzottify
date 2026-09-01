@@ -1084,7 +1084,6 @@ impl ServerState {
         user_store: Arc<dyn FullUserStore>,
         scheduler_handle: Option<SchedulerHandle>,
         server_store: Arc<dyn crate::server_store::ServerStore>,
-        show_store: Arc<dyn crate::shows::ShowStore>,
         db_registry: Arc<crate::backup::DbRegistry>,
         enrichment_store: OptionalEnrichmentStore,
         db_executor: crate::db_executor::DbExecutor,
@@ -1114,7 +1113,6 @@ impl ServerState {
             user_store,
             user_manager.clone(),
             server_store.clone(),
-            show_store.clone(),
             db_registry.clone(),
             enrichment_store.clone(),
             db_executor,
@@ -1135,7 +1133,6 @@ impl ServerState {
             ws_connection_manager,
             scheduler_handle,
             server_store,
-            show_store,
             hash: "123456".to_owned(),
             oidc_client: None, // Will be set by make_app if OIDC is configured
             auth_state_store,

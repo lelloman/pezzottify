@@ -192,30 +192,6 @@ class CatalogApiClient:
         ) as resp:
             resp.raise_for_status()
 
-    async def create_show_draft(self, brief: str) -> dict:
-        session = await self._ensure_session()
-        async with session.post(
-            f"{self.base_url}/v1/content/admin/shows/drafts",
-            json={"brief": brief, "target_duration_minutes": 30, "language": "en"},
-            headers=self._csrf_headers(),
-        ) as resp:
-            resp.raise_for_status()
-            return await resp.json(content_type=None)
-
-    async def get_admin_shows(self) -> list[dict]:
-        session = await self._ensure_session()
-        async with session.get(f"{self.base_url}/v1/content/admin/shows") as resp:
-            resp.raise_for_status()
-            return await resp.json(content_type=None)
-
-    async def delete_admin_show(self, show_id: str) -> None:
-        session = await self._ensure_session()
-        async with session.delete(
-            f"{self.base_url}/v1/content/admin/shows/{show_id}",
-            headers=self._csrf_headers(),
-        ) as resp:
-            resp.raise_for_status()
-
     async def prepare_backup(self) -> dict:
         session = await self._ensure_session()
         async with session.post(

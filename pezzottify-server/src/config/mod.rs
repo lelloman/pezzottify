@@ -122,7 +122,6 @@ pub struct AppConfig {
     pub catalog_store: CatalogStoreSettings,
     pub agent: AgentSettings,
     pub ingestion: IngestionSettings,
-    pub shows: ShowsSettings,
     pub related_artists: Option<RelatedArtistsSettings>,
     pub audio_analysis: Option<AudioAnalysisSettings>,
     pub audio_embeddings: Option<AudioEmbeddingsSettings>,
@@ -505,22 +504,6 @@ impl AppConfig {
                 .unwrap_or(ingestion_defaults.output_bitrate),
         };
 
-        // Shows/TTS settings from file config
-        let shows_file = file.shows.unwrap_or_default();
-        let shows_defaults = ShowsSettings::default();
-        let shows = ShowsSettings {
-            simple_ai_base_url: shows_file
-                .simple_ai_base_url
-                .unwrap_or(shows_defaults.simple_ai_base_url),
-            api_key_env: shows_file.api_key_env.or(shows_defaults.api_key_env),
-            default_voice_id: shows_file
-                .default_voice_id
-                .unwrap_or(shows_defaults.default_voice_id),
-            max_speakers: shows_file
-                .max_speakers
-                .unwrap_or(shows_defaults.max_speakers),
-        };
-
         // Related artists settings from file config
         let related_artists = file.related_artists.and_then(|ra| {
             if !ra.enabled.unwrap_or(false) {
@@ -642,7 +625,6 @@ impl AppConfig {
             catalog_store,
             agent,
             ingestion,
-            shows,
             related_artists,
             audio_analysis,
             audio_embeddings,
@@ -947,26 +929,6 @@ impl Default for AgentLlmSettings {
             api_key_command: None,
             temperature: 0.3,
             timeout_secs: 120,
-        }
-    }
-}
-
-/// Settings for AI-generated shows and narration synthesis.
-#[derive(Debug, Clone)]
-pub struct ShowsSettings {
-    pub simple_ai_base_url: String,
-    pub api_key_env: Option<String>,
-    pub default_voice_id: String,
-    pub max_speakers: usize,
-}
-
-impl Default for ShowsSettings {
-    fn default() -> Self {
-        Self {
-            simple_ai_base_url: "http://simple-ai:8000".to_string(),
-            api_key_env: None,
-            default_voice_id: "default".to_string(),
-            max_speakers: 4,
         }
     }
 }

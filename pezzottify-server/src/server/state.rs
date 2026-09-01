@@ -11,7 +11,6 @@ use crate::mcp::handler::McpState;
 use crate::oidc::{AuthStateStore, OidcClient};
 use crate::search::{OrganicIndexer, SearchVault};
 use crate::server_store::ServerStore;
-use crate::shows::ShowStore;
 use crate::user::{FullUserStore, UserManager};
 use std::sync::Arc;
 use std::time::Instant;
@@ -30,7 +29,6 @@ pub type GuardedUserManager = Arc<UserManager>;
 pub type GuardedConnectionManager = Arc<ConnectionManager>;
 pub type OptionalSchedulerHandle = Option<SchedulerHandle>;
 pub type GuardedServerStore = Arc<dyn ServerStore>;
-pub type GuardedShowStore = Arc<dyn ShowStore>;
 pub type OptionalOidcClient = Option<Arc<OidcClient>>;
 pub type GuardedAuthStateStore = Arc<AuthStateStore>;
 pub type GuardedMcpState = Arc<McpState>;
@@ -58,7 +56,6 @@ pub struct DatabaseHandles {
     pub user_store: DbHandle<dyn FullUserStore>,
     pub user_manager: DbHandle<UserManager>,
     pub server: DbHandle<dyn ServerStore>,
-    pub shows: DbHandle<dyn ShowStore>,
     pub backup: DbHandle<DbRegistry>,
     pub download: Option<DbHandle<DownloadManager>>,
     pub ingestion: Option<DbHandle<IngestionManager>>,
@@ -75,7 +72,6 @@ impl DatabaseHandles {
         user_store: Arc<dyn FullUserStore>,
         user_manager: Arc<UserManager>,
         server_store: Arc<dyn ServerStore>,
-        show_store: Arc<dyn ShowStore>,
         db_registry: Arc<DbRegistry>,
         enrichment_store: Option<Arc<dyn EnrichmentStore>>,
     ) -> Self {
@@ -85,7 +81,6 @@ impl DatabaseHandles {
             user_store,
             user_manager,
             server_store,
-            show_store,
             db_registry,
             enrichment_store,
             DbExecutor::new(DbExecutorConfig::default()),
@@ -99,7 +94,6 @@ impl DatabaseHandles {
         user_store: Arc<dyn FullUserStore>,
         user_manager: Arc<UserManager>,
         server_store: Arc<dyn ServerStore>,
-        show_store: Arc<dyn ShowStore>,
         db_registry: Arc<DbRegistry>,
         enrichment_store: Option<Arc<dyn EnrichmentStore>>,
         executor: DbExecutor,
@@ -116,7 +110,6 @@ impl DatabaseHandles {
             user_store: DbHandle::new(user_store, executor.clone(), DbLane::User),
             user_manager: DbHandle::new(user_manager, executor.clone(), DbLane::User),
             server: DbHandle::new(server_store, executor.clone(), DbLane::Server),
-            shows: DbHandle::new(show_store, executor.clone(), DbLane::Shows),
             backup: DbHandle::new(db_registry, executor.clone(), DbLane::Server),
             download: None,
             ingestion: None,
@@ -141,7 +134,6 @@ pub struct ServerState {
     pub ws_connection_manager: GuardedConnectionManager,
     pub scheduler_handle: OptionalSchedulerHandle,
     pub server_store: GuardedServerStore,
-    pub show_store: GuardedShowStore,
     pub hash: String,
     pub oidc_client: OptionalOidcClient,
     pub auth_state_store: GuardedAuthStateStore,
@@ -170,12 +162,6 @@ const fn assert_send_sync<T: Send + Sync>() {}
 impl FromRef<ServerState> for GuardedCatalogStore {
     fn from_ref(input: &ServerState) -> Self {
         input.catalog_store.clone()
-    }
-}
-
-impl FromRef<ServerState> for GuardedShowStore {
-    fn from_ref(input: &ServerState) -> Self {
-        input.show_store.clone()
     }
 }
 
