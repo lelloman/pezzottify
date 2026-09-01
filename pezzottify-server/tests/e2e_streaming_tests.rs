@@ -281,22 +281,14 @@ async fn test_stream_track_full_then_partial() {
 #[tokio::test]
 async fn test_concurrent_streaming() {
     let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
 
-    // Spawn 5 concurrent streaming requests
-    let handles: Vec<_> = (0..5)
-        .map(|_| {
-            let base_url = server.base_url.clone();
-            tokio::spawn(async move {
-                let client = TestClient::authenticated(base_url).await;
-                let response = client.stream_track(TRACK_1_ID).await;
-                response.status()
-            })
-        })
-        .collect();
+    // Issue 5 concurrent streaming requests over one authenticated session.
+    let responses =
+        futures::future::join_all((0..5).map(|_| client.stream_track(TRACK_1_ID))).await;
 
     // All should succeed
-    for handle in handles {
-        let status = handle.await.unwrap();
-        assert_eq!(status, StatusCode::OK);
+    for response in responses {
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }
