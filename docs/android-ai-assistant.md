@@ -1,7 +1,14 @@
 # Android AI Assistant
 
-**Status**: Design Phase
+**Status**: Implemented and extracted
 **Created**: 2026-01-04
+
+> The reusable implementation now lives in the sibling
+> `simple-android-assistant` repository. Pezzottify consumes its
+> `assistant-core`, `assistant-compose`, `provider-simpleai`, and
+> `provider-ollama` modules through a Gradle composite build. Module names and
+> paths below describe the original in-tree design and are retained as design
+> history.
 
 ---
 
