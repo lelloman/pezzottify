@@ -264,8 +264,10 @@ private class ExponentialBackoffRetryInterceptor(
             try {
                 val response = chain.proceed(request)
 
-                // Success or client error - don't retry
-                if (response.isSuccessful || response.code in 400..499) {
+                // Success, client error, or server capacity exhaustion: don't
+                // retry. Retrying 503s for every image on a content grid creates
+                // a synchronized request storm and makes backend recovery harder.
+                if (response.isSuccessful || response.code in 400..499 || response.code == 503) {
                     return response
                 }
 
