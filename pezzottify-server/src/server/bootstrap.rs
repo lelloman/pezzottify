@@ -94,11 +94,17 @@ async fn make_app_with_executor(
         });
     }
 
-    // Create organic indexer for on-demand search index growth
-    state.organic_indexer = Some(crate::search::OrganicIndexer::new(
-        state.database.search_write.clone(),
-        state.database.catalog_read.clone(),
-    ));
+    // The active search index is a full-catalog index. Do not attach the legacy
+    // organic indexer to read-only content requests: it treats its process-local
+    // tracking set as authoritative and rewrites already-indexed FTS5 documents
+    // after every restart. On a full index, locating those documents through the
+    // UNINDEXED item_id/item_type columns requires a table scan and can saturate
+    // storage for unrelated interactive requests.
+    //
+    // Genuine availability transitions are published through the explicit
+    // TrackMaterializer/SearchVault incremental paths below.
+    state.organic_indexer = None;
+    info!("Legacy page-driven organic search indexing disabled");
 
     if config.proxy_mode.enabled {
         if let Some(url) = &config.downloader_url {
