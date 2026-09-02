@@ -22,7 +22,6 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Pezzottify"
-includeBuild("../../simple-android-assistant")
 include(":app")
 include(":ui")
 include(":remoteapi")
