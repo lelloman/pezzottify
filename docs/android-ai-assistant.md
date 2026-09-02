@@ -6,9 +6,9 @@
 > The reusable implementation now lives in the sibling
 > `simple-android-assistant` repository. Pezzottify consumes its
 > `assistant-core`, `assistant-compose`, `provider-simpleai`, and
-> `provider-ollama` modules through a Gradle composite build. Module names and
-> paths below describe the original in-tree design and are retained as design
-> history.
+> `provider-ollama` modules as version-pinned JitPack artifacts. Module names
+> and paths below describe the original in-tree design and are retained as
+> design history.
 
 ---
 
