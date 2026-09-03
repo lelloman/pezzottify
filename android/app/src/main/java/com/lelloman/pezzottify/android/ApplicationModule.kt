@@ -317,9 +317,7 @@ private class OkHttpAuthInterceptor(
         val authToken = (authStore.getAuthState().value as? AuthState.LoggedIn)?.authToken
 
         val requestWithAuth = if (authToken != null) {
-            chain.request().newBuilder()
-                .addHeader("Authorization", bearerAuthorization(authToken))
-                .build()
+            chain.request().withBearerAuthorization(authToken)
         } else {
             chain.request()
         }
@@ -327,3 +325,13 @@ private class OkHttpAuthInterceptor(
         return chain.proceed(requestWithAuth)
     }
 }
+
+/**
+ * Replaces any authorization value already attached by Coil. Internal image requests pass
+ * through both Coil's request interceptor and this OkHttp interceptor, while the server rejects
+ * requests containing duplicate Authorization headers.
+ */
+internal fun okhttp3.Request.withBearerAuthorization(authToken: String): okhttp3.Request =
+    newBuilder()
+        .header("Authorization", bearerAuthorization(authToken))
+        .build()
