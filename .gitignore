@@ -4,6 +4,9 @@ dev-data/
 # Android build artifacts
 android/**/build/
 
+# Local Android release publisher wrapper
+scripts/publish-android-to-lellostore.sh
+
 # used by bruno
 api_test/
 
