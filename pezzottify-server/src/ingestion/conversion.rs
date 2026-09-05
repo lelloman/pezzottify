@@ -34,7 +34,6 @@ impl IngestionManager {
 
         let files = self.store.get_files_for_job(job_id)?;
         let mut converted = 0;
-        let mut converted_track_ids: Vec<String> = Vec::new();
 
         for mut file in files {
             // Skip files without a matched track
@@ -56,166 +55,69 @@ impl IngestionManager {
                     | Some(ConversionReason::UndetectableBitrate)
             );
 
-            if !needs_conversion {
-                // No conversion needed - copy file directly to output
-                let output_path = self
-                    .file_handler
-                    .get_output_path(&self.config.media_dir, &track_id);
-
-                // Determine output extension based on original format
-                let extension = Path::new(&file.filename)
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .unwrap_or("ogg");
-
-                let output_path_with_ext = output_path.with_extension(extension);
-
-                // Ensure output directory exists
-                if let Some(parent) = output_path_with_ext.parent() {
-                    if let Err(e) = tokio::fs::create_dir_all(parent).await {
-                        error!("Failed to create output directory {:?}: {}", parent, e);
-                    }
-                }
-
-                // Check if input file exists before attempting copy
-                let input_exists = input_path.exists();
-                if !input_exists {
-                    error!(
-                        "Input file does not exist: {:?} (temp_file_path: {})",
-                        input_path, file.temp_file_path
-                    );
-                }
-
-                match tokio::fs::copy(&input_path, &output_path_with_ext).await {
-                    Ok(_) => {
-                        file.output_file_path =
-                            Some(output_path_with_ext.to_string_lossy().to_string());
-                        file.converted = true; // Mark as processed even if not transcoded
-                        converted += 1;
-                        converted_track_ids.push(track_id.clone());
-
-                        // Update catalog with appropriate extension (sharded path)
-                        let (dir1, dir2) = super::file_handler::FileHandler::shard_dirs(&track_id);
-                        let audio_uri =
-                            format!("audio/{}/{}/{}.{}", dir1, dir2, track_id, extension);
-                        if let Err(e) = self.catalog.set_track_audio_uri(&track_id, &audio_uri) {
-                            warn!("Failed to update track {} audio_uri: {}", track_id, e);
-                        }
-
-                        info!(
-                            "Copied {} -> {} (no conversion needed, {} kbps)",
-                            file.filename,
-                            track_id,
-                            file.bitrate.unwrap_or(0)
-                        );
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to copy {} from {:?} to {:?}: {}",
-                            file.filename, input_path, output_path_with_ext, e
-                        );
-                        file.error_message = Some(e.to_string());
-                    }
-                }
-
-                self.store.update_file(&file)?;
+            if file.converted {
+                converted += 1;
                 continue;
             }
-
-            // Original conversion logic for files that need conversion
-            let output_path = self
-                .file_handler
-                .get_output_path(&self.config.media_dir, &track_id);
-
-            match convert_to_ogg(input_path, &output_path, self.config.target_bitrate).await {
-                Ok(()) => {
-                    file.output_file_path = Some(output_path.to_string_lossy().to_string());
+            let extension = if needs_conversion {
+                "ogg"
+            } else {
+                Path::new(&file.filename)
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("ogg")
+            }
+            .to_owned();
+            let published = if needs_conversion {
+                match self
+                    .media
+                    .stage(
+                        track_id.clone(),
+                        extension,
+                        crate::media::Provenance::Ingested,
+                    )
+                    .await
+                {
+                    Ok(stage) => {
+                        match convert_to_ogg(input_path, &stage.path(), self.config.target_bitrate)
+                            .await
+                        {
+                            Ok(()) => self.media.commit(stage).await,
+                            Err(error) => Err(error.into()),
+                        }
+                    }
+                    Err(error) => Err(error),
+                }
+            } else {
+                self.media
+                    .publish_file(
+                        track_id.clone(),
+                        extension,
+                        input_path.to_owned(),
+                        crate::media::Provenance::Ingested,
+                    )
+                    .await
+            };
+            match published {
+                Ok(receipt) => {
+                    file.output_file_path = Some(
+                        self.config
+                            .media_dir
+                            .join(receipt.uri)
+                            .to_string_lossy()
+                            .into_owned(),
+                    );
                     file.converted = true;
+                    file.error_message = None;
                     converted += 1;
-                    converted_track_ids.push(track_id.clone());
-
-                    // Update catalog: set audio_uri for the track (sharded path)
-                    let (dir1, dir2) = super::file_handler::FileHandler::shard_dirs(&track_id);
-                    let audio_uri = format!("audio/{}/{}/{}.ogg", dir1, dir2, track_id);
-                    if let Err(e) = self.catalog.set_track_audio_uri(&track_id, &audio_uri) {
-                        warn!("Failed to update track {} audio_uri: {}", track_id, e);
-                    }
-
-                    info!(
-                        "Converted {} -> {} (target: {} kbps)",
-                        file.filename, track_id, self.config.target_bitrate
-                    );
                 }
-                Err(e) => {
-                    error!("Failed to convert {}: {}", file.filename, e);
-                    file.error_message = Some(e.to_string());
+                Err(error) => {
+                    file.error_message = Some(error.to_string());
+                    self.store.update_file(&file)?;
+                    return Err(IngestionError::Store(error));
                 }
             }
-
             self.store.update_file(&file)?;
-        }
-
-        // Update album availability in catalog
-        if let Some(album_id) = &job.matched_album_id {
-            match self.catalog.recompute_album_availability(album_id) {
-                Ok(availability) => {
-                    info!(
-                        "Album {} availability updated to {:?}",
-                        album_id, availability
-                    );
-
-                    // Update search index for album
-                    let album_available =
-                        availability != crate::catalog_store::AlbumAvailability::Missing;
-                    self.search.update_availability(&[(
-                        album_id.clone(),
-                        HashedItemType::Album,
-                        album_available,
-                    )]);
-
-                    // Update artist availability for album's artists
-                    match self.catalog.get_album_artist_ids(album_id) {
-                        Ok(artist_ids) => {
-                            for artist_id in artist_ids {
-                                match self.catalog.recompute_artist_availability(&artist_id) {
-                                    Ok(artist_available) => {
-                                        info!(
-                                            "Artist {} availability updated to {}",
-                                            artist_id, artist_available
-                                        );
-                                        self.search.update_availability(&[(
-                                            artist_id,
-                                            HashedItemType::Artist,
-                                            artist_available,
-                                        )]);
-                                    }
-                                    Err(e) => {
-                                        warn!(
-                                            "Failed to recompute artist {} availability: {}",
-                                            artist_id, e
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            warn!("Failed to get artist IDs for album {}: {}", album_id, e);
-                        }
-                    }
-                }
-                Err(e) => {
-                    warn!("Failed to recompute album {} availability: {}", album_id, e);
-                }
-            }
-        }
-
-        // Update search index for converted tracks
-        let track_availability_updates: Vec<_> = converted_track_ids
-            .iter()
-            .map(|id| (id.clone(), HashedItemType::Track, true))
-            .collect();
-        if !track_availability_updates.is_empty() {
-            self.search.update_availability(&track_availability_updates);
         }
 
         job.tracks_converted = converted;
@@ -453,5 +355,4 @@ impl IngestionManager {
 
         Ok(())
     }
-
 }

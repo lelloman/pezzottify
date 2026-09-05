@@ -44,12 +44,13 @@ fn job_fixture() -> JobFixture {
     let users: Arc<dyn FullUserStore> = user_store;
     let server: Arc<dyn ServerStore> = server_store.clone();
     let user_manager = Arc::new(UserManager::new(users.clone()));
-    let context = JobContext::new(
+    let context = JobContext::with_search_vault(
         CancellationToken::new(),
         catalog,
         users,
         server,
         user_manager,
+        Arc::new(pezzottify_server::search::NoopSearchVault),
     );
 
     JobFixture {

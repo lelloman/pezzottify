@@ -4,6 +4,10 @@ Ticket: [LLPR/PEZZOTTIFY-5](https://crumbles.lelloman.com/w/LLPR/PEZZOTTIFY/5)
 
 Audit date: 2026-09-05. Original source baseline: `8a3b57c9834080cf48e53e205f4aaeec8fb083c6`.
 
+Follow-up: story #6 completes publication and physical-presence ownership; see
+[the write and presence audit](media-write-audit.md). The inventory below records the
+original story #5 boundary, including temporary bridges since removed.
+
 ## Scope
 
 `MediaManager` intercepts reads of published audio tracks and catalog images throughout the server. This includes local reads, remote retrieval, progressive playback, successor prefetch, fetch-then-persist behavior, and indirect file readers such as multipart embedding uploads. Audio and images are included together.

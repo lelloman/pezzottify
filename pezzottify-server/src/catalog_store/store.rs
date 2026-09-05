@@ -18,7 +18,6 @@ use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
 use rusqlite::{params, params_from_iter, types::Value, Connection, OptionalExtension};
 use std::collections::HashMap;
-use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -27,6 +26,7 @@ use tracing::info;
 
 #[cfg(test)]
 use crate::media::local::resolve_existing_media_path;
+#[cfg(test)]
 use crate::media::local::{normalized_media_identifier, open_media_file_beneath};
 
 /// SQLite-backed catalog store for Spotify metadata.

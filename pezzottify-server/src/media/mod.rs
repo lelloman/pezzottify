@@ -5,7 +5,11 @@
 //! See docs/media-read-audit.md for the inventory and staging exceptions.
 
 pub(crate) mod local;
+mod mutations;
 mod track_materializer;
+pub use mutations::{CopyReceipt, Provenance, StagedMedia};
+mod availability;
+pub use availability::{directory_size, probe, MediaCatalogView, MediaPresence};
 
 use crate::catalog_store::{CatalogStore, Track};
 use crate::db_executor::{DbExecutor, DbHandle, DbLane, DbPriority, DbRunError};
@@ -35,6 +39,10 @@ pub struct MediaManager {
     filesystem: FilesystemWorkPool,
     http_client: reqwest::Client,
     materializer: OnceLock<Arc<TrackMaterializer>>,
+    root: PathBuf,
+    mutations: Arc<std::sync::Mutex<()>>,
+    effects: OnceLock<mutations::Effects>,
+    recovery_cursor: std::sync::Mutex<Option<String>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -116,7 +124,12 @@ impl RemoteAudio {
 
 impl MediaManager {
     pub fn new(catalog: Arc<dyn CatalogStore>, executor: DbExecutor) -> Self {
+        let root = catalog.media_root();
         Self {
+            mutations: mutations::mutation_lock(&root),
+            root,
+            effects: OnceLock::new(),
+            recovery_cursor: std::sync::Mutex::new(None),
             catalog_read: DbHandle::new(catalog.clone(), executor, DbLane::CatalogRead),
             catalog,
             filesystem: FilesystemWorkPool::default(),
@@ -137,36 +150,81 @@ impl MediaManager {
         &self,
         track_id: &str,
     ) -> Result<Option<(Track, Option<LocalAudio>)>, DbRunError> {
-        let track_id = track_id.to_owned();
-        self.catalog_read
+        let id = track_id.to_owned();
+        let Some(track) = self
+            .catalog_read
             .run(DbPriority::Interactive, move |catalog| {
-                let Some(track) = catalog.get_track(&track_id)? else {
-                    return Ok(None);
-                };
-                let opened = match catalog.open_track_audio_file(&track_id) {
-                    Ok(opened) => opened.map(|(file, path)| LocalAudio::new(file, path)),
-                    Err(error) => {
-                        debug!(%error, %track_id, "Refused or failed to open track audio");
-                        None
-                    }
-                };
-                Ok(Some((track, opened)))
+                catalog.get_track(&id)
+            })
+            .await?
+        else {
+            return Ok(None);
+        };
+        let root = self.root.clone();
+        let uri = track.audio_uri.clone();
+        let opened = self
+            .filesystem
+            .run(move || {
+                uri.and_then(|uri| local::open_media_file_beneath(&root, &uri).ok())
+                    .map(|(file, path)| LocalAudio::new(file, path))
             })
             .await
+            .map_err(|error| DbRunError::Store(anyhow::anyhow!(error)))?;
+        Ok(Some((track, opened)))
     }
 
-    /// Local-only: safe for synchronous background jobs; never starts a download.
     pub(crate) fn open_local_audio_blocking(
         &self,
         track_id: &str,
     ) -> Result<Option<LocalAudio>, DbRunError> {
-        let track_id = track_id.to_owned();
-        self.catalog_read
+        let id = track_id.to_owned();
+        let track = self
+            .catalog_read
             .run_blocking(DbPriority::Background, move |catalog| {
-                Ok(catalog
-                    .open_track_audio_file(&track_id)?
-                    .map(|(file, path)| LocalAudio::new(file, path)))
+                catalog.get_track(&id)
+            })?;
+        track
+            .and_then(|track| track.audio_uri)
+            .map(|uri| {
+                local::open_media_file_beneath(&self.root, &uri)
+                    .map(|(file, path)| LocalAudio::new(file, path))
+                    .map_err(DbRunError::Store)
             })
+            .transpose()
+    }
+
+    pub async fn stage(
+        self: &Arc<Self>,
+        id: String,
+        extension: String,
+        provenance: Provenance,
+    ) -> anyhow::Result<StagedMedia> {
+        let manager = self.clone();
+        self.filesystem
+            .run(move || manager.begin_publication(&id, &extension, provenance))
+            .await?
+    }
+    pub async fn commit(self: &Arc<Self>, stage: StagedMedia) -> anyhow::Result<CopyReceipt> {
+        let manager = self.clone();
+        self.filesystem
+            .run(move || manager.commit_publication(stage))
+            .await?
+    }
+    pub async fn publish_file(
+        self: &Arc<Self>,
+        id: String,
+        extension: String,
+        input: PathBuf,
+        provenance: Provenance,
+    ) -> anyhow::Result<CopyReceipt> {
+        let manager = self.clone();
+        self.filesystem
+            .run(move || {
+                let stage = manager.begin_publication(&id, &extension, provenance)?;
+                std::fs::copy(input, stage.path())?;
+                manager.commit_publication(stage)
+            })
+            .await?
     }
 
     /// Caller must have checked proxy permission AND the user's proxy preference.
@@ -189,20 +247,19 @@ impl MediaManager {
     }
 
     pub(crate) fn enable_proxy(
-        &self,
+        self: &Arc<Self>,
         downloader: Arc<dyn crate::downloader::Downloader>,
         search: Arc<dyn crate::search::SearchVault>,
         server: Arc<dyn crate::server_store::ServerStore>,
-        media_path: PathBuf,
+        _media_path: PathBuf,
         settings: crate::config::ProxyModeSettings,
     ) {
+        self.configure_effects(search, server);
         let backend = TrackMaterializer::new(
             downloader,
             self.catalog.clone(),
-            search,
-            server,
-            media_path,
             settings,
+            Arc::downgrade(self),
         );
         assert!(
             self.materializer.set(backend).is_ok(),
@@ -210,8 +267,17 @@ impl MediaManager {
         );
     }
 
-    pub(crate) async fn read_image(&self, id: &str) -> Result<ImageRead, MediaReadError> {
-        let file_path = self.catalog.get_image_path(id);
+    pub(crate) async fn read_image(
+        self: &Arc<Self>,
+        id: &str,
+    ) -> Result<ImageRead, MediaReadError> {
+        let manager = self.clone();
+        let image_id = id.to_owned();
+        let file_path = self
+            .filesystem
+            .run(move || manager.image_path(&image_id))
+            .await?
+            .map_err(|error| MediaReadError::Storage(io::Error::other(error)))?;
 
         // First, check if we have the image cached locally.
         match self.filesystem.read(file_path.clone()).await {
@@ -281,18 +347,20 @@ impl MediaManager {
 
         // Save the image atomically for future requests. Cache failure does not fail
         // this response because the validated bytes are already available.
-        match self
+        let manager = self.clone();
+        let image_id = id.to_owned();
+        let cached_bytes = bytes.to_vec();
+        let cached = self
             .filesystem
-            .write_atomic(file_path.clone(), bytes.to_vec())
-            .await
-        {
-            Ok(Ok(())) => debug!("Cached image for {} to {}", id, file_path.display()),
-            Ok(Err(error)) => warn!(
-                "Failed to cache image to {}: {}",
-                file_path.display(),
-                error
-            ),
-            Err(error) => warn!("Failed to schedule image cache write: {}", error),
+            .run(move || -> anyhow::Result<()> {
+                let stage = manager.begin_publication(&image_id, "jpg", Provenance::ImageCache)?;
+                std::fs::write(stage.path(), cached_bytes)?;
+                manager.commit_publication(stage)?;
+                Ok(())
+            })
+            .await;
+        if !matches!(cached, Ok(Ok(()))) {
+            warn!("Failed to persist image for {id}");
         }
 
         Ok(ImageRead {
@@ -334,3 +402,6 @@ pub(crate) fn audio_content_type(path: &Path) -> &'static str {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod mutation_tests;

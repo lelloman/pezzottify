@@ -9,7 +9,10 @@ impl IngestionManager {
     ) -> Self {
         let file_handler = FileHandler::new(&config.temp_dir, config.max_file_size);
 
+        let media = Arc::new(crate::media::MediaManager::new(catalog.clone(), crate::db_executor::DbExecutor::new(Default::default())));
+        media.configure_search(search.clone());
         Self {
+            media,
             store,
             catalog,
             search,
@@ -19,6 +22,11 @@ impl IngestionManager {
             notifier: None,
             notification_service: None,
         }
+    }
+
+    pub fn with_media(mut self, media: Arc<crate::media::MediaManager>) -> Self {
+        self.media = media;
+        self
     }
 
     /// Set the notifier for WebSocket updates.

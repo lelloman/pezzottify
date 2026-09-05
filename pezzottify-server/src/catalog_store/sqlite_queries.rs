@@ -127,19 +127,6 @@ impl SqliteCatalogStore {
         })
     }
 
-    /// Compute track availability from an already-fetched audio_uri.
-    ///
-    /// This avoids acquiring another database connection, preventing deadlocks
-    /// when called from within methods that already hold a connection.
-    fn availability_from_audio_uri(&self, audio_uri: &Option<String>) -> TrackAvailability {
-        match audio_uri {
-            Some(uri) if open_media_file_beneath(&self.media_base_path, uri).is_ok() => {
-                TrackAvailability::Available
-            }
-            _ => TrackAvailability::Unavailable,
-        }
-    }
-
     // =========================================================================
     // Internal Helper Methods
     // =========================================================================
@@ -271,7 +258,7 @@ impl SqliteCatalogStore {
     fn get_track_inner(conn: &Connection, id: &str) -> Result<Option<Track>> {
         let mut stmt = conn.prepare_cached(
             "SELECT id, name, album_rowid, track_number, external_id_isrc,
-                    popularity, disc_number, duration_ms, explicit, language, audio_uri
+                    popularity, disc_number, duration_ms, explicit, language, audio_uri, track_available
              FROM tracks WHERE id = ?1",
         )?;
 
@@ -289,6 +276,7 @@ impl SqliteCatalogStore {
                 row.get::<_, i32>(8)?,
                 row.get::<_, Option<String>>(9)?,
                 row.get::<_, Option<String>>(10)?,
+                row.get::<_, i32>(11)?,
             ))
         });
 
@@ -304,6 +292,7 @@ impl SqliteCatalogStore {
             explicit,
             language,
             audio_uri,
+            track_available,
         ) = match row_result {
             Ok(data) => data,
             Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
@@ -328,7 +317,7 @@ impl SqliteCatalogStore {
             language,
             external_id_isrc: isrc,
             audio_uri,
-            availability: TrackAvailability::default(),
+            availability: if track_available == 1 { TrackAvailability::Available } else { TrackAvailability::Unavailable },
         }))
     }
 
@@ -406,7 +395,7 @@ impl SqliteCatalogStore {
 
         let mut tracks_stmt = conn.prepare_cached(
             "SELECT id, name, album_rowid, track_number, external_id_isrc,
-                    popularity, disc_number, duration_ms, explicit, language, audio_uri
+                    popularity, disc_number, duration_ms, explicit, language, audio_uri, track_available
              FROM tracks WHERE album_rowid = ?1
              ORDER BY disc_number, track_number",
         )?;
@@ -428,18 +417,13 @@ impl SqliteCatalogStore {
                         language: row.get(9)?,
                         external_id_isrc: row.get(4)?,
                         audio_uri: audio_uri.clone(),
-                        availability: TrackAvailability::default(),
+                        availability: if row.get::<_, i32>(11)? == 1 { TrackAvailability::Available } else { TrackAvailability::Unavailable },
                     },
                     audio_uri,
                 ))
             })?
             .filter_map(|r| r.ok())
-            .map(|(mut t, audio_uri)| {
-                // Compute availability using already-fetched audio_uri to avoid
-                // acquiring another connection (which would cause deadlocks)
-                t.availability = self.availability_from_audio_uri(&audio_uri);
-                t
-            })
+            .map(|(t, _audio_uri)| t)
             .collect();
 
         let mut disc_map: HashMap<i32, Vec<Track>> = HashMap::new();
@@ -473,13 +457,13 @@ impl SqliteCatalogStore {
         let mut track_stmt = conn.prepare_cached(
             "SELECT t.id, t.name, t.album_rowid, t.track_number, t.external_id_isrc,
                     t.popularity, t.disc_number, t.duration_ms, t.explicit, t.language,
-                    a.id as album_id, t.audio_uri
+                    a.id as album_id, t.audio_uri, t.track_available
              FROM tracks t
              INNER JOIN albums a ON t.album_rowid = a.rowid
              WHERE t.rowid = ?1",
         )?;
 
-        let (mut track, album_id, audio_uri): (Track, String, Option<String>) = track_stmt
+        let (track, album_id, _audio_uri): (Track, String, Option<String>) = track_stmt
             .query_row(params![track_rowid], |row| {
                 let explicit: i32 = row.get(8)?;
                 let album_id: String = row.get(10)?;
@@ -497,16 +481,13 @@ impl SqliteCatalogStore {
                         language: row.get(9)?,
                         external_id_isrc: row.get(4)?,
                         audio_uri: audio_uri.clone(),
-                        availability: TrackAvailability::default(),
+                        availability: if row.get::<_, i32>(12)? == 1 { TrackAvailability::Available } else { TrackAvailability::Unavailable },
                     },
                     album_id,
                     audio_uri,
                 ))
             })?;
 
-        // Compute availability using already-fetched audio_uri to avoid
-        // acquiring another connection (which would cause deadlocks)
-        track.availability = self.availability_from_audio_uri(&audio_uri);
 
         let mut album_stmt = conn.prepare_cached(
             "SELECT id, name, album_type, external_id_upc, external_id_amgid,

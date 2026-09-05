@@ -76,8 +76,8 @@ impl AlbumEmbeddingSyncJob {
         {
             let audio_uri = audio_uri.as_deref()?.trim();
             if audio_uri.is_empty()
-                || crate::media::local::open_media_file_beneath(&self.media_path, audio_uri)
-                    .is_err()
+                || crate::media::probe(&self.media_path, Some(audio_uri))
+                    != crate::media::MediaPresence::Present
             {
                 return None;
             }
