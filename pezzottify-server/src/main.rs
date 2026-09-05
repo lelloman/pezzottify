@@ -316,6 +316,7 @@ async fn main() -> Result<()> {
         );
     }
 
+    let media = job_context.media.clone();
     let (mut scheduler, scheduler_handle) = create_scheduler(
         server_store.clone(),
         hook_receiver,
@@ -425,10 +426,7 @@ async fn main() -> Result<()> {
     // Register track embedding sync job if configured.
     if let Some(ref ae_settings) = app_config.audio_embeddings {
         scheduler
-            .register_job(Arc::new(TrackEmbeddingSyncJob::new(
-                ae_settings.clone(),
-                app_config.media_path.clone(),
-            )))
+            .register_job(Arc::new(TrackEmbeddingSyncJob::new(ae_settings.clone())))
             .await;
         info!("Registered track embedding sync job");
 
@@ -607,6 +605,7 @@ async fn main() -> Result<()> {
             db_registry.clone(),
             enrichment_store.clone().map(|store| store as Arc<dyn pezzottify_server::enrichment_store::EnrichmentStore>),
             db_executor,
+            media,
         ) => {
             info!("HTTP server stopped: {:?}", result);
             shutdown_token.cancel();

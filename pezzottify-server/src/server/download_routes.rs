@@ -17,9 +17,9 @@ use tracing::{debug, warn};
 
 use crate::db_executor::{DbHandle, DbPriority, DbRunError};
 use crate::download_manager::{AuditLogFilter, DownloadManager, QueueStatus};
+use crate::media::ProxyMaterializerStatus;
 use crate::server::session::Session;
-use crate::server::state::{DatabaseHandles, OptionalTrackMaterializer, ServerState};
-use crate::server::track_materializer::ProxyMaterializerStatus;
+use crate::server::state::{DatabaseHandles, GuardedMediaManager, ServerState};
 use crate::server::ApiError;
 use crate::user::Permission;
 
@@ -335,25 +335,23 @@ async fn get_admin_stats(
 /// GET /admin/proxy - Get active and recent on-demand track materializations.
 async fn get_admin_proxy_status(
     session: Session,
-    State(materializer): State<OptionalTrackMaterializer>,
+    State(media): State<GuardedMediaManager>,
 ) -> impl IntoResponse {
     if !session.has_permission(Permission::DownloadManagerAdmin) {
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    let status = materializer
-        .map(|materializer| materializer.status())
-        .unwrap_or(ProxyMaterializerStatus {
-            enabled: false,
-            active: Vec::new(),
-            recent: Vec::new(),
-            memory_used_bytes: 0,
-            memory_limit_bytes: 0,
-            foreground_active: 0,
-            foreground_limit: 0,
-            prefetch_active: 0,
-            prefetch_limit: 0,
-        });
+    let status = media.proxy_status().unwrap_or(ProxyMaterializerStatus {
+        enabled: false,
+        active: Vec::new(),
+        recent: Vec::new(),
+        memory_used_bytes: 0,
+        memory_limit_bytes: 0,
+        foreground_active: 0,
+        foreground_limit: 0,
+        prefetch_active: 0,
+        prefetch_limit: 0,
+    });
     Json(status).into_response()
 }
 

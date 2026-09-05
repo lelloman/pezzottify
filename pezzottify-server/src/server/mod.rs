@@ -4,7 +4,7 @@ mod blocking_work;
 pub mod config;
 mod download_routes;
 mod embeddings;
-mod filesystem_work;
+pub(crate) mod filesystem_work;
 mod http_layers;
 mod ingestion_routes;
 pub mod metrics;
@@ -22,7 +22,6 @@ mod storage_report;
 // mod skeleton;
 pub mod state;
 mod stream_track;
-mod track_materializer;
 pub mod websocket;
 
 pub(crate) use api_error::ApiError;

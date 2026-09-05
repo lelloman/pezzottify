@@ -526,115 +526,25 @@ fn enrich_batch_content(
 }
 
 async fn get_image(
-    _session: Session,
-    State(catalog_store): State<GuardedCatalogStore>,
-    State(database): State<DatabaseHandles>,
-    State(filesystem_work): State<FilesystemWorkPool>,
-    State(http_client): State<HttpClient>,
+    State(media): State<GuardedMediaManager>,
     Path(id): Path<String>,
 ) -> Response {
-    let file_path = catalog_store.get_image_path(&id);
-
-    // First, check if we have the image cached locally.
-    match filesystem_work.read(file_path.clone()).await {
-        Ok(Ok(buffer)) => return serve_image_bytes(buffer),
-        Ok(Err(error)) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Ok(Err(error)) => {
-            error!(%error, path = %file_path.display(), "Failed to read cached image");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    match media.read_image(&id).await {
+        Ok(image) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, image.content_type)
+            .body(image.bytes.into())
+            .expect("image response headers are valid"),
+        Err(crate::media::MediaReadError::Database(error)) => ApiError::from(error).into_response(),
+        Err(crate::media::MediaReadError::Filesystem(error)) => ApiError::from(error).into_response(),
+        Err(crate::media::MediaReadError::NotFound | crate::media::MediaReadError::InvalidLocalImage) => {
+            StatusCode::NOT_FOUND.into_response()
         }
-        Err(error) => return ApiError::from(error).into_response(),
+        Err(crate::media::MediaReadError::Storage(_)) => {
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+        Err(crate::media::MediaReadError::Upstream) => StatusCode::BAD_GATEWAY.into_response(),
     }
-
-    // Image not cached locally - try to fetch from external URL
-    let image_id = id.clone();
-    let image_url = match database
-        .catalog_read
-        .run(DbPriority::Interactive, move |catalog_store| {
-            catalog_store.get_item_image_url(&image_id)
-        })
-        .await
-    {
-        Ok(Some(url)) => url,
-        Ok(None) => {
-            debug!("No image URL found for item: {}", id);
-            return StatusCode::NOT_FOUND.into_response();
-        }
-        Err(err) => {
-            error!("Failed to query image URL for {}: {}", id, err);
-            return ApiError::from(err).into_response();
-        }
-    };
-
-    // Download the image from the external URL
-    let response = match http_client.get(&image_url.url).send().await {
-        Ok(resp) => resp,
-        Err(e) => {
-            error!("Failed to download image from {}: {}", image_url.url, e);
-            return StatusCode::BAD_GATEWAY.into_response();
-        }
-    };
-
-    if !response.status().is_success() {
-        error!(
-            "Failed to download image from {}: status {}",
-            image_url.url,
-            response.status()
-        );
-        return StatusCode::BAD_GATEWAY.into_response();
-    }
-
-    let bytes = match response.bytes().await {
-        Ok(b) => b,
-        Err(e) => {
-            error!("Failed to read image bytes from {}: {}", image_url.url, e);
-            return StatusCode::BAD_GATEWAY.into_response();
-        }
-    };
-
-    // Verify it's actually an image
-    let mime_type = match infer::get(&bytes) {
-        Some(kind) if kind.mime_type().starts_with("image/") => kind.mime_type().to_string(),
-        _ => {
-            error!("Downloaded content is not an image: {}", image_url.url);
-            return StatusCode::BAD_GATEWAY.into_response();
-        }
-    };
-
-    // Save the image atomically for future requests. Cache failure does not fail
-    // this response because the validated bytes are already available.
-    match filesystem_work
-        .write_atomic(file_path.clone(), bytes.to_vec())
-        .await
-    {
-        Ok(Ok(())) => debug!("Cached image for {} to {}", id, file_path.display()),
-        Ok(Err(error)) => warn!(
-            "Failed to cache image to {}: {}",
-            file_path.display(),
-            error
-        ),
-        Err(error) => warn!("Failed to schedule image cache write: {}", error),
-    }
-
-    // Return the image
-    Response::builder()
-        .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, mime_type)
-        .body(bytes.to_vec().into())
-        .unwrap()
-}
-
-fn serve_image_bytes(buffer: Vec<u8>) -> Response {
-    if let Some(kind) = infer::get(&buffer) {
-        if kind.mime_type().starts_with("image/") {
-            return Response::builder()
-                .status(StatusCode::OK)
-                .header(header::CONTENT_TYPE, kind.mime_type().to_string())
-                .body(buffer.into())
-                .unwrap();
-        }
-    }
-    StatusCode::NOT_FOUND.into_response()
 }
 
 // =============================================================================

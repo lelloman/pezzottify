@@ -51,6 +51,7 @@ pub struct JobContext {
 
     /// Shared priority-aware execution for synchronous job database work.
     pub db_executor: DbExecutor,
+    pub media: Arc<crate::media::MediaManager>,
     pub catalog_db: DbHandle<dyn CatalogStore>,
     pub user_db: DbHandle<dyn FullUserStore>,
     pub server_db: DbHandle<dyn ServerStore>,
@@ -86,6 +87,10 @@ impl JobContext {
         db_executor: DbExecutor,
     ) -> Self {
         Self {
+            media: Arc::new(crate::media::MediaManager::new(
+                catalog_store.clone(),
+                db_executor.clone(),
+            )),
             cancellation_token,
             catalog_db: DbHandle::new(
                 catalog_store.clone(),

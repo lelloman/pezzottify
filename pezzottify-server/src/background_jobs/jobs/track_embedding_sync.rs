@@ -17,14 +17,12 @@ use crate::db_executor::DbPriority;
 use reqwest::blocking::{multipart, Client};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tracing::{info, warn};
 
 #[derive(Clone)]
 pub struct TrackEmbeddingSyncJob {
     settings: AudioEmbeddingsSettings,
-    media_path: PathBuf,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -48,11 +46,8 @@ struct SimpleAiAudioEmbeddingResponse {
 }
 
 impl TrackEmbeddingSyncJob {
-    pub fn new(settings: AudioEmbeddingsSettings, media_path: PathBuf) -> Self {
-        Self {
-            settings,
-            media_path,
-        }
+    pub fn new(settings: AudioEmbeddingsSettings) -> Self {
+        Self { settings }
     }
 
     fn namespaces(&self) -> Vec<String> {
@@ -93,16 +88,25 @@ impl TrackEmbeddingSyncJob {
     fn request_embedding(
         &self,
         client: &Client,
-        audio_path: &Path,
+        audio: crate::media::LocalAudio,
         spec: &AudioEmbeddingSpec,
     ) -> Result<SimpleAiAudioEmbeddingResponse, JobError> {
         let options = json!({
             "model": spec.model,
             "namespace": spec.namespace,
         });
-        let form = multipart::Form::new()
-            .file("file", audio_path)
+        let (reader, filename) = audio.into_reader();
+        let length = reader
+            .metadata()
             .map_err(|e| JobError::ExecutionFailed(e.to_string()))?
+            .len();
+        let mime = mime_guess::from_path(&filename).first_or_octet_stream();
+        let part = multipart::Part::reader_with_length(reader, length)
+            .file_name(filename)
+            .mime_str(mime.as_ref())
+            .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+        let form = multipart::Form::new()
+            .part("file", part)
             .text("options", options.to_string());
 
         let url = format!(
@@ -180,16 +184,20 @@ impl TrackEmbeddingSyncJob {
                 return Err(JobError::Cancelled);
             }
 
-            let audio_path = self.media_path.join(&audio_uri);
-            if !audio_path.is_file() {
-                failures += 1;
-                warn!(
-                    "Skipping track {} because audio file is missing: {}",
-                    track_id,
-                    audio_path.display()
-                );
-                continue;
-            }
+            // Check local availability before counting a processed track, retaining
+            // the descriptor for the first upload instead of reopening its path.
+            let mut first_audio = match ctx.media.open_local_audio_blocking(&track_id) {
+                Ok(Some(audio)) => Some(audio),
+                result => {
+                    failures += 1;
+                    warn!(
+                        track_id,
+                        failed = result.is_err(),
+                        "Skipping track because local audio cannot be opened"
+                    );
+                    continue;
+                }
+            };
 
             let specs = self.specs_for_track(ctx, &track_id, force)?;
             if specs.is_empty() {
@@ -204,7 +212,23 @@ impl TrackEmbeddingSyncJob {
                     return Err(JobError::Cancelled);
                 }
 
-                match self.request_embedding(&client, &audio_path, &spec) {
+                let opened = match first_audio.take() {
+                    Some(audio) => Ok(Some(audio)),
+                    None => ctx.media.open_local_audio_blocking(&track_id),
+                };
+                let audio = match opened {
+                    Ok(Some(audio)) => audio,
+                    result => {
+                        failures += 1;
+                        warn!(
+                            track_id,
+                            failed = result.is_err(),
+                            "Cannot open local audio for embedding"
+                        );
+                        continue;
+                    }
+                };
+                match self.request_embedding(&client, audio, &spec) {
                     Ok(response) => {
                         if response.embedding.len() != response.dim as usize {
                             failures += 1;
@@ -357,7 +381,7 @@ mod tests {
 
     #[test]
     fn schedule_uses_configured_interval_and_jitter() {
-        let job = TrackEmbeddingSyncJob::new(test_settings(), PathBuf::from("/media"));
+        let job = TrackEmbeddingSyncJob::new(test_settings());
 
         match job.schedule() {
             JobSchedule::JitteredInterval { interval, jitter } => {
@@ -370,8 +394,7 @@ mod tests {
 
     #[test]
     fn execution_policy_isolates_remote_embedding_generation() {
-        let policy =
-            TrackEmbeddingSyncJob::new(test_settings(), PathBuf::from("/media")).execution_policy();
+        let policy = TrackEmbeddingSyncJob::new(test_settings()).execution_policy();
 
         assert_eq!(policy.resource_class, JobResourceClass::IoBound);
         assert_eq!(policy.queue_timeout, Duration::from_secs(60));
@@ -396,7 +419,7 @@ mod tests {
             ],
             ..test_settings()
         };
-        let job = TrackEmbeddingSyncJob::new(settings, PathBuf::from("/media"));
+        let job = TrackEmbeddingSyncJob::new(settings);
 
         assert_eq!(
             job.namespaces(),
