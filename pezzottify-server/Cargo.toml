@@ -15,6 +15,7 @@ mock = ["mockall"] # dev feature, enables mockall for trait mocking in tests
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+mime_guess = "2"
 anyhow = "1.0.75"
 base64 = "0.22"
 bytes = "1"

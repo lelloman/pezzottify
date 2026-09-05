@@ -2380,6 +2380,7 @@ dependencies = [
  "jsonwebtoken",
  "lazy_static",
  "libc",
+ "mime_guess",
  "mockall",
  "openidconnect",
  "prometheus",

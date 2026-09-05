@@ -242,7 +242,7 @@ async fn get_sync_state(
     session: Session,
     State(database): State<DatabaseHandles>,
     State(config): State<ServerConfig>,
-    State(track_materializer): State<OptionalTrackMaterializer>,
+    State(media): State<GuardedMediaManager>,
 ) -> Response {
     let user_id = session.user_id;
     let snapshot = match database
@@ -278,7 +278,7 @@ async fn get_sync_state(
         permissions: snapshot.permissions,
         notifications: snapshot.notifications,
         features: SyncFeatures {
-            proxy_streaming: config.proxy_mode.enabled && track_materializer.is_some(),
+            proxy_streaming: config.proxy_mode.enabled && media.proxy_enabled(),
         },
     })
     .into_response()

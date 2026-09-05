@@ -75,7 +75,10 @@ impl AlbumEmbeddingSyncJob {
         } in &album.tracks
         {
             let audio_uri = audio_uri.as_deref()?.trim();
-            if audio_uri.is_empty() || !self.media_path.join(audio_uri).is_file() {
+            if audio_uri.is_empty()
+                || crate::media::local::open_media_file_beneath(&self.media_path, audio_uri)
+                    .is_err()
+            {
                 return None;
             }
             tracks.push((track_id.clone(), audio_uri.to_string()));
