@@ -13,6 +13,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiRespon
 import com.lelloman.pezzottify.android.domain.remoteapi.response.PlaylistState
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ServerFeatures
 import com.lelloman.pezzottify.android.domain.usercontent.PlaylistSyncStatus
 import com.lelloman.pezzottify.android.domain.usercontent.UserPlaylist
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
@@ -119,6 +120,12 @@ class SyncManagerImplTest {
     @Test
     fun `initialize performs catchUp when cursor is greater than 0`() = runTest(testDispatcher) {
         every { syncStateStore.getCurrentCursor() } returns 5L
+        coEvery { remoteApiClient.getSyncState() } returns RemoteApiResponse.Success(
+            createSyncStateResponse(seq = 5L).copy(
+                permissions = listOf(Permission.UseProxyStreaming),
+                features = ServerFeatures(proxyStreaming = true),
+            )
+        )
         coEvery { remoteApiClient.getSyncEvents(5L) } returns RemoteApiResponse.Success(
             SyncEventsResponse(events = emptyList(), currentSeq = 5L)
         )
@@ -127,9 +134,104 @@ class SyncManagerImplTest {
 
         assertThat(result).isTrue()
         coVerify { remoteApiClient.getSyncEvents(5L) }
+        verify { userSettingsStore.setProxyStreamingAvailable(true) }
+        coVerify(exactly = 0) { userPlaylistStore.replaceAllPlaylists(any()) }
+    }
+
+    @Test
+    fun `initialize hides proxy streaming when server feature is disabled`() = runTest(testDispatcher) {
+        every { syncStateStore.getCurrentCursor() } returns 5L
+        coEvery { remoteApiClient.getSyncState() } returns RemoteApiResponse.Success(
+            createSyncStateResponse(seq = 5L).copy(
+                permissions = listOf(Permission.UseProxyStreaming),
+                features = ServerFeatures(proxyStreaming = false),
+            )
+        )
+        coEvery { remoteApiClient.getSyncEvents(5L) } returns RemoteApiResponse.Success(
+            SyncEventsResponse(events = emptyList(), currentSeq = 5L)
+        )
+
+        assertThat(syncManager.initialize()).isTrue()
+
+        verify { userSettingsStore.setProxyStreamingAvailable(false) }
+    }
+
+    @Test
+    fun `initialize hides proxy streaming without permission`() = runTest(testDispatcher) {
+        every { syncStateStore.getCurrentCursor() } returns 5L
+        coEvery { remoteApiClient.getSyncState() } returns RemoteApiResponse.Success(
+            createSyncStateResponse(seq = 5L).copy(features = ServerFeatures(proxyStreaming = true))
+        )
+        coEvery { remoteApiClient.getSyncEvents(5L) } returns RemoteApiResponse.Success(
+            SyncEventsResponse(events = emptyList(), currentSeq = 5L)
+        )
+
+        assertThat(syncManager.initialize()).isTrue()
+
+        verify { userSettingsStore.setProxyStreamingAvailable(false) }
+    }
+
+    @Test
+    fun `initialize can recover when availability refresh fails with an existing cursor`() = runTest(testDispatcher) {
+        every { syncStateStore.getCurrentCursor() } returns 5L
+        coEvery { remoteApiClient.getSyncState() } returns RemoteApiResponse.Error.Network
+
+        assertThat(syncManager.initialize()).isFalse()
+        assertThat(syncManager.state.value).isEqualTo(SyncState.Error("Network error"))
+        coVerify(exactly = 0) { syncStateStore.saveCursor(any()) }
+
+        coEvery { remoteApiClient.getSyncState() } returns RemoteApiResponse.Success(
+            createSyncStateResponse(seq = 5L).copy(
+                permissions = listOf(Permission.UseProxyStreaming),
+                features = ServerFeatures(proxyStreaming = true),
+            )
+        )
+        coEvery { remoteApiClient.getSyncEvents(5L) } returns RemoteApiResponse.Success(
+            SyncEventsResponse(events = emptyList(), currentSeq = 5L)
+        )
+
+        assertThat(syncManager.initialize()).isTrue()
+        verify { userSettingsStore.setProxyStreamingAvailable(true) }
     }
 
     // endregion
+
+    @Test
+    fun `live permission changes update proxy availability and respect server support`() = runTest(testDispatcher) {
+        var available = false
+        every { userSettingsStore.setProxyStreamingAvailable(any()) } answers {
+            available = firstArg()
+        }
+        var cursor = 10L
+        every { syncStateStore.getCurrentCursor() } answers { cursor }
+        coEvery { syncStateStore.saveCursor(any()) } coAnswers { cursor = firstArg() }
+
+        for (serverEnabled in listOf(true, false)) {
+            coEvery { remoteApiClient.getSyncState() } returns RemoteApiResponse.Success(
+                createSyncStateResponse(seq = 10L).copy(
+                    permissions = listOf(Permission.UseProxyStreaming),
+                    features = ServerFeatures(proxyStreaming = serverEnabled),
+                )
+            )
+            syncManager.fullSync()
+            assertThat(available).isEqualTo(serverEnabled)
+
+            for ((type, payload, expected) in listOf(
+                Triple("permission_revoked", SyncEventPayload(permission = Permission.UseProxyStreaming), false),
+                Triple("permission_granted", SyncEventPayload(permission = Permission.UseProxyStreaming), serverEnabled),
+                Triple("permissions_reset", SyncEventPayload(permissions = emptyList()), false),
+                Triple("permissions_reset", SyncEventPayload(permissions = listOf(Permission.UseProxyStreaming)), serverEnabled),
+            )) {
+                syncManager.handleSyncMessage(
+                    StoredEvent(seq = cursor + 1, type = type, payload = payload, serverTimestamp = 0L)
+                )
+                assertThat(available).isEqualTo(expected)
+            }
+
+            syncManager.cleanup()
+            assertThat(available).isFalse()
+        }
+    }
 
     // region fullSync
 
