@@ -86,6 +86,7 @@ impl JobContext {
         user_manager: GuardedUserManager,
         db_executor: DbExecutor,
     ) -> Self {
+        let catalog_store = crate::media::MediaCatalogView::wrap(catalog_store);
         Self {
             media: Arc::new(crate::media::MediaManager::new(
                 catalog_store.clone(),
@@ -155,6 +156,9 @@ impl JobContext {
             db_executor,
             DbLane::SearchWrite,
         ));
+        context
+            .media
+            .configure_effects(search_vault.clone(), context.server_store.clone());
         context.search_vault = Some(search_vault);
         context
     }

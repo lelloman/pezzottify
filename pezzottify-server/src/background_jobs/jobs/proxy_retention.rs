@@ -5,9 +5,7 @@ use crate::background_jobs::{
     job::{BackgroundJob, JobError, JobExecutionPolicy, JobResourceClass, JobSchedule},
     JobAuditLogger,
 };
-use crate::catalog_store::AlbumAvailability;
-use crate::search::HashedItemType;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::path::PathBuf;
 use std::time::Duration;
 use tracing::{info, warn};
@@ -21,31 +19,11 @@ fn meets_retention_threshold(listened_seconds: u64, duration_ms: i64) -> bool {
     duration_ms > 0 && listened_ms * 100 >= duration_ms * u128::from(RETENTION_PERCENT)
 }
 
-pub struct ProxyRetentionJob {
-    media_path: PathBuf,
-}
+pub struct ProxyRetentionJob;
 
 impl ProxyRetentionJob {
-    pub fn new(media_path: PathBuf) -> Self {
-        Self { media_path }
-    }
-
-    fn proxy_audio_paths(&self, track_id: &str) -> Result<Vec<PathBuf>> {
-        let (dir1, dir2) = crate::ingestion::FileHandler::shard_dirs(track_id);
-        let directory = self.media_path.join("audio").join(dir1).join(dir2);
-        let Ok(entries) = std::fs::read_dir(directory) else {
-            return Ok(Vec::new());
-        };
-        let prefix = format!("{track_id}.");
-        let mut paths = Vec::new();
-        for entry in entries {
-            let entry = entry?;
-            let name = entry.file_name();
-            if name.to_string_lossy().starts_with(&prefix) && entry.file_type()?.is_file() {
-                paths.push(entry.path());
-            }
-        }
-        Ok(paths)
+    pub fn new(_media_path: PathBuf) -> Self {
+        Self
     }
 
     fn process_candidate(
@@ -62,46 +40,21 @@ impl ProxyRetentionJob {
             &materialization.track_id,
             materialization.materialized_at,
         )?;
-        let keep = meets_retention_threshold(listened_seconds, track.duration_ms);
-        if keep {
+        let Some(copy) = ctx
+            .media
+            .proxy_copy(&materialization.track_id, materialization.materialized_at)?
+        else {
+            // Legacy/ambiguous copies are protected. Retire the stale schedule only.
             ctx.server_store
                 .delete_proxy_materialization(&materialization.track_id)?;
             return Ok(true);
+        };
+        if meets_retention_threshold(listened_seconds, track.duration_ms) {
+            ctx.media.retain_copy(&copy)?;
+            return Ok(true);
         }
-
-        let resolved_album = ctx
-            .catalog_store
-            .get_resolved_album(&track.album_id)?
-            .with_context(|| format!("album {} is missing", track.album_id))?;
-        ctx.catalog_store
-            .clear_track_audio_uri(&materialization.track_id)?;
-        let album_availability = ctx
-            .catalog_store
-            .recompute_album_availability(&track.album_id)?;
-
-        let mut unavailable = vec![(materialization.track_id.clone(), HashedItemType::Track)];
-        if album_availability == AlbumAvailability::Missing {
-            unavailable.push((track.album_id.clone(), HashedItemType::Album));
-        }
-        for artist in resolved_album.artists {
-            if !ctx
-                .catalog_store
-                .recompute_artist_availability(&artist.id)?
-            {
-                unavailable.push((artist.id, HashedItemType::Artist));
-            }
-        }
-        if let Some(search) = &ctx.search_vault {
-            search.unpublish_proxy_items(&unavailable)?;
-        }
-
-        for path in self.proxy_audio_paths(&materialization.track_id)? {
-            std::fs::remove_file(&path)
-                .with_context(|| format!("failed to remove {}", path.display()))?;
-        }
-        ctx.server_store
-            .delete_proxy_materialization(&materialization.track_id)?;
-        Ok(false)
+        // A concurrent replacement is kept, rather than counted as deleted.
+        Ok(!ctx.media.remove_copy(&copy)?)
     }
 }
 

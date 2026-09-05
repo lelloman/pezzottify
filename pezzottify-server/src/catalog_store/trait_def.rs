@@ -125,27 +125,47 @@ pub trait CatalogStore: Send + Sync {
     // File Path Resolution
     // =========================================================================
 
-    /// Get the filesystem path to an image (for lazy-downloaded images).
-    /// The id is the Spotify ID (album or artist).
-    fn get_image_path(&self, id: &str) -> PathBuf;
+    /// Configured media root, retained for construction compatibility. No I/O.
+    fn media_root(&self) -> PathBuf {
+        PathBuf::new()
+    }
 
-    /// Get the filesystem path to a track's audio file.
-    fn get_track_audio_path(&self, track_id: &str) -> Option<PathBuf>;
+    fn media_presence_page(
+        &self,
+        _after: i64,
+        _limit: usize,
+    ) -> Result<Vec<(i64, String, Option<String>)>> {
+        Ok(Vec::new())
+    }
 
-    /// Safely open a track's audio file and return its validated path.
-    /// Implementations should prevent path traversal and symlink escapes.
-    fn open_track_audio_file(&self, track_id: &str) -> Result<Option<(std::fs::File, PathBuf)>>;
+    /// Atomically attach/detach a validated media revision and its derived flags.
+    fn compare_exchange_audio(
+        &self,
+        _id: &str,
+        _expected: Option<&str>,
+        _new: Option<&str>,
+    ) -> Result<bool> {
+        anyhow::bail!("media attachment is unsupported")
+    }
+
+    fn apply_media_observations(
+        &self,
+        _observations: &[(String, Option<String>, bool)],
+        cancelled: &(dyn Fn() -> bool + Send + Sync),
+    ) -> Result<super::AvailabilityRefreshResult> {
+        self.refresh_availability_and_stats_with_cancel(cancelled)
+    }
 
     /// Get the album ID for a track (needed for audio path resolution).
     fn get_track_album_id(&self, track_id: &str) -> Option<String>;
 
     /// Compute the availability of a track based on audio file existence.
     fn get_track_availability(&self, track_id: &str) -> super::TrackAvailability {
-        if self.get_track_audio_path(track_id).is_some() {
-            super::TrackAvailability::Available
-        } else {
-            super::TrackAvailability::Unavailable
-        }
+        self.get_track(track_id)
+            .ok()
+            .flatten()
+            .map(|track| track.availability)
+            .unwrap_or_default()
     }
 
     // =========================================================================
@@ -176,12 +196,9 @@ pub trait CatalogStore: Send + Sync {
         ))
     }
 
-    /// Reconcile availability with filesystem truth and return aggregate stats.
-    ///
-    /// Implementations should:
-    /// - verify track availability from audio file presence
-    /// - recompute album availability from tracks
-    /// - recompute artist availability from credited available tracks
+    /// Recompute derived availability and aggregate stats from persisted track flags.
+    /// Physical observations are supplied separately by MediaManager; this operation
+    /// must not access media files while holding catalog transactions.
     fn refresh_availability_and_stats(&self) -> Result<super::AvailabilityRefreshResult> {
         Err(anyhow::anyhow!(
             "refresh_availability_and_stats not supported by this catalog store"

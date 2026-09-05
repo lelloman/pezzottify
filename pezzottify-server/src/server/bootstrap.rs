@@ -43,6 +43,7 @@ async fn make_app_with_executor(
     db_executor: crate::db_executor::DbExecutor,
     media: Option<Arc<crate::media::MediaManager>>,
 ) -> Result<Router> {
+    let catalog_store = crate::media::MediaCatalogView::wrap(catalog_store);
     // Initialize OIDC client if configured
     let oidc_client = match oidc_config {
         Some(cfg) => {
@@ -126,6 +127,40 @@ async fn make_app_with_executor(
         } else {
             error!("Proxy streaming enabled without downloader_url; feature unavailable");
         }
+    }
+
+    {
+        let media = state.media.clone();
+        if !matches!(
+            media
+                .filesystem_work()
+                .run({
+                    let media = media.clone();
+                    move || media.recover(&|| false)
+                })
+                .await,
+            Ok(Ok(_))
+        ) {
+            warn!("Media recovery has pending operations; background recovery will retry");
+        }
+        let media = Arc::downgrade(&media);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            interval.tick().await;
+            loop {
+                interval.tick().await;
+                let Some(manager) = media.upgrade() else {
+                    break;
+                };
+                let pool = manager.filesystem_work();
+                if !matches!(
+                    pool.run(move || manager.recover(&|| false)).await,
+                    Ok(Ok(_))
+                ) {
+                    warn!("Media recovery has pending operations; retrying on next tick");
+                }
+            }
+        });
     }
 
     // Initialize download manager if enabled
@@ -235,6 +270,7 @@ async fn make_app_with_executor(
                         ingestion_config,
                         manager_traits,
                     )
+                    .with_media(state.media.clone())
                     .with_notifier(notifier)
                     .with_notification_service(notification_service),
                 );

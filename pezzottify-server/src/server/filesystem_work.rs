@@ -1,10 +1,7 @@
-use std::{
-    ffi::OsString,
-    io,
-    path::{Path, PathBuf},
-    time::Duration,
-};
+use std::{io, path::PathBuf, time::Duration};
 
+#[cfg(test)]
+use std::{ffi::OsString, path::Path};
 use thiserror::Error;
 
 use super::blocking_work::{BlockingWorkError, BoundedBlockingPool};
@@ -63,6 +60,7 @@ impl FilesystemWorkPool {
         self.run(move || std::fs::read(path)).await
     }
 
+    #[cfg(test)]
     pub(crate) async fn write_atomic(
         &self,
         path: PathBuf,
@@ -72,6 +70,7 @@ impl FilesystemWorkPool {
     }
 }
 
+#[cfg(test)]
 fn atomic_write(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let parent = path
         .parent()

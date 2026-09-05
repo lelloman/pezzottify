@@ -10,29 +10,16 @@ impl CatalogStore for SqliteCatalogStore {
     }
 
     fn get_track_json(&self, id: &str) -> Result<Option<serde_json::Value>> {
-        let read_conn = self.get_read_conn();
-        let conn = read_conn.lock().unwrap();
-        Self::get_track_inner(&conn, id).map(|opt| {
-            opt.map(|mut t| {
-                // Compute availability using already-fetched audio_uri to avoid
-                // acquiring another connection (which would cause deadlocks)
-                t.availability = self.availability_from_audio_uri(&t.audio_uri);
-                serde_json::to_value(t).unwrap()
-            })
-        })
+        self.get_track(id)
+            .map(|track| track.map(|track| serde_json::to_value(track).unwrap()))
     }
-
     fn get_track(&self, id: &str) -> Result<Option<Track>> {
-        let read_conn = self.get_read_conn();
-        let conn = read_conn.lock().unwrap();
-        Self::get_track_inner(&conn, id).map(|opt| {
-            opt.map(|mut t| {
-                // Compute availability using already-fetched audio_uri to avoid
-                // acquiring another connection (which would cause deadlocks)
-                t.availability = self.availability_from_audio_uri(&t.audio_uri);
-                t
-            })
-        })
+        let connection = self.get_read_conn();
+        let connection = connection.lock().unwrap();
+        Self::get_track_inner(&connection, id)
+    }
+    fn media_root(&self) -> PathBuf {
+        self.media_base_path.clone()
     }
 
     fn get_resolved_artist_json(&self, id: &str) -> Result<Option<serde_json::Value>> {
@@ -81,49 +68,6 @@ impl CatalogStore for SqliteCatalogStore {
         SqliteCatalogStore::get_artist_image_url(self, artist_id)
     }
 
-    fn get_image_path(&self, id: &str) -> PathBuf {
-        self.media_base_path
-            .join("images")
-            .join(format!("{}.jpg", id))
-    }
-
-    fn get_track_audio_path(&self, track_id: &str) -> Option<PathBuf> {
-        let read_conn = self.get_read_conn();
-        let conn = read_conn.lock().unwrap();
-        let audio_uri: Option<String> = conn
-            .query_row(
-                "SELECT audio_uri FROM tracks WHERE id = ?1",
-                params![track_id],
-                |r| r.get(0),
-            )
-            .ok()
-            .flatten();
-
-        audio_uri.and_then(|uri| {
-            open_media_file_beneath(&self.media_base_path, &uri)
-                .ok()
-                .map(|(_, path)| path)
-        })
-    }
-
-    fn open_track_audio_file(&self, track_id: &str) -> Result<Option<(File, PathBuf)>> {
-        let read_conn = self.get_read_conn();
-        let conn = read_conn.lock().unwrap();
-        let audio_uri: Option<String> = conn
-            .query_row(
-                "SELECT audio_uri FROM tracks WHERE id = ?1",
-                params![track_id],
-                |row| row.get(0),
-            )
-            .optional()?
-            .flatten();
-        drop(conn);
-
-        audio_uri
-            .map(|uri| open_media_file_beneath(&self.media_base_path, &uri))
-            .transpose()
-    }
-
     fn get_track_album_id(&self, track_id: &str) -> Option<String> {
         let read_conn = self.get_read_conn();
         let conn = read_conn.lock().unwrap();
@@ -168,6 +112,14 @@ impl CatalogStore for SqliteCatalogStore {
         &self,
         is_cancelled: &(dyn Fn() -> bool + Send + Sync),
     ) -> Result<AvailabilityRefreshResult> {
+        self.apply_media_observations(&[], is_cancelled)
+    }
+
+    fn apply_media_observations(
+        &self,
+        observations: &[(String, Option<String>, bool)],
+        is_cancelled: &(dyn Fn() -> bool + Send + Sync),
+    ) -> Result<AvailabilityRefreshResult> {
         const BATCH_SIZE: i64 = 1000;
         let refresh_started = Instant::now();
         let conn = self.write_conn.lock().unwrap();
@@ -184,78 +136,19 @@ impl CatalogStore for SqliteCatalogStore {
             let mut album_updates = Vec::new();
             let mut artist_updates = Vec::new();
 
-            // Reconcile the tracks that the catalog currently considers
-            // available against filesystem truth. The availability index makes
-            // this proportional to the local catalog (tens of thousands of
-            // tracks in production), rather than the full Spotify metadata dump
-            // (hundreds of millions of tracks).
-            let tracks_started = Instant::now();
-            let mut last_track_rowid = 0i64;
-            loop {
+            for (id, expected_uri, available) in observations {
                 if is_cancelled() {
                     anyhow::bail!("cancelled");
                 }
-
-                let mut tracks_stmt = conn.prepare_cached(
-                    "SELECT rowid, id, audio_uri, track_available
-                     FROM tracks INDEXED BY idx_tracks_available
-                     WHERE track_available = 1 AND rowid > ?1
-                     ORDER BY rowid
-                     LIMIT ?2",
-                )?;
-                let mut rows = tracks_stmt.query(params![last_track_rowid, BATCH_SIZE])?;
-                let mut pending_updates: Vec<(i64, String, i32)> = Vec::new();
-                let mut batch_last_rowid = last_track_rowid;
-
-                while let Some(row) = rows.next()? {
-                    if is_cancelled() {
-                        anyhow::bail!("cancelled");
-                    }
-                    let track_rowid: i64 = row.get(0)?;
-                    let track_id: String = row.get(1)?;
-                    let audio_uri: Option<String> = row.get(2)?;
-                    let current_available: i32 = row.get(3)?;
-
-                    let computed_available = match audio_uri {
-                        Some(uri)
-                            if open_media_file_beneath(&self.media_base_path, &uri).is_ok() =>
-                        {
-                            1
-                        }
-                        _ => 0,
-                    };
-                    if computed_available != current_available {
-                        pending_updates.push((track_rowid, track_id, computed_available));
-                    }
-                    batch_last_rowid = track_rowid;
-                }
-                drop(rows);
-                drop(tracks_stmt);
-
-                if batch_last_rowid == last_track_rowid {
-                    break;
-                }
-
-                for (track_rowid, track_id, computed_available) in pending_updates {
-                    if is_cancelled() {
-                        anyhow::bail!("cancelled");
-                    }
-                    conn.execute(
-                        "UPDATE tracks SET track_available = ?1 WHERE rowid = ?2",
-                        params![computed_available, track_rowid],
-                    )?;
-                    tracks_updated += 1;
+                let changed = conn.execute("UPDATE tracks SET track_available = ?1 WHERE id = ?2 AND audio_uri IS ?3 AND track_available != ?1", params![*available as i32, id, expected_uri])?;
+                if changed > 0 {
+                    tracks_updated += changed;
                     track_updates.push(AvailabilityItemUpdate {
-                        id: track_id,
-                        available: computed_available == 1,
+                        id: id.clone(),
+                        available: *available,
                     });
                 }
-                last_track_rowid = batch_last_rowid;
             }
-            info!(
-                elapsed_ms = tracks_started.elapsed().as_millis() as u64,
-                tracks_updated, "Catalog availability track verification completed"
-            );
 
             // Album and artist availability are derived from track flags by the
             // normal mutation paths. Recompute them only when filesystem
@@ -1742,11 +1635,45 @@ impl CatalogStore for SqliteCatalogStore {
         }
     }
 
+    fn media_presence_page(
+        &self,
+        after: i64,
+        limit: usize,
+    ) -> Result<Vec<(i64, String, Option<String>)>> {
+        let connection = self.get_read_conn();
+        let connection = connection.lock().unwrap();
+        let mut statement = connection.prepare_cached("SELECT rowid,id,audio_uri FROM tracks INDEXED BY idx_tracks_available WHERE track_available=1 AND rowid>?1 ORDER BY rowid LIMIT ?2")?;
+        let rows = statement
+            .query_map(params![after, limit.min(1000) as i64], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
+    fn compare_exchange_audio(
+        &self,
+        id: &str,
+        expected: Option<&str>,
+        new: Option<&str>,
+    ) -> Result<bool> {
+        let mut conn = self.write_conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let changed = tx.execute(
+            "UPDATE tracks SET audio_uri=?1, track_available=?2 WHERE id=?3 AND audio_uri IS ?4",
+            params![new, new.is_some() as i32, id, expected],
+        )?;
+        if changed == 0 {
+            return Ok(false);
+        }
+        tx.execute("UPDATE albums SET album_availability = CASE WHEN (SELECT COUNT(*) FROM tracks WHERE album_rowid=albums.rowid AND track_available=1)=0 THEN 'missing' WHEN (SELECT COUNT(*) FROM tracks WHERE album_rowid=albums.rowid AND track_available=0)=0 THEN 'complete' ELSE 'partial' END WHERE rowid=(SELECT album_rowid FROM tracks WHERE id=?1)", params![id])?;
+        tx.execute("UPDATE artists SET artist_available=EXISTS(SELECT 1 FROM artist_albums aa JOIN albums a ON aa.album_rowid=a.rowid WHERE aa.artist_rowid=artists.rowid AND lower(a.album_availability)!='missing') WHERE rowid IN (SELECT aa.artist_rowid FROM artist_albums aa JOIN tracks t ON t.album_rowid=aa.album_rowid WHERE t.id=?1)", params![id])?;
+        tx.commit()?;
+        Ok(true)
+    }
+
     fn set_track_audio_uri(&self, track_id: &str, audio_uri: &str) -> Result<()> {
-        normalized_media_identifier(audio_uri)?;
-        // The setter marks the track available, so require the referenced file to exist
-        // beneath the configured root at the time the catalog is updated.
-        open_media_file_beneath(&self.media_base_path, audio_uri)?;
+        crate::media::local::normalized_media_identifier(audio_uri)?;
 
         let conn = self.write_conn.lock().unwrap();
         let rows_affected = conn.execute(

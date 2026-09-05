@@ -115,7 +115,11 @@ fn directory_component(id: &str, label: &str, path: &Path) -> StorageComponent {
         id: id.to_string(),
         label: label.to_string(),
         path: path.to_string_lossy().to_string(),
-        bytes: directory_size(path),
+        bytes: if id == "catalog_audio" || id == "catalog_images" {
+            crate::media::directory_size(path)
+        } else {
+            directory_size(path)
+        },
     }
 }
 
