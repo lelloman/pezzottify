@@ -76,6 +76,14 @@ async fn image_cache_miss_fetches_validates_and_persists_then_hits_locally() {
         assert_eq!(image.content_type, "image/jpeg");
     }
     assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let pointer =
+        super::mutations::read_record(&fixture.root.path().join(".media/images/album.json"))
+            .unwrap();
+    let copy = pointer.copy.unwrap();
+    assert_eq!(copy.vault.0, vault::LOCAL_IMAGES);
+    assert!(!copy.protected);
+    assert_eq!(copy.source.unwrap().locator.as_deref(), Some(url.as_str()));
+
     assert_eq!(
         std::fs::read(fixture.manager.image_path("album").unwrap()).unwrap(),
         JPEG

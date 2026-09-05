@@ -1,12 +1,12 @@
-//! Read boundary for published catalog audio and images.
-//!
-//! Callers use catalog identities and owned handles, never storage paths. Existing
-//! publication side effects remain in the backends until the write-boundary story.
-//! See docs/media-read-audit.md for the inventory and staging exceptions.
+//! Shared ownership of published media, vault adapters and dependent-copy validity.
+//! See docs/media-vaults.md for contracts and migration behavior.
 
+pub mod adapters;
+mod copies;
 pub(crate) mod local;
 mod mutations;
 mod track_materializer;
+pub mod vault;
 pub use mutations::{CopyReceipt, Provenance, StagedMedia};
 mod availability;
 pub use availability::{directory_size, probe, MediaCatalogView, MediaPresence};
@@ -29,7 +29,7 @@ use track_materializer::{InFlightTrack, TrackMaterializer};
 pub(crate) use track_materializer::{ProxyMaterializerStatus, TrackStreamMetadata};
 
 const STREAM_BUFFER_SIZE: usize = 64 * 1024;
-pub(crate) type MediaStream = Pin<Box<dyn Stream<Item = io::Result<Bytes>> + Send>>;
+pub type MediaStream = Pin<Box<dyn Stream<Item = io::Result<Bytes>> + Send>>;
 
 /// Both foreground HTTP consumers and background jobs share this service.
 /// The optional remote backend is attached once during server initialization.
@@ -37,12 +37,15 @@ pub struct MediaManager {
     catalog: Arc<dyn CatalogStore>,
     catalog_read: DbHandle<dyn CatalogStore>,
     filesystem: FilesystemWorkPool,
-    http_client: reqwest::Client,
+    local_adapter: adapters::FilesystemAdapter,
+    image_adapter: Arc<dyn vault::VaultAdapter>,
+    vaults: std::sync::RwLock<std::collections::HashMap<vault::VaultId, copies::RegisteredVault>>,
     materializer: OnceLock<Arc<TrackMaterializer>>,
     root: PathBuf,
     mutations: Arc<std::sync::Mutex<()>>,
     effects: OnceLock<mutations::Effects>,
     recovery_cursor: std::sync::Mutex<Option<String>>,
+    cache_cleanup_cursor: std::sync::Mutex<Option<String>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -125,18 +128,21 @@ impl RemoteAudio {
 impl MediaManager {
     pub fn new(catalog: Arc<dyn CatalogStore>, executor: DbExecutor) -> Self {
         let root = catalog.media_root();
+        let image_adapter: Arc<dyn vault::VaultAdapter> =
+            Arc::new(adapters::HttpImageAdapter::default());
+        let vaults = std::sync::RwLock::new(copies::initial_vaults(&root, image_adapter.clone()));
         Self {
             mutations: mutations::mutation_lock(&root),
+            local_adapter: adapters::FilesystemAdapter::new(root.clone()),
             root,
             effects: OnceLock::new(),
             recovery_cursor: std::sync::Mutex::new(None),
+            cache_cleanup_cursor: std::sync::Mutex::new(None),
             catalog_read: DbHandle::new(catalog.clone(), executor, DbLane::CatalogRead),
             catalog,
             filesystem: FilesystemWorkPool::default(),
-            http_client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
-                .build()
-                .expect("Failed to create media HTTP client"),
+            image_adapter,
+            vaults,
             materializer: OnceLock::new(),
         }
     }
@@ -160,12 +166,12 @@ impl MediaManager {
         else {
             return Ok(None);
         };
-        let root = self.root.clone();
+        let adapter = self.local_adapter.clone();
         let uri = track.audio_uri.clone();
         let opened = self
             .filesystem
             .run(move || {
-                uri.and_then(|uri| local::open_media_file_beneath(&root, &uri).ok())
+                uri.and_then(|uri| adapter.open_file(&uri).ok())
                     .map(|(file, path)| LocalAudio::new(file, path))
             })
             .await
@@ -186,7 +192,8 @@ impl MediaManager {
         track
             .and_then(|track| track.audio_uri)
             .map(|uri| {
-                local::open_media_file_beneath(&self.root, &uri)
+                self.local_adapter
+                    .open_file(&uri)
                     .map(|(file, path)| LocalAudio::new(file, path))
                     .map_err(DbRunError::Store)
             })
@@ -255,8 +262,17 @@ impl MediaManager {
         settings: crate::config::ProxyModeSettings,
     ) {
         self.configure_effects(search, server);
+        let adapter = Arc::new(adapters::ProxyAudioAdapter::new(downloader));
+        self.register_vault(
+            vault::Vault {
+                id: vault::VaultId(vault::AUDIO_ORIGIN.into()),
+                role: vault::VaultRole::Authoritative,
+            },
+            adapter.clone(),
+        )
+        .expect("proxy vault initialized twice");
         let backend = TrackMaterializer::new(
-            downloader,
+            adapter,
             self.catalog.clone(),
             settings,
             Arc::downgrade(self),
@@ -280,7 +296,17 @@ impl MediaManager {
             .map_err(|error| MediaReadError::Storage(io::Error::other(error)))?;
 
         // First, check if we have the image cached locally.
-        match self.filesystem.read(file_path.clone()).await {
+        let adapter = self.local_adapter.clone();
+        let locator = file_path
+            .strip_prefix(&self.root)
+            .map_err(|error| MediaReadError::Storage(io::Error::other(error)))?
+            .to_string_lossy()
+            .into_owned();
+        match self
+            .filesystem
+            .run(move || adapter.read_bytes(&locator))
+            .await
+        {
             Ok(Ok(buffer)) => return image_bytes(buffer, MediaReadError::InvalidLocalImage),
             Ok(Err(error)) if error.kind() == std::io::ErrorKind::NotFound => {}
             Ok(Err(error)) => {
@@ -310,31 +336,21 @@ impl MediaManager {
             }
         };
 
-        // Download the image from the external URL
-        let response = match self.http_client.get(&image_url.url).send().await {
-            Ok(resp) => resp,
-            Err(e) => {
-                error!("Failed to download image from {}: {}", image_url.url, e);
-                return Err(MediaReadError::Upstream);
-            }
-        };
-
-        if !response.status().is_success() {
-            error!(
-                "Failed to download image from {}: status {}",
-                image_url.url,
-                response.status()
-            );
-            return Err(MediaReadError::Upstream);
+        let response = self
+            .image_adapter
+            .read(vault::ReadRequest {
+                locator: image_url.url.clone(),
+                range: None,
+                priority: DownloadPriority::Foreground,
+            })
+            .await
+            .map_err(|_| MediaReadError::Upstream)?;
+        use futures::StreamExt;
+        let mut stream = response.stream;
+        let mut bytes = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            bytes.extend_from_slice(&chunk.map_err(|_| MediaReadError::Upstream)?);
         }
-
-        let bytes = match response.bytes().await {
-            Ok(b) => b,
-            Err(e) => {
-                error!("Failed to read image bytes from {}: {}", image_url.url, e);
-                return Err(MediaReadError::Upstream);
-            }
-        };
 
         // Verify it's actually an image
         let mime_type = match infer::get(&bytes) {
@@ -350,10 +366,13 @@ impl MediaManager {
         let manager = self.clone();
         let image_id = id.to_owned();
         let cached_bytes = bytes.to_vec();
+        let source_url = image_url.url.clone();
         let cached = self
             .filesystem
             .run(move || -> anyhow::Result<()> {
-                let stage = manager.begin_publication(&image_id, "jpg", Provenance::ImageCache)?;
+                let mut stage =
+                    manager.begin_publication(&image_id, "jpg", Provenance::ImageCache)?;
+                stage.record.source_locator = Some(source_url);
                 std::fs::write(stage.path(), cached_bytes)?;
                 manager.commit_publication(stage)?;
                 Ok(())
@@ -405,3 +424,6 @@ mod tests;
 
 #[cfg(test)]
 mod mutation_tests;
+
+#[cfg(test)]
+mod vault_tests;

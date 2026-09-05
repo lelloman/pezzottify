@@ -26,6 +26,10 @@ pub(super) enum Phase {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CopyReceipt {
     pub revision: String,
+    #[serde(default)]
+    pub copy: Option<super::vault::MediaCopy>,
+    #[serde(default)]
+    pub(super) source_locator: Option<String>,
     pub media_id: String,
     pub uri: String,
     pub provenance: Provenance,
@@ -102,7 +106,7 @@ fn validate_id(id: &str) -> Result<()> {
     );
     Ok(())
 }
-fn prepare_directory(root: &Path, relative: &str) -> Result<()> {
+pub(super) fn prepare_directory(root: &Path, relative: &str) -> Result<()> {
     let mut path = root.to_owned();
     for part in local::normalized_media_identifier(relative)?.components() {
         path.push(part);
@@ -126,7 +130,7 @@ fn prepare_directory(root: &Path, relative: &str) -> Result<()> {
     }
     Ok(())
 }
-fn sync_directory(path: &Path) -> Result<()> {
+pub(super) fn sync_directory(path: &Path) -> Result<()> {
     #[cfg(unix)]
     std::fs::File::open(path)?.sync_all()?;
     Ok(())
@@ -176,7 +180,7 @@ pub(super) fn read_record(path: &Path) -> Result<CopyReceipt> {
     }
     Ok(record)
 }
-fn unlink(path: &Path) -> Result<()> {
+pub(super) fn unlink(path: &Path) -> Result<()> {
     match std::fs::remove_file(path) {
         Ok(()) => sync_directory(path.parent().context("file has no parent")?),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
@@ -253,6 +257,8 @@ impl MediaManager {
             pending_effects: false,
             owner: process_epoch().to_owned(),
             revision,
+            copy: None,
+            source_locator: None,
             media_id: id.to_owned(),
             provenance,
             previous: None,
@@ -283,7 +289,7 @@ impl MediaManager {
             staged.root == self.root,
             "staging belongs to another manager"
         );
-        let (file, _) = local::open_media_file_beneath(&self.root, &staged.record.staging)?;
+        let (file, _) = self.local_adapter.open_file(&staged.record.staging)?;
         anyhow::ensure!(file.metadata()?.len() > 0, "empty publication");
         if staged.record.image {
             let bytes = std::fs::read(staged.path())?;
@@ -293,6 +299,7 @@ impl MediaManager {
             );
         }
         file.sync_all()?;
+        staged.record.copy = Some(self.describe_publication(&staged.record, &file)?);
         anyhow::ensure!(
             self.current_uri(&staged.record)? == staged.record.previous,
             "media revision changed during preparation"
@@ -321,17 +328,15 @@ impl MediaManager {
                 if self.current_uri(record)? != record.previous {
                     // This generation never became current. Clean only its owned paths.
                     unlink(&self.root.join(&record.staging))?;
-                    unlink(&self.root.join(&record.uri))?;
+                    self.local_adapter.remove_file(&record.uri)?;
                     unlink(&pending)?;
                     anyhow::bail!("superseded publication");
                 }
                 let destination = self.root.join(&record.uri);
                 if !destination.exists() {
-                    std::fs::rename(self.root.join(&record.staging), &destination)?;
-                    sync_directory(destination.parent().unwrap())?;
-                    sync_directory(self.root.join(&record.staging).parent().unwrap())?;
+                    self.local_adapter.expose(&record.staging, &record.uri)?;
                 }
-                local::open_media_file_beneath(&self.root, &record.uri)?;
+                self.local_adapter.open_file(&record.uri)?;
                 if record.image {
                     save(&image_pointer(&self.root, &record.media_id), record)?;
                 } else {
@@ -482,6 +487,24 @@ impl MediaManager {
         }
         Ok(())
     }
+    /// Explicit authoritative deletion. Automatic retention must continue using
+    /// remove_copy, which applies provenance/protection rules. This operation is
+    /// conditional on the exact current descriptor and is not an HTTP endpoint.
+    pub fn delete_authoritative_audio(&self, expected: &super::vault::MediaCopy) -> Result<bool> {
+        let _guard = self.mutations.lock().unwrap();
+        if expected.media.kind != super::vault::MediaKind::Audio
+            || expected.vault.0 != super::vault::LOCAL_AUDIO
+            || self.authoritative_audio(&expected.media.id)?.as_ref() != Some(expected)
+        {
+            return Ok(false);
+        }
+        uuid::Uuid::parse_str(&expected.id.0)?;
+        let mut record = read_record(&copy_path(&self.root, &expected.id.0))?;
+        record.phase = Phase::Removing;
+        save(&pending_path(&self.root, &record.revision), &record)?;
+        self.finish_removal(&mut record)?;
+        Ok(true)
+    }
     pub fn remove_copy(&self, receipt: &CopyReceipt) -> Result<bool> {
         uuid::Uuid::parse_str(&receipt.revision)?;
         let _guard = self.mutations.lock().unwrap();
@@ -528,7 +551,7 @@ impl MediaManager {
         if self.current_uri(record)?.is_none() {
             self.apply_effects(record, false)?;
         }
-        unlink(&self.root.join(&record.uri))?;
+        self.local_adapter.remove_file(&record.uri)?;
         unlink(&copy_path(&self.root, &record.revision))?;
         unlink(&pending_path(&self.root, &record.revision))
     }
@@ -611,6 +634,8 @@ impl MediaManager {
             anyhow::ensure!(!cancelled(), "cancelled");
             let record = CopyReceipt {
                 revision: uuid::Uuid::new_v4().to_string(),
+                copy: None,
+                source_locator: None,
                 media_id: id.to_owned(),
                 uri: uri.clone().unwrap_or_default(),
                 previous: uri.clone(),

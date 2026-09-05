@@ -143,6 +143,9 @@ async fn make_app_with_executor(
         ) {
             warn!("Media recovery has pending operations; background recovery will retry");
         }
+        if let Err(error) = media.cleanup_invalidated_caches().await {
+            warn!(%error, "Cache cleanup remains pending");
+        }
         let media = Arc::downgrade(&media);
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
@@ -152,6 +155,9 @@ async fn make_app_with_executor(
                 let Some(manager) = media.upgrade() else {
                     break;
                 };
+                if let Err(error) = manager.cleanup_invalidated_caches().await {
+                    warn!(%error, "Cache cleanup remains pending");
+                }
                 let pool = manager.filesystem_work();
                 if !matches!(
                     pool.run(move || manager.recover(&|| false)).await,
