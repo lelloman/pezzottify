@@ -1,5 +1,7 @@
 # Published media read boundary
 
+Story #7 adds [explicit vaults, adapters and dependent-copy validity](media-vaults.md).
+
 Ticket: [LLPR/PEZZOTTIFY-5](https://crumbles.lelloman.com/w/LLPR/PEZZOTTIFY/5)
 
 Audit date: 2026-09-05. Original source baseline: `8a3b57c9834080cf48e53e205f4aaeec8fb083c6`.

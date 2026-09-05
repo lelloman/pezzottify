@@ -1,8 +1,9 @@
 //! Shared, bounded, progressive materialization of missing catalog tracks.
 
+use super::vault::{ReadRequest, VaultAdapter};
 use crate::catalog_store::{CatalogStore, TrackAvailability};
 use crate::config::ProxyModeSettings;
-use crate::downloader::{DownloadPriority, Downloader};
+use crate::downloader::DownloadPriority;
 use anyhow::{Context, Result};
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
@@ -399,7 +400,7 @@ impl Drop for MemoryReservation {
 }
 
 pub struct TrackMaterializer {
-    downloader: Arc<dyn Downloader>,
+    downloader: Arc<dyn VaultAdapter>,
     catalog: Arc<dyn CatalogStore>,
     settings: ProxyModeSettings,
     media: Weak<super::MediaManager>,
@@ -412,7 +413,7 @@ pub struct TrackMaterializer {
 
 impl TrackMaterializer {
     pub fn new(
-        downloader: Arc<dyn Downloader>,
+        downloader: Arc<dyn VaultAdapter>,
         catalog: Arc<dyn CatalogStore>,
         settings: ProxyModeSettings,
         media: Weak<super::MediaManager>,
@@ -539,21 +540,25 @@ impl TrackMaterializer {
         track.set_phase(ProxyJobPhase::Connecting);
         let mut download = tokio::time::timeout(
             timeout,
-            self.downloader.open_track_audio(&track.track_id, priority),
+            self.downloader.read(ReadRequest {
+                locator: track.track_id.clone(),
+                range: None,
+                priority,
+            }),
         )
         .await
         .context("downloader response headers timed out")??;
-        if download.content_length == 0
-            || download.content_length > self.settings.max_track_size_bytes
+        if download.metadata.content_length == 0
+            || download.metadata.content_length > self.settings.max_track_size_bytes
         {
             anyhow::bail!(
                 "declared track size {} is outside the allowed range",
-                download.content_length
+                download.metadata.content_length
             );
         }
         let reservation = self
             .budget
-            .reserve(download.content_length, priority, timeout)
+            .reserve(download.metadata.content_length, priority, timeout)
             .await?;
         {
             *track
@@ -561,14 +566,16 @@ impl TrackMaterializer {
                 .lock()
                 .expect("track reservation mutex poisoned") = Some(reservation);
             let mut state = track.state.lock().expect("track buffer mutex poisoned");
-            state.bytes.reserve(download.content_length as usize);
+            state
+                .bytes
+                .reserve(download.metadata.content_length as usize);
             state.metadata = Some(TrackStreamMetadata {
-                content_length: download.content_length,
-                content_type: download.content_type.clone(),
+                content_length: download.metadata.content_length,
+                content_type: download.metadata.content_type.clone(),
             });
-            state.extension = Some(download.extension.clone());
+            state.extension = Some(download.metadata.extension.clone());
         }
-        track.set_total_bytes(download.content_length);
+        track.set_total_bytes(download.metadata.content_length);
         track.set_phase(ProxyJobPhase::Downloading);
         track.changed.notify_waiters();
 
@@ -578,7 +585,9 @@ impl TrackMaterializer {
         {
             let chunk = chunk?;
             let mut state = track.state.lock().expect("track buffer mutex poisoned");
-            if state.bytes.len().saturating_add(chunk.len()) > download.content_length as usize {
+            if state.bytes.len().saturating_add(chunk.len())
+                > download.metadata.content_length as usize
+            {
                 anyhow::bail!("downloader sent more bytes than declared");
             }
             state.bytes.extend_from_slice(&chunk);
@@ -590,10 +599,10 @@ impl TrackMaterializer {
         track.set_phase(ProxyJobPhase::Validating);
         {
             let mut state = track.state.lock().expect("track buffer mutex poisoned");
-            if state.bytes.len() as u64 != download.content_length {
+            if state.bytes.len() as u64 != download.metadata.content_length {
                 anyhow::bail!(
                     "downloader length mismatch: expected {}, received {}",
-                    download.content_length,
+                    download.metadata.content_length,
                     state.bytes.len()
                 );
             }
@@ -604,9 +613,9 @@ impl TrackMaterializer {
         // Once validated, persist immediately. Retention is reconciled later
         // from durable listening history by the proxy cleanup job.
         drop(_slot);
-        self.publish(&track, &download.extension).await?;
+        self.publish(&track, &download.metadata.extension).await?;
         track.finish(ProxyJobPhase::Completed, None);
-        info!(track_id = %track.track_id, bytes = download.content_length, "Proxy track published");
+        info!(track_id = %track.track_id, bytes = download.metadata.content_length, "Proxy track published");
 
         if priority != DownloadPriority::Prefetch {
             self.schedule_successor(&track.track_id);

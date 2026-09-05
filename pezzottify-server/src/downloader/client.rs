@@ -191,9 +191,9 @@ impl Downloader for DownloaderClient {
             .await
             .context("Failed to connect for progressive audio download")?;
 
-        if !response.status().is_success() {
-            anyhow::bail!("Audio download failed with status: {}", response.status());
-        }
+        let response = response
+            .error_for_status()
+            .context("Audio download failed")?;
 
         let content_length = response
             .content_length()

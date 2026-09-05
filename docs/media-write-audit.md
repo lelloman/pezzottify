@@ -1,5 +1,7 @@
 # Media publication, removal and presence ownership
 
+Story #7 adds [explicit vaults, adapters and dependent-copy validity](media-vaults.md).
+
 Ticket: [LLPR/PEZZOTTIFY-6](https://crumbles.lelloman.com/w/LLPR/PEZZOTTIFY/6)
 
 Implementation audit: 2026-09-05, following the read boundary in story #5.

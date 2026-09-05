@@ -15,7 +15,7 @@ pub fn probe(root: &Path, uri: Option<&str>) -> MediaPresence {
     let Some(uri) = uri else {
         return MediaPresence::Missing;
     };
-    match super::local::open_media_file_beneath(root, uri) {
+    match super::adapters::FilesystemAdapter::new(root.to_owned()).open_file(uri) {
         Ok(_) => MediaPresence::Present,
         Err(error)
             if error
