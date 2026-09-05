@@ -13,6 +13,7 @@ pub mod downloader;
 pub mod enrichment_store;
 pub mod ingestion;
 pub mod mcp;
+pub mod media;
 pub mod notifications;
 pub mod oidc;
 pub mod related_artists;

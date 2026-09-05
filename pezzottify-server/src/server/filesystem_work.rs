@@ -14,13 +14,13 @@ const DEFAULT_QUEUE_TIMEOUT: Duration = Duration::from_secs(1);
 const DEFAULT_EXECUTION_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Clone)]
-pub(super) struct FilesystemWorkPool {
+pub(crate) struct FilesystemWorkPool {
     inner: BoundedBlockingPool,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
 #[error(transparent)]
-pub(super) struct FilesystemWorkError(#[from] pub(super) BlockingWorkError);
+pub(crate) struct FilesystemWorkError(#[from] pub(super) BlockingWorkError);
 
 impl Default for FilesystemWorkPool {
     fn default() -> Self {
@@ -33,7 +33,7 @@ impl Default for FilesystemWorkPool {
 }
 
 impl FilesystemWorkPool {
-    pub(super) fn with_limits(
+    pub(crate) fn with_limits(
         max_concurrent: usize,
         queue_timeout: Duration,
         execution_timeout: Duration,
@@ -48,7 +48,7 @@ impl FilesystemWorkPool {
         }
     }
 
-    pub(super) async fn run<T, F>(&self, work: F) -> Result<T, FilesystemWorkError>
+    pub(crate) async fn run<T, F>(&self, work: F) -> Result<T, FilesystemWorkError>
     where
         T: Send + 'static,
         F: FnOnce() -> T + Send + 'static,
@@ -56,14 +56,14 @@ impl FilesystemWorkPool {
         self.inner.run(work).await.map_err(Into::into)
     }
 
-    pub(super) async fn read(
+    pub(crate) async fn read(
         &self,
         path: PathBuf,
     ) -> Result<io::Result<Vec<u8>>, FilesystemWorkError> {
         self.run(move || std::fs::read(path)).await
     }
 
-    pub(super) async fn write_atomic(
+    pub(crate) async fn write_atomic(
         &self,
         path: PathBuf,
         bytes: Vec<u8>,

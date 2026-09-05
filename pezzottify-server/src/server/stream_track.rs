@@ -3,10 +3,12 @@
 use super::{
     api_error::ApiError,
     session::Session,
-    state::{DatabaseHandles, OptionalOrganicIndexer, OptionalTrackMaterializer, ServerState},
+    state::{DatabaseHandles, GuardedMediaManager, OptionalOrganicIndexer, ServerState},
 };
 use crate::db_executor::DbPriority;
 use crate::downloader::DownloadPriority;
+#[cfg(test)]
+use crate::media::audio_content_type;
 use crate::user::{Permission, UserSetting};
 use axum::{
     body::Body,
@@ -14,15 +16,7 @@ use axum::{
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
-use std::path::Path as FilePath;
-use tokio::{
-    fs::File,
-    io::{AsyncReadExt, AsyncSeekExt, BufReader, SeekFrom},
-};
-use tokio_util::io::ReaderStream;
 use tracing::debug;
-
-const STREAM_BUFFER_SIZE: usize = 64 * 1024;
 
 /// A single byte-range specification. Multiple ranges are deliberately unsupported.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -166,30 +160,12 @@ fn range_not_satisfiable(file_length: u64) -> Response {
         .expect("static range error response is valid")
 }
 
-fn audio_content_type(path: &FilePath) -> &'static str {
-    let extension = path
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .map(str::to_ascii_lowercase);
-
-    match extension.as_deref() {
-        Some("aac") => "audio/aac",
-        Some("flac") => "audio/flac",
-        Some("m4a" | "mp4") => "audio/mp4",
-        Some("mp3") => "audio/mpeg",
-        Some("oga" | "ogg") => "audio/ogg",
-        Some("opus") => "audio/opus",
-        Some("wav") => "audio/wav",
-        _ => "application/octet-stream",
-    }
-}
-
 pub async fn stream_track(
     session: Session,
     byte_range: ByteRangeRequest,
     State(database): State<DatabaseHandles>,
     State(organic_indexer): State<OptionalOrganicIndexer>,
-    State(track_materializer): State<OptionalTrackMaterializer>,
+    State(media): State<GuardedMediaManager>,
     Path(id): Path<String>,
 ) -> Response {
     // Queue track for organic search index expansion
@@ -197,25 +173,7 @@ pub async fn stream_track(
         indexer.touch_track(&id);
     }
 
-    let track_id = id.clone();
-    let loaded = database
-        .catalog_read
-        .run(DbPriority::Interactive, move |catalog_store| {
-            let Some(track) = catalog_store.get_track(&track_id)? else {
-                return Ok(None);
-            };
-            // Open through the catalog's root-confined resolver. This prevents catalog
-            // paths and symlinks from escaping the configured media directory.
-            let opened = match catalog_store.open_track_audio_file(&track_id) {
-                Ok(opened) => opened,
-                Err(error) => {
-                    debug!(%error, track_id = %track_id, "Refused or failed to open track audio");
-                    None
-                }
-            };
-            Ok(Some((track, opened)))
-        })
-        .await;
+    let loaded = media.lookup_audio(&id).await;
     let (track, opened) = match loaded {
         Ok(Some(loaded)) => loaded,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
@@ -223,13 +181,13 @@ pub async fn stream_track(
     };
     debug!("Streaming track: {}", track.name);
 
-    let Some((file, path)) = opened else {
+    let Some(audio) = opened else {
         if !session.has_permission(Permission::UseProxyStreaming) {
             return StatusCode::NOT_FOUND.into_response();
         }
-        let Some(materializer) = track_materializer else {
+        if !media.proxy_enabled() {
             return StatusCode::NOT_FOUND.into_response();
-        };
+        }
         let user_id = session.user_id;
         let enabled = database
             .user_manager
@@ -247,7 +205,9 @@ pub async fn stream_track(
             return StatusCode::NOT_FOUND.into_response();
         }
 
-        let in_flight = materializer.get_or_start(&id, DownloadPriority::Foreground);
+        let Some(in_flight) = media.open_remote_audio(&id, DownloadPriority::Foreground) else {
+            return StatusCode::NOT_FOUND.into_response();
+        };
         let metadata = match in_flight.metadata().await {
             Ok(metadata) => metadata,
             Err(error) => {
@@ -288,13 +248,11 @@ pub async fn stream_track(
             .expect("proxy stream response headers are valid");
     };
 
-    debug!("Streaming track from path {}", path.display());
-
-    let mut file = File::from_std(file);
-    let file_length = match file.metadata().await {
-        Ok(metadata) => metadata.len(),
+    let metadata = match audio.metadata().await {
+        Ok(metadata) => metadata,
         Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
+    let file_length = metadata.content_length;
 
     let resolved_range = match byte_range.0 {
         Ok(None) => None,
@@ -310,18 +268,15 @@ pub async fn stream_track(
         None => (StatusCode::OK, 0, file_length),
     };
 
-    if start != 0 && file.seek(SeekFrom::Start(start)).await.is_err() {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-
-    // `take` is essential: without it a bounded range continues reading until EOF.
-    let file_reader = BufReader::with_capacity(STREAM_BUFFER_SIZE, file).take(content_length);
-    let stream = ReaderStream::with_capacity(file_reader, STREAM_BUFFER_SIZE);
+    let stream = match audio.range_stream(start, content_length).await {
+        Ok(stream) => stream,
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
     let body = Body::from_stream(stream);
 
     let mut response = Response::builder()
         .status(status)
-        .header(header::CONTENT_TYPE, audio_content_type(&path))
+        .header(header::CONTENT_TYPE, metadata.content_type)
         .header(header::ACCEPT_RANGES, "bytes")
         .header(header::CONTENT_LENGTH, content_length);
 

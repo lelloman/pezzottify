@@ -120,13 +120,11 @@ impl MissingFilesWatchdog {
         let mut missing_details = Vec::new();
 
         for track_id in track_ids {
-            let is_missing =
-                if let Some(audio_path) = self.catalog_store.get_track_audio_path(track_id) {
-                    !audio_path.exists()
-                } else {
-                    // No audio_uri set = missing
-                    true
-                };
+            // The catalog compatibility bridge uses media's root-confined opener.
+            let is_missing = !matches!(
+                self.catalog_store.open_track_audio_file(track_id),
+                Ok(Some(_))
+            );
 
             if is_missing {
                 missing_ids.push(track_id.clone());

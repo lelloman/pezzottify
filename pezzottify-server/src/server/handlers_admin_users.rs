@@ -1087,6 +1087,7 @@ impl ServerState {
         db_registry: Arc<crate::backup::DbRegistry>,
         enrichment_store: OptionalEnrichmentStore,
         db_executor: crate::db_executor::DbExecutor,
+        media: Option<GuardedMediaManager>,
     ) -> ServerState {
         // Create connection manager
         let ws_connection_manager = Arc::new(super::websocket::ConnectionManager::new());
@@ -1101,12 +1102,6 @@ impl ServerState {
         // Note: This requires a tokio runtime, so we wrap in Option and create later
         let organic_indexer = None;
 
-        // HTTP client for downloading images from external URLs
-        let http_client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
-            .build()
-            .expect("Failed to create HTTP client");
-
         let database = super::state::DatabaseHandles::new_with_executor(
             catalog_store.clone(),
             search_vault.clone(),
@@ -1117,6 +1112,14 @@ impl ServerState {
             enrichment_store.clone(),
             db_executor,
         );
+
+        let media = media.unwrap_or_else(|| {
+            Arc::new(crate::media::MediaManager::new(
+                catalog_store.clone(),
+                database.executor.clone(),
+            ))
+        });
+        let filesystem_work = media.filesystem_work();
 
         // Create playback session manager for multi-device sync
         let playback_session_manager = Arc::new(super::websocket::PlaybackSessionManager::new(
@@ -1138,14 +1141,13 @@ impl ServerState {
             auth_state_store,
             mcp_state,
             organic_indexer,
-            http_client,
             download_manager: None, // Will be set by make_app if download manager is enabled
-            track_materializer: None,
+            media,
             ingestion_manager: None, // Will be set by make_app if ingestion is enabled
             enrichment_store,
             database,
             password_work: PasswordWorkPool::default(),
-            filesystem_work: FilesystemWorkPool::default(),
+            filesystem_work,
             playback_session_manager,
             db_registry,
         }

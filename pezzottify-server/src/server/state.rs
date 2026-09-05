@@ -17,9 +17,9 @@ use std::time::Instant;
 
 use super::filesystem_work::FilesystemWorkPool;
 use super::password_work::PasswordWorkPool;
-use super::track_materializer::TrackMaterializer;
 use super::websocket::{ConnectionManager, PlaybackSessionManager};
 use super::ServerConfig;
+use crate::media::MediaManager;
 
 pub type GuardedCatalogStore = Arc<dyn CatalogStore>;
 /// SearchVault is internally thread-safe (uses separate read/write connections with internal Mutex).
@@ -33,9 +33,8 @@ pub type OptionalOidcClient = Option<Arc<OidcClient>>;
 pub type GuardedAuthStateStore = Arc<AuthStateStore>;
 pub type GuardedMcpState = Arc<McpState>;
 pub type OptionalOrganicIndexer = Option<Arc<OrganicIndexer>>;
-pub type HttpClient = reqwest::Client;
 pub type OptionalDownloadManager = Option<Arc<DownloadManager>>;
-pub type OptionalTrackMaterializer = Option<Arc<TrackMaterializer>>;
+pub type GuardedMediaManager = Arc<MediaManager>;
 pub type OptionalIngestionManager = Option<Arc<IngestionManager>>;
 pub type OptionalEnrichmentStore = Option<Arc<dyn EnrichmentStore>>;
 pub type GuardedPlaybackSessionManager = Arc<PlaybackSessionManager>;
@@ -139,9 +138,8 @@ pub struct ServerState {
     pub auth_state_store: GuardedAuthStateStore,
     pub mcp_state: GuardedMcpState,
     pub organic_indexer: OptionalOrganicIndexer,
-    pub http_client: HttpClient,
     pub download_manager: OptionalDownloadManager,
-    pub track_materializer: OptionalTrackMaterializer,
+    pub media: GuardedMediaManager,
     pub ingestion_manager: OptionalIngestionManager,
     pub enrichment_store: OptionalEnrichmentStore,
     /// Priority-aware database handles used by incrementally migrated call sites.
@@ -243,21 +241,15 @@ impl FromRef<ServerState> for OptionalOrganicIndexer {
     }
 }
 
-impl FromRef<ServerState> for HttpClient {
-    fn from_ref(input: &ServerState) -> Self {
-        input.http_client.clone()
-    }
-}
-
 impl FromRef<ServerState> for OptionalDownloadManager {
     fn from_ref(input: &ServerState) -> Self {
         input.download_manager.clone()
     }
 }
 
-impl FromRef<ServerState> for OptionalTrackMaterializer {
+impl FromRef<ServerState> for GuardedMediaManager {
     fn from_ref(input: &ServerState) -> Self {
-        input.track_materializer.clone()
+        input.media.clone()
     }
 }
 

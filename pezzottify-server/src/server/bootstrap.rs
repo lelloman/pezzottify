@@ -23,6 +23,7 @@ pub async fn make_app(
         db_registry,
         enrichment_store,
         crate::db_executor::DbExecutor::new(Default::default()),
+        None,
     )
     .await
 }
@@ -40,6 +41,7 @@ async fn make_app_with_executor(
     db_registry: Arc<crate::backup::DbRegistry>,
     enrichment_store: OptionalEnrichmentStore,
     db_executor: crate::db_executor::DbExecutor,
+    media: Option<Arc<crate::media::MediaManager>>,
 ) -> Result<Router> {
     // Initialize OIDC client if configured
     let oidc_client = match oidc_config {
@@ -79,6 +81,7 @@ async fn make_app_with_executor(
         db_registry,
         enrichment_store,
         db_executor,
+        media,
     );
     state.oidc_client = oidc_client;
 
@@ -112,14 +115,13 @@ async fn make_app_with_executor(
                 url.clone(),
                 config.downloader_timeout_sec,
             ));
-            state.track_materializer = Some(super::track_materializer::TrackMaterializer::new(
+            state.media.enable_proxy(
                 downloader,
-                catalog_store.clone(),
                 search_vault.clone(),
                 state.server_store.clone(),
                 config.media_path.clone(),
                 config.proxy_mode.clone(),
-            ));
+            );
             info!("Progressive proxy streaming initialized");
         } else {
             error!("Proxy streaming enabled without downloader_url; feature unavailable");
@@ -326,6 +328,7 @@ pub async fn run_server(
     db_registry: Arc<crate::backup::DbRegistry>,
     enrichment_store: OptionalEnrichmentStore,
     db_executor: crate::db_executor::DbExecutor,
+    media: Arc<crate::media::MediaManager>,
 ) -> Result<()> {
     let disable_password_auth = oidc_config
         .as_ref()
@@ -367,6 +370,7 @@ pub async fn run_server(
         db_registry,
         enrichment_store,
         db_executor,
+        Some(media),
     )
     .await?;
 
