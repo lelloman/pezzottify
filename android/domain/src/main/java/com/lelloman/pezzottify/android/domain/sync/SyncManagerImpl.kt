@@ -8,6 +8,7 @@ import com.lelloman.pezzottify.android.domain.notifications.SystemNotificationHe
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.PlaylistState
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncStateResponse
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.user.PermissionsStore
 import com.lelloman.pezzottify.android.domain.usercontent.LikedContent
@@ -84,6 +85,7 @@ class SyncManagerImpl internal constructor(
 
     private var retryJob: Job? = null
     private var currentRetryDelay: Duration = minRetryDelay
+    private var serverProxyStreamingEnabled = false
 
     // Debounce download completion notifications so multiple arrivals get grouped
     // Each entry pairs the internal notification ID with the download data
@@ -101,7 +103,19 @@ class SyncManagerImpl internal constructor(
             logger.info("Performing full sync (cursor=$cursor, needsFullSync=$needsFullSync)")
             fullSync()
         } else {
-            // Have cursor, catch up
+            // Availability is held in memory, and incremental events do not include
+            // server features. Refresh it even when this session already has a cursor.
+            mutableState.value = SyncState.Syncing
+            when (val response = remoteApiClient.getSyncState()) {
+                is RemoteApiResponse.Success -> applyProxyStreamingAvailability(response.data)
+                is RemoteApiResponse.Error -> {
+                    val errorMsg = errorToMessage(response)
+                    logger.error("Failed to refresh proxy streaming availability: $errorMsg")
+                    mutableState.value = SyncState.Error(errorMsg)
+                    scheduleRetry()
+                    return@withContext false
+                }
+            }
             logger.info("Cursor at $cursor, catching up")
             catchUp()
         }
@@ -123,10 +137,7 @@ class SyncManagerImpl internal constructor(
 
                 // Update permissions
                 permissionsStore.setPermissions(syncState.permissions.toSet())
-                userSettingsStore.setProxyStreamingAvailable(
-                    syncState.features.proxyStreaming &&
-                        Permission.UseProxyStreaming in syncState.permissions
-                )
+                applyProxyStreamingAvailability(syncState)
                 logger.debug("Applied permissions: ${syncState.permissions}")
 
                 // Apply settings
@@ -166,6 +177,14 @@ class SyncManagerImpl internal constructor(
                 false
             }
         }
+    }
+
+    private fun applyProxyStreamingAvailability(syncState: SyncStateResponse) {
+        serverProxyStreamingEnabled = syncState.features.proxyStreaming
+        userSettingsStore.setProxyStreamingAvailable(
+            serverProxyStreamingEnabled &&
+                Permission.UseProxyStreaming in syncState.permissions
+        )
     }
 
     override suspend fun catchUp(): Boolean = withContext(dispatcher) {
@@ -252,6 +271,8 @@ class SyncManagerImpl internal constructor(
         syncStateStore.clearCursor()
         downloadStatusRepository.clear()
         notificationRepository.clear()
+        serverProxyStreamingEnabled = false
+        userSettingsStore.setProxyStreamingAvailable(false)
         mutableState.value = SyncState.Idle
     }
 
@@ -322,16 +343,25 @@ class SyncManagerImpl internal constructor(
 
             is SyncEvent.PermissionGranted -> {
                 permissionsStore.addPermission(event.permission)
+                if (event.permission == Permission.UseProxyStreaming) {
+                    userSettingsStore.setProxyStreamingAvailable(serverProxyStreamingEnabled)
+                }
                 logger.debug("Applied PermissionGranted: ${event.permission}")
             }
 
             is SyncEvent.PermissionRevoked -> {
                 permissionsStore.removePermission(event.permission)
+                if (event.permission == Permission.UseProxyStreaming) {
+                    userSettingsStore.setProxyStreamingAvailable(false)
+                }
                 logger.debug("Applied PermissionRevoked: ${event.permission}")
             }
 
             is SyncEvent.PermissionsReset -> {
                 permissionsStore.setPermissions(event.permissions.toSet())
+                userSettingsStore.setProxyStreamingAvailable(
+                    serverProxyStreamingEnabled && Permission.UseProxyStreaming in event.permissions
+                )
                 logger.debug("Applied PermissionsReset: ${event.permissions}")
             }
 
