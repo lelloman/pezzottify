@@ -540,7 +540,7 @@ mod tests {
     }
 
     #[test]
-    fn catalog_rejects_unsafe_or_missing_audio_uri_at_write_boundary() {
+    fn catalog_validates_locator_syntax_without_opening_media() {
         let (store, temp_dir) = create_test_store();
         seed_available_track(&store, "track-safe-path", None, false);
         std::fs::create_dir_all(temp_dir.path().join("audio")).unwrap();
@@ -557,7 +557,7 @@ mod tests {
             .is_err());
         assert!(store
             .set_track_audio_uri("track-safe-path", "audio/missing.ogg")
-            .is_err());
+            .is_ok());
     }
 
     #[test]
@@ -571,8 +571,8 @@ mod tests {
         );
         seed_available_track(&store, "imported-unsafe", Some(&traversal), true);
 
-        assert!(store.get_track_audio_path("imported-unsafe").is_none());
-        assert!(store.open_track_audio_file("imported-unsafe").is_err());
+        let manager = crate::media::MediaManager::new(Arc::new(store), crate::db_executor::DbExecutor::new(Default::default()));
+        assert!(manager.open_local_audio_blocking("imported-unsafe").is_err());
 
         // Ensure the test setup really points at an existing file outside the root.
         assert!(temp_dir.path().join(&traversal).exists());
@@ -1302,7 +1302,8 @@ mod tests {
 
         let checks = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let checks_clone = checks.clone();
-        let result = store.refresh_availability_and_stats_with_cancel(&|| {
+        let observations = (0..5000).map(|i| (format!("track{i}"), None, false)).collect::<Vec<_>>();
+        let result = store.apply_media_observations(&observations, &|| {
             let n = checks_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             n > 300
         });

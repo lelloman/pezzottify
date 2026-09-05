@@ -6,13 +6,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 const JPEG: &[u8] = include_bytes!("../../tests/fixtures/test-image.jpg");
 
-struct Fixture {
-    manager: Arc<MediaManager>,
-    root: tempfile::TempDir,
+pub(super) struct Fixture {
+    pub(super) manager: Arc<MediaManager>,
+    pub(super) root: tempfile::TempDir,
 }
 
 impl Fixture {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         let root = tempfile::tempdir().unwrap();
         let db = root.path().join("catalog.db");
         let catalog =
@@ -77,7 +77,7 @@ async fn image_cache_miss_fetches_validates_and_persists_then_hits_locally() {
     }
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert_eq!(
-        std::fs::read(fixture.root.path().join("images/album.jpg")).unwrap(),
+        std::fs::read(fixture.manager.image_path("album").unwrap()).unwrap(),
         JPEG
     );
     task.abort();
@@ -126,7 +126,7 @@ async fn image_persistence_failure_does_not_fail_valid_response() {
     let (url, _, task) = upstream(
         JPEG,
         axum::http::StatusCode::OK,
-        Some(fixture.root.path().join("images/album.jpg")),
+        Some(fixture.root.path().join(".media/images/album.json")),
     )
     .await;
     fixture.image_url(&url);

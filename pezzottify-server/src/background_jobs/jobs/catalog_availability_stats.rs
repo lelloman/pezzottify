@@ -96,12 +96,9 @@ impl BackgroundJob for CatalogAvailabilityStatsJob {
 
         let cancellation_token = ctx.cancellation_token.clone();
         let refresh = match ctx
-            .catalog_db
-            .run_blocking(DbPriority::Background, move |store| {
-                store.refresh_availability_and_stats_with_cancel(&|| {
-                    cancellation_token.is_cancelled()
-                })
-            }) {
+            .media
+            .reconcile_presence(&|| cancellation_token.is_cancelled())
+        {
             Ok(r) => r,
             Err(e) => {
                 if ctx.is_cancelled() {

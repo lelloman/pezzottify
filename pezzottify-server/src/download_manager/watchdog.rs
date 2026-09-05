@@ -120,11 +120,12 @@ impl MissingFilesWatchdog {
         let mut missing_details = Vec::new();
 
         for track_id in track_ids {
-            // The catalog compatibility bridge uses media's root-confined opener.
-            let is_missing = !matches!(
-                self.catalog_store.open_track_audio_file(track_id),
-                Ok(Some(_))
-            );
+            let uri = self
+                .catalog_store
+                .get_track(track_id)?
+                .and_then(|track| track.audio_uri);
+            let is_missing = crate::media::probe(&self.catalog_store.media_root(), uri.as_deref())
+                == crate::media::MediaPresence::Missing;
 
             if is_missing {
                 missing_ids.push(track_id.clone());

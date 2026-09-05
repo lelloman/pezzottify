@@ -228,6 +228,7 @@ pub struct IngestionManager {
     catalog: Arc<dyn CatalogStore>,
     search: Arc<dyn SearchVault>,
     file_handler: FileHandler,
+    media: Arc<crate::media::MediaManager>,
     config: IngestionManagerConfig,
     download_manager: Option<Arc<dyn DownloadManagerTrait>>,
     notifier: Option<Arc<super::notifier::IngestionNotifier>>,

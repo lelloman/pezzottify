@@ -1119,6 +1119,7 @@ impl ServerState {
                 database.executor.clone(),
             ))
         });
+        media.configure_effects(search_vault.clone(), server_store.clone());
         let filesystem_work = media.filesystem_work();
 
         // Create playback session manager for multi-device sync

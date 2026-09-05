@@ -12,7 +12,6 @@ use prometheus::{
 };
 use std::path::Path;
 use std::time::{Duration, Instant};
-use walkdir::WalkDir;
 
 use crate::db_executor::{DbLane, DbPriority};
 
@@ -946,21 +945,6 @@ pub struct StorageMetrics {
     pub catalog_images: u64,
 }
 
-/// Calculate the total size of a directory recursively
-fn calculate_dir_size(path: &Path) -> u64 {
-    if !path.exists() {
-        return 0;
-    }
-
-    WalkDir::new(path)
-        .into_iter()
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| entry.file_type().is_file())
-        .filter_map(|entry| entry.metadata().ok())
-        .map(|metadata| metadata.len())
-        .sum()
-}
-
 /// Get the size of a single file
 fn get_file_size(path: &Path) -> u64 {
     path.metadata().map(|m| m.len()).unwrap_or(0)
@@ -981,8 +965,8 @@ pub fn calculate_storage_metrics(db_dir: &Path, media_path: &Path) -> StorageMet
     let db_total = db_catalog + db_user + db_server + db_download_queue + db_search;
 
     // Catalog/media directories
-    let catalog_audio = calculate_dir_size(&media_path.join("audio"));
-    let catalog_images = calculate_dir_size(&media_path.join("images"));
+    let catalog_audio = crate::media::directory_size(&media_path.join("audio"));
+    let catalog_images = crate::media::directory_size(&media_path.join("images"));
     let catalog_total = catalog_audio + catalog_images;
 
     // Total

@@ -2012,6 +2012,10 @@ impl Fts5LevenshteinSearchVault {
                     &format!("DELETE FROM {AVAILABLE_INDEX} WHERE item_id = ?1 AND item_type = ?2"),
                     rusqlite::params![id, type_str],
                 )?;
+                conn.execute(
+                    "DELETE FROM proxy_available_rows WHERE item_id = ?1 AND item_type = ?2",
+                    rusqlite::params![id, type_str],
+                )?;
                 if *is_available && Self::is_enriched_index(&conn, ACTIVE_INDEX)? {
                     conn.execute(
                         &format!(
@@ -2037,8 +2041,8 @@ impl Fts5LevenshteinSearchVault {
     ///
     /// `item_id` and `item_type` are UNINDEXED FTS5 columns, so deleting or
     /// selecting an FTS row by those columns scans the entire virtual table.
-    /// Proxy materialization has the document already and guarantees a
-    /// missing -> available transition, allowing a direct O(1) insertion.
+    /// New publication uses direct insertion; journal replay replaces the tracked
+    /// dynamic row or preserves a document already supplied by a full rebuild.
     pub fn publish_newly_available(&self, items: &[SearchIndexItem]) -> Result<()> {
         if items.is_empty() {
             return Ok(());
@@ -2051,6 +2055,7 @@ impl Fts5LevenshteinSearchVault {
             let available_ready = Self::available_index_is_ready(&conn);
             for item in items {
                 let type_str = Self::item_type_to_str(&item.item_type);
+                let was_available = conn.query_row("SELECT is_available FROM item_availability WHERE item_id=?1 AND item_type=?2", rusqlite::params![item.id, type_str], |row| row.get::<_, bool>(0)).optional()?.unwrap_or(false);
                 conn.execute(
                     "INSERT OR REPLACE INTO item_availability
                      (item_id, item_type, is_available) VALUES (?1, ?2, 1)",
@@ -2058,6 +2063,16 @@ impl Fts5LevenshteinSearchVault {
                 )?;
 
                 if enriched && available_ready {
+                    let existing: Option<i64> = conn.query_row("SELECT available_rowid FROM proxy_available_rows WHERE item_id=?1 AND item_type=?2", rusqlite::params![item.id, type_str], |row| row.get(0)).optional()?;
+                    if existing.is_none() && was_available {
+                        continue;
+                    }
+                    if let Some(rowid) = existing {
+                        conn.execute(
+                            &format!("DELETE FROM {AVAILABLE_INDEX} WHERE rowid=?1"),
+                            [rowid],
+                        )?;
+                    }
                     let (primary, artist, album, extra) = Self::index_item_document_parts(item);
                     conn.execute(
                         &format!(
@@ -2124,6 +2139,14 @@ impl Fts5LevenshteinSearchVault {
                     conn.execute(
                         &format!("DELETE FROM {AVAILABLE_INDEX} WHERE rowid = ?1"),
                         [rowid],
+                    )?;
+                } else if Self::available_index_is_ready(&conn) {
+                    // Legacy or rebuilt documents have no dynamic row mapping.
+                    conn.execute(
+                        &format!(
+                            "DELETE FROM {AVAILABLE_INDEX} WHERE item_id = ?1 AND item_type = ?2"
+                        ),
+                        rusqlite::params![id, type_str],
                     )?;
                 }
                 conn.execute(
@@ -2875,7 +2898,6 @@ mod tests {
 
     mod mock {
         use super::*;
-        use std::path::PathBuf;
         use std::sync::atomic::AtomicI64;
 
         pub struct MockCatalogStore {
@@ -2971,19 +2993,7 @@ mod tests {
             ) -> anyhow::Result<Option<crate::catalog_store::ImageUrl>> {
                 Ok(None)
             }
-            fn get_image_path(&self, _id: &str) -> PathBuf {
-                PathBuf::new()
-            }
-            fn get_track_audio_path(&self, _track_id: &str) -> Option<PathBuf> {
-                None
-            }
 
-            fn open_track_audio_file(
-                &self,
-                _track_id: &str,
-            ) -> anyhow::Result<Option<(std::fs::File, PathBuf)>> {
-                Ok(None)
-            }
             fn get_track_album_id(&self, _track_id: &str) -> Option<String> {
                 None
             }
@@ -3907,6 +3917,22 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].item_id, "track-new");
 
+        // Replaying a durable publication must replace its dynamic document.
+        vault
+            .publish_newly_available(&[SearchIndexItem {
+                id: "track-new".to_string(),
+                name: "Immediate Playback".to_string(),
+                item_type: HashedItemType::Track,
+                additional_text: vec!["artist:Fast Artist".to_string()],
+            }])
+            .unwrap();
+        assert_eq!(
+            vault
+                .search_with_availability("Immediate", 10, None, true)
+                .len(),
+            1
+        );
+
         vault
             .unpublish_proxy_items(&[("track-new".to_string(), HashedItemType::Track)])
             .unwrap();
@@ -3922,6 +3948,35 @@ mod tests {
             })
             .unwrap();
         assert_eq!(mapped_rows, 0);
+
+        // A full availability refresh removes the dynamic mapping. Subsequent
+        // publication/recovery must preserve one document, then remove it cleanly.
+        vault.update_availability(&[("track-new".to_owned(), HashedItemType::Track, true)]);
+        vault
+            .publish_newly_available(&[SearchIndexItem {
+                id: "track-new".to_owned(),
+                name: "Immediate Playback".to_owned(),
+                item_type: HashedItemType::Track,
+                additional_text: vec![],
+            }])
+            .unwrap();
+        let count = || {
+            vault
+                .write_conn
+                .lock()
+                .unwrap()
+                .query_row(
+                    &format!("SELECT COUNT(*) FROM {AVAILABLE_INDEX} WHERE item_id='track-new'"),
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap()
+        };
+        assert_eq!(count(), 1);
+        vault
+            .unpublish_proxy_items(&[("track-new".to_owned(), HashedItemType::Track)])
+            .unwrap();
+        assert_eq!(count(), 0);
     }
 
     #[test]

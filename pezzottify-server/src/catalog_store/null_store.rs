@@ -5,7 +5,6 @@
 
 use super::trait_def::{CatalogStore, SearchableItem};
 use anyhow::Result;
-use std::path::PathBuf;
 
 /// A no-op catalog store that returns empty/none for all operations.
 pub struct NullCatalogStore;
@@ -67,18 +66,6 @@ impl CatalogStore for NullCatalogStore {
     }
 
     fn get_artist_image_url(&self, _artist_id: &str) -> Result<Option<super::ImageUrl>> {
-        Ok(None)
-    }
-
-    fn get_image_path(&self, _id: &str) -> PathBuf {
-        PathBuf::new()
-    }
-
-    fn get_track_audio_path(&self, _track_id: &str) -> Option<PathBuf> {
-        None
-    }
-
-    fn open_track_audio_file(&self, _track_id: &str) -> Result<Option<(std::fs::File, PathBuf)>> {
         Ok(None)
     }
 
