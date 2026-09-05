@@ -572,7 +572,9 @@ async fn main() -> Result<()> {
     info!("Ready to serve at port {}!", app_config.port);
     info!("Metrics available at port {}!", app_config.metrics_port);
 
-    // Run HTTP server and job scheduler concurrently
+    // Keep polling the scheduler after cancellation so it can finish job cleanup.
+    let scheduler_task = scheduler.run();
+    tokio::pin!(scheduler_task);
     tokio::select! {
         result = run_server(
             catalog_store,
@@ -610,15 +612,14 @@ async fn main() -> Result<()> {
             shutdown_token.cancel();
             result
         },
-        _ = scheduler.run() => {
+        _ = &mut scheduler_task => {
             info!("Scheduler stopped");
             Ok(())
         },
         signal = shutdown_signal() => {
             info!("Received {}, initiating graceful shutdown", signal);
             shutdown_token.cancel();
-            // Give the scheduler a moment to shut down gracefully
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            scheduler_task.await;
             Ok(())
         }
     }
