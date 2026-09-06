@@ -831,7 +831,10 @@ impl MetadataEnrichmentJob {
                 &batch[index..],
                 async {
                     match provider.as_ref() {
-                        Some(provider) => self.enrich_queue_item(ctx, store, provider.as_ref(), item).await,
+                        Some(provider) => {
+                            self.enrich_queue_item(ctx, store, provider.as_ref(), item)
+                                .await
+                        }
                         None => self.enrich_queue_item_without_llm(ctx, store, item).await,
                     }
                 },
@@ -1904,7 +1907,9 @@ mod tests {
         let temp = tempfile::TempDir::new().unwrap();
         let (ctx, _, store) = test_job_context(&temp);
         for id in ["done", "active", "waiting"] {
-            store.enqueue_enrichment_if_missing_or_stale("track", id, "test", 1, 3600).unwrap();
+            store
+                .enqueue_enrichment_if_missing_or_stale("track", id, "test", 1, 3600)
+                .unwrap();
         }
         let batch = store.claim_enrichment_queue_batch(3).unwrap();
         store.complete_enrichment_queue_item(batch[0].id).unwrap();
@@ -1913,14 +1918,36 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(20)).await;
             token.cancel();
         });
-        let result = tokio::time::timeout(Duration::from_secs(1), enrich_until_cancelled(
-            &ctx.cancellation_token, store.as_ref(), &batch[1..], std::future::pending::<()>(),
-        )).await.unwrap();
+        let result = tokio::time::timeout(
+            Duration::from_secs(1),
+            enrich_until_cancelled(
+                &ctx.cancellation_token,
+                store.as_ref(),
+                &batch[1..],
+                std::future::pending::<()>(),
+            ),
+        )
+        .await
+        .unwrap();
         cancel.await.unwrap();
         assert!(matches!(result, Err(JobError::Cancelled)));
-        assert_eq!(store.get_enrichment_queue_item("track", &batch[0].entity_id).unwrap().unwrap().status, "completed");
+        assert_eq!(
+            store
+                .get_enrichment_queue_item("track", &batch[0].entity_id)
+                .unwrap()
+                .unwrap()
+                .status,
+            "completed"
+        );
         for item in &batch[1..] {
-            assert_eq!(store.get_enrichment_queue_item("track", &item.entity_id).unwrap().unwrap().status, "queued");
+            assert_eq!(
+                store
+                    .get_enrichment_queue_item("track", &item.entity_id)
+                    .unwrap()
+                    .unwrap()
+                    .status,
+                "queued"
+            );
         }
         assert_eq!(store.claim_enrichment_queue_batch(3).unwrap().len(), 2);
     }
@@ -1929,7 +1956,12 @@ mod tests {
     async fn completed_enrichment_keeps_its_result() {
         let temp = tempfile::TempDir::new().unwrap();
         let (ctx, _, store) = test_job_context(&temp);
-        assert_eq!(enrich_until_cancelled(&ctx.cancellation_token, store.as_ref(), &[], async { 42 }).await.unwrap(), 42);
+        assert_eq!(
+            enrich_until_cancelled(&ctx.cancellation_token, store.as_ref(), &[], async { 42 })
+                .await
+                .unwrap(),
+            42
+        );
     }
 
     #[test]
