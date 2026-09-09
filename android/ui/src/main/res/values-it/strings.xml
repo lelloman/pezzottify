@@ -42,6 +42,8 @@
     <!-- HOME SCREEN -->
     <string name="app_name">Pezzottify</string>
     <string name="recently_viewed_item_header">Visti di recente</string>
+    <string name="featured_this_week">In evidenza questa settimana</string>
+    <string name="featured_albums_header">Album in evidenza</string>
     <string name="popular_albums_header">Album popolari</string>
     <string name="popular_artists_header">Artisti popolari</string>
     <string name="home_empty_state">Inizia a esplorare per vedere qui i contenuti visti di recente!</string>

@@ -31,6 +31,7 @@ import com.lelloman.pezzottify.android.domain.settings.usecase.UpdateSmartContin
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
 import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.statics.usecase.GetGenres
+import com.lelloman.pezzottify.android.domain.statics.usecase.GetFeaturedAlbums
 import com.lelloman.pezzottify.android.domain.statics.usecase.GetPopularContent
 import com.lelloman.pezzottify.android.domain.statics.usecase.GetWhatsNew
 import com.lelloman.pezzottify.android.domain.statics.usecase.PerformSearch
@@ -82,6 +83,8 @@ import com.lelloman.pezzottify.android.mapping.toDeviceSharePolicyUi
 import com.lelloman.pezzottify.android.ui.screen.main.genre.GenreListScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.genre.GenreScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreenState
+import com.lelloman.pezzottify.android.ui.screen.main.home.FeaturedAlbumState
+import com.lelloman.pezzottify.android.ui.screen.main.home.FeaturedContentState
 import com.lelloman.pezzottify.android.ui.screen.main.home.HomeScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.home.PopularAlbumState
 import com.lelloman.pezzottify.android.ui.screen.main.home.PopularArtistState
@@ -1461,6 +1464,7 @@ class InteractorsModule {
     @Provides
     fun provideHomeScreenInteractor(
         getRecentlyViewedContent: GetRecentlyViewedContentUseCase,
+        getFeaturedAlbums: GetFeaturedAlbums,
         getPopularContentUseCase: GetPopularContent,
         authStore: AuthStore,
         webSocketManager: WebSocketManager,
@@ -1519,6 +1523,26 @@ class InteractorsModule {
                             id = artist.id,
                             name = artist.name,
                             imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, artist.id),
+                        )
+                    },
+                )
+            }
+        }
+
+        override suspend fun getFeaturedContent(): FeaturedContentState? {
+            if (authStore.getAuthState().value !is AuthState.LoggedIn) {
+                return null
+            }
+            return getFeaturedAlbums().getOrNull()?.let { featured ->
+                val baseUrl = configStore.baseUrl.value
+                FeaturedContentState(
+                    heroIndex = featured.heroIndex,
+                    albums = featured.albums.map { album ->
+                        FeaturedAlbumState(
+                            id = album.id,
+                            name = album.name,
+                            imageUrl = ImageUrlProvider.buildImageUrl(baseUrl, album.id),
+                            artistNames = album.artistNames,
                         )
                     },
                 )

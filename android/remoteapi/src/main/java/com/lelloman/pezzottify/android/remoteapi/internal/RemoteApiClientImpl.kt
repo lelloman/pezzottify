@@ -16,6 +16,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsR
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DevicesResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DeviceSharePolicy
 import com.lelloman.pezzottify.android.domain.remoteapi.response.FullSkeletonResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.FeaturedAlbumsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.GenreResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.GenreTracksResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
@@ -293,6 +294,13 @@ internal class RemoteApiClientImpl(
             )
             .returnFromRetrofitResponse()
     }
+
+    override suspend fun getFeaturedAlbums(limit: Int): RemoteApiResponse<FeaturedAlbumsResponse> =
+        catchingNetworkError {
+            getRetrofit()
+                .getFeaturedAlbums(authToken = authToken, limit = limit)
+                .returnFromRetrofitResponse()
+        }
 
     override suspend fun getCatalogStats(): RemoteApiResponse<CatalogStatsResponse> =
         catchingNetworkError {

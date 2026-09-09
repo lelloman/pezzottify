@@ -36,6 +36,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonDeltaResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonVersionResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.FullSkeletonResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.FeaturedAlbumsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.GenreResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.GenreTracksResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
@@ -107,6 +108,12 @@ internal interface RetrofitApiClient {
         @Query("albums_limit") albumsLimit: Int,
         @Query("artists_limit") artistsLimit: Int,
     ): Response<PopularContentResponse>
+
+    @GET("/v1/content/featured/albums")
+    suspend fun getFeaturedAlbums(
+        @Header("Authorization") authToken: String,
+        @Query("limit") limit: Int,
+    ): Response<FeaturedAlbumsResponse>
 
     @GET("/v1/content/catalog/stats")
     suspend fun getCatalogStats(

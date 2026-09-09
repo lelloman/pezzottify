@@ -43,6 +43,8 @@
     <!-- HOME SCREEN -->
     <string name="app_name">Pezzottify</string>
     <string name="recently_viewed_item_header">Recently viewed</string>
+    <string name="featured_this_week">Featured this week</string>
+    <string name="featured_albums_header">Featured albums</string>
     <string name="popular_albums_header">Popular albums</string>
     <string name="popular_artists_header">Popular artists</string>
     <string name="home_empty_state">Start exploring to see your recently viewed content here!</string>

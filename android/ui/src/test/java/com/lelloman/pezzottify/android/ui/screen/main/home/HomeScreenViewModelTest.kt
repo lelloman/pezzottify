@@ -95,6 +95,24 @@ class HomeScreenViewModelTest {
     }
 
     @Test
+    fun `loads featured content from interactor`() = runTest {
+        val featuredContent = FeaturedContentState(
+            heroIndex = 1,
+            albums = listOf(
+                FeaturedAlbumState("album-1", "Album One", "http://img.com/1", listOf("Artist A")),
+                FeaturedAlbumState("album-2", "Album Two", "http://img.com/2", listOf("Artist B")),
+            ),
+        )
+        fakeInteractor.setFeaturedContent(featuredContent)
+
+        createViewModel()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.featuredContent).isEqualTo(featuredContent)
+        assertThat(viewModel.state.value.featuredContent?.heroAlbum?.id).isEqualTo("album-2")
+    }
+
+    @Test
     fun `loads recently viewed content from interactor`() = runTest {
         val recentlyViewed = listOf(
             HomeScreenState.RecentlyViewedContent("artist-1", ViewedContentType.Artist),
@@ -263,14 +281,34 @@ class HomeScreenViewModelTest {
         job.cancel()
     }
 
+    @Test
+    fun `clickOnFeaturedAlbum emits NavigateToAlbum`() = runTest {
+        createViewModel()
+        advanceUntilIdle()
+
+        val events = mutableListOf<HomeScreenEvents>()
+        val job = launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.events.collect { events.add(it) }
+        }
+
+        viewModel.clickOnFeaturedAlbum("featured-album-1")
+        advanceUntilIdle()
+
+        assertThat(events).containsExactly(HomeScreenEvents.NavigateToAlbum("featured-album-1"))
+
+        job.cancel()
+    }
+
     private class FakeInteractor : HomeScreenViewModel.Interactor {
         private var _userName = "TestUser"
         private var _popularContent: PopularContentState? = null
+        private var _featuredContent: FeaturedContentState? = null
         private var _recentlyViewedContent: List<HomeScreenState.RecentlyViewedContent> = emptyList()
         val connectionStateFlow = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
 
         fun setUserName(name: String) { _userName = name }
         fun setPopularContent(content: PopularContentState?) { _popularContent = content }
+        fun setFeaturedContent(content: FeaturedContentState?) { _featuredContent = content }
         fun setRecentlyViewedContent(content: List<HomeScreenState.RecentlyViewedContent>) { _recentlyViewedContent = content }
 
         override fun connectionState(scope: CoroutineScope): StateFlow<ConnectionState> =
@@ -282,6 +320,7 @@ class HomeScreenViewModelTest {
         override fun getUserName(): String = _userName
 
         override suspend fun getPopularContent(): PopularContentState? = _popularContent
+        override suspend fun getFeaturedContent(): FeaturedContentState? = _featuredContent
     }
 
     private class FakeContentResolver : ContentResolver {

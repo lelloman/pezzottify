@@ -10,5 +10,7 @@ interface HomeScreenActions {
 
     fun clickOnPopularAlbum(albumId: String)
 
+    fun clickOnFeaturedAlbum(albumId: String)
+
     fun clickOnPopularArtist(artistId: String)
 }
