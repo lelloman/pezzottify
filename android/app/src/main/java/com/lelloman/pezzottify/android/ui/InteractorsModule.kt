@@ -1502,8 +1502,9 @@ class InteractorsModule {
         }
 
         override suspend fun getPopularContent(): PopularContentState? {
-            // Only fetch if logged in - otherwise auth token is empty and server returns 403
-            if (authStore.getAuthState().value !is AuthState.LoggedIn) {
+            // Home can be created while persisted authentication is still being restored.
+            // Wait for that restoration instead of permanently skipping remote sections.
+            if (authStore.getAuthState().first { it !is AuthState.Loading } !is AuthState.LoggedIn) {
                 return null
             }
             val result = getPopularContentUseCase()
@@ -1530,7 +1531,7 @@ class InteractorsModule {
         }
 
         override suspend fun getFeaturedContent(): FeaturedContentState? {
-            if (authStore.getAuthState().value !is AuthState.LoggedIn) {
+            if (authStore.getAuthState().first { it !is AuthState.Loading } !is AuthState.LoggedIn) {
                 return null
             }
             return getFeaturedAlbums().getOrNull()?.let { featured ->
