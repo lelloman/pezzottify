@@ -67,6 +67,11 @@ class HomeScreenViewModel(
             mutableState.value = mutableState.value.copy(popularContent = popularContent)
         }
 
+        viewModelScope.launch(coroutineContext) {
+            val featuredContent = interactor.getFeaturedContent()
+            mutableState.value = mutableState.value.copy(featuredContent = featuredContent)
+        }
+
         viewModelScope.launch {
             interactor.connectionState(viewModelScope).collect { connectionState ->
                 mutableState.value = mutableState.value.copy(connectionState = connectionState)
@@ -171,6 +176,12 @@ class HomeScreenViewModel(
         }
     }
 
+    override fun clickOnFeaturedAlbum(albumId: String) {
+        viewModelScope.launch {
+            mutableEvents.emit(HomeScreenEvents.NavigateToAlbum(albumId))
+        }
+    }
+
     override fun clickOnPopularArtist(artistId: String) {
         viewModelScope.launch {
             mutableEvents.emit(HomeScreenEvents.NavigateToArtist(artistId))
@@ -184,6 +195,7 @@ class HomeScreenViewModel(
         suspend fun getRecentlyViewedContent(maxCount: Int): Flow<List<HomeScreenState.RecentlyViewedContent>>
         fun getUserName(): String
         suspend fun getPopularContent(): PopularContentState?
+        suspend fun getFeaturedContent(): FeaturedContentState?
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

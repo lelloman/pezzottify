@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 
 data class HomeScreenState(
     val recentlyViewedContent: List<Flow<Content<ResolvedRecentlyViewedContent>>>? = null,
+    val featuredContent: FeaturedContentState? = null,
     val popularContent: PopularContentState? = null,
     val userName: String = "",
     val connectionState: ConnectionState = ConnectionState.Disconnected,
@@ -22,6 +23,21 @@ data class HomeScreenState(
 data class PopularContentState(
     val albums: List<PopularAlbumState>,
     val artists: List<PopularArtistState>,
+)
+
+data class FeaturedContentState(
+    val heroIndex: Int,
+    val albums: List<FeaturedAlbumState>,
+) {
+    val heroAlbum: FeaturedAlbumState?
+        get() = albums.getOrNull(heroIndex) ?: albums.firstOrNull()
+}
+
+data class FeaturedAlbumState(
+    val id: String,
+    val name: String,
+    val imageUrl: String?,
+    val artistNames: List<String>,
 )
 
 data class PopularAlbumState(

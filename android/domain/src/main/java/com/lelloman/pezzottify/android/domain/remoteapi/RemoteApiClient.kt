@@ -10,6 +10,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.ArtistResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.BatchContentResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.DownloadLimitsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.FullSkeletonResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.FeaturedAlbumsResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.GenreResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.GenreTracksResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
@@ -82,6 +83,9 @@ interface RemoteApiClient {
         albumsLimit: Int = 10,
         artistsLimit: Int = 10,
     ): RemoteApiResponse<PopularContentResponse>
+
+    /** Get the current weekly featured album selection. */
+    suspend fun getFeaturedAlbums(limit: Int = 20): RemoteApiResponse<FeaturedAlbumsResponse>
 
     /**
      * Get catalog availability statistics (total/available/unavailable per content type).

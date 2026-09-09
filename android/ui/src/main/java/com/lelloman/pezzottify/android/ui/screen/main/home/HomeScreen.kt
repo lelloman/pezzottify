@@ -188,38 +188,70 @@ private fun HomeScreenContent(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = Spacing.Medium),
             ) {
-            state.recentlyViewedContent?.takeIf { it.isNotEmpty() }?.let { recentlyViewedItems ->
-                Spacer(modifier = Modifier.height(Spacing.Medium))
-                Text(
-                    stringResource(R.string.recently_viewed_item_header),
-                    style = MaterialTheme.typography.titleLarge
-                )
-                Spacer(modifier = Modifier.height(Spacing.Medium))
+                state.featuredContent?.takeIf { it.albums.isNotEmpty() }?.let { featured ->
+                    featured.heroAlbum?.let { heroAlbum ->
+                        Spacer(modifier = Modifier.height(Spacing.Medium))
+                        FeaturedHero(
+                            album = heroAlbum,
+                            onClick = { actions.clickOnFeaturedAlbum(heroAlbum.id) },
+                        )
+                    }
 
-                val maxGroupSize = 2
-                recentlyViewedItems.forEachGroup(maxGroupSize) { items ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(Spacing.Small)
-                    ) {
-                        for (i in 0 until maxGroupSize) {
-                            val item = items.getOrNull(i)
-                            val itemState = item?.collectAsState(null)
-                            itemState?.value?.let {
-                                RecentlyViewedItem(
-                                    modifier = Modifier
-                                        .weight(1f),
-                                    item = it,
-                                    actions = actions
+                    if (featured.albums.size > 1) {
+                        Spacer(modifier = Modifier.height(Spacing.Large))
+                        Text(
+                            text = stringResource(R.string.featured_albums_header),
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                        Spacer(modifier = Modifier.height(Spacing.Medium))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.Small),
+                        ) {
+                            featured.albums.forEach { album ->
+                                FeaturedAlbumItem(
+                                    album = album,
+                                    onClick = { actions.clickOnFeaturedAlbum(album.id) },
                                 )
-                            } ?: run {
-                                Spacer(modifier = Modifier.weight(1f))
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(Spacing.Small))
                 }
-            }
+
+                state.recentlyViewedContent?.takeIf { it.isNotEmpty() }?.let { recentlyViewedItems ->
+                    Spacer(modifier = Modifier.height(Spacing.Medium))
+                    Text(
+                        stringResource(R.string.recently_viewed_item_header),
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    Spacer(modifier = Modifier.height(Spacing.Medium))
+
+                    val maxGroupSize = 2
+                    recentlyViewedItems.forEachGroup(maxGroupSize) { items ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.Small)
+                        ) {
+                            for (i in 0 until maxGroupSize) {
+                                val item = items.getOrNull(i)
+                                val itemState = item?.collectAsState(null)
+                                itemState?.value?.let {
+                                    RecentlyViewedItem(
+                                        modifier = Modifier
+                                            .weight(1f),
+                                        item = it,
+                                        actions = actions
+                                    )
+                                } ?: run {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(Spacing.Small))
+                    }
+                }
 
                 // Popular content section
                 state.popularContent?.let { popularContent ->
@@ -272,10 +304,11 @@ private fun HomeScreenContent(
                 val isRecentlyViewedLoaded = state.recentlyViewedContent != null
                 val isPopularLoaded = state.popularContent != null
                 val hasRecentlyViewed = state.recentlyViewedContent?.isNotEmpty() == true
+                val hasFeatured = state.featuredContent?.albums?.isNotEmpty() == true
                 val hasPopularAlbums = state.popularContent?.albums?.isNotEmpty() == true
                 val hasPopularArtists = state.popularContent?.artists?.isNotEmpty() == true
                 if (isRecentlyViewedLoaded && isPopularLoaded &&
-                    !hasRecentlyViewed && !hasPopularAlbums && !hasPopularArtists) {
+                    !hasRecentlyViewed && !hasFeatured && !hasPopularAlbums && !hasPopularArtists) {
                     Spacer(modifier = Modifier.height(Spacing.ExtraLarge))
                     Text(
                         text = stringResource(R.string.home_empty_state),
@@ -290,6 +323,92 @@ private fun HomeScreenContent(
             }
         }
     }
+}
+
+@Composable
+private fun FeaturedHero(
+    album: FeaturedAlbumState,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(CornerRadius.Medium),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = Elevation.Medium),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(148.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        ) {
+            NullablePezzottifyImage(
+                url = album.imageUrl,
+                shape = PezzottifyImageShape.FullSize,
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .aspectRatio(1f, matchHeightConstraintsFirst = true)
+                    .clip(
+                        RoundedCornerShape(
+                            topStart = CornerRadius.Medium,
+                            bottomStart = CornerRadius.Medium,
+                            topEnd = 0.dp,
+                            bottomEnd = 0.dp,
+                        )
+                    ),
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(Spacing.Medium),
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = stringResource(R.string.featured_this_week),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(modifier = Modifier.height(Spacing.ExtraSmall))
+                Text(
+                    text = album.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                if (album.artistNames.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(Spacing.ExtraSmall))
+                    Text(
+                        text = album.artistNames.joinToString(", "),
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FeaturedAlbumItem(
+    album: FeaturedAlbumState,
+    onClick: () -> Unit,
+) {
+    PopularAlbumItem(
+        album = PopularAlbumState(
+            id = album.id,
+            name = album.name,
+            imageUrl = album.imageUrl,
+            artistNames = album.artistNames,
+        ),
+        onClick = onClick,
+    )
 }
 
 @Composable
