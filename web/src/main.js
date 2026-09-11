@@ -8,9 +8,13 @@ import { useDebugStore } from "./store/debug";
 import { useRemoteStore } from "./store/remote";
 import { useAuthStore } from "./store/auth";
 import { setupAxiosInterceptors } from "./services/api";
+import { setupServiceWorkerBridge } from "./services/oidc";
 
 // Setup axios interceptors for auth token handling BEFORE creating stores
 setupAxiosInterceptors();
+
+// Let the service worker request a fresh token for media requests
+setupServiceWorkerBridge();
 
 const pinia = createPinia();
 const app = createApp(App);

@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * Also handles 429 (Too Many Requests) responses with exponential backoff.
  */
-internal class SessionExpiredInterceptor(
+class SessionExpiredInterceptor(
     private val sessionExpiredHandler: SessionExpiredHandler,
     private val tokenRefresher: TokenRefresher,
     private val logger: Logger,

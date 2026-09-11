@@ -73,6 +73,8 @@ function notifyServiceWorker(idToken) {
     return;
   }
 
+  setupServiceWorkerBridge();
+
   const send = (worker) => {
     if (!worker) return;
     worker.postMessage({
@@ -88,6 +90,45 @@ function notifyServiceWorker(idToken) {
       .then((registration) => send(registration.active))
       .catch(() => {});
   }
+}
+
+let serviceWorkerBridgeReady = false;
+
+/**
+ * Answer token requests coming from the service worker.
+ *
+ * The service worker can be terminated and restarted, losing the token it was
+ * given, so it asks a page for a fresh one when a media request needs auth.
+ */
+function handleServiceWorkerTokenRequest(event) {
+  const data = event?.data;
+  if (!data || data.type !== "GET_AUTH_TOKEN") return;
+
+  const port = event.ports?.[0];
+  if (!port) return;
+
+  getIdToken()
+    .then((idToken) => {
+      port.postMessage({
+        token: idToken ? authorizationHeaderValue(idToken) : null,
+      });
+    })
+    .catch(() => {
+      port.postMessage({ token: null });
+    });
+}
+
+export function setupServiceWorkerBridge() {
+  if (serviceWorkerBridgeReady) return;
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
+    return;
+  }
+
+  navigator.serviceWorker.addEventListener(
+    "message",
+    handleServiceWorkerTokenRequest
+  );
+  serviceWorkerBridgeReady = true;
 }
 
 /**
@@ -516,4 +557,5 @@ export default {
   clearStorage,
   storeLastUsername,
   getLastUsername,
+  setupServiceWorkerBridge,
 };
