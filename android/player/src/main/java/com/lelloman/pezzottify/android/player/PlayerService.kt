@@ -25,12 +25,15 @@ import coil3.request.allowHardware
 import coil3.toBitmap
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.domain.auth.SessionExpiredHandler
+import com.lelloman.pezzottify.android.domain.auth.TokenRefresher
 import com.lelloman.pezzottify.android.domain.auth.bearerAuthorization
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider
 import com.lelloman.pezzottify.android.domain.player.TrackMetadata
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.remoteapi.internal.OkHttpClientFactory
+import com.lelloman.pezzottify.android.remoteapi.internal.SessionExpiredInterceptor
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -52,6 +55,12 @@ class PlaybackService : MediaSessionService() {
 
     @Inject
     lateinit var okHttpClientFactory: OkHttpClientFactory
+
+    @Inject
+    lateinit var tokenRefresher: TokenRefresher
+
+    @Inject
+    lateinit var sessionExpiredHandler: SessionExpiredHandler
 
     @Inject
     internal lateinit var playerServiceEventsEmitter: PlayerServiceEventsEmitter
@@ -85,6 +94,9 @@ class PlaybackService : MediaSessionService() {
                         .build()
                 )
             }
+            .addInterceptor(
+                SessionExpiredInterceptor(sessionExpiredHandler, tokenRefresher, logger)
+            )
             .build()
     }
 
