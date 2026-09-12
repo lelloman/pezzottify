@@ -40,6 +40,8 @@ const WIKIDATA_SPARQL_URL: &str = "https://query.wikidata.org/sparql";
 struct MetadataEnrichmentRunParams {
     batch_size: Option<usize>,
     entity_types: Option<Vec<String>>,
+    /// Evaluate only these tracks, without claiming queues or writing Works.
+    work_dry_run_track_ids: Option<Vec<String>>,
 }
 
 fn normalize_entity_types(entity_types: Option<Vec<String>>) -> Vec<String> {
@@ -47,7 +49,12 @@ fn normalize_entity_types(entity_types: Option<Vec<String>>) -> Vec<String> {
         .unwrap_or_default()
         .into_iter()
         .map(|entity_type| entity_type.trim().to_ascii_lowercase())
-        .filter(|entity_type| matches!(entity_type.as_str(), "artist" | "album" | "track"))
+        .filter(|entity_type| {
+            matches!(
+                entity_type.as_str(),
+                "artist" | "album" | "track" | "work_resolution"
+            )
+        })
         .collect()
 }
 
@@ -178,7 +185,7 @@ fn track_context_from_resolved(
 #[derive(Clone)]
 pub struct MetadataEnrichmentJob {
     settings: MetadataEnrichmentJobSettings,
-    agent: AgentSettings,
+    pub(super) agent: AgentSettings,
 }
 
 impl MetadataEnrichmentJob {
@@ -340,6 +347,14 @@ impl MetadataEnrichmentJob {
         item: &EnrichmentQueueItemV1,
     ) -> std::result::Result<(), ItemError> {
         let mut wikidata_enrichment = None;
+        if item.entity_type == "work_resolution" {
+            self.enrich_work(ctx, store, provider, &item.entity_id)
+                .await?;
+            store
+                .complete_enrichment_queue_item(item.id)
+                .map_err(|e| ItemError::retryable(e.to_string()))?;
+            return Ok(());
+        }
         if item.entity_type == "artist" {
             match self
                 .try_enrich_artist_from_wikidata(ctx, store, &item.entity_id)
@@ -751,12 +766,54 @@ impl MetadataEnrichmentJob {
             None => MetadataEnrichmentRunParams::default(),
         };
         let batch_size = params.batch_size.unwrap_or(self.settings.batch_size).max(1);
+        if let Some(ids) = params.work_dry_run_track_ids {
+            if ids.is_empty()
+                || ids.len() > 50
+                || ids.iter().any(|id| id.trim().is_empty() || id.len() > 200)
+            {
+                return Err(JobError::ExecutionFailed(
+                    "work_dry_run_track_ids must contain 1–50 track IDs".into(),
+                ));
+            }
+            if !self.agent.enabled {
+                return Err(JobError::ExecutionFailed(
+                    "Work evaluation requires an enabled LLM provider".into(),
+                ));
+            }
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+            let provider = build_provider(&self.agent);
+            let audit = JobAuditLogger::new(ctx.server_db.clone(), self.id());
+            audit.log_started(Some(
+                serde_json::json!({"work_dry_run":true,"track_ids":ids}),
+            ));
+            let mut results = Vec::new();
+            for id in ids {
+                let result = runtime.block_on(enrich_until_cancelled(
+                    &ctx.cancellation_token,
+                    store,
+                    &[],
+                    self.evaluate_work(ctx, store, provider.as_ref(), &id),
+                ))?;
+                results.push(match result {
+                    Ok(evaluation) => serde_json::json!({"track_id":id,"evaluation":evaluation}),
+                    Err(error) => serde_json::json!({"track_id":id,"error":format!("{error:?}")}),
+                });
+            }
+            audit.log_completed(Some(
+                serde_json::json!({"work_dry_run":true,"results":results}),
+            ));
+            return Ok(());
+        }
         let entity_types = normalize_entity_types(params.entity_types);
         let selected_entity_types = if entity_types.is_empty() {
             vec![
                 "artist".to_string(),
                 "album".to_string(),
                 "track".to_string(),
+                "work_resolution".to_string(),
             ]
         } else {
             entity_types.clone()
@@ -790,7 +847,10 @@ impl MetadataEnrichmentJob {
         let mut seeded = 0usize;
         let mut batch = claim_batch()?;
         if batch.is_empty() {
-            seeded = self.seed_listening_backfill(ctx, store, &entity_types)?;
+            seeded += self.seed_listening_backfill(ctx, store, &entity_types)?;
+            if entity_types.is_empty() || entity_types.iter().any(|t| t == "work_resolution") {
+                seeded += self.seed_work_resolution(ctx, store, batch_size.min(100))?;
+            }
             if seeded > 0 {
                 batch = claim_batch()?;
             }
@@ -889,7 +949,7 @@ impl MetadataEnrichmentJob {
 }
 
 #[derive(Debug)]
-enum ItemError {
+pub(super) enum ItemError {
     Retryable(String),
     Permanent(String),
 }

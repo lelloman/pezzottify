@@ -278,6 +278,75 @@ async fn get_genre_radio(
     }
 }
 
+#[derive(Deserialize, Default)]
+struct WorkQuery {
+    #[serde(default)]
+    query: String,
+    limit: Option<usize>,
+    #[serde(default)]
+    offset: usize,
+}
+
+async fn search_works(
+    _session: Session,
+    State(database): State<DatabaseHandles>,
+    Query(query): Query<WorkQuery>,
+) -> Response {
+    let Some(store) = &database.enrichment_read else {
+        return Json(serde_json::json!([])).into_response();
+    };
+    if query.query.trim().is_empty() || query.query.len() > 500 {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    match store
+        .run(DbPriority::Interactive, move |store| {
+            store.search_works(&query.query, query.limit.unwrap_or(25).clamp(1, 100))
+        })
+        .await
+    {
+        Ok(works) => Json(works).into_response(),
+        Err(err) => ApiError::from(err).into_response(),
+    }
+}
+
+async fn get_work(
+    _session: Session,
+    State(database): State<DatabaseHandles>,
+    Path(id): Path<String>,
+    Query(query): Query<WorkQuery>,
+) -> Response {
+    let Some(store) = &database.enrichment_read else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let result = store
+        .run(DbPriority::Interactive, move |store| {
+            let Some(work) = store.get_work(&id)? else {
+                return Ok(None);
+            };
+            let ids = store.list_work_track_ids(
+                &id,
+                query.limit.unwrap_or(50).clamp(1, 100),
+                query.offset,
+            )?;
+            let next_offset = query.offset.saturating_add(ids.len());
+            let has_more = !store.list_work_track_ids(&id, 1, next_offset)?.is_empty();
+            Ok(Some((work, ids, next_offset, has_more)))
+        })
+        .await;
+    match result {
+        Ok(Some((work, ids, next_offset, has_more))) => {
+            match database.catalog_read.run(DbPriority::Interactive, move |catalog| {
+                ids.iter().map(|id| catalog.get_resolved_track(id)).collect::<anyhow::Result<Vec<_>>>()
+            }).await {
+                Ok(tracks) => Json(serde_json::json!({"work":work,"tracks":tracks.into_iter().flatten().collect::<Vec<_>>(),"next_offset":next_offset,"has_more":has_more})).into_response(),
+                Err(err) => ApiError::from(err).into_response(),
+            }
+        }
+        Ok(None) => ApiError::not_found("catalog_item_not_found", "Work not found").into_response(),
+        Err(err) => ApiError::from(err).into_response(),
+    }
+}
+
 pub async fn get_track(
     _session: Session,
     State(database): State<DatabaseHandles>,

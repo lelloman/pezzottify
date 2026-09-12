@@ -98,6 +98,8 @@ export const useStaticsStore = defineStore("statics", () => {
       availability: resolvedTrack.track.availability || "available",
       enrichment_status: resolvedTrack.enrichment_status || null,
       enrichment: resolvedTrack.enrichment || null,
+      work_resolution: resolvedTrack.work_resolution || null,
+      work_enrichment_status: resolvedTrack.work_enrichment_status || null,
     };
 
     return track;

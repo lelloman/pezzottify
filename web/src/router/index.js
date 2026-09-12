@@ -33,6 +33,12 @@ const router = createRouter({
           meta: { requiresAuth: true },
         },
         {
+          path: "/work/:workId",
+          name: "work",
+          component: HomeView,
+          meta: { requiresAuth: true },
+        },
+        {
           path: "/artist/:artistId?",
           name: "artist",
           component: HomeView,

@@ -2,6 +2,9 @@ mod models;
 mod schema;
 mod store;
 mod trait_def;
+mod works;
+
+pub use works::{Work, WorkProposal, WorkResolution};
 
 pub use models::{
     AlbumEnrichment, AlbumEnrichmentV1, ArtistEnrichment, ArtistEnrichmentV1, AudioFeatures,

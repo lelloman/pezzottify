@@ -84,7 +84,18 @@
     <section v-if="detailRows.length" class="detailSection">
       <div v-for="row in detailRows" :key="row.label" class="detailItem">
         <dt>{{ row.label }}</dt>
-        <dd>{{ row.value }}</dd>
+        <dd>
+          <RouterLink
+            v-if="row.label === 'Work' && track.work_resolution?.work"
+            :to="{
+              name: 'work',
+              params: { workId: track.work_resolution.work.id },
+            }"
+          >
+            {{ track.work_resolution.work.title }}
+          </RouterLink>
+          <template v-else>{{ row.value }}</template>
+        </dd>
       </div>
     </section>
 
@@ -295,7 +306,10 @@ const movementLabel = computed(() => {
 const detailRows = computed(() => {
   const profile = trackProfile.value || {};
   return [
-    { label: "Work", value: profile.work_title },
+    {
+      label: "Work",
+      value: track.value?.work_resolution?.work?.title || profile.work_title,
+    },
     { label: "Movement", value: movementLabel.value },
     { label: "Form", value: titleCase(profile.form) },
     { label: "Key", value: profile.key_signature },
@@ -316,7 +330,11 @@ const trackContributors = computed(() =>
 
 const isTrackAvailable = computed(() => {
   const availability = track.value?.availability;
-  return userStore.isProxyModeEnabled || !availability || availability === "available";
+  return (
+    userStore.isProxyModeEnabled ||
+    !availability ||
+    availability === "available"
+  );
 });
 
 const isTrackFetching = computed(

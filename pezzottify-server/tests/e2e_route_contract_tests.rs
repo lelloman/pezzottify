@@ -20,6 +20,8 @@ async fn protected_route_groups_remain_mounted_and_authenticated() {
             StatusCode::UNAUTHORIZED,
         ),
         (Method::GET, "/v1/user/playlists", StatusCode::UNAUTHORIZED),
+        (Method::GET, "/v1/content/work/unknown", StatusCode::UNAUTHORIZED),
+        (Method::GET, "/v1/content/works?query=song", StatusCode::UNAUTHORIZED),
         (Method::GET, "/v1/sync/state", StatusCode::UNAUTHORIZED),
         (Method::GET, "/v1/admin/users", StatusCode::UNAUTHORIZED),
         (Method::GET, "/v1/download/limits", StatusCode::UNAUTHORIZED),
