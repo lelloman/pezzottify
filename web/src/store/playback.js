@@ -12,6 +12,7 @@ import { useStaticsStore } from "./statics";
 import { LocalOutlet } from "./playbackOutlets/LocalOutlet";
 import { useRemoteStore } from "./remote";
 import { useUserStore } from "./user";
+import { createRadioCreation } from "../utils/radioCreation";
 
 export const usePlaybackStore = defineStore("playback", () => {
   const staticsStore = useStaticsStore();
@@ -53,6 +54,12 @@ export const usePlaybackStore = defineStore("playback", () => {
   const playlistsHistory = ref(null);
   const currentPlaylistIndex = ref(null);
   const smartContinuationInFlightSignature = ref(null);
+  const radioCreationState = ref({ status: "idle" });
+  const radioCreation = createRadioCreation({
+    onState: (state) => {
+      radioCreationState.value = state;
+    },
+  });
 
   // ============================================
   // Session store reference (set externally to avoid circular imports)
@@ -192,9 +199,7 @@ export const usePlaybackStore = defineStore("playback", () => {
         const savedCurrentPlaylistIndex =
           localStorage.getItem("currentPlaylistIndex") ||
           playlistsHistory.value.length - 1;
-        currentPlaylistIndex.value = Number.parseInt(
-          savedCurrentPlaylistIndex,
-        );
+        currentPlaylistIndex.value = Number.parseInt(savedCurrentPlaylistIndex);
 
         const loadedTrackIndex = localStorage.getItem("currentTrackIndex");
         if (loadedTrackIndex) {
@@ -206,8 +211,7 @@ export const usePlaybackStore = defineStore("playback", () => {
             indexValue < currentPlaylist.value.tracksIds.length
           ) {
             currentTrackIndex.value = indexValue;
-            currentTrackId.value =
-              currentPlaylist.value.tracksIds[indexValue];
+            currentTrackId.value = currentPlaylist.value.tracksIds[indexValue];
           }
         }
 
@@ -222,9 +226,7 @@ export const usePlaybackStore = defineStore("playback", () => {
           progressPercent.value = savedPercent;
         }
 
-        const savedSec = Number.parseFloat(
-          localStorage.getItem("progressSec"),
-        );
+        const savedSec = Number.parseFloat(localStorage.getItem("progressSec"));
         if (!Number.isNaN(savedSec)) {
           progressSec.value = savedSec;
         }
@@ -377,7 +379,10 @@ export const usePlaybackStore = defineStore("playback", () => {
       {
         context: context || { name: "Remote", id: null, edited: false },
         tracksIds: trackIds,
-        type: context?.type === "radio" ? PLAYBACK_CONTEXTS.radio : PLAYBACK_CONTEXTS.userMix,
+        type:
+          context?.type === "radio"
+            ? PLAYBACK_CONTEXTS.radio
+            : PLAYBACK_CONTEXTS.userMix,
       },
     ];
     currentPlaylistIndex.value = 0;
@@ -388,6 +393,7 @@ export const usePlaybackStore = defineStore("playback", () => {
   // ============================================
 
   function enterRemoteMode() {
+    radioCreation.cancel();
     console.info("[Playback] enterRemoteMode");
     localOutlet.stop();
     mode.value = "remote";
@@ -395,6 +401,7 @@ export const usePlaybackStore = defineStore("playback", () => {
   }
 
   function exitRemoteMode() {
+    radioCreation.cancel();
     console.info("[Playback] exitRemoteMode");
     stopInterpolation();
     mode.value = "local";
@@ -534,7 +541,8 @@ export const usePlaybackStore = defineStore("playback", () => {
     if (!currentPlaylist.value || currentTrackIndex.value === null) return;
 
     const tracksIds = currentPlaylist.value.tracksIds || [];
-    if (tracksIds.length === 0 || currentTrackIndex.value !== tracksIds.length - 1) {
+    const remaining = tracksIds.length - currentTrackIndex.value - 1;
+    if (tracksIds.length === 0 || remaining > 1 || remaining < 0) {
       return;
     }
 
@@ -542,22 +550,36 @@ export const usePlaybackStore = defineStore("playback", () => {
     if (smartContinuationInFlightSignature.value === signature) return;
     smartContinuationInFlightSignature.value = signature;
 
-    const contextTrackIds = tracksIds
-      .slice(0, currentTrackIndex.value + 1)
-      .slice(-10);
-    const nextTrackIds = await remoteStore.fetchContinuationRecommendations({
-      contextTrackIds,
-      excludeTrackIds: tracksIds,
-      count: 1,
-    });
+    // Include queued tracks in the seed and keep three tracks ahead when possible.
+    const contextTrackIds = tracksIds.slice(-10);
+    let nextTrackIds = [];
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt)
+        await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
+      if (
+        currentQueueSignature() !== signature ||
+        !userStore.isSmartContinuationEnabled ||
+        mode.value !== "local"
+      )
+        break;
+      nextTrackIds = await remoteStore.fetchContinuationRecommendations({
+        contextTrackIds,
+        excludeTrackIds: tracksIds,
+        count: 3 - remaining,
+      });
+      if (nextTrackIds.length) break;
+    }
 
     if (smartContinuationInFlightSignature.value !== signature) return;
     smartContinuationInFlightSignature.value = null;
+    if (!userStore.isSmartContinuationEnabled || mode.value !== "local") return;
     if (currentQueueSignature() !== signature) return;
     const existingTrackIds = new Set(currentPlaylist.value?.tracksIds || []);
-    const nextTrackId = nextTrackIds.find((trackId) => !existingTrackIds.has(trackId));
-    if (nextTrackId) {
-      addTracksToPlaylist([nextTrackId]);
+    const additions = [...new Set(nextTrackIds)].filter(
+      (trackId) => !existingTrackIds.has(trackId),
+    );
+    if (additions.length) {
+      addTracksToPlaylist(additions, true);
     }
   };
 
@@ -566,6 +588,7 @@ export const usePlaybackStore = defineStore("playback", () => {
   // ============================================
 
   const setNewPlayingPlaylist = (newPlaylist) => {
+    radioCreation.cancel();
     console.debug("[Playback] setNewPlayingPlaylist", {
       size: newPlaylist?.tracksIds?.length || 0,
     });
@@ -623,11 +646,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     currentTrackId.value = trackId;
 
     if (mode.value === "local") {
-      localOutlet.loadTrack(
-        trackId,
-        false,
-        seekPercent || pendingSeekPercent,
-      );
+      localOutlet.loadTrack(trackId, false, seekPercent || pendingSeekPercent);
     }
     pendingSeekPercent = null;
   };
@@ -637,6 +656,7 @@ export const usePlaybackStore = defineStore("playback", () => {
   // ============================================
 
   const setAlbumId = async (albumId, discIndex, trackIndex) => {
+    radioCreation.cancel();
     if (mode.value === "remote") return;
 
     const album = await Promise.resolve(staticsStore.waitAlbumData(albumId));
@@ -695,16 +715,26 @@ export const usePlaybackStore = defineStore("playback", () => {
     }
   };
 
-  const setRadioFromItem = async (entityType, entityId, count = 50) => {
-    if (mode.value === "remote") return [];
-    const trackIds = await remoteStore.fetchRadioTrackIds(entityType, entityId, count);
-    if (trackIds.length > 0) {
+  const commitRadio = ({ trackIds, context }) => {
+    if (mode.value === "remote") {
+      getSessionStore()?.sendCommand("loadTrackIds", { trackIds, context });
+    } else {
+      setPlaylistFromTrackIds(trackIds, 0, true, context);
+    }
+  };
+
+  const setRadioFromItem = (entityType, entityId, count = 50) =>
+    radioCreation.start(async (signal) => {
+      const trackIds = await remoteStore.fetchRadioTrackIds(
+        entityType,
+        entityId,
+        count,
+        signal,
+      );
       const label = await resolveRadioSeedLabel(entityType, entityId);
-      setPlaylistFromTrackIds(
+      return {
         trackIds,
-        0,
-        true,
-        buildRadioContext({
+        context: buildRadioContext({
           source: "basic",
           entityType,
           entityId,
@@ -712,13 +742,14 @@ export const usePlaybackStore = defineStore("playback", () => {
           count,
           settings: { count },
         }),
-      );
-    }
-    return trackIds;
-  };
+      };
+    }, commitRadio);
 
-  const setAdvancedRadioFromItem = async (entityType, entityId, radioRequest) => {
-    if (mode.value === "remote") return [];
+  const setAdvancedRadioFromItem = async (
+    entityType,
+    entityId,
+    radioRequest,
+  ) => {
     const request = {
       ...radioRequest,
       seed: {
@@ -726,14 +757,12 @@ export const usePlaybackStore = defineStore("playback", () => {
         entity_id: entityId,
       },
     };
-    const trackIds = await remoteStore.buildRadioTrackIds(request);
-    if (trackIds.length > 0) {
+    return radioCreation.start(async (signal) => {
+      const trackIds = await remoteStore.buildRadioTrackIds(request, signal);
       const label = await resolveRadioSeedLabel(entityType, entityId);
-      setPlaylistFromTrackIds(
+      return {
         trackIds,
-        0,
-        true,
-        buildRadioContext({
+        context: buildRadioContext({
           source: "custom",
           entityType,
           entityId,
@@ -741,12 +770,15 @@ export const usePlaybackStore = defineStore("playback", () => {
           count: request.count || trackIds.length,
           settings: request,
         }),
-      );
-    }
-    return trackIds;
+      };
+    }, commitRadio);
   };
 
-  const setGenreRadio = (genreName, trackIds, count = trackIds?.length || 0) => {
+  const setGenreRadio = (
+    genreName,
+    trackIds,
+    count = trackIds?.length || 0,
+  ) => {
     setPlaylistFromTrackIds(
       trackIds,
       0,
@@ -761,6 +793,22 @@ export const usePlaybackStore = defineStore("playback", () => {
       }),
     );
   };
+
+  const createGenreRadio = (genreName, count = 50) =>
+    radioCreation.start(
+      async (signal) => ({
+        trackIds: await remoteStore.fetchGenreRadio(genreName, count, signal),
+        context: buildRadioContext({
+          source: "genre",
+          entityType: "genre",
+          entityId: genreName,
+          label: genreName,
+          count,
+          settings: { genre: genreName, count },
+        }),
+      }),
+      commitRadio,
+    );
 
   // ============================================
   // Playback controls
@@ -873,7 +921,9 @@ export const usePlaybackStore = defineStore("playback", () => {
   const seekToPercentage = (percentage) => {
     if (mode.value === "remote") {
       const durMs = currentTrack.value?.duration || 0;
-      getSessionStore()?.sendCommand("seek", { position: (durMs / 1000) * percentage });
+      getSessionStore()?.sendCommand("seek", {
+        position: (durMs / 1000) * percentage,
+      });
       return;
     }
 
@@ -952,6 +1002,7 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const stop = () => {
+    radioCreation.cancel();
     if (mode.value === "remote") return;
 
     localOutlet.stop();
@@ -1015,9 +1066,7 @@ export const usePlaybackStore = defineStore("playback", () => {
       newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
       newPlaylist.context = { name: null, id: null, edited: false };
       pushNewHistory = true;
-    } else if (
-      currentPlaylist.value.type === PLAYBACK_CONTEXTS.userPlaylist
-    ) {
+    } else if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.userPlaylist) {
       newPlaylist.context.edited = true;
     } else if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.radio) {
       newPlaylist.context.edited = true;
@@ -1048,7 +1097,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     savePlaylistHistory(playlistsHistory.value);
   };
 
-  const addTracksToPlaylist = (tracksIds) => {
+  const addTracksToPlaylist = (tracksIds, automatic = false) => {
     if (mode.value === "remote") return;
     if (!currentPlaylist.value) return;
 
@@ -1060,15 +1109,19 @@ export const usePlaybackStore = defineStore("playback", () => {
       tracksIds: newTracks,
     };
 
-    if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.album) {
+    if (!automatic && currentPlaylist.value.type === PLAYBACK_CONTEXTS.album) {
       newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
       newPlaylist.context = { name: null, id: null, edited: false };
       pushNewHistory = true;
     } else if (
+      !automatic &&
       currentPlaylist.value.type === PLAYBACK_CONTEXTS.userPlaylist
     ) {
       newPlaylist.context.edited = true;
-    } else if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.radio) {
+    } else if (
+      !automatic &&
+      currentPlaylist.value.type === PLAYBACK_CONTEXTS.radio
+    ) {
       newPlaylist.context.edited = true;
     }
 
@@ -1099,9 +1152,7 @@ export const usePlaybackStore = defineStore("playback", () => {
       newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
       newPlaylist.context = { name: null, id: null, edited: false };
       pushNewHistory = true;
-    } else if (
-      currentPlaylist.value.type === PLAYBACK_CONTEXTS.userPlaylist
-    ) {
+    } else if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.userPlaylist) {
       newPlaylist.context.edited = true;
     } else if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.radio) {
       newPlaylist.context.edited = true;
@@ -1123,7 +1174,11 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   watch(
-    [currentTrackIndex, currentPlaylist, () => userStore.isSmartContinuationEnabled],
+    [
+      currentTrackIndex,
+      currentPlaylist,
+      () => userStore.isSmartContinuationEnabled,
+    ],
     () => {
       maybeFetchSmartContinuation();
     },
@@ -1136,6 +1191,9 @@ export const usePlaybackStore = defineStore("playback", () => {
   return {
     // Core state
     mode,
+    radioCreationState,
+    cancelRadioCreation: radioCreation.cancel,
+    retryRadioCreation: radioCreation.retry,
     currentTrackId,
     currentTrackIndex,
     currentPlaylist,
@@ -1159,6 +1217,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     setUserPlaylist,
     setPlaylistFromTrackIds,
     setGenreRadio,
+    createGenreRadio,
     setRadioFromItem,
     setAdvancedRadioFromItem,
 

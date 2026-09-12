@@ -519,8 +519,15 @@
     <!-- PLAYBACK SETTINGS -->
     <string name="playback_section">Playback</string>
     <string name="smart_continuation">Smart continuation</string>
-    <string name="smart_continuation_description">Automatically add a related track when the current queue reaches its final track.</string>
+    <string name="smart_continuation_description">Automatically queue related tracks as the current queue nears its end.</string>
     <string name="listen_to_radio">Listen to radio</string>
+    <string name="radio_creating">Creating radio…</string>
+    <string name="radio_creation_timeout">Radio creation timed out. Please try again.</string>
+    <string name="radio_creation_error">Could not create radio. Please try again.</string>
+    <string name="radio_creation_empty">No playable tracks found for this radio.</string>
+    <string name="radio_creation_retry">Retry</string>
+    <string name="radio_creation_cancel">Cancel</string>
+    <string name="radio_creation_dismiss">Dismiss</string>
     <!-- PLAYBACK SETTINGS -->
 
     <!-- PLAYLIST -->

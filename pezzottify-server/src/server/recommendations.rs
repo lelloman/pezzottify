@@ -256,7 +256,10 @@ async fn get_radio(
     let count = query.count.unwrap_or(50).clamp(1, 200);
     let catalog = state.database.catalog_read.clone();
     let namespace = track_namespace(state.config.audio_embeddings.as_ref());
-    let album_namespace = album_namespace_for_track_namespace(&namespace);
+    let album_namespace = album_namespace_for_track_namespace_with_settings(
+        state.config.audio_embeddings.as_ref(),
+        &namespace,
+    );
 
     match catalog
         .run(
@@ -539,6 +542,11 @@ fn build_radio(
     request: RadioBuildRequest,
 ) -> anyhow::Result<Vec<String>> {
     validate_entity_type(&request.seed.entity_type)?;
+    if request.criteria.len() > 8 || request.toward.len() > 8 || request.away.len() > 8 {
+        return Err(anyhow::anyhow!(
+            "invalid radio request: at most 8 criteria and 8 references per direction are allowed"
+        ));
+    }
     if let Some(recipe_id) = request.recipe_id.as_deref() {
         if !recipes_contain_recipe(settings, recipe_id) {
             return Err(anyhow::anyhow!(
@@ -610,10 +618,9 @@ fn build_radio(
         else {
             continue;
         };
-        let results = catalog_store.search_entity_embeddings(
+        let results = catalog_store.search_available_track_embeddings(
             &criterion.namespace,
             &query,
-            Some("track"),
             oversample,
         )?;
         for search_result in results {
@@ -670,13 +677,7 @@ fn build_radio(
                 let Some(resolved) = catalog_store.get_resolved_track(track_id)? else {
                     continue;
                 };
-                if !resolved_track_passes_filters(&resolved, request.filters.as_ref())
-                    || artist_recently_used(
-                        &resolved,
-                        selection.result.len(),
-                        selection.artist_last_positions,
-                    )
-                {
+                if !resolved_track_passes_filters(&resolved, request.filters.as_ref()) {
                     continue;
                 }
                 selection.exclude.insert(track_id.clone());
@@ -709,7 +710,11 @@ fn build_radio(
         if !resolved_track_passes_filters(&resolved, request.filters.as_ref()) {
             continue;
         }
-        let jitter = rng.random_range(0.0..(0.1 * randomness));
+        let jitter = if randomness > 0.0 {
+            rng.random_range(0.0..(0.1 * randomness))
+        } else {
+            0.0
+        };
         ranked.push(RankedRadioCandidate {
             track_id,
             resolved,
@@ -738,15 +743,24 @@ fn select_radio_candidates(
     selection: &mut RadioSelectionState<'_>,
 ) {
     while selection.result.len() < count && !ranked.is_empty() {
+        ranked.retain(|candidate| !selection.exclude.contains(&candidate.track_id));
+        let has_fresh_artist = ranked.iter().any(|candidate| {
+            !artist_recently_used(
+                &candidate.resolved,
+                selection.result.len(),
+                selection.artist_last_positions,
+            )
+        });
         let Some((selected_index, _)) = ranked
             .iter()
             .enumerate()
             .filter(|(_, candidate)| {
-                !artist_recently_used(
-                    &candidate.resolved,
-                    selection.result.len(),
-                    selection.artist_last_positions,
-                )
+                !has_fresh_artist
+                    || !artist_recently_used(
+                        &candidate.resolved,
+                        selection.result.len(),
+                        selection.artist_last_positions,
+                    )
             })
             .map(|(index, candidate)| {
                 (
@@ -969,6 +983,11 @@ fn normalize_radio_criteria(
         .iter()
         .map(|criterion| criterion.weight)
         .sum::<f32>();
+    if !total_weight.is_finite() {
+        return Err(anyhow::anyhow!(
+            "invalid radio request: combined criterion weights are too large"
+        ));
+    }
     for criterion in &mut criteria {
         criterion.weight /= total_weight;
     }
@@ -1179,8 +1198,7 @@ fn append_radio_recommendations(
     }
 
     let oversample = (count.saturating_sub(selection.result.len()) * 16).clamp(100, 1000);
-    let results =
-        catalog_store.search_entity_embeddings(namespace, seed, Some("track"), oversample)?;
+    let results = catalog_store.search_available_track_embeddings(namespace, seed, oversample)?;
 
     let mut rng = rand::rng();
     let mut scored = results
@@ -1431,8 +1449,7 @@ fn recommend_tracks(
     }
 
     let oversample = (count * 16).clamp(100, 1000);
-    let results =
-        catalog_store.search_entity_embeddings(namespace, seed, Some("track"), oversample)?;
+    let results = catalog_store.search_available_track_embeddings(namespace, seed, oversample)?;
 
     let mut rng = rand::rng();
     let mut scored = results
@@ -1660,5 +1677,180 @@ mod tests {
         assert!((artist_cooldowns["artist-a"] - 0.4225).abs() < f32::EPSILON);
         assert!((album_cooldowns["album-b"] - 0.65).abs() < f32::EPSILON);
         assert!((artist_cooldowns["artist-c"] - 1.0).abs() < f32::EPSILON);
+    }
+
+    fn embedding(
+        entity_type: &str,
+        id: &str,
+        namespace: &str,
+        vector: Vec<f32>,
+    ) -> crate::catalog_store::EntityEmbeddingUpsert {
+        crate::catalog_store::EntityEmbeddingUpsert {
+            entity_type: entity_type.into(),
+            entity_id: id.into(),
+            namespace: namespace.into(),
+            vector,
+            dtype: "float32".into(),
+            metadata: serde_json::json!({}),
+            model: serde_json::json!({}),
+        }
+    }
+
+    #[test]
+    fn album_radio_builder_handles_seed_inclusion_zero_randomness_and_small_catalogs() {
+        use crate::catalog_store::SqliteCatalogStore;
+        let dir = tempfile::tempdir().unwrap();
+        let store = SqliteCatalogStore::new(
+            dir.path().join("catalog.db"),
+            dir.path(),
+            2,
+            &crate::backup::DbRegistry::new(),
+        )
+        .unwrap();
+        let first = resolved_track("seed-1", "album-seed", &["artist"]);
+        store.create_artist(&first.artists[0].artist).unwrap();
+        store
+            .create_album(&first.album, &["artist".into()])
+            .unwrap();
+        let other = resolved_track("other", "album-other", &["artist"]);
+        store
+            .create_album(&other.album, &["artist".into()])
+            .unwrap();
+        for track in [
+            first,
+            resolved_track("seed-2", "album-seed", &["artist"]),
+            other,
+        ] {
+            store
+                .create_track(&track.track, &["artist".into()])
+                .unwrap();
+            store
+                .set_track_audio_uri(&track.track.id, "audio.ogg")
+                .unwrap();
+            store
+                .upsert_entity_embedding(&embedding(
+                    "track",
+                    &track.track.id,
+                    DEFAULT_TRACK_NAMESPACE,
+                    vec![1.0, 0.0],
+                ))
+                .unwrap();
+        }
+        let request = |include| {
+            serde_json::from_value::<RadioBuildRequest>(serde_json::json!({
+                "seed": {"entity_type": "album", "entity_id": "album-seed"},
+                "count": 10, "randomness": 0, "include_seed_tracks": include,
+            }))
+            .unwrap()
+        };
+        let included = build_radio(&store, None, request(true)).unwrap();
+        assert_eq!(included.len(), 3);
+        assert_eq!(&included[..2], &["seed-1", "seed-2"]);
+        assert_eq!(
+            build_radio(&store, None, request(false)).unwrap(),
+            vec!["other"]
+        );
+        assert_eq!(
+            album_radio(
+                &store,
+                DEFAULT_TRACK_NAMESPACE,
+                DEFAULT_ALBUM_NAMESPACE,
+                "album-seed",
+                10
+            )
+            .unwrap(),
+            vec!["other"]
+        );
+
+        // An unavailable nearest neighbour must not consume the result limit.
+        store
+            .upsert_entity_embedding(&embedding(
+                "track",
+                "missing",
+                DEFAULT_TRACK_NAMESPACE,
+                vec![1.0, 0.0],
+            ))
+            .unwrap();
+        store.clear_track_audio_uri("seed-1").unwrap();
+        store.clear_track_audio_uri("seed-2").unwrap();
+        let available = store
+            .search_available_track_embeddings(DEFAULT_TRACK_NAMESPACE, &[1.0, 0.0], 1)
+            .unwrap();
+        assert_eq!(available.len(), 1);
+        assert_eq!(available[0].entity_id, "other");
+
+        let settings = AudioEmbeddingsSettings {
+            enabled: true,
+            simple_ai_base_url: String::new(),
+            api_key: String::new(),
+            interval_hours: 24,
+            jitter_minutes: 0,
+            max_tracks_per_run: 10,
+            request_timeout_secs: 60,
+            specs: vec![crate::config::AudioEmbeddingSpec {
+                model: "test".into(),
+                namespace: DEFAULT_TRACK_NAMESPACE.into(),
+            }],
+            album_derivations: crate::config::AlbumEmbeddingDerivationsSettings {
+                enabled: true,
+                interval_hours: 24,
+                jitter_minutes: 0,
+                max_albums_per_run: 10,
+                specs: vec![crate::config::AlbumEmbeddingDerivationSpec {
+                    source_namespace: DEFAULT_TRACK_NAMESPACE.into(),
+                    target_namespace: "custom.album".into(),
+                    aggregation: crate::config::AlbumEmbeddingAggregation::Median,
+                }],
+            },
+        };
+        store
+            .upsert_entity_embedding(&embedding(
+                "album",
+                "album-seed",
+                "custom.album",
+                vec![0.0, 1.0],
+            ))
+            .unwrap();
+        let namespace = album_namespace_for_track_namespace_with_settings(
+            Some(&settings),
+            DEFAULT_TRACK_NAMESPACE,
+        );
+        assert_eq!(namespace, "custom.album");
+        // Only the configured album embedding remains: both entry points must use it.
+        assert_eq!(
+            album_radio(
+                &store,
+                DEFAULT_TRACK_NAMESPACE,
+                &namespace,
+                "album-seed",
+                10
+            )
+            .unwrap(),
+            vec!["other"]
+        );
+        assert_eq!(
+            build_radio(&store, Some(&settings), request(false)).unwrap(),
+            vec!["other"]
+        );
+    }
+
+    #[test]
+    fn excessive_radio_inputs_are_rejected_before_search() {
+        let request = serde_json::from_value::<RadioBuildRequest>(serde_json::json!({
+            "seed": {"entity_type": "album", "entity_id": "seed"},
+            "criteria": vec![serde_json::json!({"namespace": DEFAULT_TRACK_NAMESPACE, "weight": 1}); 9],
+        })).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::catalog_store::SqliteCatalogStore::new(
+            dir.path().join("catalog.db"),
+            dir.path(),
+            2,
+            &crate::backup::DbRegistry::new(),
+        )
+        .unwrap();
+        assert!(build_radio(&store, None, request)
+            .unwrap_err()
+            .to_string()
+            .contains("at most 8"));
     }
 }

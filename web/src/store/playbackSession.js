@@ -30,7 +30,8 @@ function detectDeviceName() {
   if (ua.includes("Firefox/")) browser = "Firefox";
   else if (ua.includes("Edg/")) browser = "Edge";
   else if (ua.includes("Chrome/") && !ua.includes("Edg/")) browser = "Chrome";
-  else if (ua.includes("Safari/") && !ua.includes("Chrome/")) browser = "Safari";
+  else if (ua.includes("Safari/") && !ua.includes("Chrome/"))
+    browser = "Safari";
 
   if (navigator.userAgentData?.platform) {
     os = navigator.userAgentData.platform;
@@ -307,7 +308,10 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
   function handleQueueSync(payload) {
     const targetDeviceId = payload.device_id;
     if (!targetDeviceId) {
-      console.log("[PlaybackSession] Queue sync received without device id:", payload);
+      console.log(
+        "[PlaybackSession] Queue sync received without device id:",
+        payload,
+      );
       return;
     }
 
@@ -350,7 +354,9 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
         if (cmdPayload?.position != null) {
           const durMs = _playbackStore.currentTrack?.duration || 0;
           if (durMs > 0) {
-            _playbackStore.seekToPercentage(cmdPayload.position / (durMs / 1000));
+            _playbackStore.seekToPercentage(
+              cmdPayload.position / (durMs / 1000),
+            );
           }
         }
         break;
@@ -381,6 +387,16 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
       case "loadSingleTrack":
         if (cmdPayload?.trackId) {
           _playbackStore.setPlaylistFromTrackIds([cmdPayload.trackId], 0, true);
+        }
+        break;
+      case "loadTrackIds":
+        if (cmdPayload?.trackIds?.length) {
+          _playbackStore.setPlaylistFromTrackIds(
+            cmdPayload.trackIds,
+            0,
+            true,
+            cmdPayload.context,
+          );
         }
         break;
       case "addAlbumToQueue":

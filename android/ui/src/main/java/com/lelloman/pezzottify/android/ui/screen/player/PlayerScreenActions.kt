@@ -1,6 +1,8 @@
 package com.lelloman.pezzottify.android.ui.screen.player
 
 interface PlayerScreenActions {
+    fun retryRadioCreation() {}
+    fun dismissRadioCreation() {}
     fun clickOnPlayPause()
     fun clickOnSkipNext()
     fun clickOnSkipPrevious()

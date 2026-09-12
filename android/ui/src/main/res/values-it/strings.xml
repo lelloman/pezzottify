@@ -519,8 +519,15 @@
     <!-- PLAYBACK SETTINGS -->
     <string name="playback_section">Riproduzione</string>
     <string name="smart_continuation">Continuazione intelligente</string>
-    <string name="smart_continuation_description">Aggiunge automaticamente un brano correlato quando la coda arriva all\'ultimo brano.</string>
+    <string name="smart_continuation_description">Aggiunge automaticamente brani correlati quando la coda si avvicina alla fine.</string>
     <string name="listen_to_radio">Ascolta la radio</string>
+    <string name="radio_creating">Creazione della radio…</string>
+    <string name="radio_creation_timeout">La creazione della radio ha impiegato troppo tempo. Riprova.</string>
+    <string name="radio_creation_error">Impossibile creare la radio. Riprova.</string>
+    <string name="radio_creation_empty">Nessun brano riproducibile trovato per questa radio.</string>
+    <string name="radio_creation_retry">Riprova</string>
+    <string name="radio_creation_cancel">Annulla</string>
+    <string name="radio_creation_dismiss">Chiudi</string>
     <!-- PLAYBACK SETTINGS -->
 
     <!-- PLAYLIST -->

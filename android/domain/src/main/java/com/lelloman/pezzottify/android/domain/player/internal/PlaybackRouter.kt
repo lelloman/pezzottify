@@ -37,6 +37,7 @@ class PlaybackRouter @Inject constructor(
     private val remoteController: RemotePlaybackController,
     private val playbackModeManager: PlaybackModeManager,
     private val playbackSessionHandler: PlaybackSessionHandler,
+    private val radioCreation: com.lelloman.pezzottify.android.domain.player.RadioCreationController,
     loggerFactory: LoggerFactory,
 ) : PezzottifyPlayer {
 
@@ -216,7 +217,10 @@ class PlaybackRouter @Inject constructor(
     override fun setIsPlaying(isPlaying: Boolean) = localOrRemote.setIsPlaying(isPlaying)
     override fun forward10Sec() = localOrRemote.forward10Sec()
     override fun rewind10Sec() = localOrRemote.rewind10Sec()
-    override fun stop() = localOrRemote.stop()
+    override fun stop() {
+        radioCreation.cancel()
+        localOrRemote.stop()
+    }
     override fun setVolume(volume: Float) = localOrRemote.setVolume(volume)
     override fun setMuted(isMuted: Boolean) = localOrRemote.setMuted(isMuted)
     override fun loadTrackIndex(index: Int) = localOrRemote.loadTrackIndex(index)
@@ -229,6 +233,7 @@ class PlaybackRouter @Inject constructor(
     // --- PezzottifyPlayer content methods ---
 
     override fun loadAlbum(albumId: String, startTrackId: String?) {
+        radioCreation.cancel()
         if (isRemote) {
             val payload = mutableMapOf<String, Any?>("albumId" to albumId)
             if (startTrackId != null) payload["startTrackId"] = startTrackId
@@ -247,6 +252,7 @@ class PlaybackRouter @Inject constructor(
     }
 
     override fun loadUserPlaylist(userPlaylistId: String, startTrackId: String?) {
+        radioCreation.cancel()
         if (isRemote) {
             val payload = mutableMapOf<String, Any?>("playlistId" to userPlaylistId)
             if (startTrackId != null) payload["startTrackId"] = startTrackId
@@ -265,6 +271,7 @@ class PlaybackRouter @Inject constructor(
     }
 
     override fun loadSingleTrack(trackId: String) {
+        radioCreation.cancel()
         if (isRemote) {
             sendRemoteCommand("loadSingleTrack", mapOf("trackId" to trackId))
         } else {
@@ -273,6 +280,7 @@ class PlaybackRouter @Inject constructor(
     }
 
     override fun loadTrackIds(trackIds: List<String>) {
+        radioCreation.cancel()
         if (isRemote) {
             sendRemoteCommand("loadTrackIds", mapOf("trackIds" to trackIds))
         } else {
@@ -281,6 +289,7 @@ class PlaybackRouter @Inject constructor(
     }
 
     override fun loadRadio(trackIds: List<String>, context: PlaybackPlaylistContext.Radio) {
+        radioCreation.cancel()
         if (isRemote) {
             sendRemoteCommand(
                 "loadTrackIds",
@@ -335,6 +344,7 @@ class PlaybackRouter @Inject constructor(
     }
 
     override fun clearSession() {
+        radioCreation.cancel()
         if (isRemote) {
             playbackModeManager.exitRemoteMode()
         }
@@ -355,6 +365,7 @@ class PlaybackRouter @Inject constructor(
         // which requires the main thread.
         GlobalScope.launch(Dispatchers.Main) {
             playbackModeManager.mode.collect { mode ->
+                radioCreation.cancel()
                 if (mode is PlaybackMode.Remote) {
                     localPlayer.clearSession()
                 }

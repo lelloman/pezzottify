@@ -67,8 +67,8 @@
         <div class="settingInfo">
           <span class="settingLabel">Smart Continuation</span>
           <span class="settingDescription">
-            Automatically add a related track when the current queue reaches its
-            final track.
+            Automatically queue related tracks as the current queue nears its
+            end.
           </span>
         </div>
         <label class="toggle">

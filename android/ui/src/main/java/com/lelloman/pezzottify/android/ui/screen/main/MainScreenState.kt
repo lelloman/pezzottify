@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.ui.screen.main
 import com.lelloman.pezzottify.android.ui.content.ArtistInfo
 
 data class MainScreenState(
+    val radioCreationStatus: com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi = com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi.Idle,
     val bottomPlayer: BottomPlayer = BottomPlayer(),
     val notificationUnreadCount: Int = 0,
     val remoteDeviceName: String? = null,

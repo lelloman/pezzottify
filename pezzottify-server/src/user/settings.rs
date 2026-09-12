@@ -16,7 +16,7 @@ pub enum UserSetting {
     NotifyWhatsNew(bool),
 
     /// Whether clients should extend the active playback queue automatically
-    /// when the listener reaches the last queued track.
+    /// when the listener approaches the end of the queue.
     #[serde(rename = "smart_continuation_enabled")]
     SmartContinuationEnabled(bool),
 

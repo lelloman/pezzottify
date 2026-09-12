@@ -1,3 +1,97 @@
+impl SqliteCatalogStore {
+    fn search_embeddings(
+        &self,
+        namespace: &str,
+        query: &[f32],
+        entity_type: Option<&str>,
+        limit: usize,
+        available_only: bool,
+    ) -> Result<Vec<EntityEmbeddingSearchResult>> {
+        if query.is_empty() {
+            return Err(anyhow!("query vector cannot be empty"));
+        }
+        let query_norm = Self::vector_norm(query);
+        if query_norm <= f64::EPSILON {
+            return Err(anyhow!("query vector norm is zero"));
+        }
+        let limit = limit.max(1);
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+
+        let mut results = Vec::new();
+        let mut push_row = |row: &rusqlite::Row| -> Result<()> {
+            let dim: i64 = row.get("dim")?;
+            if dim as usize != query.len() {
+                return Ok(());
+            }
+            let dtype: String = row.get("dtype")?;
+            if dtype != "float32" {
+                return Ok(());
+            }
+            let blob: Vec<u8> = row.get("vector_blob")?;
+            let vector = Self::decode_f32_vector(&blob)?;
+            let vector_norm: f64 = row.get("vector_norm")?;
+            if vector_norm <= f64::EPSILON {
+                return Ok(());
+            }
+            let score = f64::from(Self::dot_product(query, &vector)) / (query_norm * vector_norm);
+            let metadata_json: String = row.get("metadata_json")?;
+            let model_json: String = row.get("model_json")?;
+            results.push(EntityEmbeddingSearchResult {
+                entity_type: row.get("entity_type")?,
+                entity_id: row.get("entity_id")?,
+                namespace: row.get("namespace")?,
+                score: score as f32,
+                dim: dim as usize,
+                dtype,
+                vector_norm,
+                metadata: serde_json::from_str(&metadata_json)
+                    .unwrap_or(serde_json::Value::Object(Default::default())),
+                model: serde_json::from_str(&model_json)
+                    .unwrap_or(serde_json::Value::Object(Default::default())),
+                updated_at: row.get("updated_at")?,
+            });
+            Ok(())
+        };
+
+        if let Some(entity_type) = entity_type {
+            let mut stmt = conn.prepare_cached(
+                "SELECT entity_type, entity_id, namespace, dim, dtype, vector_blob, vector_norm,
+                        metadata_json, model_json, updated_at
+                 FROM entity_embeddings
+                 WHERE namespace = ?1 AND entity_type = ?2
+                   AND (?3 = 0 OR EXISTS (
+                       SELECT 1 FROM tracks t WHERE t.id = entity_embeddings.entity_id AND t.track_available = 1
+                   ))",
+            )?;
+            let mut rows = stmt.query(params![namespace, entity_type, available_only])?;
+            while let Some(row) = rows.next()? {
+                push_row(row)?;
+            }
+        } else {
+            let mut stmt = conn.prepare_cached(
+                "SELECT entity_type, entity_id, namespace, dim, dtype, vector_blob, vector_norm,
+                        metadata_json, model_json, updated_at
+                 FROM entity_embeddings
+                 WHERE namespace = ?1",
+            )?;
+            let mut rows = stmt.query(params![namespace])?;
+            while let Some(row) = rows.next()? {
+                push_row(row)?;
+            }
+        }
+        results.sort_by(|left, right| {
+            right
+                .score
+                .partial_cmp(&left.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        results.truncate(limit);
+        Ok(results)
+    }
+}
+
+
 impl CatalogStore for SqliteCatalogStore {
     fn get_artist_json(&self, id: &str) -> Result<Option<serde_json::Value>> {
         self.get_artist(id)
@@ -1919,90 +2013,15 @@ impl CatalogStore for SqliteCatalogStore {
     }
 
     fn search_entity_embeddings(
-        &self,
-        namespace: &str,
-        query: &[f32],
-        entity_type: Option<&str>,
-        limit: usize,
+        &self, namespace: &str, query: &[f32], entity_type: Option<&str>, limit: usize,
     ) -> Result<Vec<EntityEmbeddingSearchResult>> {
-        if query.is_empty() {
-            return Err(anyhow!("query vector cannot be empty"));
-        }
-        let query_norm = Self::vector_norm(query);
-        if query_norm <= f64::EPSILON {
-            return Err(anyhow!("query vector norm is zero"));
-        }
-        let limit = limit.max(1);
-        let read_conn = self.get_read_conn();
-        let conn = read_conn.lock().unwrap();
+        self.search_embeddings(namespace, query, entity_type, limit, false)
+    }
 
-        let mut results = Vec::new();
-        let mut push_row = |row: &rusqlite::Row| -> Result<()> {
-            let dim: i64 = row.get("dim")?;
-            if dim as usize != query.len() {
-                return Ok(());
-            }
-            let dtype: String = row.get("dtype")?;
-            if dtype != "float32" {
-                return Ok(());
-            }
-            let blob: Vec<u8> = row.get("vector_blob")?;
-            let vector = Self::decode_f32_vector(&blob)?;
-            let vector_norm: f64 = row.get("vector_norm")?;
-            if vector_norm <= f64::EPSILON {
-                return Ok(());
-            }
-            let score = f64::from(Self::dot_product(query, &vector)) / (query_norm * vector_norm);
-            let metadata_json: String = row.get("metadata_json")?;
-            let model_json: String = row.get("model_json")?;
-            results.push(EntityEmbeddingSearchResult {
-                entity_type: row.get("entity_type")?,
-                entity_id: row.get("entity_id")?,
-                namespace: row.get("namespace")?,
-                score: score as f32,
-                dim: dim as usize,
-                dtype,
-                vector_norm,
-                metadata: serde_json::from_str(&metadata_json)
-                    .unwrap_or(serde_json::Value::Object(Default::default())),
-                model: serde_json::from_str(&model_json)
-                    .unwrap_or(serde_json::Value::Object(Default::default())),
-                updated_at: row.get("updated_at")?,
-            });
-            Ok(())
-        };
-
-        if let Some(entity_type) = entity_type {
-            let mut stmt = conn.prepare_cached(
-                "SELECT entity_type, entity_id, namespace, dim, dtype, vector_blob, vector_norm,
-                        metadata_json, model_json, updated_at
-                 FROM entity_embeddings
-                 WHERE namespace = ?1 AND entity_type = ?2",
-            )?;
-            let mut rows = stmt.query(params![namespace, entity_type])?;
-            while let Some(row) = rows.next()? {
-                push_row(row)?;
-            }
-        } else {
-            let mut stmt = conn.prepare_cached(
-                "SELECT entity_type, entity_id, namespace, dim, dtype, vector_blob, vector_norm,
-                        metadata_json, model_json, updated_at
-                 FROM entity_embeddings
-                 WHERE namespace = ?1",
-            )?;
-            let mut rows = stmt.query(params![namespace])?;
-            while let Some(row) = rows.next()? {
-                push_row(row)?;
-            }
-        }
-        results.sort_by(|left, right| {
-            right
-                .score
-                .partial_cmp(&left.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        results.truncate(limit);
-        Ok(results)
+    fn search_available_track_embeddings(
+        &self, namespace: &str, query: &[f32], limit: usize,
+    ) -> Result<Vec<EntityEmbeddingSearchResult>> {
+        self.search_embeddings(namespace, query, Some("track"), limit, true)
     }
 
     fn get_items_popularity(

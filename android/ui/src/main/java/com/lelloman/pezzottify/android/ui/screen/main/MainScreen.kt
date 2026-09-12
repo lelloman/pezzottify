@@ -348,6 +348,13 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                     )
                 }
             }
+            if (!isOverlayScreen) {
+                com.lelloman.pezzottify.android.ui.screen.player.RadioCreationNotice(
+                    status = state.radioCreationStatus,
+                    onRetry = actions::retryRadioCreation,
+                    onDismiss = actions::dismissRadioCreation,
+                )
+            }
             if (state.bottomPlayer.isVisible && !isOverlayScreen) {
                 BottomPlayer(
                     state = state.bottomPlayer,

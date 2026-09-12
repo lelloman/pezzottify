@@ -24,6 +24,11 @@ class MainScreenViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            interactor.getRadioCreationStatus().collect { status ->
+                mutableState.value = mutableState.value.copy(radioCreationStatus = status)
+            }
+        }
+        viewModelScope.launch {
             interactor.getPlaybackState()
                 .collect { playbackState ->
                     val newBottomPlayerState = when (playbackState) {
@@ -79,12 +84,17 @@ class MainScreenViewModel @Inject constructor(
     }
 
     override fun clickOnPlayPause() = interactor.clickOnPlayPause()
+    override fun retryRadioCreation() = interactor.retryRadioCreation()
+    override fun dismissRadioCreation() = interactor.dismissRadioCreation()
 
     override fun clickOnSkipToNext() = interactor.clickOnSkipToNext()
 
     override fun clickOnSkipToPrevious() = interactor.clickOnSkipToPrevious()
 
     interface Interactor {
+        fun getRadioCreationStatus(): Flow<com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi> = kotlinx.coroutines.flow.flowOf(com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi.Idle)
+        fun retryRadioCreation() {}
+        fun dismissRadioCreation() {}
 
         fun getPlaybackState(): Flow<PlaybackState?>
 

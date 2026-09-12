@@ -151,6 +151,14 @@ internal class RemoteApiClientImpl(
 
     private fun makeRetrofit(baseUrl: String): RetrofitApiClient {
         val okHttpBuilder = okHttpClientFactory.createBuilder(baseUrl)
+        // Radio computation may take longer than OkHttp's default read timeout.
+        // The player controller bounds the entire operation to 60 seconds.
+        okHttpBuilder.addInterceptor { chain ->
+            val radioChain = if (chain.request().url.encodedPath.startsWith("/v1/content/radio/")) {
+                chain.withReadTimeout(65, java.util.concurrent.TimeUnit.SECONDS)
+            } else chain
+            radioChain.proceed(chain.request())
+        }
         interceptors.forEach { okHttpBuilder.addInterceptor(it) }
         return Retrofit.Builder()
             .client(okHttpBuilder.build())
@@ -742,6 +750,7 @@ internal class RemoteApiClientImpl(
         try {
             block()
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             // Distinguish between actual network errors and other errors (like JSON parsing)
             when (t) {
                 is java.net.UnknownHostException,

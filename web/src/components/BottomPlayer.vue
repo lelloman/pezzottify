@@ -1,102 +1,147 @@
 <template>
-  <footer v-if="hasPlayback" class="footerPlayer">
-    <div class="trackInfoRow">
-      <MultiSourceImage
-        :urls="imageUrls"
-        :lazy="false"
-        alt="Image"
-        class="trackImage scaleClickFeedback"
-        @click.stop="handleClickOnAlbumCover"
+  <footer
+    v-if="hasPlayback || playback.radioCreationState.status !== 'idle'"
+    class="footerPlayer"
+    :class="{ hasRadioCreation: playback.radioCreationState.status !== 'idle' }"
+  >
+    <div
+      v-if="playback.radioCreationState.status !== 'idle'"
+      class="radioCreationStatus"
+      role="status"
+      aria-live="polite"
+      :aria-busy="playback.radioCreationState.status === 'creating'"
+    >
+      <i
+        v-if="playback.radioCreationState.status === 'creating'"
+        class="radioSpinner"
+        aria-hidden="true"
       />
-      <div class="trackNamesColumn">
-        <TrackName
-          v-if="displayTrack"
-          :track="displayTrack"
-          :infiniteAnimation="true"
-        />
-        <LoadClickableArtistsNames
-          v-if="artists.length > 0"
-          :artistsIds="artists"
-        />
-        <span v-else-if="artistName" class="artistName">{{ artistName }}</span>
-      </div>
-    </div>
-    <div class="playerControlsColumn">
-      <div class="playerControlsButtonsRow">
-        <ControlIconButton :action="handleRewind10Sec" :icon="Rewind10Sec" />
-        <ControlIconButton :action="handleSkipPrevious" :icon="SkipPrevious" />
-        <ControlIconButton
-          v-if="!playback.isPlaying"
-          :action="handlePlayPause"
-          :icon="PlayIcon"
-          :big="true"
-        />
-        <ControlIconButton
-          v-if="playback.isPlaying"
-          :action="handlePlayPause"
-          :icon="PauseIcon"
-          :big="true"
-        />
-        <ControlIconButton :action="handleSkipNext" :icon="NextTrack" />
-        <ControlIconButton :action="handleForward10Sec" :icon="Forward10Sec" />
-      </div>
-      <div class="progressControlsRow">
-        <span>{{ formattedTime }}</span>
-        <ProgressBar
-          id="TrackProgressBar"
-          class="trackProgressBar"
-          :progress="combinedProgressPercent"
-          @update:progress="updateTrackProgress"
-          @update:startDrag="startDraggingTrackProgress"
-          @update:stopDrag="handleSeek"
-        />
-        <span>{{ duration }}</span>
-      </div>
-    </div>
-    <div class="extraControlsRow">
-      <ControlIconButton
-        v-if="playback.muted"
-        :action="handleVolumeOn"
-        :icon="VolumeOffIcon"
-      />
-      <ControlIconButton
-        v-if="!playback.muted"
-        :action="handleVolumeOff"
-        :icon="VolumeOnIcon"
-      />
-      <ProgressBar
-        class="volumeProgressBar"
-        :progress="computedVolumePercent"
-        @update:progress="updateVolumeProgress"
-        @update:stratDrag="startDraggingVolumeProgress"
-        @update:stopDrag="handleSetVolume"
-      />
+      <span>{{
+        playback.radioCreationState.status === "creating"
+          ? "Creating radio…"
+          : playback.radioCreationState.message
+      }}</span>
       <button
-        type="button"
-        class="lightControlFill scaleClickFeedback scalingIcon mediumIcon smartContinuationButton"
-        :class="{ active: smartContinuationEnabled }"
-        :title="
-          smartContinuationEnabled
-            ? 'Smart continuation on'
-            : 'Smart continuation off'
-        "
-        :aria-label="
-          smartContinuationEnabled
-            ? 'Turn smart continuation off'
-            : 'Turn smart continuation on'
-        "
-        :aria-pressed="smartContinuationEnabled"
-        @click="toggleSmartContinuation"
+        v-if="playback.radioCreationState.status === 'error'"
+        @click="playback.retryRadioCreation"
       >
-        <AiContinuationIcon />
+        Retry
       </button>
-      <DeviceSelector />
-      <ControlIconButton
-        v-if="playback.mode === 'local'"
-        :action="handleStop"
-        :icon="StopIcon"
-      />
+      <button @click="playback.cancelRadioCreation">
+        {{
+          playback.radioCreationState.status === "creating"
+            ? "Cancel"
+            : "Dismiss"
+        }}
+      </button>
     </div>
+    <template v-if="hasPlayback">
+      <div class="trackInfoRow">
+        <MultiSourceImage
+          :urls="imageUrls"
+          :lazy="false"
+          alt="Image"
+          class="trackImage scaleClickFeedback"
+          @click.stop="handleClickOnAlbumCover"
+        />
+        <div class="trackNamesColumn">
+          <TrackName
+            v-if="displayTrack"
+            :track="displayTrack"
+            :infiniteAnimation="true"
+          />
+          <LoadClickableArtistsNames
+            v-if="artists.length > 0"
+            :artistsIds="artists"
+          />
+          <span v-else-if="artistName" class="artistName">{{
+            artistName
+          }}</span>
+        </div>
+      </div>
+      <div class="playerControlsColumn">
+        <div class="playerControlsButtonsRow">
+          <ControlIconButton :action="handleRewind10Sec" :icon="Rewind10Sec" />
+          <ControlIconButton
+            :action="handleSkipPrevious"
+            :icon="SkipPrevious"
+          />
+          <ControlIconButton
+            v-if="!playback.isPlaying"
+            :action="handlePlayPause"
+            :icon="PlayIcon"
+            :big="true"
+          />
+          <ControlIconButton
+            v-if="playback.isPlaying"
+            :action="handlePlayPause"
+            :icon="PauseIcon"
+            :big="true"
+          />
+          <ControlIconButton :action="handleSkipNext" :icon="NextTrack" />
+          <ControlIconButton
+            :action="handleForward10Sec"
+            :icon="Forward10Sec"
+          />
+        </div>
+        <div class="progressControlsRow">
+          <span>{{ formattedTime }}</span>
+          <ProgressBar
+            id="TrackProgressBar"
+            class="trackProgressBar"
+            :progress="combinedProgressPercent"
+            @update:progress="updateTrackProgress"
+            @update:startDrag="startDraggingTrackProgress"
+            @update:stopDrag="handleSeek"
+          />
+          <span>{{ duration }}</span>
+        </div>
+      </div>
+      <div class="extraControlsRow">
+        <ControlIconButton
+          v-if="playback.muted"
+          :action="handleVolumeOn"
+          :icon="VolumeOffIcon"
+        />
+        <ControlIconButton
+          v-if="!playback.muted"
+          :action="handleVolumeOff"
+          :icon="VolumeOnIcon"
+        />
+        <ProgressBar
+          class="volumeProgressBar"
+          :progress="computedVolumePercent"
+          @update:progress="updateVolumeProgress"
+          @update:stratDrag="startDraggingVolumeProgress"
+          @update:stopDrag="handleSetVolume"
+        />
+        <button
+          type="button"
+          class="lightControlFill scaleClickFeedback scalingIcon mediumIcon smartContinuationButton"
+          :class="{ active: smartContinuationEnabled }"
+          :title="
+            smartContinuationEnabled
+              ? 'Smart continuation on'
+              : 'Smart continuation off'
+          "
+          :aria-label="
+            smartContinuationEnabled
+              ? 'Turn smart continuation off'
+              : 'Turn smart continuation on'
+          "
+          :aria-pressed="smartContinuationEnabled"
+          @click="toggleSmartContinuation"
+        >
+          <AiContinuationIcon />
+        </button>
+        <DeviceSelector />
+        <ControlIconButton
+          v-if="playback.mode === 'local'"
+          :action="handleStop"
+          :icon="StopIcon"
+        />
+      </div>
+    </template>
   </footer>
 </template>
 
@@ -356,11 +401,51 @@ watch(
 <style scoped>
 @import "@/assets/icons.css";
 
+.radioCreationStatus {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: var(--surface-elevated, #252525);
+  color: var(--text-bright, white);
+}
+.radioCreationStatus span {
+  flex: 1;
+}
+.radioCreationStatus button {
+  cursor: pointer;
+}
+.radioSpinner {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: radioSpin 1s linear infinite;
+}
+@keyframes radioSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .radioSpinner {
+    animation: none;
+  }
+}
+.footerPlayer.hasRadioCreation {
+  height: auto;
+  min-height: var(--player-height-desktop);
+}
+
 /* ============================================
    Footer Player - Desktop Layout
    ============================================ */
 
 .footerPlayer {
+  position: relative;
   height: var(--player-height-desktop);
   display: grid;
   grid-template-columns: minmax(240px, 3fr) minmax(320px, 4fr) minmax(
@@ -591,6 +676,12 @@ watch(
    ============================================ */
 
 @media (max-width: 767px) {
+  .footerPlayer.hasRadioCreation {
+    grid-template-rows: 4px 1fr auto;
+  }
+  .hasRadioCreation .radioCreationStatus {
+    grid-row: 3;
+  }
   .footerPlayer {
     height: var(--player-height-mobile);
     grid-template-columns: 1fr auto auto;
