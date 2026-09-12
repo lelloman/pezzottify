@@ -91,6 +91,7 @@ pub const ENRICHMENT_VERSIONED_SCHEMAS: &[VersionedSchema] = &[VersionedSchema {
 /// the queryable storage API for generated metadata. Legacy `artist_enrichment`
 /// and `album_enrichment` remain untouched for compatibility.
 pub fn create_enrichment_v1_schema(conn: &Connection) -> Result<()> {
+    super::works::create_schema(conn)?;
     conn.execute_batch(
         r#"
         CREATE TABLE IF NOT EXISTS artist_enrichment_v1 (

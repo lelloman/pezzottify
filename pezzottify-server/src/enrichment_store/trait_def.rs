@@ -10,6 +10,38 @@ use anyhow::Result;
 
 /// Trait for enrichment storage backends.
 pub trait EnrichmentStore: Send + Sync {
+    fn work_scan_offset(&self) -> Result<usize> {
+        Ok(0)
+    }
+    fn set_work_scan_offset(&self, _offset: usize) -> Result<()> {
+        Ok(())
+    }
+    fn get_work(&self, _id: &str) -> Result<Option<super::Work>> {
+        Ok(None)
+    }
+    fn search_works(&self, _query: &str, _limit: usize) -> Result<Vec<super::Work>> {
+        Ok(Vec::new())
+    }
+    fn get_work_resolution(&self, _track_id: &str) -> Result<Option<super::WorkResolution>> {
+        Ok(None)
+    }
+    fn list_work_track_ids(
+        &self,
+        _work_id: &str,
+        _limit: usize,
+        _offset: usize,
+    ) -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+    fn resolve_track_work(
+        &self,
+        _track_id: &str,
+        _proposal: Option<&super::WorkProposal>,
+        _evidence: &serde_json::Value,
+        _unresolved_reason: &str,
+    ) -> Result<super::WorkResolution> {
+        anyhow::bail!("work resolution is unsupported")
+    }
     // =========================================================================
     // Audio Features (tracks)
     // =========================================================================

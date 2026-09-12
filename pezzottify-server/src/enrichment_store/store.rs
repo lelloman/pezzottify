@@ -18,8 +18,8 @@ use tracing::{info, warn};
 /// SQLite-backed enrichment store.
 #[derive(Clone)]
 pub struct SqliteEnrichmentStore {
-    read_conn: Arc<Mutex<Connection>>,
-    write_conn: Arc<Mutex<Connection>>,
+    pub(super) read_conn: Arc<Mutex<Connection>>,
+    pub(super) write_conn: Arc<Mutex<Connection>>,
 }
 
 fn migrate_if_needed(conn: &mut Connection) -> Result<()> {
@@ -233,7 +233,10 @@ fn now_unix() -> i64 {
 }
 
 fn valid_entity_type(entity_type: &str) -> bool {
-    matches!(entity_type, "artist" | "album" | "track")
+    matches!(
+        entity_type,
+        "artist" | "album" | "track" | "work_resolution"
+    )
 }
 
 fn table_for_entity_type(entity_type: &str) -> Result<(&'static str, &'static str)> {
@@ -241,6 +244,7 @@ fn table_for_entity_type(entity_type: &str) -> Result<(&'static str, &'static st
         "artist" => Ok(("artist_enrichment_v1", "artist_id")),
         "album" => Ok(("album_enrichment_v1", "album_id")),
         "track" => Ok(("track_enrichment_v1", "track_id")),
+        "work_resolution" => Ok(("work_resolutions_v1", "track_id")),
         other => anyhow::bail!("invalid enrichment entity type: {}", other),
     }
 }
@@ -283,6 +287,46 @@ fn queue_item_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<EnrichmentQu
 }
 
 impl EnrichmentStore for SqliteEnrichmentStore {
+    fn work_scan_offset(&self) -> Result<usize> {
+        Ok(self.read_conn.lock().unwrap().query_row(
+            "SELECT scan_offset FROM work_scan_v1 WHERE id=1",
+            [],
+            |r| r.get(0),
+        )?)
+    }
+    fn set_work_scan_offset(&self, offset: usize) -> Result<()> {
+        self.write_conn.lock().unwrap().execute(
+            "UPDATE work_scan_v1 SET scan_offset=?1 WHERE id=1",
+            [offset as i64],
+        )?;
+        Ok(())
+    }
+    fn get_work(&self, id: &str) -> Result<Option<super::Work>> {
+        self.read_work(id)
+    }
+    fn search_works(&self, query: &str, limit: usize) -> Result<Vec<super::Work>> {
+        self.find_works(query, limit)
+    }
+    fn get_work_resolution(&self, track_id: &str) -> Result<Option<super::WorkResolution>> {
+        self.read_work_resolution(track_id)
+    }
+    fn list_work_track_ids(
+        &self,
+        work_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<String>> {
+        self.work_track_ids(work_id, limit, offset)
+    }
+    fn resolve_track_work(
+        &self,
+        track_id: &str,
+        proposal: Option<&super::WorkProposal>,
+        evidence: &serde_json::Value,
+        unresolved_reason: &str,
+    ) -> Result<super::WorkResolution> {
+        self.resolve_work(track_id, proposal, evidence, unresolved_reason)
+    }
     fn get_audio_features(&self, track_id: &str) -> Result<Option<AudioFeatures>> {
         let conn = self.read_conn.lock().unwrap();
         let mut stmt = conn.prepare_cached(

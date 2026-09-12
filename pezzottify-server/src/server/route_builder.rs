@@ -69,6 +69,8 @@ pub(super) fn content_read_routes(
         .route("/artist/{id}/discography", get(get_artist_discography))
         .route("/track/{id}", get(get_track))
         .route("/track/{id}/resolved", get(get_resolved_track))
+        .route("/work/{id}", get(get_work))
+        .route("/works", get(search_works))
         .route("/image/{id}", get(get_image))
         .route("/catalog/stats", get(get_catalog_stats_snapshot))
         .route("/genres", get(get_genres))

@@ -1,5 +1,9 @@
 # Metadata Enrichment v1
 
+Work identification now runs as a separate `work_resolution` queue type in this
+job. See [Works v1](works-v1.md) for discovery scope, matching rules, APIs, and
+the model evaluation dry-run workflow.
+
 Metadata Enrichment v1 stores generated artist, album, and track facts in explicit SQLite tables instead of generic JSON profiles. The canonical rows live in `enrichment.db` and are designed for filtering, joins, and detail-page status display.
 
 ## Storage Model

@@ -4,12 +4,14 @@
       <SearchWrapper
         v-if="searchQuery"
         :key="'search-' + searchQuery"
+        :query="searchQuery"
         :useOrganicSearch="useOrganicSearch"
         :results="results"
         :streamingSections="streamingSections"
         :isStreamingLoading="isStreamingLoading"
       />
       <Track v-else-if="trackId" :key="'track-' + trackId" :trackId="trackId" />
+      <Work v-else-if="workId" :key="'work-' + workId" :workId="workId" />
       <Album v-else-if="albumId" :key="'album-' + albumId" :albumId="albumId" />
       <Artist
         v-else-if="artistId"
@@ -38,6 +40,7 @@
 <script setup>
 import { ref, watch, computed, onUnmounted, nextTick } from "vue";
 import Track from "@/components/content/Track.vue";
+import Work from "@/components/content/Work.vue";
 import Album from "@/components/content/Album.vue";
 import Artist from "@/components/content/Artist.vue";
 import UserPlaylist from "@/components/content/UserPlaylist.vue";
@@ -65,6 +68,7 @@ let abortStreamingSearch = null;
 const route = useRoute();
 const searchQuery = ref(route.params.query || "");
 const trackId = ref(route.params.trackId || "");
+const workId = computed(() => route.params.workId || "");
 const artistId = ref(route.params.artistId || "");
 const albumId = ref(route.params.albumId || "");
 const playlistId = ref(route.params.playlistId || "");
@@ -81,6 +85,7 @@ const scrollPositions = new Map();
 function currentRouteKey() {
   if (searchQuery.value) return "search-" + searchQuery.value;
   if (trackId.value) return "track-" + trackId.value;
+  if (workId.value) return "work-" + workId.value;
   if (albumId.value) return "album-" + albumId.value;
   if (artistId.value) return "artist-" + artistId.value;
   if (playlistId.value) return "playlist-" + playlistId.value;

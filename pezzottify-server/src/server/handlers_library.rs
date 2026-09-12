@@ -571,6 +571,23 @@ fn attach_track_enrichment(
         return value;
     };
 
+    // Work resolution is independent of ordinary metadata and is included in
+    // both individual and batch track responses, even without a track profile.
+    if let Some(obj) = value.as_object_mut() {
+        match store.get_work_resolution(track_id) {
+            Ok(resolution) => {
+                obj.insert("work_resolution".into(), serde_json::json!(resolution));
+            }
+            Err(err) => debug!(%err, track_id, "Failed to load Work resolution"),
+        }
+        match store.get_entity_enrichment_status("work_resolution", track_id) {
+            Ok(status) => {
+                obj.insert("work_enrichment_status".into(), serde_json::json!(status));
+            }
+            Err(err) => debug!(%err, track_id, "Failed to load Work enrichment status"),
+        }
+    }
+
     let profile = match store.get_track_enrichment_v1(track_id) {
         Ok(Some(profile)) => profile,
         Ok(None) => return value,
@@ -624,6 +641,29 @@ fn attach_track_enrichment(
     }
 
     value
+}
+
+#[cfg(test)]
+mod work_payload_tests {
+    use super::*;
+
+    #[test]
+    fn work_resolution_is_visible_without_track_metadata() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let store = crate::enrichment_store::SqliteEnrichmentStore::new(
+            temp.path().join("enrichment.db"), &crate::backup::DbRegistry::new(),
+        ).unwrap();
+        let proposal = crate::enrichment_store::WorkProposal {
+            title: "Example".into(), creators: vec!["Writer".into()],
+            catalog_number: None, kind: "song".into(), confidence: 0.95,
+            rationale: "Recognized work".into(),
+        };
+        store.resolve_track_work("track", Some(&proposal), &serde_json::json!({}), "").unwrap();
+        let result = attach_track_enrichment(serde_json::json!({"id":"track"}), "track", Some(&store));
+        assert_eq!(result["work_resolution"]["work"]["title"], "Example");
+        assert!(result.get("enrichment").is_none());
+        assert_eq!(result["work_enrichment_status"]["status"], "completed");
+    }
 }
 
 // User listening stats endpoints
