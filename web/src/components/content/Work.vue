@@ -9,6 +9,14 @@
       <h1>{{ work.title }}</h1>
       <p>{{ work.creators.join(", ") }}</p>
       <p v-if="work.catalog_number">{{ work.catalog_number }}</p>
+      <p v-if="work.wikidata_id">
+        <a
+          :href="`https://www.wikidata.org/wiki/${work.wikidata_id}`"
+          target="_blank"
+          rel="noopener noreferrer"
+          >Wikidata reference</a
+        >
+      </p>
       <h2>Performances and versions</h2>
       <p v-if="!tracks.length && !loading">No tracks available.</p>
       <ul>

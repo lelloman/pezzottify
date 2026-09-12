@@ -13,6 +13,7 @@ pub struct Work {
     pub catalog_number: Option<String>,
     pub kind: String,
     pub created_at: i64,
+    pub wikidata_id: Option<String>,
 }
 
 /// A model proposes identity; storage decides whether it can be accepted.
@@ -60,6 +61,10 @@ pub(super) fn create_schema(conn: &Connection) -> Result<()> {
         );
         CREATE INDEX IF NOT EXISTS idx_work_resolutions_work ON work_resolutions_v1(work_id);",
     )?;
+    conn.execute_batch("CREATE TABLE IF NOT EXISTS work_external_ids_v1 (
+        provider TEXT NOT NULL, external_id TEXT NOT NULL, work_id TEXT NOT NULL REFERENCES works_v1(id),
+        PRIMARY KEY(provider,external_id), UNIQUE(work_id,provider)
+    );")?;
     Ok(())
 }
 
@@ -221,6 +226,74 @@ mod tests {
     }
 
     #[test]
+    fn wikidata_work_identity_survives_label_changes_and_separates_external_namesakes() {
+        let (store, tmp) = setup();
+        let evidence = |qid: &str| serde_json::json!({"selected_source":{"qid":qid}});
+        let first = store
+            .resolve_track_work("a", Some(&proposal("Title", "Writer")), &evidence("Q1"), "")
+            .unwrap();
+        let renamed = store
+            .resolve_track_work(
+                "b",
+                Some(&proposal("Localized title", "Writer")),
+                &evidence("Q1"),
+                "",
+            )
+            .unwrap();
+        assert_eq!(first.work, renamed.work);
+        assert_eq!(
+            first.work.as_ref().unwrap().wikidata_id.as_deref(),
+            Some("Q1")
+        );
+        let namesake = store
+            .resolve_track_work("c", Some(&proposal("Title", "Writer")), &evidence("Q2"), "")
+            .unwrap();
+        assert_ne!(
+            first.work.as_ref().unwrap().id,
+            namesake.work.as_ref().unwrap().id
+        );
+        assert_eq!(store.search_works("Title", 25).unwrap().len(), 2);
+        drop(store);
+        let reopened = SqliteEnrichmentStore::new(
+            tmp.path().join("enrichment.db"),
+            &crate::backup::DbRegistry::new(),
+        )
+        .unwrap();
+        assert_eq!(
+            reopened
+                .get_work(&first.work.unwrap().id)
+                .unwrap()
+                .unwrap()
+                .wikidata_id
+                .as_deref(),
+            Some("Q1")
+        );
+    }
+
+    #[test]
+    fn wikidata_work_can_add_a_reference_to_an_existing_inferred_identity() {
+        let (store, _tmp) = setup();
+        let first = store
+            .resolve_track_work(
+                "a",
+                Some(&proposal("Song", "Writer")),
+                &serde_json::json!({}),
+                "",
+            )
+            .unwrap();
+        let linked = store
+            .resolve_track_work(
+                "b",
+                Some(&proposal("Song", "Writer")),
+                &serde_json::json!({"selected_source":{"qid":"Q1"}}),
+                "",
+            )
+            .unwrap();
+        assert_eq!(first.work.unwrap().id, linked.work.as_ref().unwrap().id);
+        assert_eq!(linked.work.unwrap().wikidata_id.as_deref(), Some("Q1"));
+    }
+
+    #[test]
     fn work_resolution_abstains_on_uncertain_or_composite_identity() {
         let (store, _tmp) = setup();
         for case in ["confidence", "creator", "medley", "reason", "nan", "empty"] {
@@ -305,20 +378,21 @@ fn work_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Work> {
         catalog_number: row.get(3)?,
         kind: row.get(4)?,
         created_at: row.get(5)?,
+        wikidata_id: row.get(6)?,
     })
 }
 
 impl SqliteEnrichmentStore {
     pub(super) fn read_work(&self, id: &str) -> Result<Option<Work>> {
         Ok(self.read_conn.lock().unwrap().query_row(
-            "SELECT id,title,creators_json,catalog_number,kind,created_at FROM works_v1 WHERE id=?1",
+            "SELECT id,title,creators_json,catalog_number,kind,created_at,(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='wikidata') FROM works_v1 WHERE id=?1",
             [id], work_from_row,
         ).optional()?)
     }
 
     pub(super) fn find_works(&self, query: &str, limit: usize) -> Result<Vec<Work>> {
         let conn = self.read_conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT id,title,creators_json,catalog_number,kind,created_at FROM works_v1 WHERE instr(lower(title),lower(?1)) > 0 ORDER BY title,id LIMIT ?2")?;
+        let mut stmt = conn.prepare("SELECT id,title,creators_json,catalog_number,kind,created_at,(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='wikidata') FROM works_v1 WHERE instr(lower(title),lower(?1)) > 0 ORDER BY title,id LIMIT ?2")?;
         let rows = stmt.query_map(params![query.trim(), limit.min(100) as i64], work_from_row)?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
@@ -386,16 +460,45 @@ impl SqliteEnrichmentStore {
         let mut work_id = None;
         let mut status = "unresolved";
         let mut reason = unresolved_reason.to_owned();
+        // This evidence is assembled by the server after validating the model's
+        // citation against fetched facts; it is not a model-supplied payload.
+        let source_id = evidence
+            .pointer("/selected_source/qid")
+            .and_then(|v| v.as_str());
+        if let Some(qid) = source_id {
+            ensure!(
+                qid.strip_prefix('Q').is_some_and(|n| !n.is_empty()
+                    && n.len() <= 20
+                    && n.bytes().all(|c| c.is_ascii_digit())),
+                "invalid Wikidata identifier"
+            );
+        }
         if let Some(proposal) = proposal {
             match identity(proposal) {
-                Ok(key) => {
-                    let existing: Option<String> = tx
+                Ok(mut key) => {
+                    let by_source: Option<String> = if let Some(qid) = source_id {
+                        tx.query_row("SELECT work_id FROM work_external_ids_v1 WHERE provider='wikidata' AND external_id=?1", [qid], |r| r.get(0)).optional()?
+                    } else {
+                        None
+                    };
+                    let mut existing: Option<String> = tx
                         .query_row(
                             "SELECT id FROM works_v1 WHERE identity_key=?1",
                             [&key],
                             |r| r.get(0),
                         )
                         .optional()?;
+                    if let Some(source_work) = by_source {
+                        existing = Some(source_work);
+                    } else if let (Some(id), Some(qid)) = (existing.as_ref(), source_id) {
+                        let other_source: Option<String> = tx.query_row("SELECT external_id FROM work_external_ids_v1 WHERE provider='wikidata' AND work_id=?1", [id], |r| r.get(0)).optional()?;
+                        if other_source.is_some() {
+                            // Different externally identified works can share a
+                            // title and creator. Do not merge them on text alone.
+                            existing = None;
+                            key = format!("wikidata:{qid}");
+                        }
+                    }
                     if let Some(id) = existing {
                         work_id = Some(id);
                         status = "linked";
@@ -407,14 +510,22 @@ impl SqliteEnrichmentStore {
                         status = "created";
                     }
                     reason = proposal.rationale.clone();
+                    if let Some(qid) = source_id {
+                        tx.execute("INSERT OR IGNORE INTO work_external_ids_v1(provider,external_id,work_id) VALUES('wikidata',?1,?2)",params![qid,work_id])?;
+                    }
                 }
                 Err(err) => reason = err.to_string(),
             }
         }
+        let source_status = if work_id.is_some() && source_id.is_some() {
+            "wikidata_supported_v1"
+        } else {
+            "llm_work_v2"
+        };
         tx.execute("INSERT INTO work_resolutions_v1(track_id,work_id,status,reason,evidence_json,evaluated_at,enriched_at,last_verified_at,source_status)
-            VALUES(?1,?2,?3,?4,?5,?6,?6,?6,'llm_work_v1')
-            ON CONFLICT(track_id) DO UPDATE SET work_id=excluded.work_id,status=excluded.status,reason=excluded.reason,evidence_json=excluded.evidence_json,evaluated_at=excluded.evaluated_at,enriched_at=excluded.enriched_at,last_verified_at=excluded.last_verified_at",
-            params![track_id,work_id,status,reason,serde_json::to_string(evidence)?,now])?;
+            VALUES(?1,?2,?3,?4,?5,?6,?6,?6,?7)
+            ON CONFLICT(track_id) DO UPDATE SET work_id=excluded.work_id,status=excluded.status,reason=excluded.reason,evidence_json=excluded.evidence_json,evaluated_at=excluded.evaluated_at,enriched_at=excluded.enriched_at,last_verified_at=excluded.last_verified_at,source_status=excluded.source_status",
+            params![track_id,work_id,status,reason,serde_json::to_string(evidence)?,now,source_status])?;
         tx.commit()?;
         drop(conn);
         self.read_work_resolution(track_id)?
