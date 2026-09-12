@@ -166,7 +166,6 @@ private fun AlbumScreenContent(
                     downloadRequestState = state.downloadRequestState,
                     contentResolver = contentResolver,
                     actions = actions,
-                    onShowSnackbar = showSnackbar,
                     onArtistClick = { navController.toArtist(it) },
                     onTrackMoreClick = { track -> selectedTrack = track },
                     onAlbumMoreClick = { showAlbumSheet = true },
@@ -283,14 +282,12 @@ fun AlbumLoadedScreen(
     downloadRequestState: DownloadRequestState,
     contentResolver: ContentResolver,
     actions: AlbumScreenActions,
-    onShowSnackbar: (String) -> Unit = {},
     onArtistClick: (String) -> Unit = {},
     onTrackMoreClick: (Track) -> Unit = {},
     onAlbumMoreClick: () -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val density = LocalDensity.current
-    val context = LocalContext.current
 
     // Get status bar height for proper inset handling
     val statusBarHeight = with(density) {
@@ -497,12 +494,9 @@ fun AlbumLoadedScreen(
             }
         }
 
-        // Floating add to queue button
+        // Floating album actions button
         IconButton(
-            onClick = {
-                actions.addAlbumToQueue(album.id)
-                onShowSnackbar(context.getString(R.string.added_to_queue))
-            },
+            onClick = onAlbumMoreClick,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .offset { IntOffset(0, (headerHeight - playButtonSize / 2).roundToPx()) }
@@ -517,11 +511,11 @@ fun AlbumLoadedScreen(
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.surfaceVariant,
                 )
-                // Add to queue icon
+                // More options icon
                 Icon(
                     modifier = Modifier.size(28.dp),
-                    painter = painterResource(R.drawable.baseline_playlist_add_24),
-                    contentDescription = stringResource(R.string.add_to_queue),
+                    painter = painterResource(R.drawable.baseline_more_vert_24),
+                    contentDescription = stringResource(R.string.more_options),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
