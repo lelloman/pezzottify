@@ -443,6 +443,20 @@ fun AlbumLoadedScreen(
                         )
                 )
 
+                // Keep the header menu readable over light artwork without a button background.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(statusBarHeight + 64.dp)
+                        .align(Alignment.TopStart)
+                        .alpha(imageAlpha)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Black.copy(alpha = 0.5f), Color.Transparent)
+                            )
+                        )
+                )
+
                 // Album title - color transitions from white (over image) to onSurface (collapsed)
                 val textColor = lerp(
                     MaterialTheme.colorScheme.onSurface,
@@ -459,8 +473,23 @@ fun AlbumLoadedScreen(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = textTopPadding)
+                        .padding(start = 16.dp, end = 64.dp, bottom = 16.dp, top = textTopPadding)
                 )
+
+                IconButton(
+                    onClick = onAlbumMoreClick,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = statusBarHeight + 8.dp, end = 8.dp)
+                        .size(48.dp)
+                ) {
+                    Icon(
+                        modifier = Modifier.size(24.dp),
+                        painter = painterResource(R.drawable.baseline_more_vert_24),
+                        contentDescription = stringResource(R.string.more_options),
+                        tint = textColor,
+                    )
+                }
             }
         }
 
@@ -490,33 +519,6 @@ fun AlbumLoadedScreen(
                     ),
                     contentDescription = stringResource(if (isLiked) R.string.unlike else R.string.like),
                     tint = if (isLiked) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        // Floating album actions button
-        IconButton(
-            onClick = onAlbumMoreClick,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset { IntOffset(0, (headerHeight - playButtonSize / 2).roundToPx()) }
-                .padding(end = 80.dp)
-                .size(playButtonSize)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                // Background circle
-                Icon(
-                    modifier = Modifier.size(playButtonSize),
-                    painter = painterResource(R.drawable.baseline_circle_24),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.surfaceVariant,
-                )
-                // More options icon
-                Icon(
-                    modifier = Modifier.size(28.dp),
-                    painter = painterResource(R.drawable.baseline_more_vert_24),
-                    contentDescription = stringResource(R.string.more_options),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
