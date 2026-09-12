@@ -1,9 +1,5 @@
 <template>
-  <ModalDialog
-    :isOpen="isOpen"
-    :closeCallback="handleClose"
-    :closeOnEsc="true"
-  >
+  <ModalDialog :isOpen="isOpen" :closeCallback="handleClose" :closeOnEsc="true">
     <div class="radioBuilder">
       <header class="builderHeader">
         <h2>Customize radio</h2>
@@ -44,11 +40,23 @@
         <section class="controlGroup">
           <label>
             <span>Diversity</span>
-            <input v-model.number="diversity" type="range" min="0" max="1" step="0.05" />
+            <input
+              v-model.number="diversity"
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+            />
           </label>
           <label>
             <span>Randomness</span>
-            <input v-model.number="randomness" type="range" min="0" max="1" step="0.05" />
+            <input
+              v-model.number="randomness"
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+            />
           </label>
           <label class="checkRow">
             <input v-model="includeSeedTracks" type="checkbox" />
@@ -64,7 +72,13 @@
             class="criterionRow"
           >
             <span>{{ criterionLabel(criterion.namespace) }}</span>
-            <input v-model.number="criterion.weight" type="range" min="0" max="1" step="0.05" />
+            <input
+              v-model.number="criterion.weight"
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+            />
             <strong>{{ criterion.weight.toFixed(2) }}</strong>
           </div>
         </section>
@@ -89,11 +103,21 @@
           </label>
           <label>
             <span>Popularity from</span>
-            <input v-model.number="popularityMin" type="number" min="0" max="100" />
+            <input
+              v-model.number="popularityMin"
+              type="number"
+              min="0"
+              max="100"
+            />
           </label>
           <label>
             <span>Popularity to</span>
-            <input v-model.number="popularityMax" type="number" min="0" max="100" />
+            <input
+              v-model.number="popularityMax"
+              type="number"
+              min="0"
+              max="100"
+            />
           </label>
           <label>
             <span>Explicit</span>
@@ -107,8 +131,13 @@
       </div>
 
       <footer class="builderActions">
+        <span v-if="validationError" role="alert">{{ validationError }}</span>
         <button @click="handleClose">Cancel</button>
-        <button class="primaryButton" :disabled="isSubmitting" @click="handleSubmit">
+        <button
+          class="primaryButton"
+          :disabled="isSubmitting || isLoading || !options"
+          @click="handleSubmit"
+        >
           {{ isSubmitting ? "Starting..." : "Start radio" }}
         </button>
       </footer>
@@ -224,7 +253,8 @@ const mode = ref("similar");
 const count = ref(50);
 const diversity = ref(0.3);
 const randomness = ref(0.3);
-const includeSeedTracks = ref(true);
+const includeSeedTracks = ref(props.seedEntityType !== "album");
+const validationError = ref("");
 const criteria = ref([]);
 const toward = ref([]);
 const away = ref([]);
@@ -247,6 +277,7 @@ const criterionLabel = (namespace) =>
   criteriaByNamespace.value.get(namespace)?.label || namespace;
 
 const handleClose = () => {
+  if (isSubmitting.value) playback.cancelRadioCreation();
   emit("close");
 };
 
@@ -271,6 +302,9 @@ const loadOptions = async () => {
   isLoading.value = true;
   options.value = await remoteStore.fetchRadioOptions();
   isLoading.value = false;
+  if (!options.value)
+    validationError.value =
+      "Could not load radio options. Close and reopen to retry.";
   selectedRecipeId.value = options.value?.default_recipe_id || "balanced";
   count.value = options.value?.count?.default || 50;
   diversity.value = options.value?.diversity?.default ?? 0.3;
@@ -305,11 +339,18 @@ const buildFilters = () => {
   if (yearMax !== null) filters.release_year_max = yearMax;
   if (popMin !== null) filters.popularity_min = popMin;
   if (popMax !== null) filters.popularity_max = popMax;
-  if (explicitFilter.value !== "include") filters.explicit = explicitFilter.value;
+  if (explicitFilter.value !== "include")
+    filters.explicit = explicitFilter.value;
   return Object.keys(filters).length > 0 ? filters : null;
 };
 
 const handleSubmit = async () => {
+  validationError.value = "";
+  if (!criteria.value.some((criterion) => criterion.weight > 0)) {
+    validationError.value =
+      "Choose at least one criterion with a positive weight.";
+    return;
+  }
   isSubmitting.value = true;
   const filters = buildFilters();
   const request = {
@@ -330,6 +371,9 @@ const handleSubmit = async () => {
     request,
   );
   isSubmitting.value = false;
+  if (!trackIds.length)
+    validationError.value =
+      playback.radioCreationState.message || "Radio creation cancelled.";
   if (trackIds.length > 0) {
     handleClose();
   }

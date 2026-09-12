@@ -18,6 +18,7 @@ import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -130,7 +131,8 @@ class PlayerImpl(
         val playlist = state.playlist ?: return
         val trackIndex = state.trackIndex ?: return
         if (!state.enabled) return
-        if (playlist.tracksIds.isEmpty() || trackIndex != playlist.tracksIds.lastIndex) return
+        val remaining = playlist.tracksIds.lastIndex - trackIndex
+        if (playlist.tracksIds.isEmpty() || remaining !in 0..1) return
 
         val signature = "$trackIndex:${playlist.tracksIds.joinToString(",")}"
         if (smartContinuationInFlightSignature == signature) return
@@ -139,23 +141,31 @@ class PlayerImpl(
         smartContinuationRequestJob?.cancel()
         smartContinuationRequestJob = coroutineScope.launch(Dispatchers.Main) {
             val contextTrackIds = playlist.tracksIds
-                .take(trackIndex + 1)
                 .takeLast(10)
-            val response = remoteApiClient.getContinuationRecommendations(
-                contextTrackIds = contextTrackIds,
-                excludeTrackIds = playlist.tracksIds,
-                count = 1,
-            )
+            var nextTrackIds = emptyList<String>()
+            for (attempt in 0..2) {
+                if (attempt > 0) delay(1500L * attempt)
+                if (smartContinuationInFlightSignature != signature || !userSettingsStore.isSmartContinuationEnabled.value) break
+                val response = withTimeoutOrNull(20_000) {
+                    remoteApiClient.getContinuationRecommendations(
+                        contextTrackIds = contextTrackIds,
+                        excludeTrackIds = playlist.tracksIds,
+                        count = 3 - remaining,
+                    )
+                }
+                nextTrackIds = (response as? RemoteApiResponse.Success)?.data.orEmpty()
+                if (nextTrackIds.isNotEmpty()) break
+            }
             if (smartContinuationInFlightSignature != signature) return@launch
             smartContinuationInFlightSignature = null
             val currentPlaylist = mutablePlaybackPlaylist.value ?: return@launch
             val currentIndex = platformPlayer.currentTrackIndex.value ?: return@launch
             val currentSignature = "$currentIndex:${currentPlaylist.tracksIds.joinToString(",")}"
             if (currentSignature != signature) return@launch
+            if (!userSettingsStore.isSmartContinuationEnabled.value) return@launch
 
-            val nextTrackId = (response as? RemoteApiResponse.Success)?.data?.firstOrNull()
-                ?: return@launch
-            addTracksToPlaylist(listOf(nextTrackId))
+            val additions = nextTrackIds.distinct().filter { it !in currentPlaylist.tracksIds }
+            if (additions.isNotEmpty()) appendTracks(additions, automatic = true)
         }
     }
 
@@ -463,12 +473,16 @@ class PlayerImpl(
     }
 
     override fun addTracksToPlaylist(tracksIds: List<String>) {
+        appendTracks(tracksIds, automatic = false)
+    }
+
+    private fun appendTracks(tracksIds: List<String>, automatic: Boolean) {
         runOnPlayerThread {
             val currentPlaylist = mutablePlaybackPlaylist.value
             if (currentPlaylist != null) {
                 // Add tracks to the existing playlist
                 val newTracksIds = currentPlaylist.tracksIds + tracksIds
-                val newContext = when (val ctx = currentPlaylist.context) {
+                val newContext = if (automatic) currentPlaylist.context else when (val ctx = currentPlaylist.context) {
                     is PlaybackPlaylistContext.Album -> PlaybackPlaylistContext.UserMix
                     is PlaybackPlaylistContext.UserPlaylist -> ctx.copy(isEdited = true)
                     is PlaybackPlaylistContext.UserMix -> ctx

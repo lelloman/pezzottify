@@ -24,6 +24,11 @@ class PlayerScreenViewModel @Inject constructor(
     val toastEvents: Flow<String> = mutableToastEvents.asSharedFlow()
 
     init {
+        viewModelScope.launch {
+            interactor.getRadioCreationStatus().collect { status ->
+                mutableState.value = mutableState.value.copy(radioCreationStatus = status)
+            }
+        }
         var lastErrorMessage: String? = null
 
         viewModelScope.launch {
@@ -121,10 +126,15 @@ class PlayerScreenViewModel @Inject constructor(
     }
 
     override fun retry() = interactor.retry()
+    override fun retryRadioCreation() = interactor.retryRadioCreation()
+    override fun dismissRadioCreation() = interactor.dismissRadioCreation()
 
     override fun exitRemoteMode() = interactor.exitRemoteMode()
 
     interface Interactor {
+        fun getRadioCreationStatus(): Flow<RadioCreationStatusUi> = kotlinx.coroutines.flow.flowOf(RadioCreationStatusUi.Idle)
+        fun retryRadioCreation() {}
+        fun dismissRadioCreation() {}
         fun getPlaybackState(): Flow<PlaybackState?>
         fun getRemoteDeviceName(): Flow<String?>
         fun getHasOtherDeviceConnected(): Flow<Boolean>

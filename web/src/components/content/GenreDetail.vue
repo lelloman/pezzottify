@@ -3,12 +3,18 @@
     <div class="genreHeader">
       <h1 class="genreName">{{ decodedGenreName }}</h1>
       <div class="headerInfo">
-        <span v-if="genreData" class="trackCount">{{ formatTrackCount(genreData.total) }}</span>
+        <span v-if="genreData" class="trackCount">{{
+          formatTrackCount(genreData.total)
+        }}</span>
       </div>
     </div>
 
     <div class="actionsRow">
-      <button class="shuffleButton" @click="handleShufflePlay" :disabled="isLoadingRadio">
+      <button
+        class="shuffleButton"
+        @click="handleShufflePlay"
+        :disabled="isLoadingRadio"
+      >
         <PlayIcon class="buttonIcon" />
         <span>{{ isLoadingRadio ? "Loading..." : "Shuffle Play" }}</span>
       </button>
@@ -18,7 +24,10 @@
     <div v-if="isLoading" class="loadingState">Loading tracks...</div>
 
     <!-- Track List -->
-    <div v-else-if="genreData && genreData.track_ids.length > 0" class="tracksSection">
+    <div
+      v-else-if="genreData && genreData.track_ids.length > 0"
+      class="tracksSection"
+    >
       <div
         v-for="(trackId, trackIndex) in genreData.track_ids"
         :key="trackId"
@@ -87,7 +96,7 @@ const loadGenreTracks = async () => {
   genreData.value = await remoteStore.fetchGenreTracks(
     decodedGenreName.value,
     TRACKS_PER_PAGE,
-    0
+    0,
   );
   isLoading.value = false;
 };
@@ -100,7 +109,7 @@ const loadMore = async () => {
   const moreData = await remoteStore.fetchGenreTracks(
     decodedGenreName.value,
     TRACKS_PER_PAGE,
-    newOffset
+    newOffset,
   );
 
   if (moreData) {
@@ -130,12 +139,8 @@ const handleTrackSelection = (track) => {
 
 const handleShufflePlay = async () => {
   isLoadingRadio.value = true;
-  const radioTracks = await remoteStore.fetchGenreRadio(decodedGenreName.value, 50);
+  await playback.createGenreRadio(decodedGenreName.value, 50);
   isLoadingRadio.value = false;
-
-  if (radioTracks && radioTracks.length > 0) {
-    playback.setGenreRadio(decodedGenreName.value, radioTracks, 50);
-  }
 };
 
 onMounted(() => {
@@ -147,7 +152,7 @@ watch(
   () => props.genreName,
   () => {
     loadGenreTracks();
-  }
+  },
 );
 </script>
 

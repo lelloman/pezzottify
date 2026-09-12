@@ -283,16 +283,16 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
-  const fetchGenreRadio = async (genreName, count = 50) => {
+  const fetchGenreRadio = async (genreName, count = 50, signal) => {
     try {
       const response = await axios.get(
         `/v1/content/genre/${encodeURIComponent(genreName)}/radio`,
-        { params: { count } },
+        { params: { count }, signal, timeout: 60000 },
       );
       return response.data;
     } catch (error) {
       console.error("Error fetching genre radio:", error);
-      return [];
+      throw error;
     }
   };
 
@@ -309,6 +309,7 @@ export const useRemoteStore = defineStore("remote", () => {
           exclude_track_ids: excludeTrackIds,
           count,
         },
+        { timeout: 20000 },
       );
       return response.data.track_ids || [];
     } catch (error) {
@@ -317,16 +318,21 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
-  const fetchRadioTrackIds = async (entityType, entityId, count = 50) => {
+  const fetchRadioTrackIds = async (
+    entityType,
+    entityId,
+    count = 50,
+    signal,
+  ) => {
     try {
       const response = await axios.get(
         `/v1/content/radio/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}`,
-        { params: { count } },
+        { params: { count }, signal, timeout: 60000 },
       );
       return response.data.track_ids || [];
     } catch (error) {
       console.error("Error fetching radio tracks:", error);
-      return [];
+      throw error;
     }
   };
 
@@ -340,13 +346,16 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
-  const buildRadioTrackIds = async (request) => {
+  const buildRadioTrackIds = async (request, signal) => {
     try {
-      const response = await axios.post("/v1/content/radio/build", request);
+      const response = await axios.post("/v1/content/radio/build", request, {
+        signal,
+        timeout: 60000,
+      });
       return response.data.track_ids || [];
     } catch (error) {
       console.error("Error building radio tracks:", error);
-      return [];
+      throw error;
     }
   };
 
@@ -682,7 +691,10 @@ export const useRemoteStore = defineStore("remote", () => {
   const triggerBackgroundJob = async (jobId, params = null) => {
     try {
       const body = params ? { params } : {};
-      const response = await axios.post(`/v1/admin/jobs/${jobId}/trigger`, body);
+      const response = await axios.post(
+        `/v1/admin/jobs/${jobId}/trigger`,
+        body,
+      );
       return { success: true, data: response.data };
     } catch (error) {
       console.error("Failed to trigger background job:", error);
@@ -752,7 +764,9 @@ export const useRemoteStore = defineStore("remote", () => {
       return { success: true };
     } catch (error) {
       console.error("Failed to update relevance filter:", error);
-      return { error: error.response?.data?.error || "Failed to update filter" };
+      return {
+        error: error.response?.data?.error || "Failed to update filter",
+      };
     }
   };
 
@@ -835,7 +849,12 @@ export const useRemoteStore = defineStore("remote", () => {
     try {
       // Fetch non-completed requests (includes both parent items and standalone tracks)
       const response = await axios.get("/v1/download/admin/requests", {
-        params: { limit: 200, offset: 0, exclude_completed: true, top_level_only: false },
+        params: {
+          limit: 200,
+          offset: 0,
+          exclude_completed: true,
+          top_level_only: false,
+        },
       });
       return response.data;
     } catch (error) {
@@ -889,7 +908,11 @@ export const useRemoteStore = defineStore("remote", () => {
    * @param {number|null} until - Optional custom end time (unix timestamp)
    * @returns {Object|null} Stats history with entries and totals, or null on error
    */
-  const fetchDownloadStatsHistory = async (period = "daily", since = null, until = null) => {
+  const fetchDownloadStatsHistory = async (
+    period = "daily",
+    since = null,
+    until = null,
+  ) => {
     try {
       const params = { period };
       if (since !== null) params.since = since;
@@ -930,7 +953,9 @@ export const useRemoteStore = defineStore("remote", () => {
 
   const fetchDownloadAuditForItem = async (itemId) => {
     try {
-      const response = await axios.get(`/v1/download/admin/audit/item/${itemId}`);
+      const response = await axios.get(
+        `/v1/download/admin/audit/item/${itemId}`,
+      );
       return response.data;
     } catch (error) {
       console.error("Failed to fetch audit for item:", error);
@@ -940,7 +965,9 @@ export const useRemoteStore = defineStore("remote", () => {
 
   const fetchDownloadAuditForUser = async (userId) => {
     try {
-      const response = await axios.get(`/v1/download/admin/audit/user/${userId}`);
+      const response = await axios.get(
+        `/v1/download/admin/audit/user/${userId}`,
+      );
       return response.data;
     } catch (error) {
       console.error("Failed to fetch audit for user:", error);
@@ -950,9 +977,13 @@ export const useRemoteStore = defineStore("remote", () => {
 
   const retryDownload = async (itemId, force = false) => {
     try {
-      const response = await axios.post(`/v1/download/admin/retry/${itemId}`, null, {
-        params: { force },
-      });
+      const response = await axios.post(
+        `/v1/download/admin/retry/${itemId}`,
+        null,
+        {
+          params: { force },
+        },
+      );
       return { success: true, data: response.data };
     } catch (error) {
       console.error("Failed to retry download:", error);
@@ -1007,7 +1038,9 @@ export const useRemoteStore = defineStore("remote", () => {
     try {
       const params = {};
       if (isOpen !== null) params.is_open = isOpen;
-      const response = await axios.get("/v1/admin/changelog/batches", { params });
+      const response = await axios.get("/v1/admin/changelog/batches", {
+        params,
+      });
       return response.data;
     } catch (error) {
       console.error("Failed to fetch changelog batches:", error);
@@ -1042,7 +1075,9 @@ export const useRemoteStore = defineStore("remote", () => {
 
   const closeChangelogBatch = async (batchId) => {
     try {
-      const response = await axios.post(`/v1/admin/changelog/batch/${batchId}/close`);
+      const response = await axios.post(
+        `/v1/admin/changelog/batch/${batchId}/close`,
+      );
       return { success: true, data: response.data };
     } catch (error) {
       console.error("Failed to close changelog batch:", error);
@@ -1063,7 +1098,10 @@ export const useRemoteStore = defineStore("remote", () => {
     } catch (error) {
       console.error("Failed to delete changelog batch:", error);
       if (error.response?.status === 400) {
-        return { error: "Cannot delete batch with changes. Only empty batches can be deleted." };
+        return {
+          error:
+            "Cannot delete batch with changes. Only empty batches can be deleted.",
+        };
       }
       if (error.response?.status === 404) {
         return { error: "Batch not found" };
@@ -1074,7 +1112,9 @@ export const useRemoteStore = defineStore("remote", () => {
 
   const fetchChangelogBatchChanges = async (batchId) => {
     try {
-      const response = await axios.get(`/v1/admin/changelog/batch/${batchId}/changes`);
+      const response = await axios.get(
+        `/v1/admin/changelog/batch/${batchId}/changes`,
+      );
       return response.data;
     } catch (error) {
       console.error("Failed to fetch batch changes:", error);
@@ -1133,7 +1173,12 @@ export const useRemoteStore = defineStore("remote", () => {
    * @param {function|null} onProgress - Optional callback (progress: number 0-100) => void
    * @returns {Promise<{job_id?: string, error?: string}>}
    */
-  const uploadIngestionFile = async (file, contextType = null, contextId = null, onProgress = null) => {
+  const uploadIngestionFile = async (
+    file,
+    contextType = null,
+    contextId = null,
+    onProgress = null,
+  ) => {
     const formData = new FormData();
     formData.append("file", file);
     if (contextType) formData.append("context_type", contextType);
@@ -1166,7 +1211,9 @@ export const useRemoteStore = defineStore("remote", () => {
         } else {
           try {
             const errorData = JSON.parse(xhr.responseText);
-            resolve({ error: errorData.error || `Upload failed: ${xhr.status}` });
+            resolve({
+              error: errorData.error || `Upload failed: ${xhr.status}`,
+            });
           } catch {
             resolve({ error: `Upload failed: ${xhr.status}` });
           }
@@ -1185,7 +1232,10 @@ export const useRemoteStore = defineStore("remote", () => {
 
       xhr.open("POST", "/v1/ingestion/upload");
       if (idToken) {
-        xhr.setRequestHeader("Authorization", authorizationHeaderValue(idToken));
+        xhr.setRequestHeader(
+          "Authorization",
+          authorizationHeaderValue(idToken),
+        );
       }
       const csrfToken = getCsrfToken();
       if (csrfToken) {
@@ -1261,13 +1311,18 @@ export const useRemoteStore = defineStore("remote", () => {
 
   const resolveIngestionReview = async (jobId, selectedOption) => {
     try {
-      const response = await axios.post(`/v1/ingestion/review/${jobId}/resolve`, {
-        selected_option: selectedOption,
-      });
+      const response = await axios.post(
+        `/v1/ingestion/review/${jobId}/resolve`,
+        {
+          selected_option: selectedOption,
+        },
+      );
       return response.data;
     } catch (error) {
       console.error("Failed to resolve ingestion review:", error);
-      return { error: error.response?.data?.error || "Failed to resolve review" };
+      return {
+        error: error.response?.data?.error || "Failed to resolve review",
+      };
     }
   };
 

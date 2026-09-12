@@ -9,6 +9,7 @@ enum class RepeatModeUi {
 }
 
 data class PlayerScreenState(
+    val radioCreationStatus: RadioCreationStatusUi = RadioCreationStatusUi.Idle,
     val isLoading: Boolean = true,
     val trackId: String = "",
     val trackName: String = "",

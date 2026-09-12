@@ -173,6 +173,30 @@ private suspend fun resolveRadioSeedLabel(
     else -> null
 } ?: entityId
 
+private fun startBasicRadio(
+    controller: com.lelloman.pezzottify.android.domain.player.RadioCreationController,
+    api: RemoteApiClient,
+    statics: StaticsStore,
+    player: PezzottifyPlayer,
+    entityType: String,
+    entityId: String,
+) {
+    controller.start {
+        when (val response = api.getRadioTrackIds(entityType, entityId, 50)) {
+            is RemoteApiResponse.Error -> error("Radio request failed")
+            is RemoteApiResponse.Success -> {
+                if (response.data.isEmpty()) null else {
+                    val label = resolveRadioSeedLabel(statics, entityType, entityId)
+                    val commit: () -> Unit = {
+                        player.loadRadio(response.data, buildBasicRadioContext(entityType, entityId, label, 50))
+                    }
+                    commit
+                }
+            }
+        }
+    }
+}
+
 private fun buildBasicRadioContext(
     entityType: String,
     entityId: String,
@@ -1044,6 +1068,7 @@ class InteractorsModule {
 
     @Provides
     fun provideAlbumScreenInteractor(
+        radioCreation: com.lelloman.pezzottify.android.domain.player.RadioCreationController,
         player: PezzottifyPlayer,
         logViewedContentUseCase: LogViewedContentUseCase,
         recordImpressionUseCase: RecordImpressionUseCase,
@@ -1107,19 +1132,7 @@ class InteractorsModule {
         }
 
         override suspend fun playRadio(entityType: String, entityId: String) {
-            val count = 50
-            when (val response = remoteApiClient.getRadioTrackIds(entityType, entityId, count)) {
-                is RemoteApiResponse.Success -> {
-                    if (response.data.isNotEmpty()) {
-                        val label = resolveRadioSeedLabel(staticsStore, entityType, entityId)
-                        player.loadRadio(
-                            response.data,
-                            buildBasicRadioContext(entityType, entityId, label, count),
-                        )
-                    }
-                }
-                is RemoteApiResponse.Error -> Unit
-            }
+            startBasicRadio(radioCreation, remoteApiClient, staticsStore, player, entityType, entityId)
         }
 
         override fun addTrackToQueue(trackId: String) {
@@ -1255,6 +1268,7 @@ class InteractorsModule {
 
     @Provides
     fun provideArtistScreenInteractor(
+        radioCreation: com.lelloman.pezzottify.android.domain.player.RadioCreationController,
         logViewedContentUseCase: LogViewedContentUseCase,
         recordImpressionUseCase: RecordImpressionUseCase,
         getLikedStateUseCase: GetLikedStateUseCase,
@@ -1277,19 +1291,7 @@ class InteractorsModule {
         }
 
         override suspend fun playRadio(artistId: String) {
-            val count = 50
-            when (val response = remoteApiClient.getRadioTrackIds("artist", artistId, count)) {
-                is RemoteApiResponse.Success -> {
-                    if (response.data.isNotEmpty()) {
-                        val label = resolveRadioSeedLabel(staticsStore, "artist", artistId)
-                        player.loadRadio(
-                            response.data,
-                            buildBasicRadioContext("artist", artistId, label, count),
-                        )
-                    }
-                }
-                is RemoteApiResponse.Error -> Unit
-            }
+            startBasicRadio(radioCreation, remoteApiClient, staticsStore, player, "artist", artistId)
         }
 
         override fun observeDiscographyState(artistId: String) =
@@ -1375,6 +1377,7 @@ class InteractorsModule {
 
     @Provides
     fun provideMainScreenInteractor(
+        radioCreation: com.lelloman.pezzottify.android.domain.player.RadioCreationController,
         loggerFactory: LoggerFactory,
         player: PezzottifyPlayer,
         notificationRepository: NotificationRepository,
@@ -1383,6 +1386,11 @@ class InteractorsModule {
         playbackSessionHandler: PlaybackSessionHandler,
     ): MainScreenViewModel.Interactor =
         object : MainScreenViewModel.Interactor {
+            override fun getRadioCreationStatus() = radioCreation.status.map {
+                com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi.valueOf(it.name)
+            }
+            override fun retryRadioCreation() = radioCreation.retry()
+            override fun dismissRadioCreation() = radioCreation.cancel()
 
             val logger = loggerFactory.getLogger(MainScreenViewModel.Interactor::class)
 
@@ -1553,6 +1561,7 @@ class InteractorsModule {
 
     @Provides
     fun providePlayerScreenInteractor(
+        radioCreation: com.lelloman.pezzottify.android.domain.player.RadioCreationController,
         player: PezzottifyPlayer,
         playbackMetadataProvider: com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider,
         playbackModeManager: com.lelloman.pezzottify.android.domain.player.PlaybackModeManager,
@@ -1561,6 +1570,11 @@ class InteractorsModule {
         updateSmartContinuationSetting: UpdateSmartContinuationSetting,
     ): PlayerScreenViewModel.Interactor =
         object : PlayerScreenViewModel.Interactor {
+            override fun getRadioCreationStatus() = radioCreation.status.map {
+                com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi.valueOf(it.name)
+            }
+            override fun retryRadioCreation() = radioCreation.retry()
+            override fun dismissRadioCreation() = radioCreation.cancel()
             override fun getPlaybackState(): Flow<PlayerScreenViewModel.Interactor.PlaybackState?> =
                 playbackMetadataProvider.queueState
                     .combine(player.isPlaying) { queueState, isPlaying -> queueState to isPlaying }

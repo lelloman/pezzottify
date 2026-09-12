@@ -71,12 +71,14 @@ class PlayerModule {
         remotePlaybackController: RemotePlaybackController,
         playbackModeManager: PlaybackModeManager,
         playbackSessionHandler: PlaybackSessionHandler,
+        radioCreation: RadioCreationController,
         loggerFactory: LoggerFactory,
     ): PezzottifyPlayer = PlaybackRouter(
         localPlayer = playerImpl,
         remoteController = remotePlaybackController,
         playbackModeManager = playbackModeManager,
         playbackSessionHandler = playbackSessionHandler,
+        radioCreation = radioCreation,
         loggerFactory = loggerFactory,
     )
 

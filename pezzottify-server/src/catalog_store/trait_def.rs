@@ -450,6 +450,28 @@ pub trait CatalogStore: Send + Sync {
         Ok(Vec::new())
     }
 
+    /// Search playable tracks, applying availability before the result limit.
+    fn search_available_track_embeddings(
+        &self,
+        namespace: &str,
+        query: &[f32],
+        limit: usize,
+    ) -> Result<Vec<super::EntityEmbeddingSearchResult>> {
+        let results = self.search_entity_embeddings(namespace, query, Some("track"), usize::MAX)?;
+        let mut available = Vec::new();
+        for result in results {
+            if available.len() >= limit {
+                break;
+            }
+            if self.get_track(&result.entity_id)?.is_some_and(|track| {
+                track.availability == super::TrackAvailability::Available
+            }) {
+                available.push(result);
+            }
+        }
+        Ok(available)
+    }
+
     // =========================================================================
     // Popularity Data
     // =========================================================================

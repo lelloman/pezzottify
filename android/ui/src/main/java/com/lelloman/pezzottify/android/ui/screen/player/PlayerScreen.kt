@@ -176,6 +176,9 @@ private fun PlayerScreenContent(
                     alpha = backgroundAlpha
                 },
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+            bottomBar = {
+                RadioCreationNotice(state.radioCreationStatus, actions::retryRadioCreation, actions::dismissRadioCreation)
+            },
             topBar = {
                 TopAppBar(
                     title = {

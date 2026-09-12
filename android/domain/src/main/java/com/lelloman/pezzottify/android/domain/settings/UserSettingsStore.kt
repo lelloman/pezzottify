@@ -20,8 +20,8 @@ interface UserSettingsStore {
     val isNotifyWhatsNewEnabled: StateFlow<Boolean>
 
     /**
-     * Whether clients should add a recommended track when the active queue
-     * reaches its last track. This setting is synced with the server.
+     * Whether clients should queue recommended tracks as the active queue
+     * nears its end. This setting is synced with the server.
      */
     val isSmartContinuationEnabled: StateFlow<Boolean>
 
