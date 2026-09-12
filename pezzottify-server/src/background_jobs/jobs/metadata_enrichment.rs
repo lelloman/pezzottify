@@ -1727,7 +1727,7 @@ fn wikidata_date(value: &str) -> Option<String> {
     }
 }
 
-fn build_provider(agent: &AgentSettings) -> Box<dyn LlmProvider> {
+pub(super) fn build_provider(agent: &AgentSettings) -> Box<dyn LlmProvider> {
     match agent.llm.provider.as_str() {
         "openai" => match &agent.llm.api_key_command {
             Some(command) => Box::new(OpenAIProvider::with_key_command(

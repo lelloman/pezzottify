@@ -131,6 +131,37 @@ scan resumption, retry backoff, cancellation, and linking multiple versions
 through the complete identification path. These tests use synthetic identities
 and scripted responses; they do not establish a real model's music knowledge.
 
+### Repeatable real-model evaluation
+
+From `pezzottify-server`, run the opt-in harness with the actual enrichment
+configuration and a new report path:
+
+```bash
+WORK_EVAL_CONFIG=/absolute/path/server.toml WORK_EVAL_REPORT=/tmp/work-eval.jsonl WORK_EVAL_REPEATS=2 cargo test --lib work_evaluation_real_model -- --ignored --nocapture
+```
+
+The config must explicitly select a model and enable the agent. The harness uses
+the production provider factory, prompts, Wikidata lookup and Work storage, but
+only opens temporary databases; it does not open the production catalog or queue.
+Provider calls may incur the usual costs. Reports include model responses and
+source evidence; treat their contents as potentially sensitive.
+
+`tests/fixtures/work-evaluation-v1.json` contains 16 synthetic catalog contexts
+with separately reviewed expected identities and source links. It covers shared
+versions, covers, namesakes, movement granularity, ambiguity, invented titles,
+medleys, spoken content and instruction-like catalog text. Expected labels are
+not passed to the model. The second repetition reverses processing order.
+
+JSONL records preserve each result and flag false creations, missed identities,
+wrong creators/titles/kinds/external IDs, duplicate Works, false merges, repeat
+inconsistency and pipeline failures. A missing Wikidata ID is allowed when the
+inferred identity is otherwise correct; a passing score does not imply full
+external-source coverage. Any failed case fails the test after writing its report.
+This is an initial regression corpus, not a comprehensive acceptance evaluation:
+extend it with reviewed real-catalog cases, arrangements and traditional works
+before broad rollout. Compiling or running the scoring unit tests is not evidence
+that the configured model passed this evaluation.
+
 ## Deliberate v1 limits
 
 Each track links to at most one Work; composite tracks abstain. Parent/child
