@@ -21,6 +21,7 @@ pub mod related_artists_enrichment;
 pub mod track_embedding_sync;
 pub mod whatsnew_batch;
 mod work_resolution;
+mod work_knowledge;
 
 // pub use audit_log_cleanup::AuditLogCleanupJob;
 // pub use expand_artists_base::ExpandArtistsBaseJob;

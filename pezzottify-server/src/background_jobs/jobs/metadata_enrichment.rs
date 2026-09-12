@@ -186,6 +186,7 @@ fn track_context_from_resolved(
 pub struct MetadataEnrichmentJob {
     settings: MetadataEnrichmentJobSettings,
     pub(super) agent: AgentSettings,
+    pub(super) work_knowledge: std::sync::Arc<dyn super::work_knowledge::WorkKnowledgeLookup>,
 }
 
 impl MetadataEnrichmentJob {
@@ -193,6 +194,7 @@ impl MetadataEnrichmentJob {
         Self {
             settings: settings.clone(),
             agent,
+            work_knowledge: std::sync::Arc::new(super::work_knowledge::WikidataWorkLookup),
         }
     }
 
