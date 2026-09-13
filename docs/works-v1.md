@@ -162,6 +162,39 @@ extend it with reviewed real-catalog cases, arrangements and traditional works
 before broad rollout. Compiling or running the scoring unit tests is not evidence
 that the configured model passed this evaluation.
 
+### Thinking-model deployment requirements
+
+Artist, album, track and Work enrichment support `reasoning_effort = "none"`
+under `[agent.llm]` for an OpenAI-compatible endpoint. It is omitted by default
+for compatibility; configure it explicitly for SimpleAI's Qwen `class:fast`.
+Each eligible runner must advertise support for `none`. The SimpleAI runner
+model override is:
+
+```toml
+[engines.llama_cpp.models."Qwen3.6-35B-A3B-MXFP4_MOE"]
+reasoning = { enabled = true, supported_efforts = ["none"], supports_thinking_budget = false }
+```
+
+This enables an opt-in request control, without changing the model's defaults
+for other clients. Deploy the corresponding SimpleAI runner and gateway changes
+to preserve `reasoning_content` separately from final `content`. Enrichment now
+rejects truncated, empty and non-successfully-finished answers before parsing or
+storage; partial JSON is not accepted just because it happens to parse.
+
+On 2026-09-13, the baseline synthetic Yesterday request exhausted 1,500 tokens
+and returned non-JSON reasoning. The same request with thinking disabled returned
+complete JSON in 9.6 seconds directly on halo1 and 9.7 seconds through SimpleAI.
+These are response-format checks, **not identity-quality passes**: the returned
+creator credits still failed the reviewed expectation. The full 16-case follow-up
+was blocked before inference by Wikidata `maxlag` responses. Do not bypass source
+backoff or treat that run as a model-quality result.
+
+Halo1 and halo2 received the opt-in config on that date, with backups alongside
+`/home/lelloman/config.toml` named `config.toml.before-work-reasoning-*`.
+RTX was offline and its live configuration remains unverified. Application
+binaries and production Pezzottify's reasoning setting still require rollout;
+temporary evaluation settings do not change production enrichment.
+
 ## Deliberate v1 limits
 
 Each track links to at most one Work; composite tracks abstain. Parent/child

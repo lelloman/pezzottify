@@ -101,6 +101,7 @@ read_pool_size = 4
 # provider = "openai" # "openai" for OpenAI-compatible APIs, otherwise Ollama
 # base_url = "http://simple-ai:8000/v1"
 # model = "your-chat-model"
+# reasoning_effort = "none" # Enrichment only; requires advertised model support.
 # api_key = "your-api-key"
 # temperature = 0.2
 # timeout_secs = 120

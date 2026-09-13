@@ -547,6 +547,7 @@ impl MetadataEnrichmentJob {
             .complete(&messages, None, &options)
             .await
             .map_err(|e| ItemError::retryable(format!("LLM completion failed: {e}")))?;
+        require_complete_answer(&response)?;
         let json = extract_json_object(&response.message.content).ok_or_else(|| {
             ItemError::retryable("LLM response did not contain a JSON object".to_string())
         })?;
@@ -1729,23 +1730,42 @@ fn wikidata_date(value: &str) -> Option<String> {
 
 pub(super) fn build_provider(agent: &AgentSettings) -> Box<dyn LlmProvider> {
     match agent.llm.provider.as_str() {
-        "openai" => match &agent.llm.api_key_command {
-            Some(command) => Box::new(OpenAIProvider::with_key_command(
-                agent.llm.base_url.clone(),
-                agent.llm.model.clone(),
-                command.clone(),
-            )),
-            None => Box::new(OpenAIProvider::new(
-                agent.llm.base_url.clone(),
-                agent.llm.model.clone(),
-                agent.llm.api_key.clone(),
-            )),
-        },
+        "openai" => {
+            let provider = match &agent.llm.api_key_command {
+                Some(command) => OpenAIProvider::with_key_command(
+                    agent.llm.base_url.clone(),
+                    agent.llm.model.clone(),
+                    command.clone(),
+                ),
+                None => OpenAIProvider::new(
+                    agent.llm.base_url.clone(),
+                    agent.llm.model.clone(),
+                    agent.llm.api_key.clone(),
+                ),
+            };
+            Box::new(provider.with_reasoning_effort(agent.llm.reasoning_effort.clone()))
+        }
         _ => Box::new(OllamaProvider::new(
             agent.llm.base_url.clone(),
             agent.llm.model.clone(),
         )),
     }
+}
+
+/// Never parse a partial answer (or reasoning-only response) as durable metadata.
+pub(super) fn require_complete_answer(
+    response: &crate::agent::CompletionResponse,
+) -> Result<(), ItemError> {
+    if response.finish_reason != crate::agent::llm::FinishReason::Stop {
+        return Err(ItemError::retryable(format!(
+            "LLM did not finish its answer ({:?}); no enrichment saved",
+            response.finish_reason
+        )));
+    }
+    if response.message.content.trim().is_empty() {
+        return Err(ItemError::retryable("LLM returned no final answer".into()));
+    }
+    Ok(())
 }
 
 fn output_schema(entity_type: &str) -> &'static str {
@@ -1961,6 +1981,24 @@ async fn enrich_until_cancelled<T>(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn enrichment_rejects_truncated_or_empty_final_answers() {
+        use crate::agent::llm::{CompletionResponse, FinishReason};
+        let mut response = CompletionResponse {
+            message: crate::agent::Message::assistant("{\"summary\":\"plausible but incomplete\"}"),
+            finish_reason: FinishReason::MaxTokens,
+            usage: None,
+        };
+        assert!(super::require_complete_answer(&response).is_err());
+        response.finish_reason = FinishReason::Stop;
+        assert!(super::require_complete_answer(&response).is_ok());
+        response.message.content.clear();
+        assert!(super::require_complete_answer(&response).is_err());
+        response.message.content = "{}".into();
+        response.finish_reason = FinishReason::Error;
+        assert!(super::require_complete_answer(&response).is_err());
+    }
+
     use super::*;
     use std::sync::Arc;
 

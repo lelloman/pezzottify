@@ -472,6 +472,7 @@ impl AppConfig {
                 model: agent_llm_file.model.unwrap_or(agent_llm_defaults.model),
                 api_key: agent_llm_file.api_key,
                 api_key_command: agent_llm_file.api_key_command,
+                reasoning_effort: agent_llm_file.reasoning_effort,
                 temperature: agent_llm_file
                     .temperature
                     .unwrap_or(agent_llm_defaults.temperature),
@@ -480,6 +481,20 @@ impl AppConfig {
                     .unwrap_or(agent_llm_defaults.timeout_secs),
             },
         };
+
+        if let Some(effort) = &agent.llm.reasoning_effort {
+            anyhow::ensure!(
+                agent.llm.provider == "openai",
+                "agent.llm.reasoning_effort requires an OpenAI-compatible provider"
+            );
+            anyhow::ensure!(
+                matches!(
+                    effort.as_str(),
+                    "none" | "minimal" | "low" | "medium" | "high" | "xhigh"
+                ),
+                "invalid agent.llm.reasoning_effort"
+            );
+        }
 
         // Ingestion settings from file config
         let ingestion_file = file.ingestion.unwrap_or_default();
@@ -910,6 +925,7 @@ impl Default for AgentSettings {
 /// Settings for the LLM provider.
 #[derive(Debug, Clone)]
 pub struct AgentLlmSettings {
+    pub reasoning_effort: Option<String>,
     pub provider: String,
     pub base_url: String,
     pub model: String,
@@ -922,6 +938,7 @@ pub struct AgentLlmSettings {
 impl Default for AgentLlmSettings {
     fn default() -> Self {
         Self {
+            reasoning_effort: None,
             provider: "ollama".to_string(),
             base_url: "http://localhost:11434".to_string(),
             model: "llama3.1:8b".to_string(),
@@ -1140,6 +1157,37 @@ fn parse_logging_level(s: &str) -> Option<RequestsLoggingLevel> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn enrichment_reasoning_config_is_explicit_and_validated() {
+        let temp = tempfile::tempdir().unwrap();
+        let cli = super::CliConfig {
+            db_dir: Some(temp.path().into()),
+            ..Default::default()
+        };
+        for (provider, effort, valid) in [
+            ("openai", "none", true),
+            ("openai", "typo", false),
+            ("ollama", "none", false),
+        ] {
+            let file = super::FileConfig {
+                agent: Some(super::AgentConfig {
+                    llm: Some(super::AgentLlmConfig {
+                        provider: Some(provider.into()),
+                        reasoning_effort: Some(effort.into()),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            };
+            let result = super::AppConfig::resolve(&cli, Some(file));
+            assert_eq!(result.is_ok(), valid);
+            if let Ok(config) = result {
+                assert_eq!(config.agent.llm.reasoning_effort.as_deref(), Some(effort));
+            }
+        }
+    }
+
     use super::*;
     use tempfile::TempDir;
 

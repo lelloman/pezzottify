@@ -255,6 +255,8 @@ pub struct AgentLlmConfig {
     pub temperature: Option<f32>,
     /// Request timeout in seconds.
     pub timeout_secs: Option<u64>,
+    /// Optional reasoning control for OpenAI-compatible enrichment requests.
+    pub reasoning_effort: Option<String>,
 }
 
 /// Configuration for the ingestion feature.

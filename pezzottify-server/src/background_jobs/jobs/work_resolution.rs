@@ -1,5 +1,5 @@
 //! Conservative, auditable identification of the composition behind a track.
-use super::metadata_enrichment::{ItemError, MetadataEnrichmentJob};
+use super::metadata_enrichment::{require_complete_answer, ItemError, MetadataEnrichmentJob};
 use crate::agent::{CompletionOptions, LlmProvider, Message};
 use crate::background_jobs::{context::JobContext, job::JobError};
 use crate::db_executor::DbPriority;
@@ -185,6 +185,7 @@ impl MetadataEnrichmentJob {
             )
             .await
             .map_err(retry)?;
+        require_complete_answer(&first)?;
         let first_output: Identification =
             serde_json::from_str(&first.message.content).map_err(retry)?;
         if knowledge.candidates.is_empty() {
@@ -218,6 +219,7 @@ impl MetadataEnrichmentJob {
                 Message::system(&system_prompt),
                 Message::user(json!({"context":context,"initial_identification":first_output.work,"local_candidates":candidates,"wikidata_candidates":knowledge.candidates}).to_string()),
             ], None, &options).await.map_err(retry)?;
+            require_complete_answer(&response)?;
             (
                 serde_json::from_str::<Identification>(&response.message.content).map_err(retry)?,
                 response.message.content,
@@ -284,7 +286,7 @@ fn validate_source(
 }
 
 fn retry(error: impl std::fmt::Display) -> ItemError {
-    ItemError::Retryable(error.to_string())
+    ItemError::Retryable(format!("{error:#}"))
 }
 
 #[cfg(test)]
