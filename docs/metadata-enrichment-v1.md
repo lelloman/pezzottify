@@ -1,102 +1,120 @@
-# Metadata Enrichment v1
+# Source-backed metadata enrichment
 
-Work identification now runs as a separate `work_resolution` queue type in this
-job. See [Works v1](works-v1.md) for discovery scope, matching rules, APIs, and
-the model evaluation dry-run workflow.
+The `metadata_enrichment_v1` job uses the existing typed artist, album and track
+tables in `enrichment.db`. New results have `source_status = source_backed_v3`.
+Works use the same queue but a separate resolver: see [Works v1](works-v1.md).
 
-Metadata Enrichment v1 stores generated artist, album, and track facts in explicit SQLite tables instead of generic JSON profiles. The canonical rows live in `enrichment.db` and are designed for filtering, joins, and detail-page status display.
+## Pipeline
 
-## Storage Model
+1. Resolve identity using external identifiers, never a bare name.
+2. Read structured reference facts directly.
+3. For a missing supported field, extract **one fact per LLM request** from a
+   short passage fetched for that resolved entity.
+4. Validate output and retain per-field provenance. Unknown facts stay null.
 
-Primary typed tables:
+Artist identity uses Wikidata Spotify artist ID (P1902) and, when available,
+the catalog's MusicBrainz artist ID (P434). Multiple returned Q-IDs are
+ambiguous: no first-result selection. Album identity uses MusicBrainz barcode
+search; track identity uses ISRC search. MusicBrainz candidates must also match
+the normalized title and complete artist-credit names. Multiple matching
+candidates or truncated search results do not resolve an identity.
 
-| Table | Entity | Purpose |
-| ----- | ------ | ------- |
-| `artist_enrichment_v1` | artist | Person/group role flags, dates, origin, language, confidence, summary, bio |
-| `album_enrichment_v1` | album | Release/recording dates, country, label/catalog data, album flags, summary, notes |
-| `track_enrichment_v1` | track | Work/performance fields, classical metadata, language, track flags, summary, notes |
+Resolved IDs are persisted and reused on subsequent attempts. Refreshed records
+must still carry the catalog identifier; MusicBrainz titles and credits are also
+rechecked. There is deliberately no name-only matching fallback.
 
-Shared child tables:
+## Facts and evidence
 
-| Table | Purpose |
-| ----- | ------- |
-| `enrichment_queue_v1` | Queue state for missing or stale entity enrichment |
-| `entity_tags_v1` | Queryable genre/style/mood/scene/theme tags |
-| `entity_contributors_v1` | Contributor names, optional local IDs, roles, confidence |
-| `entity_relations_v1` | Local or external relations with confidence and visibility gating |
-| `entity_aliases_v1` | Alternate names with locale/source/confidence |
-| `entity_external_ids_v1` | Provider IDs and URLs such as ISRC or UPC |
-| `entity_sources_v1` | Source names, URLs, retrieval time, confidence |
-| `entity_evidence_v1` | Supplemental snippets or raw JSON payloads, not the query surface |
+Currently supported deterministic facts:
 
-Legacy `artist_enrichment` and `album_enrichment` remain for compatibility. New generated metadata should use the `_v1` tables.
+- Artists: explicit person/group type, birth/death/foundation/dissolution dates,
+  birthplace or formation place. Citizenship is not converted to origin country.
+- Albums: release-group first-release date, label and catalog number. A particular
+  edition's release date is not substituted for the album's original date.
+- Tracks: title of a single explicitly linked MusicBrainz Work.
 
-## Queue Behavior
+Wikidata time precision is preserved (year, month or day). Unsupported calendar
+models and coarser dates abstain. Deprecated claims are ignored; preferred claims
+take precedence; qualified claims are not flattened into unconditional facts.
+Conflicting values remain in evidence rather than being selected arbitrarily.
 
-The server enqueues work without blocking user requests:
+Missing artist facts can be extracted from the English Wikipedia introduction
+linked by the resolved Wikidata entity. Missing album/track facts can be extracted
+from MusicBrainz annotations. No arbitrary model-provided URL is fetched.
 
-- `POST /v1/user/impression` enqueues the viewed artist, album, or track with reason `impression` and priority `5`.
-- `POST /v1/user/listening` enqueues a completed track play with reason `listening` and priority `20`.
-- Completed listening events also enqueue the track's album and artists with reason `listening_adjacent` and priority `10`.
-- Enqueue is deduplicated per entity and only happens when the v1 row is missing or older than the stale threshold, currently 90 days.
+The extraction field allowlist is deliberately small: artist dates/origin;
+album recording start/end dates and label; track composition/recording dates and
+language. Biography generation, mood tags, inferred roles and other broad profile
+generation are disabled. Expanding coverage requires adding a source adapter or
+a separately tested field extractor, not restoring model-memory fallback.
 
-Detail content responses include `enrichment_status` when the enrichment database has queue or completed state for the entity. The status reports `status`, `stage`, `attempts`, `last_error`, timestamps, and completed enrichment metadata.
+Each completion receives the identified subject, one field and at most 2,500
+characters of relevant source text. There are at most two source passages per
+field. Responses contain only `value` and `quote`; the quote must occur verbatim
+in the fetched passage and contain the value. Dates are normalized by code,
+without inventing precision. Empty/truncated completions and extra fields fail
+validation. Quote alignment is a guardrail, **not proof of semantic correctness**;
+wrong-subject and wrong-field extractions still require factual evaluation.
 
-## Background Job
+`entity_evidence_v1` holds individual claims with field, value, source URL,
+retrieval timestamp, supporting source data/quote and extraction model where
+applicable. An `enrichment_result` evidence row holds the versioned facts,
+resolved identities, conflicts and claims needed to resume enrichment.
+`entity_external_ids_v1` and `entity_sources_v1` remain populated.
 
-The `metadata_enrichment_v1` background job runs on the configured interval and can also be triggered from the admin jobs panel.
+Previously source-backed values are retained when a refresh omits or contradicts
+them, together with their original evidence; fresh conflicts are recorded for
+review. Legacy deterministic Wikidata fields are preserved, but legacy LLM
+fillers are not promoted to verified facts. There is no automatic conflict-review
+UI or correction mechanism in this change.
 
-Default configuration:
+## Queue, failures and configuration
 
-```toml
-[background_jobs.metadata_enrichment]
-interval_hours = 6
-batch_size = 25
-retry_after_secs = 21600
-```
+Listening/impression discovery and the normal 90-day stale interval are unchanged.
+The former special immediate requeue of Wikidata-only artists for LLM completion
+is removed.
 
-Manual trigger params:
+Unresolved/ambiguous identity, HTTP errors, rate limits and Wikidata API errors
+remain retryable with the configured backoff. They never trigger unsourced
+generation. Missing catalog items are permanent failures for that attempt.
+If an individual extraction fails, verified facts are saved before the item is
+retried; already populated fields do not need another model call.
+A legitimate null answer is abstention, not a model error.
+
+Structured retrieval also works with the agent disabled. Extraction uses the
+existing shared `[agent.llm]` provider/model and optional `reasoning_effort` and
+`thinking_budget_tokens` settings. The current extraction request uses
+temperature zero and 1,500 total output tokens. Controls must be supported by the
+selected SimpleAI runner; this change does not alter SimpleAI or deployed configs.
+
+Reference HTTP clients use bounded bodies, timeouts and fixed provider endpoints.
+MusicBrainz calls share a process-wide throttle of at least 1.1 seconds between
+request starts. Retries use the queue backoff rather than tight HTTP loops.
+
+Example manual job:
 
 ```json
-{
-  "batch_size": 10,
-  "entity_types": ["artist", "album", "track"]
-}
+{"entity_types":["artist","album","track"],"batch_size":5}
 ```
 
-`entity_types` is optional. When omitted, the job claims all supported entity types. These trigger parameters only scope a single run; they do not change the shared LLM provider settings.
+Deploying does not immediately rewrite every existing profile. Normal stale
+discovery/explicitly queued items determine which records are processed.
 
-## LLM Configuration
+## Verification
 
-The job reuses the existing shared `[agent]` / `[agent.llm]` configuration. It does not add metadata-specific model, provider, base URL, or API key settings. The existing agent LLM supports Ollama and OpenAI-compatible providers. Simple-AI can be used if it exposes an OpenAI-compatible chat endpoint.
+Offline HTTP fixtures exercise identifier resolution/reuse, identity ambiguity,
+MusicBrainz corroboration, precision and provider errors. Scripted-model tests
+exercise one-field prompts, preservation of known facts, abstention and fabricated
+evidence rejection. Work and persistence tests cover external-ID reuse and
+namesake separation.
 
-```toml
-[agent]
-enabled = true
+Run from `pezzottify-server`:
 
-[agent.llm]
-provider = "openai"
-base_url = "http://simple-ai:8000/v1"
-model = "your-chat-model"
-temperature = 0.2
-timeout_secs = 120
+```bash
+cargo test --lib
 ```
 
-If `agent.enabled` is false, the job marks claimed rows as queued again with `last_error = "agent LLM is disabled"` and `next_attempt_at` set from `retry_after_secs`.
-
-## Generated Output Contract
-
-The job prompts the LLM for strict JSON and parses the first complete JSON object in the response. The generated data is normalized before storage:
-
-- Empty strings and literal `"null"` are discarded.
-- Confidence values are clamped to `0.0..=1.0`.
-- Album UPC and track ISRC values from the catalog are preserved as external IDs.
-- Relations are visible only when confidence is at least `0.8`; lower-confidence relations remain stored but hidden from visible relation queries.
-- Raw LLM JSON is stored as evidence for audit/debugging, not as the query surface.
-
-## Operational Notes
-
-- The job is retry-oriented. LLM errors, malformed JSON, and transient database write failures leave the queue item retryable.
-- Missing catalog entities are permanent failures because there is no source context to enrich.
-- Generated facts should be treated as inferred metadata unless source-backed enrichment is added later.
-- The admin panel can limit a manual run by batch size and entity type, which is useful when validating a new model or provider configuration.
+These tests validate the pipeline, not the factual accuracy of the deployed model.
+Before broad rollout, evaluate a reviewed source-backed corpus for identity
+accuracy, supported-fact precision, abstention/coverage, latency and false Work
+merges. Keep production databases out of those experiments.

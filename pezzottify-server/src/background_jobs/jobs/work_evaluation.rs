@@ -108,6 +108,7 @@ fn work_evaluation_scoring_rejects_wrong_and_unsupported_identities() {
     let suite = suite();
     let case = &suite.cases[0];
     let mut work = crate::enrichment_store::Work {
+        musicbrainz_id: None,
         id: "test-work".into(),
         title: case.title.clone(),
         creators: case.creators.clone(),

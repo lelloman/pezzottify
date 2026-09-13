@@ -14,6 +14,7 @@ pub struct Work {
     pub kind: String,
     pub created_at: i64,
     pub wikidata_id: Option<String>,
+    pub musicbrainz_id: Option<String>,
 }
 
 /// A model proposes identity; storage decides whether it can be accepted.
@@ -146,6 +147,41 @@ mod tests {
         )
         .unwrap();
         (store, tmp)
+    }
+
+    #[test]
+    fn musicbrainz_work_ids_are_stable_and_namesakes_do_not_merge() {
+        let (store, _tmp) = setup();
+        let evidence = |id: &str| serde_json::json!({"selected_source":{"musicbrainz_id":id}});
+        let id = "00000000-0000-0000-0000-000000000001";
+        let first = store
+            .resolve_track_work("a", Some(&proposal("Song", "Writer")), &evidence(id), "")
+            .unwrap()
+            .work
+            .unwrap();
+        let renamed = store
+            .resolve_track_work(
+                "b",
+                Some(&proposal("Canonical Song", "Writer")),
+                &evidence(id),
+                "",
+            )
+            .unwrap()
+            .work
+            .unwrap();
+        assert_eq!(first.id, renamed.id);
+        assert_eq!(first.musicbrainz_id.as_deref(), Some(id));
+        let other = store
+            .resolve_track_work(
+                "c",
+                Some(&proposal("Song", "Writer")),
+                &evidence("00000000-0000-0000-0000-000000000002"),
+                "",
+            )
+            .unwrap()
+            .work
+            .unwrap();
+        assert_ne!(first.id, other.id);
     }
 
     fn proposal(title: &str, creator: &str) -> WorkProposal {
@@ -379,20 +415,21 @@ fn work_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Work> {
         kind: row.get(4)?,
         created_at: row.get(5)?,
         wikidata_id: row.get(6)?,
+        musicbrainz_id: row.get(7)?,
     })
 }
 
 impl SqliteEnrichmentStore {
     pub(super) fn read_work(&self, id: &str) -> Result<Option<Work>> {
         Ok(self.read_conn.lock().unwrap().query_row(
-            "SELECT id,title,creators_json,catalog_number,kind,created_at,(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='wikidata') FROM works_v1 WHERE id=?1",
+            "SELECT id,title,creators_json,catalog_number,kind,created_at,(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='wikidata'),(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='musicbrainz') FROM works_v1 WHERE id=?1",
             [id], work_from_row,
         ).optional()?)
     }
 
     pub(super) fn find_works(&self, query: &str, limit: usize) -> Result<Vec<Work>> {
         let conn = self.read_conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT id,title,creators_json,catalog_number,kind,created_at,(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='wikidata') FROM works_v1 WHERE instr(lower(title),lower(?1)) > 0 ORDER BY title,id LIMIT ?2")?;
+        let mut stmt = conn.prepare("SELECT id,title,creators_json,catalog_number,kind,created_at,(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='wikidata'),(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='musicbrainz') FROM works_v1 WHERE instr(lower(title),lower(?1)) > 0 ORDER BY title,id LIMIT ?2")?;
         let rows = stmt.query_map(params![query.trim(), limit.min(100) as i64], work_from_row)?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
@@ -462,10 +499,10 @@ impl SqliteEnrichmentStore {
         let mut reason = unresolved_reason.to_owned();
         // This evidence is assembled by the server after validating the model's
         // citation against fetched facts; it is not a model-supplied payload.
-        let source_id = evidence
+        let wikidata_id = evidence
             .pointer("/selected_source/qid")
             .and_then(|v| v.as_str());
-        if let Some(qid) = source_id {
+        if let Some(qid) = wikidata_id {
             ensure!(
                 qid.strip_prefix('Q').is_some_and(|n| !n.is_empty()
                     && n.len() <= 20
@@ -473,11 +510,29 @@ impl SqliteEnrichmentStore {
                 "invalid Wikidata identifier"
             );
         }
+        let musicbrainz_id = evidence
+            .pointer("/selected_source/musicbrainz_id")
+            .and_then(|v| v.as_str());
+        if let Some(id) = musicbrainz_id {
+            ensure!(
+                uuid::Uuid::parse_str(id).is_ok(),
+                "invalid MusicBrainz identifier"
+            );
+        }
+        ensure!(
+            wikidata_id.is_none() || musicbrainz_id.is_none(),
+            "multiple unverified source identities"
+        );
+        let (source_provider, source_id) = if let Some(id) = wikidata_id {
+            ("wikidata", Some(id))
+        } else {
+            ("musicbrainz", musicbrainz_id)
+        };
         if let Some(proposal) = proposal {
             match identity(proposal) {
                 Ok(mut key) => {
                     let by_source: Option<String> = if let Some(qid) = source_id {
-                        tx.query_row("SELECT work_id FROM work_external_ids_v1 WHERE provider='wikidata' AND external_id=?1", [qid], |r| r.get(0)).optional()?
+                        tx.query_row("SELECT work_id FROM work_external_ids_v1 WHERE provider=?1 AND external_id=?2", params![source_provider,qid], |r| r.get(0)).optional()?
                     } else {
                         None
                     };
@@ -491,12 +546,12 @@ impl SqliteEnrichmentStore {
                     if let Some(source_work) = by_source {
                         existing = Some(source_work);
                     } else if let (Some(id), Some(qid)) = (existing.as_ref(), source_id) {
-                        let other_source: Option<String> = tx.query_row("SELECT external_id FROM work_external_ids_v1 WHERE provider='wikidata' AND work_id=?1", [id], |r| r.get(0)).optional()?;
-                        if other_source.is_some() {
+                        let other_source: Option<String> = tx.query_row("SELECT external_id FROM work_external_ids_v1 WHERE provider=?1 AND work_id=?2", params![source_provider,id], |r| r.get(0)).optional()?;
+                        if other_source.is_some() || tx.query_row("SELECT EXISTS(SELECT 1 FROM work_external_ids_v1 WHERE work_id=?1)", [id], |r| r.get::<_, bool>(0))? {
                             // Different externally identified works can share a
                             // title and creator. Do not merge them on text alone.
                             existing = None;
-                            key = format!("wikidata:{qid}");
+                            key = format!("{source_provider}:{qid}");
                         }
                     }
                     if let Some(id) = existing {
@@ -511,14 +566,20 @@ impl SqliteEnrichmentStore {
                     }
                     reason = proposal.rationale.clone();
                     if let Some(qid) = source_id {
-                        tx.execute("INSERT OR IGNORE INTO work_external_ids_v1(provider,external_id,work_id) VALUES('wikidata',?1,?2)",params![qid,work_id])?;
+                        tx.execute("INSERT OR IGNORE INTO work_external_ids_v1(provider,external_id,work_id) VALUES(?1,?2,?3)",params![source_provider,qid,work_id])?;
                     }
                 }
                 Err(err) => reason = err.to_string(),
             }
         }
         let source_status = if work_id.is_some() && source_id.is_some() {
-            "wikidata_supported_v1"
+            if source_provider == "wikidata" {
+                "wikidata_supported_v1"
+            } else {
+                "musicbrainz_supported_v1"
+            }
+        } else if work_id.is_none() && evidence["prompt_version"] == "work-resolution-v3-sources" {
+            "source_unresolved_v3"
         } else {
             "llm_work_v2"
         };

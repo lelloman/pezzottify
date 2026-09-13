@@ -18,10 +18,11 @@ pub mod metadata_enrichment;
 pub mod popular_content;
 pub mod proxy_retention;
 pub mod related_artists_enrichment;
+mod source_knowledge;
 pub mod track_embedding_sync;
 pub mod whatsnew_batch;
-mod work_resolution;
 mod work_knowledge;
+mod work_resolution;
 
 // pub use audit_log_cleanup::AuditLogCleanupJob;
 // pub use expand_artists_base::ExpandArtistsBaseJob;

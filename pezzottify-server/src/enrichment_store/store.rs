@@ -1186,6 +1186,33 @@ impl EnrichmentStore for SqliteEnrichmentStore {
         Ok(())
     }
 
+    fn list_entity_evidence(
+        &self,
+        entity_type: &str,
+        entity_id: &str,
+    ) -> Result<Vec<EntityEvidenceV1>> {
+        let conn = self.read_conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT source_name,source_url,snippet,raw_payload FROM entity_evidence_v1 WHERE entity_type=?1 AND entity_id=?2 ORDER BY id")?;
+        let rows = stmt.query_map(params![entity_type, entity_id], |r| {
+            Ok((
+                r.get::<_, Option<String>>(0)?,
+                r.get::<_, Option<String>>(1)?,
+                r.get::<_, Option<String>>(2)?,
+                r.get::<_, Option<String>>(3)?,
+            ))
+        })?;
+        rows.map(|row| {
+            let (source_name, source_url, snippet, raw) = row?;
+            Ok(EntityEvidenceV1 {
+                source_name,
+                source_url,
+                snippet,
+                raw_payload: raw.map(|s| serde_json::from_str(&s)).transpose()?,
+            })
+        })
+        .collect()
+    }
+
     fn get_enrichment_stats(&self) -> Result<EnrichmentStats> {
         let conn = self.read_conn.lock().unwrap();
         Self::count_rows(&conn)

@@ -11,6 +11,7 @@ pub(super) struct WorkReference {
     pub qid: String,
     pub title: String,
     pub creators: Vec<String>,
+    pub kind: String,
     pub url: String,
 }
 
@@ -144,13 +145,17 @@ fn candidate_query(ids: &[&str]) -> String {
 PREFIX wdt: <http://www.wikidata.org/prop/direct/>
 PREFIX wikibase: <http://wikiba.se/ontology#>
 PREFIX bd: <http://www.bigdata.com/rdf#>
-SELECT DISTINCT ?item ?itemLabel ?creator ?creatorLabel WHERE {{
+SELECT DISTINCT ?item ?itemLabel ?creator ?creatorLabel ?form WHERE {{
   VALUES ?item {{ {values} }}
   VALUES ?workClass {{ wd:Q105543609 wd:Q207628 wd:Q7366 }}
   ?item wdt:P31/wdt:P279* ?workClass .
   FILTER NOT EXISTS {{ ?item wdt:P31/wdt:P279* wd:Q482994 }}
   FILTER NOT EXISTS {{ ?item wdt:P31/wdt:P279* wd:Q7302866 }}
   ?item (wdt:P86|wdt:P676) ?creator .
+  OPTIONAL {{
+    VALUES ?form {{ wd:Q7366 wd:Q929848 wd:Q178122 }}
+    ?item (wdt:P31|wdt:P7937)/wdt:P279* ?form .
+  }}
   SERVICE wikibase:label {{ bd:serviceParam wikibase:language "en". }}
 }} LIMIT 301"#
     )
@@ -193,8 +198,18 @@ fn parse_candidates(value: &Value, allowed: &[&str]) -> Result<Vec<WorkReference
             qid: qid.into(),
             title: title.into(),
             creators: Vec::new(),
+            kind: "composition".into(),
             url: format!("https://www.wikidata.org/wiki/{qid}"),
         });
+        match row["form"]["value"]
+            .as_str()
+            .and_then(|s| s.rsplit('/').next())
+        {
+            Some("Q929848") => work.kind = "movement".into(),
+            Some("Q178122") if work.kind != "movement" => work.kind = "aria".into(),
+            Some("Q7366") if work.kind == "composition" => work.kind = "song".into(),
+            _ => {}
+        }
         if !work.creators.iter().any(|c| c == creator) {
             work.creators.push(creator.into());
         }

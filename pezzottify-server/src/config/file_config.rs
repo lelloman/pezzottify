@@ -257,6 +257,8 @@ pub struct AgentLlmConfig {
     pub timeout_secs: Option<u64>,
     /// Optional reasoning control for OpenAI-compatible enrichment requests.
     pub reasoning_effort: Option<String>,
+    /// Optional SimpleAI thinking budget; -1 is unrestricted, 0 disables thinking.
+    pub thinking_budget_tokens: Option<i32>,
 }
 
 /// Configuration for the ingestion feature.
