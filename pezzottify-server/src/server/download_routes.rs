@@ -428,6 +428,56 @@ async fn get_admin_requests(
     }
 }
 
+#[derive(Deserialize)]
+#[serde(tag = "status", rename_all = "SCREAMING_SNAKE_CASE")]
+enum ExternalAttemptBody {
+    InProgress { previous_attempt: Option<i64> },
+    Failed { attempt: i64, error_message: String },
+}
+
+/// External cron worker status reporting. Completion is owned by ingestion.
+async fn report_external_attempt(
+    session: Session,
+    State(database): State<DatabaseHandles>,
+    Path(item_id): Path<String>,
+    Json(body): Json<ExternalAttemptBody>,
+) -> impl IntoResponse {
+    if !session.has_permission(Permission::EditCatalog) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    if let ExternalAttemptBody::Failed { error_message, .. } = &body {
+        if error_message.trim().is_empty() || error_message.len() > 4096 {
+            return (StatusCode::BAD_REQUEST, "Error must contain 1–4096 bytes").into_response();
+        }
+    }
+    let manager = match get_download_manager(&database) {
+        Ok(m) => m,
+        Err(error) => return error.into_response(),
+    };
+    match manager
+        .run(DbPriority::Interactive, move |manager| match body {
+            ExternalAttemptBody::InProgress { previous_attempt } => {
+                manager.start_external_attempt(&item_id, previous_attempt)
+            }
+            ExternalAttemptBody::Failed {
+                attempt,
+                error_message,
+            } => manager
+                .fail_external_attempt(&item_id, attempt, &error_message)
+                .map(|changed| changed.then_some(attempt)),
+        })
+        .await
+    {
+        Ok(Some(attempt)) => Json(serde_json::json!({ "attempt": attempt })).into_response(),
+        Ok(None) => (
+            StatusCode::CONFLICT,
+            "Request state changed; refresh the queue",
+        )
+            .into_response(),
+        Err(e) => ApiError::from(e).into_response(),
+    }
+}
+
 /// POST /admin/retry/:id - Retry a failed download
 async fn retry_failed(
     session: Session,
@@ -696,6 +746,7 @@ pub fn download_routes() -> Router<ServerState> {
         .route("/failed", get(get_admin_failed))
         .route("/requests", get(get_admin_requests))
         .route("/request/{id}", delete(delete_request))
+        .route("/request/{id}/attempt", post(report_external_attempt))
         .route("/retry/{id}", post(retry_failed))
         .route("/audit", get(get_audit_log))
         .route("/audit/item/{id}", get(get_audit_for_item))

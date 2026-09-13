@@ -428,6 +428,34 @@ mod tests {
     // === State Transition Tests ===
 
     #[test]
+    fn test_external_attempt_reporting() {
+        let store = SqliteDownloadQueueStore::in_memory().unwrap();
+        store.enqueue(QueueItem::new(
+            "external".into(), DownloadContentType::Album, "album".into(),
+            QueuePriority::User, RequestSource::User, 5,
+        )).unwrap();
+        let first = store.start_external_attempt("external", None).unwrap().unwrap();
+        let item = store.get_item("external").unwrap().unwrap();
+        assert_eq!(item.status, QueueStatus::InProgress);
+        assert_eq!(item.retry_count, 0);
+        assert_eq!(item.started_at, Some(first));
+        assert_eq!(store.start_external_attempt("external", None).unwrap(), None);
+        assert!(store.fail_external_attempt("external", first, "Missing 9 tracks").unwrap());
+        assert!(!store.fail_external_attempt("external", first, "duplicate").unwrap());
+        let item = store.get_item("external").unwrap().unwrap();
+        assert_eq!(item.status, QueueStatus::Failed);
+        assert_eq!(item.error_message.as_deref(), Some("Missing 9 tracks"));
+        let second = store.start_external_attempt("external", Some(first)).unwrap().unwrap();
+        assert!(second > first);
+        assert_eq!(store.get_item("external").unwrap().unwrap().retry_count, 1);
+        assert!(!store.fail_external_attempt("external", first, "late").unwrap());
+        store.mark_completed("external", 100, 50).unwrap();
+        assert!(!store.fail_external_attempt("external", second, "late upload failure").unwrap());
+        assert_eq!(store.start_external_attempt("external", Some(second)).unwrap(), None);
+        assert_eq!(store.start_external_attempt("missing", None).unwrap(), None);
+    }
+
+    #[test]
     fn test_claim_for_processing_success() {
         let store = SqliteDownloadQueueStore::in_memory().unwrap();
 

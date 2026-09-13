@@ -9,6 +9,87 @@ mod common;
 use common::{TestClient, TestServer, ALBUM_1_ID, ALBUM_1_TITLE, ARTIST_1_NAME};
 
 #[tokio::test]
+async fn external_attempt_status_contract() {
+    let server = TestServer::builder().with_download_manager().spawn().await;
+    let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
+    let created: serde_json::Value = admin
+        .download_request_album(ALBUM_1_ID, ALBUM_1_TITLE, ARTIST_1_NAME)
+        .await
+        .json()
+        .await
+        .unwrap();
+    let id = created["request_id"].as_str().unwrap();
+    let url = format!("{}/v1/download/admin/request/{id}/attempt", server.base_url);
+    let start = serde_json::json!({"status": "IN_PROGRESS", "previous_attempt": null});
+    let anonymous = TestClient::new(server.base_url.clone());
+    assert_eq!(
+        anonymous
+            .client
+            .post(&url)
+            .json(&start)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    let user = TestClient::authenticated(server.base_url.clone()).await;
+    assert_eq!(
+        user.client
+            .post(&url)
+            .json(&start)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    let response = admin.client.post(&url).json(&start).send().await.unwrap();
+    assert_eq!(response.status(), 200);
+    let body: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(
+        admin
+            .client
+            .post(&url)
+            .json(&start)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        409
+    );
+    let failure = serde_json::json!({
+        "status": "FAILED", "attempt": body["attempt"], "error_message": "Missing 9 tracks"
+    });
+    assert_eq!(
+        admin
+            .client
+            .post(&url)
+            .json(&failure)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+    let requests: serde_json::Value = admin.download_admin_requests().await.json().await.unwrap();
+    assert_eq!(requests[0]["status"], "FAILED");
+    assert_eq!(requests[0]["error_message"], "Missing 9 tracks");
+    let invalid = serde_json::json!({"status": "COMPLETED"});
+    assert_eq!(
+        admin
+            .client
+            .post(&url)
+            .json(&invalid)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        422
+    );
+}
+
+#[tokio::test]
 async fn enabled_manager_preserves_queue_limits_audit_and_delete_contracts() {
     let server = TestServer::builder().with_download_manager().spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
