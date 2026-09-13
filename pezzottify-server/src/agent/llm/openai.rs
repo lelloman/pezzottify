@@ -88,6 +88,7 @@ pub struct OpenAIProvider {
     base_url: String,
     model: String,
     api_key_source: ApiKeySource,
+    reasoning_effort: Option<String>,
 }
 
 impl OpenAIProvider {
@@ -111,6 +112,7 @@ impl OpenAIProvider {
             base_url: base_url.into(),
             model: model.into(),
             api_key_source,
+            reasoning_effort: None,
         }
     }
 
@@ -133,7 +135,14 @@ impl OpenAIProvider {
             base_url: base_url.into(),
             model: model.into(),
             api_key_source: ApiKeySource::Command(api_key_command),
+            reasoning_effort: None,
         }
+    }
+
+    /// Set the endpoint's explicit reasoning policy; omitted by default.
+    pub fn with_reasoning_effort(mut self, effort: Option<String>) -> Self {
+        self.reasoning_effort = effort;
+        self
     }
 
     /// Convert our messages to OpenAI's format.
@@ -171,6 +180,7 @@ impl LlmProvider for OpenAIProvider {
             tools: tools.map(Self::to_openai_tools),
             temperature: Some(options.temperature),
             max_tokens: options.max_tokens,
+            reasoning_effort: self.reasoning_effort.clone(),
         };
 
         debug!(
@@ -249,8 +259,9 @@ impl LlmProvider for OpenAIProvider {
         let finish_reason = match choice.finish_reason.as_deref() {
             Some("tool_calls") => FinishReason::ToolCalls,
             Some("length") => FinishReason::MaxTokens,
+            Some("stop") => FinishReason::Stop,
             _ if has_tool_calls => FinishReason::ToolCalls,
-            _ => FinishReason::Stop,
+            _ => FinishReason::Error,
         };
 
         let usage = openai_response.usage.map(|u| TokenUsage {
@@ -307,6 +318,8 @@ impl LlmProvider for OpenAIProvider {
 
 #[derive(Debug, Serialize)]
 struct OpenAIChatRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
     model: String,
     messages: Vec<OpenAIMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -485,5 +498,26 @@ mod tests {
         assert_eq!(openai.role, "tool");
         assert_eq!(openai.tool_call_id, Some("call_123".to_string()));
         assert_eq!(openai.name, Some("search".to_string()));
+    }
+
+    #[test]
+    fn reasoning_control_is_optional_and_explicit() {
+        let mut request = OpenAIChatRequest {
+            model: "class:fast".into(),
+            messages: vec![],
+            tools: None,
+            temperature: Some(0.0),
+            max_tokens: Some(1500),
+            reasoning_effort: None,
+        };
+        assert!(serde_json::to_value(&request)
+            .unwrap()
+            .get("reasoning_effort")
+            .is_none());
+        request.reasoning_effort = Some("none".into());
+        assert_eq!(
+            serde_json::to_value(&request).unwrap()["reasoning_effort"],
+            "none"
+        );
     }
 }
