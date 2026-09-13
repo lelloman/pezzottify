@@ -228,6 +228,34 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
 
     // === State Transitions ===
 
+    fn start_external_attempt(&self, id: &str, previous_attempt: Option<i64>) -> Result<Option<i64>> {
+        let conn = self.conn.lock().unwrap();
+        // Monotonic even for retries within the same second. This timestamp also
+        // identifies the attempt so delayed reports cannot affect newer work.
+        Ok(conn.query_row(
+            "UPDATE download_queue SET status='IN_PROGRESS',
+             started_at=MAX(?1, COALESCE(last_attempt_at + 1, ?1)),
+             last_attempt_at=MAX(?1, COALESCE(last_attempt_at + 1, ?1)),
+             retry_count=retry_count + CASE WHEN last_attempt_at IS NULL THEN 0 ELSE 1 END,
+             completed_at=NULL, next_retry_at=NULL, error_type=NULL, error_message=NULL
+             WHERE id=?2 AND content_type='ALBUM' AND parent_id IS NULL
+             AND status IN ('PENDING', 'FAILED', 'IN_PROGRESS')
+             AND last_attempt_at IS ?3 RETURNING last_attempt_at",
+            rusqlite::params![Self::now(), id, previous_attempt],
+            |row| row.get(0),
+        ).optional()?)
+    }
+
+    fn fail_external_attempt(&self, id: &str, attempt: i64, message: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        Ok(conn.execute(
+            "UPDATE download_queue SET status='FAILED', completed_at=?1,
+             error_type='unknown', error_message=?2
+             WHERE id=?3 AND status='IN_PROGRESS' AND last_attempt_at=?4",
+            rusqlite::params![Self::now(), message, id, attempt],
+        )? > 0)
+    }
+
     fn claim_for_processing(&self, id: &str) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
         let now = Self::now();

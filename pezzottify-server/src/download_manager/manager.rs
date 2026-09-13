@@ -174,6 +174,35 @@ pub struct DownloadManager {
 }
 
 impl DownloadManager {
+    pub fn start_external_attempt(
+        &self,
+        id: &str,
+        previous_attempt: Option<i64>,
+    ) -> Result<Option<i64>> {
+        let attempt = self
+            .queue_store
+            .start_external_attempt(id, previous_attempt)?;
+        if attempt.is_some() {
+            if let Some(item) = self.queue_store.get_item(id)? {
+                let _ = self.audit_logger.log_download_started(&item);
+            }
+        }
+        Ok(attempt)
+    }
+
+    pub fn fail_external_attempt(&self, id: &str, attempt: i64, message: &str) -> Result<bool> {
+        let changed = self
+            .queue_store
+            .fail_external_attempt(id, attempt, message)?;
+        if changed {
+            if let Some(item) = self.queue_store.get_item(id)? {
+                let error = DownloadError::new(DownloadErrorType::Unknown, message);
+                let _ = self.audit_logger.log_download_failed(&item, &error);
+            }
+        }
+        Ok(changed)
+    }
+
     /// Create a new DownloadManager.
     pub fn new(
         queue_store: Arc<dyn DownloadQueueStore>,
