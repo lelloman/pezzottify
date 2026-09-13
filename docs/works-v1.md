@@ -1,8 +1,8 @@
 # Works v1
 
 A Work identifies a composition or other single performable unit, independently
-of its recordings. Tracks with the same canonical title, creator set and catalog
-number share a stable UUID. An individual movement or aria has its own Work;
+of its recordings. Tracks linked to the same external Work share a stable UUID.
+Textual identity is secondary to external identifiers. A movement or aria has its own Work;
 its title must identify its parent composition and movement. Work identity does
 not include the performer, album, live/remaster suffix, or ISRC.
 
@@ -24,38 +24,38 @@ metadata keeps its higher priority. A manual run can isolate resolution:
 {"entity_types": ["work_resolution"], "batch_size": 25}
 ```
 
-Resolution uses Wikidata and the existing configured LLM provider, with temperature zero:
+Resolution is source-first:
 
-1. Search Wikidata using the existing work title or catalog track title. Fetch
-   composition/song candidates and their composer/lyricist claims, excluding
-   albums and audio tracks. Give those references and the catalog context to the
-   model. Return an explicit unresolved result when unsure.
-2. Search local Works using the proposed canonical title (up to 25 candidates).
-   If the first Wikidata lookup found no usable candidates and the model proposes
-   a different canonical title, retry external search once with that title.
-   If local or external candidates exist, ask the model to reconsider using them.
-3. Validate the proposal on the server. Require a nonempty title, named creators,
-   an explanation, an allowed work kind, and confidence of at least 0.9.
-   A cited Wikidata ID must have been fetched, and the proposed title and complete
-   creator set must agree with that reference. Fabricated or contradictory
-   citations are retryable model errors. Matching a track to that composition
-   remains an inference; the reference supports its identity facts.
-4. In an immediate transaction, reuse the exact normalized identity or create a
-   new Work, then persist the track link and evidence together. A unique identity
-   key prevents duplicate creation for the same normalized identity.
-   Validated Wikidata IDs are stored separately and take precedence over text
-   matching. Different Wikidata IDs do not merge on identical titles/creators.
+1. Look up the recording by ISRC in MusicBrainz, corroborating its title and
+   complete artist credits. Recheck the identifier on the fetched recording.
+2. If that recording has a single explicit performance-to-Work relationship,
+   use the referenced Work and its writer/composer/lyricist/librettist credits
+   directly, without an LLM. Missing creators, partial/medley relationships and
+   multiple Works remain unresolved.
+3. If no recording was resolved, search Wikidata for the catalog track title and
+   fetch composition candidates and their creators. Ask the model for **one
+   identity decision**, a fetched Q-ID or null, with an explanation. The server
+   copies the selected reference's title, creators and supported kind; the model
+   cannot invent those fields. Empty candidate sets require no model request.
+4. Reuse or create the local Work in a transaction with its track link and
+   evidence. Validated external IDs take precedence over text matching. Different
+   external identities do not merge merely because title/creator text matches.
 
-Normalization folds case and whitespace and sorts/deduplicates creators; it
-preserves punctuation, accents, catalog suffixes, and movement identifiers.
-`song` versus `standard` is descriptive and does not split an identity. Unknown
-creators, medleys, mashups, and ambiguous identities are unresolved in v1.
-Wikidata network errors, HTTP 429, and API errors such as `maxlag` retry rather
-than falling back to unsupported guesses. A successful lookup with no matching
-reference can still produce an explicitly inferred Work (`llm_work_v2`). A link
-with a validated reference is marked `wikidata_supported_v1`. Both external and
-model network/malformed-output failures use the existing queue retry/backoff and
-cancellation recovery. A retry never replaces an already linked Work.
+The Wikidata match remains a model-assisted identity decision, not a proven
+recording relationship. Source-backed identity facts do not guarantee the model
+selected the right composition. This path must still pass factual evaluation.
+
+There is no longer a model-memory fallback that creates an inferred Work when
+sources are absent. Uncertain tracks remain unresolved; they do not receive a
+fabricated provisional composition. Source errors retry with backoff. Existing
+linked Works are not automatically replaced.
+
+Normalization folds case/whitespace and sorts creators while preserving accents,
+punctuation and movement identifiers. The current one-Work-per-track model cannot
+represent medleys. MusicBrainz and Wikidata IDs are persisted in
+`work_external_ids_v1`, with statuses `musicbrainz_supported_v1` and
+`wikidata_supported_v1`. Cross-provider text-only equivalence is not assumed;
+without an explicit bridge, duplicate representations may require later review.
 
 ## Storage and API
 
@@ -63,15 +63,15 @@ The additive, repeatable enrichment schema setup creates `works_v1`,
 `work_resolutions_v1`, `work_external_ids_v1`, and the discovery cursor in `work_scan_v1`.
 `work_resolutions_v1` stores the link or unresolved outcome, reason, timestamps,
 and evidence JSON containing prompt version, model/provider, catalog context,
-local candidates, external search/fact responses with retrieval timestamps,
-selected source URLs/Q-IDs, and model responses. Work responses expose
-`wikidata_id`, and web Work pages link to the reference.
+external reference responses with retrieval timestamps, selected source URLs/IDs,
+and model responses when used. Work responses expose `wikidata_id` and
+`musicbrainz_id`.
 
 Wikidata uses public endpoints and needs no credentials. The implementation uses
 its [entity-search API](https://www.mediawiki.org/wiki/Wikibase/API/en) and
 [SPARQL service](https://www.wikidata.org/wiki/Wikidata:SPARQL_query_service),
 with English labels, up to ten search hits, a 20-second timeout and a 1 MiB
-response cap per request. At most two titles are searched per evaluation.
+response cap per request. One title is searched per fallback evaluation.
 Facts are filtered to musical work/composition (`Q105543609`), composed musical
 work (`Q207628`), or song (`Q7366`) classes and their subclasses. A missing creator
 label or a truncated fact result is not accepted as a complete identity.
@@ -97,13 +97,13 @@ catalog tracks **without claiming queues, creating Works, or changing links**:
 {"work_dry_run_track_ids": ["track-id-1", "track-id-2"]}
 ```
 
-Dry runs require an enabled LLM provider and make actual Wikidata and provider requests. The
+Dry runs require an enabled LLM provider and make actual reference/provider requests as needed. The
 job audit details contain each proposal, validation failure (if any), model
 responses, input context and candidates. This path shares the production
 identification code. It does not simulate writes between examples: evaluate
 matching against pre-existing Works, or use an isolated database to evaluate
-sequential creation and linking. Each track takes one model call, or two when
-local or external candidates are available, plus up to four Wikidata requests.
+sequential creation and linking. Each track takes zero or one model calls,
+in addition to reference requests.
 
 Before accepting a model/prompt for broad use, build a manually reviewed set
 containing original/cover/live/remaster groups, different songs with the same
@@ -116,12 +116,12 @@ Measure false merges, duplicate Works, missed links, incorrect creations,
 abstention rate, and consistency across repeated runs. Review every false merge
 and incorrect creation; an aggregate accuracy score can hide these cases. Verify
 writer and composition claims against trusted references. Model-reported
-confidence is only an admission heuristic and is not calibrated evidence of
-correctness. The default 0.9 threshold needs evaluation with the chosen model.
+confidence is not calibrated evidence of correctness. The legacy proposal score
+is now server-assigned for source-supported proposals, not requested from the model.
 
 Automated tests cover normalized reuse, namesakes, movements, weak identity
 rejection, retry stability, transactional rollback, schema reopening, separate
-queue state, bounded candidate reconsideration, read-only evaluation and
+queue state, source-only candidate selection, read-only evaluation and
 malformed responses. HTTP fixtures cover successful lookup, API errors, rate
 limits, and empty results; source validation tests reject fabricated IDs and
 contradictory creators. Identity tests cover stable external IDs and namesakes.
@@ -164,20 +164,28 @@ that the configured model passed this evaluation.
 
 ### Thinking-model deployment requirements
 
-Artist, album, track and Work enrichment support `reasoning_effort = "none"`
-under `[agent.llm]` for an OpenAI-compatible endpoint. It is omitted by default
-for compatibility; configure it explicitly for SimpleAI's Qwen `class:fast`.
-Each eligible runner must advertise support for `none`. The SimpleAI runner
-model override is:
+Artist, album, track and Work enrichment support per-request reasoning controls
+under `[agent.llm]`, using SimpleAI's existing API. Both are omitted by default
+for compatibility. An experimental bounded-thinking configuration is:
 
 ```toml
-[engines.llama_cpp.models."Qwen3.6-35B-A3B-MXFP4_MOE"]
-reasoning = { enabled = true, supported_efforts = ["none"], supports_thinking_budget = false }
+[agent.llm]
+provider = "openai"
+model = "class:fast"
+reasoning_effort = "low"
+thinking_budget_tokens = 512
 ```
 
-This enables an opt-in request control, without changing the model's defaults
-for other clients. Deploy the corresponding SimpleAI runner and gateway changes
-to preserve `reasoning_content` separately from final `content`. Enrichment now
+These controls require advertised support on every eligible runner; the currently
+configured Qwen capabilities only allow `none`, not `low` or a numeric budget.
+The direct Qwen runtime probe with `low` and budget 512 returned complete JSON in
+11.5 seconds (649 generated tokens); budget 64 returned JSON in 5.3 seconds (271
+tokens), with the same total limit of 1,500. These were direct runtime checks,
+not a verified `class:fast` deployment configuration.
+
+No SimpleAI response-behavior change is required: its existing implementation
+prefers final content whenever present. The proposed shared response change was
+reverted. Keep adaptation in Pezzottify's requests and validation. Enrichment
 rejects truncated, empty and non-successfully-finished answers before parsing or
 storage; partial JSON is not accepted just because it happens to parse.
 
@@ -191,18 +199,18 @@ backoff or treat that run as a model-quality result.
 
 Halo1 and halo2 received the opt-in config on that date, with backups alongside
 `/home/lelloman/config.toml` named `config.toml.before-work-reasoning-*`.
-RTX was offline and its live configuration remains unverified. Application
-binaries and production Pezzottify's reasoning setting still require rollout;
+Those earlier Halo capability changes remain opt-in and do not alter defaults.
+RTX was offline and its live configuration remains unverified. Pezzottify's
+binary and production reasoning settings still require rollout;
 temporary evaluation settings do not change production enrichment.
 
 ## Deliberate v1 limits
 
 Each track links to at most one Work; composite tracks abstain. Parent/child
-Work relationships, aliases, non-Wikidata external Work IDs, manual merge/correction tools,
+Work relationships, aliases, manual merge/correction tools,
 and Android Work screens are not implemented. Existing links are immutable to
 automatic enrichment; a future correction flow must preserve attachment
 identity. Existing linked tracks are not automatically revalidated; dry runs can
-evaluate them against Wikidata. Conservative text matching without a selected
-external reference can create separate Works when spellings,
-creator sets or catalog numbers differ. Lyrics and sheet music can later attach
+evaluate them against references. Missing source coverage yields abstention,
+not an invented composition. Lyrics and sheet music can later attach
 to the stable Work UUID; this change does not implement attachments.

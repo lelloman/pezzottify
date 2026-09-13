@@ -89,6 +89,7 @@ pub struct OpenAIProvider {
     model: String,
     api_key_source: ApiKeySource,
     reasoning_effort: Option<String>,
+    thinking_budget_tokens: Option<i32>,
 }
 
 impl OpenAIProvider {
@@ -113,6 +114,7 @@ impl OpenAIProvider {
             model: model.into(),
             api_key_source,
             reasoning_effort: None,
+            thinking_budget_tokens: None,
         }
     }
 
@@ -136,12 +138,19 @@ impl OpenAIProvider {
             model: model.into(),
             api_key_source: ApiKeySource::Command(api_key_command),
             reasoning_effort: None,
+            thinking_budget_tokens: None,
         }
     }
 
     /// Set the endpoint's explicit reasoning policy; omitted by default.
     pub fn with_reasoning_effort(mut self, effort: Option<String>) -> Self {
         self.reasoning_effort = effort;
+        self
+    }
+
+    /// Use the existing SimpleAI reasoning-budget extension when configured.
+    pub fn with_thinking_budget(mut self, budget: Option<i32>) -> Self {
+        self.thinking_budget_tokens = budget;
         self
     }
 
@@ -181,6 +190,7 @@ impl LlmProvider for OpenAIProvider {
             temperature: Some(options.temperature),
             max_tokens: options.max_tokens,
             reasoning_effort: self.reasoning_effort.clone(),
+            thinking_budget_tokens: self.thinking_budget_tokens,
         };
 
         debug!(
@@ -318,6 +328,8 @@ impl LlmProvider for OpenAIProvider {
 
 #[derive(Debug, Serialize)]
 struct OpenAIChatRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking_budget_tokens: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<String>,
     model: String,
@@ -509,12 +521,22 @@ mod tests {
             temperature: Some(0.0),
             max_tokens: Some(1500),
             reasoning_effort: None,
+            thinking_budget_tokens: None,
         };
         assert!(serde_json::to_value(&request)
             .unwrap()
             .get("reasoning_effort")
             .is_none());
         request.reasoning_effort = Some("none".into());
+        assert!(serde_json::to_value(&request)
+            .unwrap()
+            .get("thinking_budget_tokens")
+            .is_none());
+        request.thinking_budget_tokens = Some(512);
+        assert_eq!(
+            serde_json::to_value(&request).unwrap()["thinking_budget_tokens"],
+            512
+        );
         assert_eq!(
             serde_json::to_value(&request).unwrap()["reasoning_effort"],
             "none"

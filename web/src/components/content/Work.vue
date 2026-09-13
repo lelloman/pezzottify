@@ -9,6 +9,15 @@
       <h1>{{ work.title }}</h1>
       <p>{{ work.creators.join(", ") }}</p>
       <p v-if="work.catalog_number">{{ work.catalog_number }}</p>
+      <p v-if="work.musicbrainz_id">
+        <a
+          :href="`https://musicbrainz.org/work/${work.musicbrainz_id}`"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          MusicBrainz reference
+        </a>
+      </p>
       <p v-if="work.wikidata_id">
         <a
           :href="`https://www.wikidata.org/wiki/${work.wikidata_id}`"

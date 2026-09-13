@@ -217,6 +217,12 @@ pub trait EnrichmentStore: Send + Sync {
         evidence: &[EntityEvidenceV1],
     ) -> Result<()>;
 
+    fn list_entity_evidence(
+        &self,
+        entity_type: &str,
+        entity_id: &str,
+    ) -> Result<Vec<EntityEvidenceV1>>;
+
     // =========================================================================
     // Statistics
     // =========================================================================

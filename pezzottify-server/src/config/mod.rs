@@ -473,6 +473,7 @@ impl AppConfig {
                 api_key: agent_llm_file.api_key,
                 api_key_command: agent_llm_file.api_key_command,
                 reasoning_effort: agent_llm_file.reasoning_effort,
+                thinking_budget_tokens: agent_llm_file.thinking_budget_tokens,
                 temperature: agent_llm_file
                     .temperature
                     .unwrap_or(agent_llm_defaults.temperature),
@@ -493,6 +494,17 @@ impl AppConfig {
                     "none" | "minimal" | "low" | "medium" | "high" | "xhigh"
                 ),
                 "invalid agent.llm.reasoning_effort"
+            );
+        }
+
+        if let Some(budget) = agent.llm.thinking_budget_tokens {
+            anyhow::ensure!(
+                agent.llm.provider == "openai",
+                "agent.llm.thinking_budget_tokens requires an OpenAI-compatible provider"
+            );
+            anyhow::ensure!(
+                budget >= -1,
+                "agent.llm.thinking_budget_tokens must be -1 or greater"
             );
         }
 
@@ -926,6 +938,7 @@ impl Default for AgentSettings {
 #[derive(Debug, Clone)]
 pub struct AgentLlmSettings {
     pub reasoning_effort: Option<String>,
+    pub thinking_budget_tokens: Option<i32>,
     pub provider: String,
     pub base_url: String,
     pub model: String,
@@ -939,6 +952,7 @@ impl Default for AgentLlmSettings {
     fn default() -> Self {
         Self {
             reasoning_effort: None,
+            thinking_budget_tokens: None,
             provider: "ollama".to_string(),
             base_url: "http://localhost:11434".to_string(),
             model: "llama3.1:8b".to_string(),
@@ -1157,6 +1171,39 @@ fn parse_logging_level(s: &str) -> Option<RequestsLoggingLevel> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn enrichment_thinking_budget_is_validated() {
+        let temp = tempfile::tempdir().unwrap();
+        let cli = super::CliConfig {
+            db_dir: Some(temp.path().into()),
+            ..Default::default()
+        };
+        for (provider, budget, valid) in [
+            ("openai", 512, true),
+            ("openai", 0, true),
+            ("openai", -1, true),
+            ("openai", -2, false),
+            ("ollama", 512, false),
+        ] {
+            let file = super::FileConfig {
+                agent: Some(super::AgentConfig {
+                    llm: Some(super::AgentLlmConfig {
+                        provider: Some(provider.into()),
+                        thinking_budget_tokens: Some(budget),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            };
+            let result = super::AppConfig::resolve(&cli, Some(file));
+            assert_eq!(result.is_ok(), valid);
+            if let Ok(config) = result {
+                assert_eq!(config.agent.llm.thinking_budget_tokens, Some(budget));
+            }
+        }
+    }
+
     #[test]
     fn enrichment_reasoning_config_is_explicit_and_validated() {
         let temp = tempfile::tempdir().unwrap();
