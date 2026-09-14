@@ -8,6 +8,7 @@ mod mutations;
 mod track_materializer;
 pub mod vault;
 pub use mutations::{CopyReceipt, Provenance, StagedMedia};
+pub(crate) use mutations::{mutation_lock, protect_album};
 mod availability;
 pub use availability::{directory_size, probe, MediaCatalogView, MediaPresence};
 

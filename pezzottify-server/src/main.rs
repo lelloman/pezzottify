@@ -205,6 +205,19 @@ async fn main() -> Result<()> {
         &db_registry,
     )?);
 
+    // Restore retention intent before any scheduler job can recover or delete media.
+    let queue_db_path = app_config.db_dir.join("download_queue.db");
+    if queue_db_path.try_exists()? {
+        let queue = pezzottify_server::download_manager::SqliteDownloadQueueStore::new(
+            &queue_db_path,
+            &db_registry,
+        )?;
+        pezzottify_server::download_manager::DownloadManager::restore_album_protections(
+            &queue,
+            &app_config.media_path,
+        )?;
+    }
+
     // Initialize metrics system
     info!("Initializing metrics...");
     metrics::init_metrics();

@@ -201,7 +201,7 @@ impl TestServer {
                 .execute("UPDATE tracks SET track_available = 1", [])
                 .expect("Failed to mark test catalog tracks available");
         }
-        if options.download_manager_enabled {
+        if options.download_manager_enabled && !options.available_catalog {
             let connection = rusqlite::Connection::open(&catalog_db_path)
                 .expect("Failed to reopen test catalog");
             connection

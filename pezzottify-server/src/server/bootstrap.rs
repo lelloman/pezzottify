@@ -110,6 +110,20 @@ async fn make_app_with_executor(
     state.organic_indexer = None;
     info!("Legacy page-driven organic search indexing disabled");
 
+    // Protect historical album requests before proxy cleanup or journal recovery.
+    // Read existing history even if new download requests are currently disabled.
+    let queue_db_path = config.db_dir.join("download_queue.db");
+    if queue_db_path.try_exists()? {
+        let queue = crate::download_manager::SqliteDownloadQueueStore::new(
+            &queue_db_path,
+            &state.db_registry,
+        )?;
+        crate::download_manager::DownloadManager::restore_album_protections(
+            &queue,
+            &config.media_path,
+        )?;
+    }
+
     if config.proxy_mode.enabled {
         if let Some(url) = &config.downloader_url {
             let downloader = Arc::new(crate::downloader::DownloaderClient::new(
