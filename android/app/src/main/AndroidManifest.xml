@@ -11,6 +11,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <queries>
+        <package android:name="com.lelloman.authenticator" />
+        <package android:name="com.lelloman.authenticator.debug" />
+    </queries>
     <application
         android:name=".PezzottifyApplication"
         android:allowBackup="true"

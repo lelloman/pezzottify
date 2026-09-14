@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.oidc
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import com.lelloman.pezzottify.android.BuildConfig
 import com.lelloman.pezzottify.android.domain.auth.oidc.OidcAuthManager
 import com.lelloman.pezzottify.android.domain.auth.oidc.OidcConfig
 import com.lelloman.pezzottify.android.domain.remoteapi.DeviceInfo
@@ -34,53 +35,22 @@ class AppAuthOidcManager @Inject constructor(
 
     private val logger: Logger by loggerFactory
     private val authService: AuthorizationService by lazy { AuthorizationService(context) }
-    private val prefs by lazy {
-        logger.debug("[OIDC_DBG] prefs lazy init, manager instance=${this.hashCode()}")
-        context.getSharedPreferences("oidc_auth", Context.MODE_PRIVATE).also {
-            logger.debug("[OIDC_DBG] prefs initialized, all keys=${it.all.keys}")
-        }
-    }
-
-    init {
-        logger.debug("[OIDC_DBG] AppAuthOidcManager created, instance=${this.hashCode()}, context=${context.hashCode()}")
-    }
-
+    private val prefs by lazy { context.getSharedPreferences("oidc_auth", Context.MODE_PRIVATE) }
     private var serviceConfig: AuthorizationServiceConfiguration? = null
-
     private var pendingAuthRequest: AuthorizationRequest?
         get() {
-            val json = prefs.getString(KEY_PENDING_REQUEST, null)
-            logger.debug("[OIDC_DBG] get() raw json length=${json?.length}, contains=${prefs.contains(KEY_PENDING_REQUEST)}")
-            if (json == null) {
-                logger.debug("[OIDC_DBG] get() no saved request")
-                return null
-            }
-            return try {
-                AuthorizationRequest.jsonDeserialize(json).also {
-                    logger.debug("[OIDC_DBG] get() recovered request, state=${it.state}")
-                }
-            } catch (e: Exception) {
-                logger.error("[OIDC_DBG] get() failed to deserialize: ${e.message}", e)
-                null
-            }
+            val created = prefs.getLong("pending_created_at", 0)
+            if (System.currentTimeMillis() - created !in 0..600_000) return null
+            return prefs.getString(KEY_PENDING_REQUEST, null)?.let { runCatching { AuthorizationRequest.jsonDeserialize(it) }.getOrNull() }
         }
         set(value) {
-            if (value != null) {
-                val json = value.jsonSerializeString()
-                logger.debug("[OIDC_DBG] set() about to save, json length=${json.length}, state=${value.state}")
-                val success = prefs.edit().putString(KEY_PENDING_REQUEST, json).commit()
-                logger.debug("[OIDC_DBG] set() commit result=$success")
-                // Verify immediately
-                val verification = prefs.getString(KEY_PENDING_REQUEST, null)
-                logger.debug("[OIDC_DBG] set() verification: saved=${verification != null}, length=${verification?.length}")
-            } else {
-                prefs.edit().remove(KEY_PENDING_REQUEST).commit()
-                logger.debug("[OIDC_DBG] set() cleared request")
-            }
+            val edit = prefs.edit()
+            if (value == null) edit.remove(KEY_PENDING_REQUEST).remove("pending_created_at")
+            else edit.putString(KEY_PENDING_REQUEST, value.jsonSerializeString()).putLong("pending_created_at", System.currentTimeMillis())
+            check(edit.commit())
         }
 
     override suspend fun createAuthorizationIntent(deviceInfo: DeviceInfo, loginHint: String?): Intent? {
-        logger.debug("[OIDC_DBG] createAuthorizationIntent() starting, loginHint=$loginHint")
 
         val config = getServiceConfiguration()
         if (config == null) {
@@ -109,107 +79,55 @@ class AppAuthOidcManager @Inject constructor(
         // Add login hint if provided (pre-fills username on login page)
         if (!loginHint.isNullOrBlank()) {
             authRequestBuilder.setLoginHint(loginHint)
-            logger.debug("[OIDC_DBG] createAuthorizationIntent() set login_hint=$loginHint")
         }
 
         val authRequest = authRequestBuilder.build()
-        logger.debug("[OIDC_DBG] createAuthorizationIntent() built request, state=${authRequest.state}, saving...")
         pendingAuthRequest = authRequest
 
-        logger.debug("[OIDC_DBG] createAuthorizationIntent() done, device_id=${deviceInfo.deviceUuid}")
 
-        return authService.getAuthorizationRequestIntent(authRequest)
+        return AuthenticatorLauncher(context, BuildConfig.AUTHENTICATOR_ENABLED && !BuildConfig.IS_TV,
+            BuildConfig.AUTHENTICATOR_PACKAGE, BuildConfig.AUTHENTICATOR_CERTIFICATE).launch(authRequest, oidcConfig.issuerUrl)
+            ?: authService.getAuthorizationRequestIntent(authRequest)
     }
 
     override suspend fun handleAuthorizationResponse(intent: Intent): OidcAuthManager.AuthorizationResult {
-        logger.debug("[OIDC_DBG] handleAuthorizationResponse() called")
-        // First try to get response from AppAuth-formatted intent (has extras)
-        var response = AuthorizationResponse.fromIntent(intent)
-        var exception = AuthorizationException.fromIntent(intent)
-
-        // If no response/exception from extras, try to build from URI (deep link callback)
-        if (response == null && exception == null) {
-            val uri = intent.data
-            val request = pendingAuthRequest
-
-            if (uri != null) {
-                val hasCode = uri.getQueryParameter("code") != null
-                val hasError = uri.getQueryParameter("error") != null
-                logger.debug("[OIDC_DBG] handleResponse() URI hasCode=$hasCode, hasError=$hasError, hasRequest=${request != null}")
-
-                when {
-                    hasError -> {
-                        // Parse error from URI
-                        exception = AuthorizationException.fromOAuthRedirect(uri)
-                        logger.debug("[OIDC_DBG] handleResponse() parsed error: ${exception?.code}")
-                    }
-                    hasCode && request != null -> {
-                        // Build success response from URI
-                        response = try {
-                            AuthorizationResponse.Builder(request)
-                                .fromUri(uri)
-                                .build()
-                                .also { logger.debug("[OIDC_DBG] handleResponse() built response, code=${it.authorizationCode?.take(10)}...") }
-                        } catch (e: Exception) {
-                            logger.error("[OIDC_DBG] handleResponse() failed to parse URI: ${e.message}")
-                            null
-                        }
-                    }
-                    hasCode && request == null -> {
-                        logger.warn("[OIDC_DBG] handleResponse() has code but no pending request!")
-                        return OidcAuthManager.AuthorizationResult.Error("No pending auth request - please try again")
-                    }
-                    else -> {
-                        logger.warn("[OIDC_DBG] handleResponse() URI has neither code nor error")
-                        return OidcAuthManager.AuthorizationResult.Error("Invalid callback - no code or error in response")
-                    }
-                }
-            } else {
-                logger.warn("[OIDC_DBG] handleResponse() no URI in intent")
-                return OidcAuthManager.AuthorizationResult.Error("No callback URI in intent")
+        val request = pendingAuthRequest ?: return OidcAuthManager.AuthorizationResult.Error("No pending sign-in. Please try again.")
+        var response: AuthorizationResponse?
+        var exception: AuthorizationException?
+        try {
+            response = AuthorizationResponse.fromIntent(intent)
+            exception = AuthorizationException.fromIntent(intent)
+            if (response == null && exception == null) {
+                val uri = checkNotNull(intent.data)
+                AuthorizationCallbacks.validate(uri, request)
+                if (uri.getQueryParameter("error") != null) exception = AuthorizationException.fromOAuthRedirect(uri)
+                else response = AuthorizationResponse.Builder(request).fromUri(uri).build()
             }
+            response?.let { AuthorizationCallbacks.validate(it, request) }
+            require(response == null || exception == null)
+        } catch (_: Exception) {
+            // An unrelated or tampered callback must not consume the legitimate pending request.
+            return OidcAuthManager.AuthorizationResult.Error("Invalid sign-in callback")
         }
-
-        return when {
-            exception != null -> {
-                // Clear request on explicit error/cancel
-                pendingAuthRequest = null
-                if (exception.code == AuthorizationException.GeneralErrors.USER_CANCELED_AUTH_FLOW.code) {
-                    logger.info("[OIDC_DBG] handleResponse() user cancelled")
-                    OidcAuthManager.AuthorizationResult.Cancelled
-                } else {
-                    logger.error("[OIDC_DBG] handleResponse() error: ${exception.errorDescription}")
-                    OidcAuthManager.AuthorizationResult.Error(
-                        exception.errorDescription ?: "Authorization failed"
-                    )
-                }
-            }
-
-            response != null -> {
-                // Clear request on success
-                pendingAuthRequest = null
-                logger.debug("[OIDC_DBG] handleResponse() got code, exchanging for tokens")
-                exchangeCodeForTokens(response)
-            }
-
-            else -> {
-                // This shouldn't happen - we handle all cases above
-                logger.error("[OIDC_DBG] handleResponse() unexpected state: no response or exception")
-                OidcAuthManager.AuthorizationResult.Error("Unexpected authorization state")
-            }
+        if (exception != null) {
+            pendingAuthRequest = null
+            return if (exception.code == AuthorizationException.GeneralErrors.USER_CANCELED_AUTH_FLOW.code || exception.error == "access_denied")
+                OidcAuthManager.AuthorizationResult.Cancelled
+            else OidcAuthManager.AuthorizationResult.Error("Authorization failed")
         }
+        val approved = response ?: return OidcAuthManager.AuthorizationResult.Error("Invalid sign-in callback")
+        pendingAuthRequest = null
+        return exchangeCodeForTokens(approved)
     }
 
     private suspend fun exchangeCodeForTokens(
         response: AuthorizationResponse
     ): OidcAuthManager.AuthorizationResult = withContext(Dispatchers.IO) {
-        logger.debug("[OIDC_DBG] exchangeCodeForTokens() starting")
         suspendCancellableCoroutine { continuation ->
             authService.performTokenRequest(response.createTokenExchangeRequest()) { tokenResponse, exception ->
-                logger.debug("[OIDC_DBG] exchangeCodeForTokens() callback received")
                 when {
                     exception != null -> {
-                        logger.error("[OIDC_DBG] exchangeCodeForTokens() error: ${exception.errorDescription}", exception)
+                        logger.error("OIDC operation failed")
                         continuation.resume(
                             OidcAuthManager.AuthorizationResult.Error(
                                 exception.errorDescription ?: "Token exchange failed"
@@ -218,7 +136,6 @@ class AppAuthOidcManager @Inject constructor(
                     }
 
                     tokenResponse != null -> {
-                        logger.debug("[OIDC_DBG] exchangeCodeForTokens() got token response")
                         val idToken = tokenResponse.idToken
                         if (idToken == null) {
                             logger.error("[OIDC_DBG] exchangeCodeForTokens() no ID token in response")
@@ -231,7 +148,7 @@ class AppAuthOidcManager @Inject constructor(
                         // Extract user info from ID token
                         val userHandle = extractUserHandle(idToken)
                         val refreshToken = tokenResponse.refreshToken
-                        logger.info("[OIDC_DBG] exchangeCodeForTokens() success, user: $userHandle, hasRefreshToken: ${refreshToken != null}")
+                        logger.info("OIDC operation completed")
 
                         continuation.resume(
                             OidcAuthManager.AuthorizationResult.Success(
@@ -255,7 +172,6 @@ class AppAuthOidcManager @Inject constructor(
 
     override suspend fun refreshTokens(refreshToken: String): OidcAuthManager.RefreshResult =
         withContext(Dispatchers.IO) {
-            logger.debug("[OIDC_DBG] refreshTokens() starting")
 
             val config = getServiceConfiguration()
             if (config == null) {
@@ -271,10 +187,9 @@ class AppAuthOidcManager @Inject constructor(
 
             suspendCancellableCoroutine<OidcAuthManager.RefreshResult> { continuation ->
                 authService.performTokenRequest(tokenRequest) { tokenResponse, exception ->
-                    logger.debug("[OIDC_DBG] refreshTokens() callback received")
                     val result: OidcAuthManager.RefreshResult = when {
                         exception != null -> {
-                            logger.error("[OIDC_DBG] refreshTokens() error: code=${exception.code}, type=${exception.type}, description=${exception.errorDescription}", exception)
+                            logger.error("OIDC operation failed")
 
                             // Check for rate limiting (HTTP 429)
                             // AppAuth returns SERVER_ERROR for HTTP errors, check the description
@@ -297,7 +212,7 @@ class AppAuthOidcManager @Inject constructor(
                             // Return ID token if available, null otherwise
                             // The caller should keep the old ID token if we don't get a new one
                             val newRefreshToken = tokenResponse.refreshToken
-                            logger.info("[OIDC_DBG] refreshTokens() success, hasIdToken: ${tokenResponse.idToken != null}, hasNewRefreshToken: ${newRefreshToken != null}")
+                            logger.info("OIDC operation completed")
                             OidcAuthManager.RefreshResult.Success(
                                 idToken = tokenResponse.idToken,
                                 refreshToken = newRefreshToken ?: refreshToken,
@@ -316,21 +231,18 @@ class AppAuthOidcManager @Inject constructor(
 
     private suspend fun getServiceConfiguration(): AuthorizationServiceConfiguration? {
         serviceConfig?.let {
-            logger.debug("[OIDC_DBG] getServiceConfig() using cached")
             return it
         }
 
-        logger.debug("[OIDC_DBG] getServiceConfig() fetching from: ${oidcConfig.issuerUrl}")
         return withContext(Dispatchers.IO) {
             suspendCancellableCoroutine { continuation ->
                 AuthorizationServiceConfiguration.fetchFromIssuer(
                     Uri.parse(oidcConfig.issuerUrl)
                 ) { config, exception ->
                     if (exception != null) {
-                        logger.error("[OIDC_DBG] getServiceConfig() failed: ${exception.message}", exception)
+                        logger.error("OIDC operation failed")
                         continuation.resume(null)
                     } else {
-                        logger.debug("[OIDC_DBG] getServiceConfig() success: auth=${config?.authorizationEndpoint}")
                         serviceConfig = config
                         continuation.resume(config)
                     }
@@ -358,7 +270,7 @@ class AppAuthOidcManager @Inject constructor(
                 ?: json.optString("sub").takeIf { it.isNotBlank() }
                 ?: "user"
         } catch (e: Exception) {
-            logger.warn("extractUserHandle() failed to parse ID token: ${e.message}")
+            logger.warn("OIDC operation failed")
             "user"
         }
     }
