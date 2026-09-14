@@ -185,7 +185,7 @@ fn track_context_from_resolved(
 
 #[derive(Clone)]
 pub struct MetadataEnrichmentJob {
-    settings: MetadataEnrichmentJobSettings,
+    pub(super) settings: MetadataEnrichmentJobSettings,
     pub(super) agent: AgentSettings,
     pub(super) work_knowledge: std::sync::Arc<dyn super::work_knowledge::WorkKnowledgeLookup>,
 }
@@ -517,7 +517,7 @@ impl BackgroundJob for MetadataEnrichmentJob {
 }
 
 impl MetadataEnrichmentJob {
-    fn execute_with_store(
+    pub(super) fn execute_with_store(
         &self,
         ctx: &JobContext,
         params: Option<Value>,
@@ -607,13 +607,19 @@ impl MetadataEnrichmentJob {
             .map_err(|e| JobError::ExecutionFailed(e.to_string()))
         };
 
-        let mut seeded = 0usize;
         let mut batch = claim_batch()?;
-        if batch.is_empty() {
-            seeded += self.seed_listening_backfill(ctx, store, &entity_types)?;
+        // Discover Works independently of pending enrichment and retries.
+        // The scan enforces its persistent daily admission budget.
+        let mut seeded =
             if entity_types.is_empty() || entity_types.iter().any(|t| t == "work_resolution") {
-                seeded += self.seed_work_resolution(ctx, store, batch_size.min(100))?;
-            }
+                self.seed_work_resolution(ctx, store, batch_size)?
+            } else {
+                0
+            };
+        if batch.is_empty() {
+            // Preserve listening backfill when the original queue was idle;
+            // newly discovered Works must not suppress higher-priority discovery.
+            seeded += self.seed_listening_backfill(ctx, store, &entity_types)?;
             if seeded > 0 {
                 batch = claim_batch()?;
             }
@@ -1651,6 +1657,7 @@ mod tests {
                 interval_hours: 6,
                 batch_size: 2,
                 retry_after_secs: 60,
+                work_daily_enqueue_limit: 400,
             },
             AgentSettings {
                 enabled: false,
@@ -1703,6 +1710,7 @@ mod tests {
                 interval_hours: 6,
                 batch_size: 2,
                 retry_after_secs: 60,
+                work_daily_enqueue_limit: 400,
             },
             AgentSettings {
                 enabled: false,

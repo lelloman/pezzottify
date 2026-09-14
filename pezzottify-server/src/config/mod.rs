@@ -369,6 +369,9 @@ impl AppConfig {
                         .unwrap_or(me_defaults.interval_hours)
                         .max(1),
                     batch_size: me_file.batch_size.unwrap_or(me_defaults.batch_size).max(1),
+                    work_daily_enqueue_limit: me_file
+                        .work_daily_enqueue_limit
+                        .unwrap_or(me_defaults.work_daily_enqueue_limit),
                     retry_after_secs: me_file
                         .retry_after_secs
                         .unwrap_or(me_defaults.retry_after_secs)
@@ -768,6 +771,8 @@ pub struct BackgroundJobsSettings {
 pub struct MetadataEnrichmentJobSettings {
     pub interval_hours: u64,
     pub batch_size: usize,
+    /// Maximum new Work requests per UTC day; zero disables discovery, not retries.
+    pub work_daily_enqueue_limit: usize,
     pub retry_after_secs: u64,
 }
 
@@ -776,6 +781,7 @@ impl Default for MetadataEnrichmentJobSettings {
         Self {
             interval_hours: 6,
             batch_size: 2000,
+            work_daily_enqueue_limit: 400,
             retry_after_secs: 6 * 60 * 60,
         }
     }

@@ -94,6 +94,7 @@ pub struct BackgroundJobsConfig {
 pub struct MetadataEnrichmentJobConfig {
     pub interval_hours: Option<u64>,
     pub batch_size: Option<usize>,
+    pub work_daily_enqueue_limit: Option<usize>,
     pub retry_after_secs: Option<u64>,
 }
 
