@@ -287,6 +287,14 @@ fn queue_item_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<EnrichmentQu
 }
 
 impl EnrichmentStore for SqliteEnrichmentStore {
+    fn work_requests_created_on_day(&self, day_start: i64) -> Result<usize> {
+        Ok(self.read_conn.lock().unwrap().query_row(
+            "SELECT count(*) FROM enrichment_queue_v1 WHERE entity_type='work_resolution'
+             AND created_at >= ?1 AND created_at < ?2",
+            params![day_start, day_start + 86400],
+            |r| r.get(0),
+        )?)
+    }
     fn work_scan_offset(&self) -> Result<usize> {
         Ok(self.read_conn.lock().unwrap().query_row(
             "SELECT scan_offset FROM work_scan_v1 WHERE id=1",

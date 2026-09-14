@@ -69,6 +69,20 @@ impl MetadataEnrichmentJob {
         store: &dyn EnrichmentStore,
         limit: usize,
     ) -> Result<usize, JobError> {
+        // Queue creation timestamps persist across restarts and retries. Manual runs
+        // share the same daily budget instead of resetting it on each invocation.
+        let day_start = chrono::Utc::now().timestamp().div_euclid(86400) * 86400;
+        let created_today = store
+            .work_requests_created_on_day(day_start)
+            .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+        let limit = limit.min(
+            self.settings
+                .work_daily_enqueue_limit
+                .saturating_sub(created_today),
+        );
+        if limit == 0 {
+            return Ok(0);
+        }
         let mut offset = store
             .work_scan_offset()
             .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
@@ -589,6 +603,96 @@ mod tests {
         job.work_knowledge = std::sync::Arc::new(FixtureKnowledge { fail: false });
         (job, store, tmp)
     }
+    #[test]
+    fn work_discovery_daily_budget_survives_runs_and_day_rollover() {
+        let (_, store, tmp) = setup();
+        let ctx = catalog_context(&tmp);
+        let make_job = || {
+            MetadataEnrichmentJob::from_settings(
+                &MetadataEnrichmentJobSettings {
+                    work_daily_enqueue_limit: 2,
+                    ..Default::default()
+                },
+                AgentSettings::default(),
+            )
+        };
+        assert_eq!(
+            make_job().seed_work_resolution(&ctx, &store, 100).unwrap(),
+            2
+        );
+        let offset = store.work_scan_offset().unwrap();
+        assert_eq!(
+            make_job().seed_work_resolution(&ctx, &store, 100).unwrap(),
+            0
+        );
+        assert_eq!(store.work_scan_offset().unwrap(), offset);
+        let day_start = chrono::Utc::now().timestamp().div_euclid(86400) * 86400;
+        let conn = rusqlite::Connection::open(tmp.path().join("enrichment.db")).unwrap();
+        conn.execute(
+            "UPDATE enrichment_queue_v1 SET created_at=?1",
+            [day_start - 1],
+        )
+        .unwrap();
+        assert_eq!(store.work_requests_created_on_day(day_start).unwrap(), 0);
+        assert_eq!(
+            store
+                .work_requests_created_on_day(day_start - 86400)
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            make_job().seed_work_resolution(&ctx, &store, 100).unwrap(),
+            1
+        );
+        assert_eq!(store.work_requests_created_on_day(day_start).unwrap(), 1);
+    }
+
+    #[test]
+    fn work_discovery_zero_budget_or_zero_batch_does_not_advance_scan() {
+        let (job, store, tmp) = setup();
+        let ctx = catalog_context(&tmp);
+        assert_eq!(job.seed_work_resolution(&ctx, &store, 0).unwrap(), 0);
+        let disabled = MetadataEnrichmentJob::from_settings(
+            &MetadataEnrichmentJobSettings {
+                work_daily_enqueue_limit: 0,
+                ..Default::default()
+            },
+            AgentSettings::default(),
+        );
+        assert_eq!(disabled.seed_work_resolution(&ctx, &store, 100).unwrap(), 0);
+        assert_eq!(store.work_scan_offset().unwrap(), 0);
+    }
+
+    #[test]
+    fn work_discovery_runs_despite_pending_unrelated_enrichment() {
+        let (_, store, tmp) = setup();
+        let ctx = catalog_context(&tmp);
+        let job = MetadataEnrichmentJob::from_settings(
+            &MetadataEnrichmentJobSettings {
+                batch_size: 1,
+                ..Default::default()
+            },
+            AgentSettings {
+                enabled: false,
+                ..Default::default()
+            },
+        );
+        // This high-priority missing artist is processed without external requests.
+        store
+            .enqueue_enrichment_if_missing_or_stale("artist", "missing", "test", 100, 86400)
+            .unwrap();
+        job.execute_with_store(&ctx, None, &store).unwrap();
+        assert!(store
+            .get_enrichment_queue_item("work_resolution", "a")
+            .unwrap()
+            .is_some());
+        assert_eq!(store.work_scan_offset().unwrap(), 1);
+        // An explicitly artist-only run must not discover Works.
+        job.execute_with_store(&ctx, Some(json!({"entity_types":["artist"]})), &store)
+            .unwrap();
+        assert_eq!(store.work_scan_offset().unwrap(), 1);
+    }
+
     fn work() -> WorkProposal {
         WorkProposal {
             title: "Example Song".into(),

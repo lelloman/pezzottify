@@ -200,6 +200,9 @@ interval_hours = 6
 # Metadata Enrichment v1 Job
 # Processes queued artist/album/track enrichment requests, seeding from listening data when empty.
 [background_jobs.metadata_enrichment]
+# New Work requests per UTC day, independent of the existing queue backlog.
+# 0 disables Work discovery but still permits processing/retries of queued items.
+work_daily_enqueue_limit = 400
 # Interval in hours between job runs (default: 6)
 interval_hours = 6
 # Maximum queued entities to process per run (default: 2000)

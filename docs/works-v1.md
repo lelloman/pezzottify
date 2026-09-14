@@ -13,9 +13,22 @@ entity type. Its queue entity ID is a **track ID**, not a Work ID. Work resoluti
 is independent of ordinary track metadata enrichment.
 
 The initial interpretation of “known track” is a catalog track with local audio
-available (`track_available = 1` and a non-null audio URI). When the enrichment
-queue is idle, discovery admits up to 100 such tracks per run, scans at most
-5,000 rows, and persists its offset. At the end of the catalog it wraps around,
+available (`track_available = 1` and a non-null audio URI). On every run that
+includes Works, discovery runs **independently of queue processing**, even
+when other enrichment or retries are pending. It admits up to the smaller of
+`batch_size` and the remaining `background_jobs.metadata_enrichment.work_daily_enqueue_limit`
+(default **400 new requests per UTC day**). Set the daily limit to zero to pause
+discovery without disabling processing or retries. This is an admission budget,
+not a promise of 400 successful resolutions per day. Manual runs share the budget.
+When an existing batch has already been claimed, newly discovered requests are
+available to subsequent runs. When no batch was eligible, new requests can be
+claimed immediately, alongside listening backfill.
+Persisted queue creation timestamps count requests in all statuses; retries do
+not consume it again, and server restarts do not reset it. The budget resets at
+00:00 UTC. Existing queue history counts toward the first day's budget on upgrade.
+
+Each scan examines at most 5,000 rows and persists its offset, without queueing
+the full catalog. At the end of the catalog it wraps around,
 so newly available tracks are eventually picked up. Existing queued, running,
 failed, or completed resolutions are not automatically reset. Normal listening
 metadata keeps its higher priority. A manual run can isolate resolution:

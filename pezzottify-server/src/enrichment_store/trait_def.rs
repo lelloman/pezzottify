@@ -10,6 +10,10 @@ use anyhow::Result;
 
 /// Trait for enrichment storage backends.
 pub trait EnrichmentStore: Send + Sync {
+    /// Count new Work requests, regardless of current queue status, in this UTC day.
+    fn work_requests_created_on_day(&self, _day_start: i64) -> Result<usize> {
+        Ok(0)
+    }
     fn work_scan_offset(&self) -> Result<usize> {
         Ok(0)
     }
