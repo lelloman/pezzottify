@@ -29,7 +29,7 @@ server permissions continue to be enforced independently of assistant confirmati
 ## Dependency and verification
 
 The Android changes require shared library commit
-`5e85b5f34467211846f6c5a4d544a1d11cba0295`, on branch
+`fbdc72fcf475f61d96a00d459be829f915a13f95`, on branch
 `fix/assistant-session-safety`. Publish that commit to the library's Git remote
 before relying on ordinary JitPack resolution. No external publication is part of
 this change.
@@ -52,3 +52,21 @@ Tests cover revocation on an open MCP socket, permission downgrade, shared
 connection failures, pending-RPC cleanup, stale socket callbacks, conversation
 cancellation, compaction invalidation, tool budgets, account history isolation,
 and rejected/stale/timed-out confirmations. No real model calls are needed.
+
+## SimpleAI streaming
+
+The pinned library now consumes incremental responses from an updated SimpleAI
+Android service. Existing chat UI state already renders these text deltas.
+Tool arguments are assembled and validated before tools can execute. Clearing
+chat or logging out cancels the callback session and its remote HTTP request.
+Streams have a 180-second deadline and service-disconnection handling.
+
+This requires the SimpleAI app changes on `fix/android-cloud-streaming` in
+`/tmp/simple-ai-cloud-streaming`. That app forwards the backend's existing SSE
+support, so no backend change is required. Older SimpleAI apps fall back to the
+existing full-response call, without remote cancellation.
+
+Before rollout, publish the library commit, build/install the updated SimpleAI
+and Pezzottify apps, and check streaming, tool turns, clear/logout during a
+response, and fallback with an older SimpleAI app on-device. Nothing was
+published or installed during implementation.
