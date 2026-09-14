@@ -299,6 +299,28 @@ mod tests {
     }
 
     #[test]
+    fn artist_mbid_lookup_handles_null_missing_and_populated_ids() {
+        let (store, _temp_dir) = create_test_store();
+        {
+            let conn = store.write_conn.lock().unwrap();
+            conn.execute(
+                "INSERT INTO artists
+                 (id, name, followers_total, popularity, artist_available, mbid)
+                 VALUES ('artist', 'Artist', 0, 50, 1, NULL)",
+                [],
+            )
+            .unwrap();
+        }
+
+        assert_eq!(store.get_artist_mbid("artist").unwrap(), None);
+        assert_eq!(store.get_artist_mbid("missing-artist").unwrap(), None);
+
+        let mbid = "00000000-0000-0000-0000-000000000001";
+        store.set_artist_mbid("artist", mbid).unwrap();
+        assert_eq!(store.get_artist_mbid("artist").unwrap().as_deref(), Some(mbid));
+    }
+
+    #[test]
     fn test_artist_enrichment_queue_tracks_independent_phases_to_completion() {
         let (store, _temp_dir) = create_test_store();
         let artist_rowid = {
