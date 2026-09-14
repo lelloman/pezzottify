@@ -38,6 +38,12 @@ internal class ExoPlatformPlayer(
 ) : PlatformPlayer {
 
     private val logger: Logger by loggerFactory
+    private val diagnostics = PlaybackDiagnostics(loggerFactory, "controller")
+    private val controllerListener = object : MediaController.Listener {
+        override fun onDisconnected(controller: MediaController) {
+            diagnostics.record("disconnected", controller)
+        }
+    }
 
     private var mediaController: MediaController? = null
 
@@ -195,6 +201,7 @@ internal class ExoPlatformPlayer(
                 // After a PlaybackException, ExoPlayer transitions to STATE_IDLE.
                 // We must call prepare() before seeking to next track.
                 mediaController?.let { controller ->
+                    diagnostics.record("permanent_error_prepare_and_skip", controller)
                     controller.prepare()
                     controller.seekToNext()
                 }
@@ -242,10 +249,12 @@ internal class ExoPlatformPlayer(
     }
 
     init {
+        diagnostics.record("adapter_created")
         coroutineScope.launch(Dispatchers.Main) {
             playerServiceEventsEmitter.events.collect {
                 when (it) {
                     PlayerServiceEventsEmitter.Event.Shutdown -> {
+                        diagnostics.record("service_shutdown_received", mediaController)
                         logger.info("Received Shutdown event - clearing player state")
                         stopProgressPolling()
                         mediaController?.removeListener(playerListener)
@@ -290,11 +299,18 @@ internal class ExoPlatformPlayer(
         if (!controllerReady) {
             logger.info("setIsPlaying($isPlaying) - controller not ready, attempting to reconnect")
             reconnectAndExecute { controller ->
-                controller.playWhenReady = isPlaying
+                requestPlayback(controller, isPlaying)
             }
             return
         }
-        mediaController!!.playWhenReady = isPlaying
+        requestPlayback(mediaController!!, isPlaying)
+    }
+
+    private fun requestPlayback(controller: MediaController, playing: Boolean) {
+        diagnostics.record("request_playback value=$playing connected=${controller.isConnected}", controller)
+        controller.requestPlayback(playing) {
+            diagnostics.record("prepare_idle_resume", controller)
+        }
     }
 
     override fun loadPlaylist(tracksUrls: List<String>, playWhenReady: Boolean) {
@@ -329,17 +345,21 @@ internal class ExoPlatformPlayer(
             }
         controllerConnectionInProgress = true
         mutableControllerState.value = MediaControllerState.CONNECTING
-        val controllerFuture = MediaController.Builder(context, token).buildAsync()
+        diagnostics.record("connect_begin", mediaController)
+        val controllerFuture = MediaController.Builder(context, token)
+            .setListener(controllerListener).buildAsync()
         controllerFuture.addListener(
             {
                 controllerConnectionInProgress = false
                 try {
                     mediaController = controllerFuture.get()
+                    diagnostics.record("connected", mediaController)
                     logger.info("MediaController created - isConnected=${mediaController?.isConnected}")
                     mediaController?.addListener(playerListener)
                     updateControllerState()
                     consumePendingOperations()
                 } catch (error: Exception) {
+                    diagnostics.record("connect_failed")
                     logger.error("Failed to create MediaController", error)
                     sessionToken = null
                     mutableControllerState.value = MediaControllerState.DISCONNECTED
@@ -352,6 +372,7 @@ internal class ExoPlatformPlayer(
     private fun consumePendingOperations() {
         val controller = mediaController?.takeIf { it.isConnected } ?: return
         pendingPlaylist?.let { playlist ->
+            diagnostics.record("load_playlist count=${playlist.tracksUrls.size} requested=${playlist.playWhenReady}", controller)
             pendingPlaylist = null
             controller.run {
                 clearMediaItems()
@@ -406,14 +427,14 @@ internal class ExoPlatformPlayer(
         if (!isControllerReady()) {
             logger.info("togglePlayPause() - controller not ready, attempting to reconnect")
             reconnectAndExecute { controller ->
-                controller.playWhenReady = !controller.playWhenReady
+                requestPlayback(controller, !controller.playWhenReady)
             }
             return
         }
         mediaController?.let { controller ->
             val newState = !controller.playWhenReady
             logger.info("togglePlayPause() - newState=$newState, isConnected=${controller.isConnected}, playbackState=${controller.playbackState}")
-            controller.playWhenReady = newState
+            requestPlayback(controller, newState)
         }
     }
 
@@ -438,11 +459,14 @@ internal class ExoPlatformPlayer(
         sessionToken = token
         mutableControllerState.value = MediaControllerState.CONNECTING
 
-        val controllerFuture = MediaController.Builder(context, token).buildAsync()
+        diagnostics.record("reconnect_begin", mediaController)
+        val controllerFuture = MediaController.Builder(context, token)
+            .setListener(controllerListener).buildAsync()
         controllerFuture.addListener(
             {
                 val controller = controllerFuture.get()
                 mediaController = controller
+                diagnostics.record("reconnected", controller)
                 logger.info("reconnectAndExecute() - MediaController built: isConnected=${controller.isConnected}, mediaItemCount=${controller.mediaItemCount}")
                 controller.addListener(playerListener)
                 updateControllerState()
@@ -504,6 +528,7 @@ internal class ExoPlatformPlayer(
     }
 
     override fun stop() {
+        diagnostics.record("app_stop", mediaController)
         mediaController?.stop()
         mutableIsPlaying.value = false
         mutableCurrentTrackDurationSeconds.value = null
@@ -511,6 +536,7 @@ internal class ExoPlatformPlayer(
     }
 
     override fun clearSession() {
+        diagnostics.record("app_clear_session", mediaController)
         stopProgressPolling()
         autoRetryJob?.cancel()
         autoRetryJob = null
@@ -617,6 +643,7 @@ internal class ExoPlatformPlayer(
      */
     private fun retryInternal() {
         mediaController?.let { controller ->
+            diagnostics.record("retry_prepare", controller)
             val positionMs = lastKnownPositionMs.takeIf { it > 0 } ?: 0L
             logger.info("Retrying playback from position: ${positionMs}ms")
             // After a PlaybackException, ExoPlayer transitions to STATE_IDLE.

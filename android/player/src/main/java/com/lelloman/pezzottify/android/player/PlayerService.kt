@@ -11,6 +11,7 @@ import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -75,6 +76,33 @@ class PlaybackService : MediaSessionService() {
     lateinit var loggerFactory: LoggerFactory
 
     private val logger by lazy { loggerFactory.getLogger("PlaybackService") }
+    private val diagnostics by lazy { PlaybackDiagnostics(loggerFactory, "service") }
+
+    private val sessionCallback = object : MediaSession.Callback {
+        override fun onPostConnect(session: MediaSession, controller: MediaSession.ControllerInfo) {
+            diagnostics.record("session_controller_connected caller=${controller.packageName}", player)
+            super.onPostConnect(session, controller)
+        }
+
+        override fun onDisconnected(session: MediaSession, controller: MediaSession.ControllerInfo) {
+            diagnostics.record("session_controller_disconnected caller=${controller.packageName}", player)
+            super.onDisconnected(session, controller)
+        }
+
+        @androidx.media3.common.util.UnstableApi
+        override fun onPlayerCommandRequest(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            playerCommand: Int,
+        ): Int {
+            if (playerCommand == Player.COMMAND_STOP ||
+                playerCommand == Player.COMMAND_PLAY_PAUSE ||
+                playerCommand == Player.COMMAND_PREPARE) {
+                diagnostics.record("controller_command command=$playerCommand caller=${controller.packageName}", player)
+            }
+            return super.onPlayerCommandRequest(session, controller, playerCommand)
+        }
+    }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var metadataObserverJob: Job? = null
@@ -110,6 +138,7 @@ class PlaybackService : MediaSessionService() {
     private val becomingNoisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
+                diagnostics.record("becoming_noisy_pause", player)
                 player?.pause()
             }
         }
@@ -132,11 +161,16 @@ class PlaybackService : MediaSessionService() {
             /* handleAudioFocus = */ true
         )
         .build()
-        .apply { player = this }
+        .apply {
+            player = this
+            addListener(diagnostics.listener(this))
+            diagnostics.record("player_created", this)
+        }
 
     override fun onCreate() {
         super.onCreate()
-        mediaSession = MediaSession.Builder(this, makePlayer()).build()
+        diagnostics.record("service_created")
+        mediaSession = MediaSession.Builder(this, makePlayer()).setCallback(sessionCallback).build()
         ContextCompat.registerReceiver(
             this,
             becomingNoisyReceiver,
@@ -266,6 +300,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun releasePlayerAndSession() {
+        diagnostics.record("release_player_and_session", player)
         player?.let {
             it.playWhenReady = false
             it.release()
@@ -278,6 +313,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        diagnostics.record("service_destroy", player)
         metadataObserverJob?.cancel()
         artworkLoadJob?.cancel()
         playerServiceEventsEmitter.shutdown()
@@ -289,6 +325,7 @@ class PlaybackService : MediaSessionService() {
 
     @OptIn(UnstableApi::class)
     override fun onTaskRemoved(rootIntent: Intent?) {
+        diagnostics.record("task_removed", player)
         super.onTaskRemoved(rootIntent)
         releasePlayerAndSession()
         playerServiceEventsEmitter.shutdown()
