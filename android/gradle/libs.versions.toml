@@ -35,7 +35,7 @@ nanohttpd = "2.3.1"
 androidoscopy = "master-SNAPSHOT"
 appauth = "0.11.1"
 work = "2.10.1"
-simpleAndroidAssistant = "5e85b5f34467211846f6c5a4d544a1d11cba0295"
+simpleAndroidAssistant = "fbdc72fcf475f61d96a00d459be829f915a13f95"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
