@@ -1046,7 +1046,7 @@ impl SqliteCatalogStore {
         Ok(())
     }
 
-    /// Get MusicBrainz ID for an artist.
+    /// Get MusicBrainz ID for an artist, or None if the artist or ID is absent.
     pub fn get_artist_mbid(&self, artist_id: &str) -> Result<Option<String>> {
         let read_conn = self.get_read_conn();
         let conn = read_conn.lock().unwrap();
@@ -1054,10 +1054,10 @@ impl SqliteCatalogStore {
             .query_row(
                 "SELECT mbid FROM artists WHERE id = ?1",
                 params![artist_id],
-                |row| row.get(0),
+                |row| row.get::<_, Option<String>>(0),
             )
             .optional()?;
-        Ok(mbid)
+        Ok(mbid.flatten())
     }
 
     /// Set MusicBrainz ID for an artist, marking status = 1.
