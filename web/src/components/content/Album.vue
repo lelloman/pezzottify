@@ -178,6 +178,7 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { chooseAlbumCoverImageUrl } from "@/utils";
+import { canRequestAlbumDownload } from "@/utils/downloadRequests";
 import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
 import PlayIcon from "@/components/icons/PlayIcon.vue";
 import RadioIcon from "@/components/icons/RadioIcon.vue";
@@ -477,24 +478,9 @@ const albumAvailability = computed(() => {
   return avail;
 });
 
-const isAlbumUnavailable = computed(() => {
-  return (
-    albumAvailability.value === "missing" ||
-    albumAvailability.value === "partial"
-  );
-});
-
-const showDownloadSection = computed(() => {
-  const canRequest = userStore.canRequestContent;
-  const unavailable = isAlbumUnavailable.value;
-  console.log(
-    "[Album] showDownloadSection check - canRequestContent:",
-    canRequest,
-    "isAlbumUnavailable:",
-    unavailable,
-  );
-  return canRequest && unavailable && !userStore.isProxyModeEnabled;
-});
+const showDownloadSection = computed(() =>
+  canRequestAlbumDownload(userStore.canRequestContent, albumAvailability.value),
+);
 
 const syncedDownloadRequest = computed(() => {
   return userStore.getDownloadRequest(props.albumId);

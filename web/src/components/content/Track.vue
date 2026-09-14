@@ -156,6 +156,7 @@ import RadioIcon from "@/components/icons/RadioIcon.vue";
 import { usePlaybackStore } from "@/store/playback";
 import { useRemoteStore } from "@/store/remote";
 import { chooseAlbumCoverImageUrl, formatDuration } from "@/utils";
+import { canRequestTrackDownload } from "@/utils/downloadRequests";
 import { useRouter } from "vue-router";
 import LoadArtistListItem from "@/components/common/LoadArtistListItem.vue";
 import { useStaticsStore } from "@/store/statics";
@@ -337,15 +338,11 @@ const isTrackAvailable = computed(() => {
   );
 });
 
-const isTrackFetching = computed(
-  () => track.value?.availability === "fetching",
-);
-const showDownloadButton = computed(
-  () =>
-    userStore.canRequestContent &&
-    !userStore.isProxyModeEnabled &&
-    !isTrackAvailable.value &&
-    !isTrackFetching.value,
+const showDownloadButton = computed(() =>
+  canRequestTrackDownload(
+    userStore.canRequestContent,
+    track.value?.availability,
+  ),
 );
 
 const updateSummaryOverflow = async () => {
