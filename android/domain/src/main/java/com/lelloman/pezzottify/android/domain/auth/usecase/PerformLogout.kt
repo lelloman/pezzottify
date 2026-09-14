@@ -34,12 +34,15 @@ class PerformLogout @Inject internal constructor(
     private val player: PezzottifyPlayer,
     private val webSocketManager: WebSocketManager,
     loggerFactory: LoggerFactory,
+    private val assistantSessionCleaner: com.lelloman.pezzottify.android.domain.auth.AssistantSessionCleaner =
+        com.lelloman.pezzottify.android.domain.auth.AssistantSessionCleaner {},
 ) : UseCase() {
 
     private val logger: Logger by loggerFactory
 
     suspend operator fun invoke() {
         logger.info("invoke() starting logout")
+        assistantSessionCleaner.clearSession()
 
         // Save the current username for login hint before clearing auth
         val currentAuthState = authStore.getAuthState().value

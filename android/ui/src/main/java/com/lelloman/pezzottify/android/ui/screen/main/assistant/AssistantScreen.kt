@@ -1,6 +1,8 @@
 package com.lelloman.pezzottify.android.ui.screen.main.assistant
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
+import com.lelloman.pezzottify.android.ui.R
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -15,6 +17,24 @@ fun AssistantScreen(
     viewModel: AssistantViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val confirmation by viewModel.confirmation.request.collectAsState()
+    confirmation?.let { request ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { viewModel.confirmation.respond(request.id, false) },
+            title = { androidx.compose.material3.Text(stringResource(R.string.ai_confirm_action)) },
+            text = { androidx.compose.material3.Text("${request.action}\n\n${request.details}") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { viewModel.confirmation.respond(request.id, true) }) {
+                    androidx.compose.material3.Text(stringResource(R.string.ai_allow_action))
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { viewModel.confirmation.respond(request.id, false) }) {
+                    androidx.compose.material3.Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
     val currentProviderId by viewModel.providerConfigStore.selectedProviderId.collectAsState()
     val currentConfig by viewModel.providerConfigStore.config.collectAsState()
     var showSettings by remember { mutableStateOf(false) }

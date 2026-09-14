@@ -13,6 +13,8 @@ import { ref, computed } from 'vue';
 // Module state
 let socket = null;
 let requestId = 0;
+let connectionPromise = null;
+let rejectConnection = null;
 const pendingRequests = new Map();
 const cachedTools = ref([]);
 const connected = ref(false);
@@ -43,17 +45,25 @@ function sendRequest(method, params = {}) {
       params,
     };
 
-    pendingRequests.set(id, { resolve, reject });
+    let timer;
+    pendingRequests.set(id, {
+      resolve: value => { clearTimeout(timer); resolve(value); },
+      reject: error => { clearTimeout(timer); reject(error); },
+    });
 
     // Set timeout for request
-    setTimeout(() => {
+    timer = setTimeout(() => {
       if (pendingRequests.has(id)) {
         pendingRequests.delete(id);
         reject(new Error('MCP request timeout'));
       }
     }, 30000);
 
-    socket.send(JSON.stringify(request));
+    try { socket.send(JSON.stringify(request)); }
+    catch (error) {
+      pendingRequests.get(id)?.reject(error);
+      pendingRequests.delete(id);
+    }
   });
 }
 
@@ -84,82 +94,74 @@ function handleMessage(event) {
  * Connect to the MCP server
  */
 export function connect() {
-  if (socket && socket.readyState === WebSocket.OPEN) {
-    return Promise.resolve();
-  }
-
-  if (connecting.value) {
-    // Wait for existing connection attempt
-    return new Promise((resolve) => {
-      const check = setInterval(() => {
-        if (connected.value) {
-          clearInterval(check);
-          resolve();
-        }
-      }, 100);
-    });
-  }
-
+  if (connectionPromise) return connectionPromise;
+  if (connected.value) return Promise.resolve();
   connecting.value = true;
-
-  return new Promise((resolve, reject) => {
+  let ws;
+  try {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/v1/mcp`;
-
-    socket = new WebSocket(wsUrl);
-
-    socket.onopen = async () => {
-      connected.value = true;
-      connecting.value = false;
-
-      // Initialize the connection
+    ws = new WebSocket(`${protocol}//${window.location.host}/v1/mcp`);
+  } catch (error) {
+    connecting.value = false;
+    return Promise.reject(error);
+  }
+  socket = ws;
+  connectionPromise = new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => fail(new Error('MCP connection timeout')), 30000);
+    const finish = error => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error) reject(error); else resolve();
+    };
+    rejectConnection = finish;
+    const fail = error => {
+      finish(error);
+      if (socket !== ws) return;
+      disconnect();
+    };
+    ws.onopen = async () => {
+      if (socket !== ws) return;
       try {
         await sendRequest('initialize', {
-          protocolVersion: '2024-11-05',
-          capabilities: {},
-          clientInfo: {
-            name: 'pezzottify-web-chat',
-            version: '1.0.0',
-          },
+          protocolVersion: '2024-11-05', capabilities: {},
+          clientInfo: { name: 'pezzottify-web-chat', version: '1.0.0' },
         });
-
-        // Fetch and cache tools
-        await refreshTools();
-
-        resolve();
-      } catch (e) {
-        console.error('MCP initialization failed:', e);
-        reject(e);
-      }
+        if (socket !== ws) return;
+        const result = await sendRequest('tools/list');
+        if (socket !== ws) return;
+        cachedTools.value = result.tools || [];
+        connected.value = true;
+        connecting.value = false;
+        connectionPromise = null;
+        rejectConnection = null;
+        finish();
+      } catch (error) { fail(error); }
     };
-
-    socket.onmessage = handleMessage;
-
-    socket.onclose = () => {
-      connected.value = false;
-      connecting.value = false;
-      socket = null;
-      cachedTools.value = [];
-    };
-
-    socket.onerror = (error) => {
-      connecting.value = false;
-      reject(error);
-    };
+    ws.onmessage = event => { if (socket === ws) handleMessage(event); };
+    ws.onerror = () => fail(new Error('MCP connection failed'));
+    ws.onclose = () => fail(new Error('MCP connection closed'));
   });
+  return connectionPromise;
 }
 
 /**
- * Disconnect from the MCP server
+ * Invalidate callbacks and settle every waiter before closing the old socket.
  */
 export function disconnect() {
-  if (socket) {
-    socket.close();
-    socket = null;
-  }
+  const previous = socket;
+  socket = null;
+  const error = new Error('MCP disconnected');
+  rejectConnection?.(error);
+  rejectConnection = null;
+  connectionPromise = null;
+  for (const request of pendingRequests.values()) request.reject(error);
+  pendingRequests.clear();
   connected.value = false;
   connecting.value = false;
   cachedTools.value = [];
+  previous?.close();
 }
 
 /**

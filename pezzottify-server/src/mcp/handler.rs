@@ -67,9 +67,27 @@ async fn handle_mcp_socket(
     while let Some(result) = ws_stream.next().await {
         match result {
             Ok(Message::Text(text)) => {
-                let response =
-                    handle_message(&text, &session, &server_state, &mcp_state, &mut initialized)
-                        .await;
+                // Handshake authentication is not lifetime authorization.
+                let current_session = match crate::server::session::validate_session_token(
+                    &session.token,
+                    &server_state,
+                )
+                .await
+                {
+                    Ok(Some(current)) if current.user_id == session.user_id => current,
+                    _ => {
+                        let _ = ws_sink.send(Message::Close(None)).await;
+                        break;
+                    }
+                };
+                let response = handle_message(
+                    &text,
+                    &current_session,
+                    &server_state,
+                    &mcp_state,
+                    &mut initialized,
+                )
+                .await;
 
                 if let Some(response) = response {
                     match serde_json::to_string(&response) {
