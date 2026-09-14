@@ -81,6 +81,11 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        // Release remains browser-only until the authenticator release gates pass.
+        buildConfigField("boolean", "AUTHENTICATOR_ENABLED", "false")
+        buildConfigField("String", "AUTHENTICATOR_PACKAGE", "\"com.lelloman.authenticator\"")
+        buildConfigField("String", "AUTHENTICATOR_CERTIFICATE", "\"\"")
+
         // AppAuth redirect scheme for OIDC callback
         manifestPlaceholders["appAuthRedirectScheme"] = "com.lelloman.pezzottify.android"
     }
@@ -116,6 +121,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            val enabled = buildProperty("authenticator.enabled", "false").toBooleanStrict()
+            val certificate = buildProperty("authenticator.certificate", "")
+            require(!enabled || certificate.matches(Regex("[a-fA-F0-9]{64}")))
+            buildConfigField("boolean", "AUTHENTICATOR_ENABLED", enabled.toString())
+            buildConfigField("String", "AUTHENTICATOR_PACKAGE", buildProperty("authenticator.package", "com.lelloman.authenticator").asBuildConfigString())
+            buildConfigField("String", "AUTHENTICATOR_CERTIFICATE", certificate.asBuildConfigString())
+        }
         release {
             isMinifyEnabled = true
             proguardFiles(
