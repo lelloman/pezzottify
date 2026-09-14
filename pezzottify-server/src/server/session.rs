@@ -434,14 +434,22 @@ async fn extract_session_from_request_parts(
 
     debug!("Got session token (length={})", token.len());
 
+    validate_session_token(&token, ctx).await
+}
+
+/// Revalidate long-lived transports using the same policy as HTTP requests.
+pub(crate) async fn validate_session_token(
+    token: &str,
+    ctx: &ServerState,
+) -> Result<Option<Session>, DbRunError> {
     // Try OIDC JWT validation first (if OIDC is configured)
-    if let Some(session) = try_oidc_session(&token, ctx).await? {
+    if let Some(session) = try_oidc_session(token, ctx).await? {
         debug!("Session validated via OIDC for user_id={}", session.user_id);
         return Ok(Some(session));
     }
 
     // Fall back to legacy database token lookup
-    if let Some(session) = try_legacy_session(&token, ctx).await? {
+    if let Some(session) = try_legacy_session(token, ctx).await? {
         debug!(
             "Session validated via legacy auth for user_id={}",
             session.user_id

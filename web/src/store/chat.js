@@ -15,6 +15,8 @@ import { mcpClient } from '../services/mcp';
 import { uiTools } from '../services/uiTools';
 import { LANGUAGES, getLanguage, buildDetectionPrompt } from '../services/languages';
 
+import { ChatLifecycle, runToolLoop, requiresConfirmation } from '../services/chatLifecycle.js';
+
 const CONFIG_KEY = 'ai_chat_config';
 
 // Compaction thresholds (in estimated tokens)
@@ -153,6 +155,7 @@ export const useChatStore = defineStore('chat', () => {
 
   // Message history: { id, role, content, toolCalls?, toolResults? }
   const messages = ref([]);
+  const lifecycle = new ChatLifecycle();
 
   // Loading state
   const isLoading = ref(false);
@@ -287,7 +290,12 @@ export const useChatStore = defineStore('chat', () => {
   /**
    * Execute a tool call
    */
-  async function executeTool(name, args) {
+  async function executeTool(name, args, signal) {
+    lifecycle.check(signal);
+    if (requiresConfirmation(name) && !window.confirm(`Allow AI action ${name}?\n\n${JSON.stringify(args, null, 2)}`)) {
+      return { error: 'User declined; action was not executed.' };
+    }
+    lifecycle.check(signal);
     // Check if it's a UI tool
     if (uiTools.isUiTool(name)) {
       return await uiTools.callTool(name, args);
@@ -309,7 +317,7 @@ export const useChatStore = defineStore('chat', () => {
   /**
    * Detect language from a user message
    */
-  async function detectLanguage(userMessage) {
+  async function detectLanguage(userMessage, signal) {
     console.log('[Lang] detectLanguage called, isConfigured:', isConfigured.value);
     if (!isConfigured.value) return null;
 
@@ -317,7 +325,8 @@ export const useChatStore = defineStore('chat', () => {
     try {
       const prompt = buildDetectionPrompt(userMessage);
       console.log('[Lang] Sending detection prompt...');
-      const response = await quickPrompt(config.value.provider, config.value, prompt);
+      const response = await quickPrompt(config.value.provider, { ...config.value, signal }, prompt);
+      lifecycle.check(signal);
       console.log('[Lang] Got response:', response);
 
       // Extract language code - look for a valid 2-letter code in the response
@@ -346,7 +355,7 @@ export const useChatStore = defineStore('chat', () => {
       console.warn('[Lang] Detection failed:', e);
       return 'en';
     } finally {
-      isDetectingLanguage.value = false;
+      if (lifecycle.owns(signal)) isDetectingLanguage.value = false;
     }
   }
 
@@ -400,8 +409,8 @@ export const useChatStore = defineStore('chat', () => {
   /**
    * Check if compaction is needed and run it asynchronously
    */
-  async function maybeCompact() {
-    if (isCompacting.value || !isConfigured.value) return;
+  async function maybeCompact(signal) {
+    if (isCompacting.value || !isConfigured.value || !lifecycle.owns(signal)) return;
 
     const dist = analyzeTokenDistribution();
 
@@ -426,7 +435,8 @@ export const useChatStore = defineStore('chat', () => {
       );
 
       // Get summary from LLM
-      const summary = await quickPrompt(config.value.provider, config.value, prompt);
+      const summary = await quickPrompt(config.value.provider, { ...config.value, signal }, prompt);
+      lifecycle.check(signal);
 
       // Update state
       contextSummary.value = summary.trim();
@@ -439,7 +449,7 @@ export const useChatStore = defineStore('chat', () => {
       console.error('[Chat] Compaction failed:', e);
       // Non-fatal - we just keep the messages as-is
     } finally {
-      isCompacting.value = false;
+      if (lifecycle.owns(signal)) isCompacting.value = false;
     }
   }
 
@@ -447,165 +457,43 @@ export const useChatStore = defineStore('chat', () => {
    * Send a message and get a response
    */
   async function sendMessage(userMessage) {
-    if (!userMessage.trim() || isLoading.value || isCompacting.value) return;
-
+    if (!userMessage.trim() || isLoading.value || isCompacting.value || !isConfigured.value) return;
+    const signal = lifecycle.begin();
     error.value = null;
     streamingText.value = '';
-
-    // Detect language if pending (either first message or user selected auto-detect)
-    const trimmedMessage = userMessage.trim();
-    console.log('[Lang] sendMessage - pendingLanguageDetection:', pendingLanguageDetection.value, 'current language:', config.value.language);
-    if (pendingLanguageDetection.value) {
-      console.log('[Lang] Triggering detection for message:', trimmedMessage.slice(0, 50));
-      const detectedLang = await detectLanguage(trimmedMessage);
-      console.log('[Lang] Detection returned:', detectedLang);
-      if (detectedLang) {
-        config.value.language = detectedLang;
+    isLoading.value = true; // Includes language detection, preventing overlapping sends.
+    const turnStart = messages.value.length;
+    try {
+      if (pendingLanguageDetection.value) {
+        const language = await detectLanguage(userMessage.trim(), signal);
+        lifecycle.check(signal);
+        config.value.language = language;
         pendingLanguageDetection.value = false;
-        console.log('[Lang] Language set to:', detectedLang);
       }
-    }
-
-    // Add user message
-    const userMsg = {
-      id: `msg_${Date.now()}_user`,
-      role: 'user',
-      content: trimmedMessage,
-    };
-    messages.value.push(userMsg);
-
-    isLoading.value = true;
-
-    try {
-      // Ensure MCP is connected
+      messages.value.push({ id: crypto.randomUUID(), role: 'user', content: userMessage.trim() });
       if (!mcpClient.isConnected.value) {
-        try {
-          await mcpClient.connect();
-        } catch (e) {
-          console.warn('MCP connection failed:', e);
-          // Continue without MCP tools
-        }
+        try { await mcpClient.connect(); }
+        catch (error) { console.warn('MCP unavailable:', error); }
       }
-
-      // Get all available tools
-      const tools = getAllTools();
-
-      // Build messages for LLM
-      const llmMessages = buildLlmMessages();
-
-      // Stream the response
-      let assistantContent = '';
-      let toolCalls = [];
-
-      for await (const event of streamChat(config.value.provider, config.value, llmMessages, tools)) {
-        if (event.type === 'text') {
-          assistantContent += event.content;
-          streamingText.value = assistantContent;
-        } else if (event.type === 'tool_use') {
-          toolCalls.push({
-            id: event.id,
-            name: event.name,
-            input: event.input,
-          });
-        } else if (event.type === 'error') {
-          throw new Error(event.message);
-        }
-      }
-
-      // Add assistant message
-      const assistantMsg = {
-        id: `msg_${Date.now()}_assistant`,
-        role: 'assistant',
-        content: assistantContent,
-        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-      };
-      messages.value.push(assistantMsg);
-      streamingText.value = '';
-
-      // If there are tool calls, execute them and continue
-      if (toolCalls.length > 0) {
-        await handleToolCalls(toolCalls);
-      }
-
-    } catch (e) {
-      console.error('Chat error:', e);
-      error.value = e.message;
-      streamingText.value = '';
-    } finally {
-      isLoading.value = false;
-
-      // Trigger async compaction after response (fire and forget)
-      maybeCompact();
-    }
-  }
-
-  /**
-   * Handle tool calls and get follow-up response
-   */
-  async function handleToolCalls(toolCalls) {
-    // Execute all tool calls
-    const results = [];
-    for (const tc of toolCalls) {
-      const result = await executeTool(tc.name, tc.input);
-      results.push({
-        id: `result_${Date.now()}_${tc.id}`,
-        role: 'tool',
-        toolCallId: tc.id,
-        toolName: tc.name,
-        content: typeof result === 'string' ? result : JSON.stringify(result),
+      lifecycle.check(signal);
+      await runToolLoop({
+        stream: () => streamChat(config.value.provider, { ...config.value, signal }, buildLlmMessages(), getAllTools()),
+        execute: (name, args) => executeTool(name, args, signal),
+        append: message => messages.value.push({ id: crypto.randomUUID(), ...message }),
+        onText: text => { streamingText.value = text; },
+        check: () => lifecycle.check(signal),
       });
-    }
-
-    // Add tool results to messages
-    messages.value.push(...results);
-
-    // Get follow-up response from LLM
-    isLoading.value = true;
-    streamingText.value = '';
-
-    try {
-      const tools = getAllTools();
-      const llmMessages = buildLlmMessages();
-
-      let assistantContent = '';
-      let newToolCalls = [];
-
-      for await (const event of streamChat(config.value.provider, config.value, llmMessages, tools)) {
-        if (event.type === 'text') {
-          assistantContent += event.content;
-          streamingText.value = assistantContent;
-        } else if (event.type === 'tool_use') {
-          newToolCalls.push({
-            id: event.id,
-            name: event.name,
-            input: event.input,
-          });
-        } else if (event.type === 'error') {
-          throw new Error(event.message);
-        }
-      }
-
-      // Add assistant message
-      const assistantMsg = {
-        id: `msg_${Date.now()}_assistant_followup`,
-        role: 'assistant',
-        content: assistantContent,
-        toolCalls: newToolCalls.length > 0 ? newToolCalls : undefined,
-      };
-      messages.value.push(assistantMsg);
-      streamingText.value = '';
-
-      // Recursively handle more tool calls (with depth limit)
-      if (newToolCalls.length > 0 && messages.value.length < 50) {
-        await handleToolCalls(newToolCalls);
-      }
-
     } catch (e) {
-      console.error('Tool follow-up error:', e);
-      error.value = e.message;
-      streamingText.value = '';
+      if (lifecycle.owns(signal)) {
+        error.value = e.message;
+        // Keep tool/result pairs valid if a provider fails between rounds.
+      }
     } finally {
-      isLoading.value = false;
+      if (lifecycle.owns(signal)) {
+        isLoading.value = false;
+        streamingText.value = '';
+        if (messages.value.length > turnStart) void maybeCompact(signal);
+      }
     }
   }
 
@@ -613,6 +501,11 @@ export const useChatStore = defineStore('chat', () => {
    * Clear chat history
    */
   function clearHistory() {
+    lifecycle.cancel();
+    mcpClient.disconnect();
+    isLoading.value = false;
+    isCompacting.value = false;
+    isDetectingLanguage.value = false;
     messages.value = [];
     contextSummary.value = null;
     error.value = null;
@@ -625,7 +518,15 @@ export const useChatStore = defineStore('chat', () => {
   /**
    * Update configuration
    */
+  function resetSession() {
+    clearHistory();
+    isOpen.value = false;
+    config.value.apiKey = '';
+    localStorage.removeItem(CONFIG_KEY);
+  }
+
   function setConfig(newConfig) {
+    clearHistory();
     config.value = { ...config.value, ...newConfig };
   }
 
@@ -700,6 +601,7 @@ export const useChatStore = defineStore('chat', () => {
     // Methods
     sendMessage,
     clearHistory,
+    resetSession,
     setConfig,
     toggle,
     open,

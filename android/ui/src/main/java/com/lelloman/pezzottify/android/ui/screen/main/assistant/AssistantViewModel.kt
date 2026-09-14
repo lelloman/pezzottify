@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 
 @HiltViewModel
@@ -26,7 +27,8 @@ class AssistantViewModel @Inject constructor(
     val providerConfigStore: ProviderConfigStore,
     providerConfigurationPolicy: ProviderConfigurationPolicy,
     private val modeManager: ModeManager,
-    private val debugModePreferences: DebugModePreferences
+    private val debugModePreferences: DebugModePreferences,
+    val confirmation: AssistantConfirmation,
 ) : ViewModel() {
 
     val isProviderConfigurationVisible = providerConfigurationPolicy.isUserConfigurable
@@ -121,6 +123,8 @@ class AssistantViewModel @Inject constructor(
             _error.value = null
             try {
                 chatRepository.sendMessage(text)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _error.value = e.message ?: "Unknown error"
             }
@@ -159,6 +163,8 @@ class AssistantViewModel @Inject constructor(
             _error.value = null
             try {
                 chatRepository.restartFromMessage(messageId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _error.value = e.message ?: "Unknown error"
             }
@@ -179,6 +185,8 @@ class AssistantViewModel @Inject constructor(
                 if (!success) {
                     _error.value = "Failed to switch to mode: $modeId"
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _error.value = e.message ?: "Unknown error"
             }

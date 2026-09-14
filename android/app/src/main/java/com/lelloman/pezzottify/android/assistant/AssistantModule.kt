@@ -67,6 +67,16 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import com.lelloman.simpleaiassistant.data.AccountChatRepository
+import com.lelloman.simpleaiassistant.tool.Tool
+import com.lelloman.simpleaiassistant.tool.ToolResult
+import com.lelloman.pezzottify.android.domain.auth.AssistantSessionCleaner
+import com.lelloman.pezzottify.android.ui.screen.main.assistant.AssistantConfirmation
 import javax.inject.Singleton
 
 @Module
@@ -160,7 +170,8 @@ object AssistantModule {
         getWhatsNew: GetWhatsNew,
         getGenres: GetGenres,
         getGenreTracks: GetGenreTracks,
-        userPlaylistStore: UserPlaylistStore
+        userPlaylistStore: UserPlaylistStore,
+        confirmation: AssistantConfirmation,
     ): ToolRegistry {
         // Catalog/Search tools
         val searchCatalogTool = SearchCatalogTool(performSearch, staticsStore)
@@ -214,8 +225,21 @@ object AssistantModule {
             addPlaylistToQueueTool
         )
 
+        val guardedTools = allTools.map { tool ->
+            if (tool.spec.name !in setOf("delete_playlist", "remove_tracks_from_playlist")) tool
+            else object : Tool by tool {
+                override suspend fun execute(input: Map<String, Any?>): ToolResult {
+                    val snapshot = input.toMap()
+                    if (!confirmation.confirm(tool.spec.name, snapshot.toString())) {
+                        return ToolResult(success = false, error = "User declined; action was not executed")
+                    }
+                    currentCoroutineContext().ensureActive()
+                    return tool.execute(snapshot)
+                }
+            }
+        }
         return ToolRegistry(
-            tools = allTools.associateBy { it.spec.name },
+            tools = guardedTools.associateBy { it.spec.name },
             topography = allTools.map { ToolNode.ToolRef(it.spec.name) }
         )
     }
@@ -387,7 +411,7 @@ object AssistantModule {
 
     @Provides
     @Singleton
-    fun provideChatRepository(
+    fun provideAccountChatRepository(
         chatMessageDao: ChatMessageDao,
         llmProvider: LlmProvider,
         toolRegistry: ToolRegistry,
@@ -396,9 +420,12 @@ object AssistantModule {
         languagePreferences: LanguagePreferences,
         logger: AssistantLogger,
         authErrorHandler: AuthErrorHandler,
-        modeManager: ModeManager
-    ): ChatRepository {
-        return ChatRepositoryImpl(
+        modeManager: ModeManager,
+        authStore: AuthStore,
+        @ApplicationContext context: Context,
+        scope: CoroutineScope,
+    ): AccountChatRepository {
+        val delegate = ChatRepositoryImpl(
             chatMessageDao = chatMessageDao,
             llmProvider = llmProvider,
             toolRegistry = toolRegistry,
@@ -409,5 +436,28 @@ object AssistantModule {
             authErrorHandler = authErrorHandler,
             modeManager = modeManager
         )
+        val prefs = context.getSharedPreferences("assistant_session", Context.MODE_PRIVATE)
+        return AccountChatRepository(
+            delegate = delegate,
+            accountChanges = authStore.getAuthState()
+                .filter { it != AuthState.Loading }
+                .map { state ->
+                    (state as? AuthState.LoggedIn)?.let {
+                        "${it.remoteUrl.length}:${it.remoteUrl}${it.userHandle}"
+                    }
+                }.distinctUntilChanged(),
+            readOwner = { prefs.getString("owner", null) },
+            writeOwner = { owner ->
+                check(prefs.edit().putString("owner", owner).commit()) { "Could not persist assistant account" }
+            },
+            scope = scope,
+        )
     }
+
+    @Provides
+    fun provideChatRepository(repository: AccountChatRepository): ChatRepository = repository
+
+    @Provides
+    fun provideAssistantSessionCleaner(repository: AccountChatRepository): AssistantSessionCleaner =
+        AssistantSessionCleaner { repository.endSession() }
 }

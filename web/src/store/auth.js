@@ -51,6 +51,11 @@ export const useAuthStore = defineStore("auth", {
         // If user is already set (e.g., from password login), just verify with backend
         // Also try session endpoint even without OIDC tokens (cookie-based auth)
         const response = await axios.get("/v1/auth/session");
+        if (localStorage.getItem('ai_chat_owner') !== response.data.user_handle) {
+          const { useChatStore } = await import('./chat');
+          useChatStore().resetSession();
+          localStorage.setItem('ai_chat_owner', response.data.user_handle);
+        }
         this.user = {
           handle: response.data.user_handle,
           permissions: response.data.permissions,
@@ -84,6 +89,9 @@ export const useAuthStore = defineStore("auth", {
       } catch (error) {
         // 401/403 means no valid session
         console.debug("Session check failed:", error?.response?.status);
+        const { useChatStore } = await import('./chat');
+        useChatStore().resetSession();
+        localStorage.removeItem('ai_chat_owner');
         this.user = null;
         this.sessionChecked = true;
         return false;
@@ -109,6 +117,10 @@ export const useAuthStore = defineStore("auth", {
     },
 
     async logout() {
+      // Stop AI work and its separate authenticated MCP socket before switching accounts.
+      const { useChatStore } = await import('./chat');
+      useChatStore().resetSession();
+      localStorage.removeItem('ai_chat_owner');
       // Save the current username for login hint before clearing auth
       if (this.user?.handle) {
         oidc.storeLastUsername(this.user.handle);

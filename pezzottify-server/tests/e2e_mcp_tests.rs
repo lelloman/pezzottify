@@ -10,6 +10,63 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 type McpSocket =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
+#[tokio::test]
+async fn mcp_rejects_calls_after_session_logout() {
+    let server = TestServer::spawn().await;
+    let token = login_token(&server, ADMIN_USER, ADMIN_PASS, "mcp-revoked").await;
+    let mut socket = connect_mcp(&server, &token).await;
+    initialize(&mut socket).await;
+    let response = reqwest::Client::new()
+        .post(format!("{}/v1/auth/logout", server.base_url))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert!(response.status().is_success());
+    socket
+        .send(Message::Text(
+            json!({
+                "jsonrpc": "2.0", "id": 2, "method": "tools/list"
+            })
+            .to_string()
+            .into(),
+        ))
+        .await
+        .unwrap();
+    let response = tokio::time::timeout(std::time::Duration::from_secs(5), socket.next())
+        .await
+        .unwrap();
+    assert!(matches!(response, None | Some(Ok(Message::Close(_)))));
+}
+
+#[tokio::test]
+async fn mcp_refreshes_permissions_on_an_existing_connection() {
+    let server = TestServer::spawn().await;
+    let token = login_token(&server, ADMIN_USER, ADMIN_PASS, "mcp-demoted").await;
+    let mut socket = connect_mcp(&server, &token).await;
+    initialize(&mut socket).await;
+    let changed = request(
+        &mut socket,
+        json!({
+            "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+            "params": {"name": "users.mutate", "arguments": {
+                "action": "remove_role", "user_handle": ADMIN_USER, "role": "Admin"
+            }}
+        }),
+    )
+    .await;
+    assert!(changed.get("error").is_none(), "{changed}");
+    let response = request(
+        &mut socket,
+        json!({
+            "jsonrpc": "2.0", "id": 3, "method": "tools/call",
+            "params": {"name": "server.query", "arguments": {"query_type": "stats"}}
+        }),
+    )
+    .await;
+    assert!(response.get("error").is_some(), "{response}");
+}
+
 async fn login_token(server: &TestServer, user: &str, password: &str, device: &str) -> String {
     let client = TestClient::new(server.base_url.clone());
     let response = client.login_with_device(user, password, device).await;

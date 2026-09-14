@@ -85,6 +85,7 @@ export async function* streamChat(config, messages, tools = []) {
   }
 
   const response = await fetch(API_URL, {
+    signal: config.signal,
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -22,6 +22,19 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Pezzottify"
+
+// Opt-in local verification of unpublished assistant changes; normal builds use
+// the immutable JitPack revision in libs.versions.toml.
+providers.gradleProperty("assistantCheckout").orNull?.let { checkout ->
+    includeBuild(checkout) {
+        dependencySubstitution {
+            listOf("assistant-core", "assistant-compose", "provider-ollama", "provider-simpleai").forEach { artifact ->
+                substitute(module("com.github.lelloman.simple-android-assistant:$artifact"))
+                    .using(project(":$artifact"))
+            }
+        }
+    }
+}
 include(":app")
 include(":ui")
 include(":remoteapi")
