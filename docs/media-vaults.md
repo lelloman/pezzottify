@@ -78,6 +78,28 @@ existing provenance-restricted `remove_copy`. Both detach the authoritative cata
 reference through the recovery journal, making dependent copies invalid. Stale
 requests cannot remove a newer publication. Catalog metadata remains intact.
 
+## Explicit album retention
+
+An accepted album download request durably protects the album against automatic
+proxy retention, independently of listening time and download success. Protection
+is stored in `.media/protected-albums/<album-id>` under the media root, alongside
+the publication journal. Include this directory when backing up or moving media.
+It applies to current and future proxy copies and survives queue-history deletion.
+
+Request acceptance and automatic deletion share the media mutation lock. The marker
+is persisted before the request is accepted, and deletion checks it under that same
+lock, including during recovery of interrupted removals. Protection lookup errors
+fail closed. Explicit authoritative deletion still works; it is distinguished in
+the removal journal from automatic retention.
+
+Existing album requests in the queue database (including completed and failed
+history) are backfilled before application-level media recovery. Already deleted
+history cannot be reconstructed. Fully available albums can be requested through
+the API: they are protected and immediately recorded as COMPLETED without another
+download. Missing or partial albums remain queued for normal ingestion. Protection
+does not restore copies deleted before the request, nor prevent explicit admin
+deletion or storage loss.
+
 `evict_cache_copy` only deletes its registered cache object, leaving authoritative
 media intact. Repeated eviction is harmless. Evicted copy identities leave durable
 `.deleted` records to prevent reuse during delayed operations. Replacement and

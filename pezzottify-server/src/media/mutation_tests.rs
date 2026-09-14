@@ -57,6 +57,177 @@ fn stage(fixture: &Fixture, bytes: &[u8], provenance: Provenance) -> StagedMedia
     std::fs::write(staged.path(), bytes).unwrap();
     staged
 }
+
+fn request_fixture_album(
+    fixture: &Fixture,
+) -> (
+    Arc<crate::download_manager::SqliteDownloadQueueStore>,
+    Vec<crate::download_manager::QueueItem>,
+) {
+    let queue = Arc::new(crate::download_manager::SqliteDownloadQueueStore::in_memory().unwrap());
+    let manager = crate::download_manager::DownloadManager::new(
+        queue.clone(),
+        fixture.manager.catalog.clone(),
+        fixture.root.path().to_owned(),
+        crate::config::DownloadManagerSettings::default(),
+    );
+    let items = manager.request_album("user", "album", true).unwrap();
+    (queue, items)
+}
+
+#[test]
+fn album_request_protects_cached_and_future_proxy_copies_after_queue_deletion() {
+    use crate::download_manager::{DownloadQueueStore, QueueStatus};
+    let fixture = ready_fixture();
+    let stale_candidate = fixture
+        .manager
+        .commit_publication(stage(
+            &fixture,
+            b"proxy",
+            Provenance::Proxy { materialized_at: 7 },
+        ))
+        .unwrap();
+    let (queue, items) = request_fixture_album(&fixture);
+    assert_eq!(items[0].status, QueueStatus::Completed);
+    queue.delete_item(&items[0].id).unwrap();
+    assert!(!fixture.manager.remove_copy(&stale_candidate).unwrap());
+    let future = fixture
+        .manager
+        .commit_publication(stage(
+            &fixture,
+            b"future",
+            Provenance::Proxy { materialized_at: 8 },
+        ))
+        .unwrap();
+    // A fresh manager instance must honor durable protection too.
+    let reopened = MediaManager::new(
+        fixture.manager.catalog.clone(),
+        DbExecutor::new(Default::default()),
+    );
+    reopened.configure_search(Arc::new(crate::search::NoopSearchVault));
+    assert!(!reopened.remove_copy(&future).unwrap());
+    assert_eq!(
+        std::fs::read(fixture.root.path().join(&future.uri)).unwrap(),
+        b"future"
+    );
+    // Explicit administrative deletion is not automatic proxy retention.
+    assert!(reopened
+        .delete_authoritative_audio(future.copy.as_ref().unwrap())
+        .unwrap());
+}
+
+#[test]
+fn pending_and_failed_album_requests_protect_proxy_tracks() {
+    use crate::download_manager::{
+        DownloadError, DownloadErrorType, DownloadQueueStore, QueueStatus,
+    };
+    let fixture = ready_fixture();
+    let proxy = fixture
+        .manager
+        .commit_publication(stage(
+            &fixture,
+            b"proxy",
+            Provenance::Proxy { materialized_at: 7 },
+        ))
+        .unwrap();
+    rusqlite::Connection::open(fixture.root.path().join("catalog.db")).unwrap().execute_batch(
+        "INSERT INTO tracks (id, name, album_rowid, track_number, popularity, disc_number, duration_ms, explicit, track_available) VALUES ('missing', 'Missing', 1, 2, 0, 1, 1000, 0, 0);"
+    ).unwrap();
+    let (queue, items) = request_fixture_album(&fixture);
+    assert_eq!(items[0].status, QueueStatus::Pending);
+    assert!(!fixture.manager.remove_copy(&proxy).unwrap());
+    queue
+        .mark_failed(
+            &items[0].id,
+            &DownloadError::new(DownloadErrorType::Unknown, "Unavailable"),
+        )
+        .unwrap();
+    assert!(!fixture.manager.remove_copy(&proxy).unwrap());
+}
+
+#[test]
+fn protected_album_cancels_stale_removal_journal_on_recovery() {
+    let fixture = ready_fixture();
+    let mut proxy = fixture
+        .manager
+        .commit_publication(stage(
+            &fixture,
+            b"proxy",
+            Provenance::Proxy { materialized_at: 7 },
+        ))
+        .unwrap();
+    proxy.phase = Phase::Removing;
+    save(&pending_path(fixture.root.path(), &proxy.revision), &proxy).unwrap();
+    request_fixture_album(&fixture);
+    fixture.manager.recover(&|| false).unwrap();
+    assert!(fixture.root.path().join(&proxy.uri).exists());
+    assert_eq!(
+        fixture
+            .manager
+            .catalog
+            .get_track("track1")
+            .unwrap()
+            .unwrap()
+            .audio_uri
+            .as_deref(),
+        Some(proxy.uri.as_str())
+    );
+}
+
+#[test]
+fn historical_album_requests_restore_durable_protection() {
+    use crate::download_manager::{
+        DownloadContentType, DownloadManager, DownloadQueueStore, QueueItem, QueuePriority,
+        RequestSource, SqliteDownloadQueueStore,
+    };
+    let fixture = ready_fixture();
+    let proxy = fixture
+        .manager
+        .commit_publication(stage(
+            &fixture,
+            b"proxy",
+            Provenance::Proxy { materialized_at: 7 },
+        ))
+        .unwrap();
+    let queue = SqliteDownloadQueueStore::in_memory().unwrap();
+    queue
+        .enqueue(QueueItem::new(
+            "old".into(),
+            DownloadContentType::Album,
+            "album".into(),
+            QueuePriority::User,
+            RequestSource::User,
+            5,
+        ))
+        .unwrap();
+    DownloadManager::restore_album_protections(&queue, fixture.root.path()).unwrap();
+    queue.delete_item("old").unwrap();
+    assert!(!fixture.manager.remove_copy(&proxy).unwrap());
+}
+
+#[test]
+fn album_request_is_not_accepted_if_protection_cannot_be_persisted() {
+    use crate::download_manager::{DownloadManager, DownloadQueueStore, SqliteDownloadQueueStore};
+    let fixture = ready_fixture();
+    std::fs::create_dir_all(fixture.root.path().join(".media")).unwrap();
+    std::fs::write(
+        fixture.root.path().join(".media/protected-albums"),
+        b"not a directory",
+    )
+    .unwrap();
+    let queue = Arc::new(SqliteDownloadQueueStore::in_memory().unwrap());
+    let manager = DownloadManager::new(
+        queue.clone(),
+        fixture.manager.catalog.clone(),
+        fixture.root.path().to_owned(),
+        Default::default(),
+    );
+    assert!(manager.request_album("user", "album", true).is_err());
+    assert!(queue
+        .list_all(None, false, false, 10, 0)
+        .unwrap()
+        .is_empty());
+}
 #[test]
 fn replacement_preserves_old_reader_and_failed_staging_preserves_current_copy() {
     let fixture = ready_fixture();

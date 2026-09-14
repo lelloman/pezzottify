@@ -269,7 +269,11 @@ async fn request_album(
     {
         Ok(items) => Json(AlbumRequestResponse {
             request_id: items.first().map(|i| i.id.clone()).unwrap_or_default(),
-            status: "PENDING".to_string(),
+            status: items
+                .first()
+                .map(|i| i.status.as_db_str())
+                .unwrap_or("PENDING")
+                .to_string(),
         })
         .into_response(),
         Err(DbRunError::Store(e)) => {

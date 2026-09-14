@@ -40,6 +40,8 @@ pub struct CopyReceipt {
     pub(super) phase: Phase,
     pub(super) staging: String,
     pub(super) owner: String,
+    #[serde(default)]
+    authoritative_removal: bool,
 }
 
 /// A local staging lease is the sole path-based exception for converters.
@@ -68,7 +70,7 @@ pub(super) struct Effects {
     pub server: Option<Arc<dyn crate::server_store::ServerStore>>,
 }
 
-pub(super) fn mutation_lock(root: &Path) -> Arc<Mutex<()>> {
+pub(crate) fn mutation_lock(root: &Path) -> Arc<Mutex<()>> {
     static LOCKS: OnceLock<Mutex<HashMap<PathBuf, Weak<Mutex<()>>>>> = OnceLock::new();
     let key = root.canonicalize().unwrap_or_else(|_| root.to_owned());
     let mut locks = LOCKS.get_or_init(Default::default).lock().unwrap();
@@ -105,6 +107,30 @@ fn validate_id(id: &str) -> Result<()> {
         "invalid media identity"
     );
     Ok(())
+}
+
+/// Durable retention intent, independent of queue history or individual copies.
+/// Caller must hold mutation_lock(root), including while accepting the request.
+pub(crate) fn protect_album(root: &Path, album_id: &str) -> Result<()> {
+    validate_id(album_id)?;
+    prepare_directory(root, ".media/protected-albums")?;
+    let path = root.join(".media/protected-albums").join(album_id);
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&path)?;
+    file.sync_all()?;
+    sync_directory(path.parent().context("protection has no parent")?)
+}
+
+fn album_is_protected(root: &Path, album_id: &str) -> Result<bool> {
+    validate_id(album_id)?;
+    match std::fs::metadata(root.join(".media/protected-albums").join(album_id)) {
+        Ok(_) => Ok(true),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(e.into()), // Fail closed: a lookup error must never authorize deletion.
+    }
 }
 pub(super) fn prepare_directory(root: &Path, relative: &str) -> Result<()> {
     let mut path = root.to_owned();
@@ -224,6 +250,15 @@ impl MediaManager {
             .get_track(&record.media_id)?
             .and_then(|track| track.audio_uri))
     }
+    fn album_protects_copy(&self, record: &CopyReceipt) -> Result<bool> {
+        if record.image {
+            return Ok(false);
+        }
+        match self.catalog.get_track(&record.media_id)? {
+            Some(track) => album_is_protected(&self.root, &track.album_id),
+            None => Ok(false),
+        }
+    }
     pub fn begin_publication(
         &self,
         id: &str,
@@ -249,6 +284,7 @@ impl MediaManager {
         let revision = uuid::Uuid::new_v4().to_string();
         let image = provenance == Provenance::ImageCache;
         let mut record = CopyReceipt {
+            authoritative_removal: false,
             uri: format!(
                 "{}/.managed/{id}.{revision}.{extension}",
                 if image { "images" } else { "audio" }
@@ -500,6 +536,7 @@ impl MediaManager {
         }
         uuid::Uuid::parse_str(&expected.id.0)?;
         let mut record = read_record(&copy_path(&self.root, &expected.id.0))?;
+        record.authoritative_removal = true;
         record.phase = Phase::Removing;
         save(&pending_path(&self.root, &record.revision), &record)?;
         self.finish_removal(&mut record)?;
@@ -522,6 +559,9 @@ impl MediaManager {
         if record.uri != receipt.uri || record.media_id != receipt.media_id {
             return Ok(false);
         }
+        if self.album_protects_copy(&record)? {
+            return Ok(false);
+        }
         if !matches!(
             record.provenance,
             Provenance::Proxy { .. } | Provenance::ImageCache
@@ -536,6 +576,14 @@ impl MediaManager {
     }
     fn finish_removal(&self, record: &mut CopyReceipt) -> Result<()> {
         if record.phase == Phase::Removing {
+            // Recovery may encounter a removal journal created before a later
+            // album request. Do not detach the now-protected current copy.
+            if !record.authoritative_removal
+                && self.album_protects_copy(record)?
+                && self.current_uri(record)? == Some(record.uri.clone())
+            {
+                return unlink(&pending_path(&self.root, &record.revision));
+            }
             if record.image {
                 if self.current_uri(record)? == Some(record.uri.clone()) {
                     unlink(&image_pointer(&self.root, &record.media_id))?;
@@ -633,6 +681,7 @@ impl MediaManager {
         for (id, uri, _) in observations {
             anyhow::ensure!(!cancelled(), "cancelled");
             let record = CopyReceipt {
+                authoritative_removal: false,
                 revision: uuid::Uuid::new_v4().to_string(),
                 copy: None,
                 source_locator: None,

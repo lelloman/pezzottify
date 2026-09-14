@@ -174,6 +174,29 @@ pub struct DownloadManager {
 }
 
 impl DownloadManager {
+    /// Upgrade persisted request history before starting media recovery/retention.
+    /// Protection survives subsequent pruning of the queue itself.
+    pub fn restore_album_protections(
+        queue: &dyn DownloadQueueStore,
+        media_path: &std::path::Path,
+    ) -> Result<()> {
+        let lock = crate::media::mutation_lock(media_path);
+        let _guard = lock.lock().unwrap();
+        let mut offset = 0;
+        loop {
+            let items = queue.list_all(None, false, true, 500, offset)?;
+            for item in &items {
+                if item.content_type == DownloadContentType::Album {
+                    crate::media::protect_album(media_path, &item.content_id)?;
+                }
+            }
+            if items.len() < 500 {
+                return Ok(());
+            }
+            offset += items.len();
+        }
+    }
+
     pub fn start_external_attempt(
         &self,
         id: &str,
@@ -313,6 +336,10 @@ impl DownloadManager {
         album_id: &str,
         is_admin: bool,
     ) -> Result<Vec<QueueItem>> {
+        // Serialize acceptance with proxy deletion, including stale cleanup
+        // decisions. The durable marker also protects future proxy copies.
+        let media_lock = crate::media::mutation_lock(&self.media_path);
+        let _guard = media_lock.lock().unwrap();
         // Check user limits (admins are unlimited)
         if !is_admin {
             let limits = self.queue_store.get_user_stats(user_id)?;
@@ -344,13 +371,6 @@ impl DownloadManager {
             }
         }
 
-        if tracks_needing_download == 0 {
-            return Err(anyhow!(
-                "No tracks to download - all tracks in '{}' are already available",
-                album.name
-            ));
-        }
-
         // Check if album is already in queue
         if self
             .queue_store
@@ -360,7 +380,7 @@ impl DownloadManager {
         }
 
         // Create a single album queue item
-        let album_item = QueueItem::new(
+        let mut album_item = QueueItem::new(
             uuid::Uuid::new_v4().to_string(),
             DownloadContentType::Album,
             album_id.to_string(),
@@ -371,7 +391,16 @@ impl DownloadManager {
         .with_names(Some(album.name.clone()), Some(primary_artist.clone()))
         .with_user(user_id.to_string());
 
-        // Enqueue the item (status: PENDING)
+        // Persist protection before accepting the request. If queue persistence
+        // subsequently fails, keeping extra content is safer than deleting it.
+        crate::media::protect_album(&self.media_path, album_id)?;
+        if tracks_needing_download == 0 {
+            // Fully proxy-cached albums can be kept without downloading again.
+            album_item.status = QueueStatus::Completed;
+            album_item.completed_at = Some(chrono::Utc::now().timestamp());
+        }
+
+        // Enqueue the item, or record an immediately fulfilled keep request.
         self.queue_store.enqueue(album_item.clone())?;
         self.audit_logger.log_request_created(&album_item, 0)?;
 

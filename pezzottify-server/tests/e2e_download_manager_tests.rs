@@ -9,6 +9,25 @@ mod common;
 use common::{TestClient, TestServer, ALBUM_1_ID, ALBUM_1_TITLE, ARTIST_1_NAME};
 
 #[tokio::test]
+async fn requesting_fully_available_album_records_completed_keep_request() {
+    let server = TestServer::builder()
+        .with_download_manager()
+        .with_available_catalog()
+        .spawn()
+        .await;
+    let client = TestClient::authenticated_admin(server.base_url.clone()).await;
+    let response = client
+        .download_request_album(ALBUM_1_ID, ALBUM_1_TITLE, ARTIST_1_NAME)
+        .await;
+    assert_eq!(response.status(), 200);
+    let body: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(body["status"], "COMPLETED");
+    assert!(!body["request_id"].as_str().unwrap().is_empty());
+    let requests: serde_json::Value = client.download_admin_requests().await.json().await.unwrap();
+    assert_eq!(requests[0]["status"], "COMPLETED");
+}
+
+#[tokio::test]
 async fn external_attempt_status_contract() {
     let server = TestServer::builder().with_download_manager().spawn().await;
     let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
