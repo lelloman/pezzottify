@@ -40,7 +40,7 @@ impl IntoResponse for ReportError {
 
 fn permission(session: &Session, admin: bool) -> Result<(), Response> {
     let permission = if admin {
-        Permission::ServerAdmin
+        Permission::TriageReports
     } else {
         Permission::ReportBug
     };
@@ -156,8 +156,8 @@ async fn events(
     Path(id): Path<String>,
     Query(query): Query<ReportFilter>,
 ) -> Response {
-    if let Err(r) = permission(&session, true) {
-        return r;
+    if !session.has_permission(Permission::ViewReportDiagnostics) {
+        return super::report_admission::error(StatusCode::FORBIDDEN);
     }
     output(
         run(db, move |s| {
@@ -186,8 +186,8 @@ async fn admin_attachment(
     State(db): State<DatabaseHandles>,
     Path((id, attachment)): Path<(String, String)>,
 ) -> Response {
-    if let Err(r) = permission(&session, true) {
-        return r;
+    if !session.has_permission(Permission::ViewReportDiagnostics) {
+        return super::report_admission::error(StatusCode::FORBIDDEN);
     }
     output(
         run(db, move |s| {
@@ -216,8 +216,8 @@ async fn admin_delete_attachment(
     State(db): State<DatabaseHandles>,
     Path((id, attachment)): Path<(String, String)>,
 ) -> Response {
-    if let Err(r) = permission(&session, true) {
-        return r;
+    if !session.has_permission(Permission::ViewReportDiagnostics) {
+        return super::report_admission::error(StatusCode::FORBIDDEN);
     }
     output(
         run(db, move |s| {
@@ -227,6 +227,37 @@ async fn admin_delete_attachment(
     )
 }
 
+async fn settings(session: Session, State(db): State<DatabaseHandles>) -> Response {
+    if !session.has_permission(Permission::ManageReportIntegrations) {
+        return super::report_admission::error(StatusCode::FORBIDDEN);
+    }
+    output(run(db, |s| s.settings()).await)
+}
+async fn save_settings(
+    session: Session,
+    State(db): State<DatabaseHandles>,
+    Json(input): Json<ReportSettings>,
+) -> Response {
+    if !session.has_permission(Permission::ManageReportIntegrations) {
+        return super::report_admission::error(StatusCode::FORBIDDEN);
+    }
+    output(run(db, move |s| s.save_settings(session.user_id, input)).await)
+}
+async fn stats(
+    session: Session,
+    State(db): State<DatabaseHandles>,
+    axum::Extension(admission): axum::Extension<std::sync::Arc<super::report_admission::Admission>>,
+) -> Response {
+    if let Err(r) = permission(&session, true) {
+        return r;
+    }
+    match run(db, |s| s.stats()).await {
+        Ok(s) => {
+            Json(serde_json::json!({"storage":s,"admission":admission.stats()})).into_response()
+        }
+        Err(e) => e.into_response(),
+    }
+}
 pub fn routes(state: ServerState) -> Router {
     Router::new()
         .route("/v1/reports", post(submit).get(owner_list))
@@ -236,6 +267,11 @@ pub fn routes(state: ServerState) -> Router {
             get(owner_attachment).delete(owner_delete_attachment),
         )
         .route("/v1/admin/reports", get(admin_list))
+        .route(
+            "/v1/admin/reports/settings",
+            get(settings).put(save_settings),
+        )
+        .route("/v1/admin/reports/stats", get(stats))
         .route("/v1/admin/reports/{id}", get(admin_get).patch(update))
         .route("/v1/admin/reports/{id}/events", get(events))
         .route(

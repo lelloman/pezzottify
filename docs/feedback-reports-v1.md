@@ -133,6 +133,27 @@ Expire attachments without deleting report descriptions/status. Periodic expirat
 and opportunistic cleanup share one transactional implementation. Operational counters
 use bounded reason labels, never user IDs or descriptions as metric labels.
 
+Backend implementation details: settings updates submit the complete settings object
+with its current `version`. Count/byte defaults above are also hard ceilings; admins
+can lower them and subsequently restore them. Retention can range from 1 to 90 days.
+Shortening retention shortens existing expiry deadlines; increasing it never extends
+an existing attachment's deadline or resurrects deleted content. Expiration runs on
+startup, every 60 seconds, and during new submissions. Historical database backups
+remain subject to the server's separate backup policy; expiration is not secure erasure.
+
+Report operations are additionally bounded to 120 requests/user/minute; admission
+keeps at most 4,096 user windows and holds slots through parsing and handler execution.
+Non-submission report bodies are limited to 128 KiB (including JSON escaping).
+Audit storage is capped at 2,000 events/resource and 200,000 globally, also subject
+to the aggregate metadata-byte ceiling. One event and 512 bytes are reserved per live
+attachment for owner deletion. Other new audited operations fail closed at capacity.
+`GET /v1/admin/reports/settings/events` and `/v1/admin/reports/administration/events`
+expose settings changes and legacy whole-report deletion requests with diagnostic
+permission. Legacy whole-report deletion retains a separate deletion-request audit
+record; it is not evidence of successful deletion. Stats include effective settings,
+current storage usage and bounded HTTP rejection counters since process startup.
+Outbox/queue limits are implemented with the automation task, not by upload admission.
+
 ## Automation and external sharing
 
 Write report events and outbox entries in the same transaction. Worker claims leased

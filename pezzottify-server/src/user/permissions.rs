@@ -14,6 +14,9 @@ pub enum Permission {
     DownloadManagerAdmin,
     ReportBug,
     UseProxyStreaming,
+    TriageReports,
+    ViewReportDiagnostics,
+    ManageReportIntegrations,
 }
 
 impl Permission {
@@ -30,6 +33,9 @@ impl Permission {
             Permission::DownloadManagerAdmin => 10,
             Permission::ReportBug => 11,
             Permission::UseProxyStreaming => 12,
+            Permission::TriageReports => 13,
+            Permission::ViewReportDiagnostics => 14,
+            Permission::ManageReportIntegrations => 15,
         }
     }
 
@@ -46,6 +52,9 @@ impl Permission {
             10 => Some(Permission::DownloadManagerAdmin),
             11 => Some(Permission::ReportBug),
             12 => Some(Permission::UseProxyStreaming),
+            13 => Some(Permission::TriageReports),
+            14 => Some(Permission::ViewReportDiagnostics),
+            15 => Some(Permission::ManageReportIntegrations),
             _ => None,
         }
     }
@@ -60,6 +69,9 @@ const ADMIN_PERMISSIONS: &[Permission] = &[
     Permission::RequestContent,
     Permission::DownloadManagerAdmin,
     Permission::UseProxyStreaming,
+    Permission::TriageReports,
+    Permission::ViewReportDiagnostics,
+    Permission::ManageReportIntegrations,
 ];
 const REGULAR_PERMISSIONS: &[Permission] = &[
     Permission::AccessCatalog,
@@ -155,7 +167,7 @@ mod tests {
     #[test]
     fn permission_from_int_invalid_values() {
         assert_eq!(Permission::from_int(0), None);
-        assert_eq!(Permission::from_int(13), None);
+        assert_eq!(Permission::from_int(16), None);
         assert_eq!(Permission::from_int(-1), None);
         assert_eq!(Permission::from_int(100), None);
         assert_eq!(Permission::from_int(i32::MAX), None);
@@ -189,7 +201,15 @@ mod tests {
     fn user_role_admin_permissions() {
         let admin_perms = UserRole::Admin.permissions();
 
-        assert_eq!(admin_perms.len(), 8);
+        assert_eq!(admin_perms.len(), 11);
+        for permission in [
+            Permission::TriageReports,
+            Permission::ViewReportDiagnostics,
+            Permission::ManageReportIntegrations,
+        ] {
+            assert!(admin_perms.contains(&permission));
+            assert_eq!(Permission::from_int(permission.as_int()), Some(permission));
+        }
         assert!(admin_perms.contains(&Permission::AccessCatalog));
         assert!(admin_perms.contains(&Permission::EditCatalog));
         assert!(admin_perms.contains(&Permission::ManagePermissions));

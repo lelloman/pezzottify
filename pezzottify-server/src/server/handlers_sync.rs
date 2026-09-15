@@ -354,7 +354,6 @@ async fn get_catalog_sync(
 use crate::server_store::{
     BugReport, BUG_REPORT_ATTACHMENT_MAX_SIZE, BUG_REPORT_DESCRIPTION_MAX_SIZE,
     BUG_REPORT_LOGS_MAX_SIZE, BUG_REPORT_MAX_ATTACHMENTS, BUG_REPORT_TITLE_MAX_LEN,
-    BUG_REPORT_TOTAL_MAX_SIZE,
 };
 
 /// POST /v1/user/bug-report - Submit a bug report
@@ -479,30 +478,16 @@ async fn submit_bug_report(
         created_at: chrono::Utc::now(),
     };
 
-    let cleanup = match database
+    let result = database
         .server
         .run(DbPriority::Interactive, move |store| {
-            store.insert_bug_report(&report)?;
-            Ok(store.cleanup_bug_reports_to_size(BUG_REPORT_TOTAL_MAX_SIZE))
+            Ok(store.insert_bug_report(&report).map_err(|error| error.downcast::<crate::server_store::reports::ReportError>().unwrap_or(crate::server_store::reports::ReportError::Storage)))
         })
-        .await
-    {
-        Ok(cleanup) => cleanup,
-        Err(err) => return ApiError::from(err).into_response(),
-    };
-
-    match cleanup {
-        Ok(deleted) if deleted > 0 => {
-            info!(
-                "Cleaned up {} old bug reports to stay under size limit",
-                deleted
-            );
-        }
-        Err(err) => {
-            warn!("Failed to cleanup old bug reports: {}", err);
-            // Don't fail the request, cleanup is best-effort
-        }
-        _ => {}
+        .await;
+    match result {
+        Ok(Ok(())) => {},
+        Ok(Err(error)) => return error.into_response(),
+        Err(_) => return crate::server_store::reports::ReportError::Storage.into_response(),
     }
 
     Json(SubmitBugReportResponse { id }).into_response()

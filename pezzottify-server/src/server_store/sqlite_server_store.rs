@@ -487,6 +487,44 @@ impl ServerStore for SqliteServerStore {
         let mut guard = self.conn.lock().unwrap();
         let conn = guard.transaction()?;
         let created_at = Self::format_datetime(&report.created_at);
+        let validation = super::reports::NewReport {
+            client_request_id: uuid::Uuid::new_v4().to_string(),
+            kind: "bug".into(),
+            category: "other".into(),
+            title: report.title.clone(),
+            description: report.description.clone(),
+            client_type: report.client_type.clone(),
+            client_version: report.client_version.clone(),
+            device_info: report.device_info.clone(),
+            attachments: report
+                .logs
+                .as_ref()
+                .map(|content| super::reports::NewAttachment {
+                    kind: "technical_logs".into(),
+                    content: content.clone(),
+                    consent: true,
+                })
+                .into_iter()
+                .collect(),
+        };
+        validation.validate()?;
+        let bytes = report.logs.as_ref().map_or(0, String::len)
+            + report.attachments.as_ref().map_or(0, String::len);
+        if bytes > 2 * 1024 * 1024 {
+            return Err(super::reports::ReportError::TooLarge.into());
+        }
+        super::report_limits::reserve(
+            &conn,
+            report.user_id,
+            report.description.len()
+                + report.title.as_ref().map_or(0, String::len)
+                + report.client_type.len()
+                + report.client_version.as_ref().map_or(0, String::len)
+                + report.device_info.as_ref().map_or(0, String::len)
+                + report.user_handle.len(),
+            bytes,
+            Utc::now().timestamp(),
+        )?;
 
         conn.execute(
             "INSERT INTO bug_reports (id, user_id, user_handle, title, description, client_type, client_version, device_info, logs, attachments, created_at)
@@ -507,6 +545,10 @@ impl ServerStore for SqliteServerStore {
         )?;
 
         super::report_repository::index_legacy(&conn, report)?;
+        conn.execute(
+            "UPDATE bug_reports SET logs=NULL,attachments=NULL WHERE id=?1",
+            [&report.id],
+        )?;
         conn.commit()?;
         Ok(())
     }
@@ -514,7 +556,9 @@ impl ServerStore for SqliteServerStore {
     fn get_bug_report(&self, id: &str) -> Result<Option<super::BugReport>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, user_id, user_handle, title, description, client_type, client_version, device_info, logs, attachments, created_at
+            "SELECT id, user_id, user_handle, title, description, client_type, client_version, device_info,
+             (SELECT content FROM report_attachments WHERE report_id=bug_reports.id AND kind='technical_logs' AND state='active' AND expires_at>unixepoch()) AS logs,
+             (SELECT content FROM report_attachments WHERE report_id=bug_reports.id AND kind='legacy_images' AND state='active' AND expires_at>unixepoch()) AS attachments, created_at
              FROM bug_reports WHERE id = ?1",
         )?;
 
@@ -533,7 +577,7 @@ impl ServerStore for SqliteServerStore {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id, user_id, user_handle, title, client_type, created_at,
-                    LENGTH(COALESCE(description, '')) + LENGTH(COALESCE(logs, '')) + LENGTH(COALESCE(attachments, '')) as size_bytes
+                    length(CAST(description AS BLOB)) + COALESCE((SELECT SUM(length(CAST(content AS BLOB))) FROM report_attachments WHERE report_id=bug_reports.id),0) as size_bytes
              FROM bug_reports
              ORDER BY created_at DESC
              LIMIT ?1 OFFSET ?2",
@@ -541,7 +585,7 @@ impl ServerStore for SqliteServerStore {
 
         let summaries = stmt
             .query_map(
-                params![limit as i64, offset as i64],
+                params![limit.min(100) as i64, offset.min(100_000) as i64],
                 Self::row_to_bug_report_summary,
             )?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -560,52 +604,18 @@ impl ServerStore for SqliteServerStore {
     fn get_bug_reports_total_size(&self) -> Result<usize> {
         let conn = self.conn.lock().unwrap();
         let size: i64 = conn.query_row(
-            "SELECT COALESCE(SUM(LENGTH(COALESCE(description, '')) + LENGTH(COALESCE(logs, '')) + LENGTH(COALESCE(attachments, ''))), 0)
-             FROM bug_reports",
+            "SELECT COALESCE((SELECT SUM(length(CAST(description AS BLOB))) FROM bug_reports),0) + COALESCE((SELECT SUM(length(CAST(content AS BLOB))) FROM report_attachments),0)",
             [],
             |row| row.get(0),
         )?;
         Ok(size as usize)
     }
 
-    fn cleanup_bug_reports_to_size(&self, max_size: usize) -> Result<usize> {
+    fn cleanup_bug_reports_to_size(&self, _max_size: usize) -> Result<usize> {
         let mut guard = self.conn.lock().unwrap();
         let conn = guard.transaction()?;
-        let mut deleted_count = 0;
-
-        loop {
-            // Check current total size
-            let current_size: i64 = conn.query_row(
-                "SELECT COALESCE(SUM(LENGTH(COALESCE(description, '')) + LENGTH(COALESCE(logs, '')) + LENGTH(COALESCE(attachments, ''))), 0)
-                 FROM bug_reports",
-                [],
-                |row| row.get(0),
-            )?;
-
-            if (current_size as usize) <= max_size {
-                break;
-            }
-
-            // Delete the oldest report
-            let oldest: Option<String> = conn
-                .query_row(
-                    "SELECT id FROM bug_reports ORDER BY created_at ASC LIMIT 1",
-                    [],
-                    |row| row.get(0),
-                )
-                .optional()?;
-            let Some(oldest) = oldest else {
-                break;
-            };
-            let deleted = super::report_repository::delete_legacy(&conn, &oldest)?;
-
-            if deleted == 0 {
-                break; // No more reports to delete
-            }
-
-            deleted_count += deleted;
-        }
-
+        // Legacy entry point: capacity rejects writes; it must never delete report metadata.
+        let deleted_count = super::report_limits::expire(&conn, Utc::now().timestamp())?;
         conn.commit()?;
         Ok(deleted_count)
     }
@@ -1201,12 +1211,13 @@ mod tests {
         let initial_size = store.get_bug_reports_total_size().unwrap();
         assert!(initial_size > 4000);
 
-        // Cleanup to a small size - should delete some reports
+        // Capacity never causes metadata or unexpired diagnostics to be silently deleted.
         let deleted = store.cleanup_bug_reports_to_size(2000).unwrap();
-        assert!(deleted > 0);
+        assert_eq!(deleted, 0);
 
         let final_size = store.get_bug_reports_total_size().unwrap();
-        assert!(final_size <= 2000);
+        assert_eq!(final_size, initial_size);
+        assert_eq!(store.list_bug_reports(100, 0).unwrap().len(), 5);
     }
 
     #[test]
