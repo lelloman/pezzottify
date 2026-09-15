@@ -467,6 +467,7 @@ pub(super) fn assemble_app(
         .with_state(state.clone());
 
     let api_routes = Router::new()
+        .merge(super::super::report_routes::routes(state.clone()))
         .nest("/v1/auth", auth_routes)
         .nest("/v1/content", content_routes)
         .nest("/v1/user", user_routes)

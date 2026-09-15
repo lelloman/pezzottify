@@ -10,6 +10,7 @@ mod ingestion_routes;
 pub mod metrics;
 mod password_work;
 mod recommendations;
+mod report_routes;
 // TODO: Re-enable after updating for Spotify schema (depends on downloader)
 // pub mod proxy;
 mod search;

@@ -1,5 +1,8 @@
 mod models;
 mod schema;
+mod report_schema;
+pub mod reports;
+mod report_repository;
 mod sqlite_server_store;
 
 pub use models::{
@@ -15,6 +18,7 @@ pub use sqlite_server_store::SqliteServerStore;
 use anyhow::Result;
 
 pub trait ServerStore: Send + Sync {
+    fn reports(&self) -> Option<&dyn reports::ReportRepository> { None }
     fn record_job_start(&self, job_id: &str, triggered_by: &str) -> Result<i64>;
     fn record_job_finish(
         &self,
