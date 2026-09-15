@@ -66,8 +66,10 @@ WebSocket connections.
 
 ## Shared assistant
 
-Check out `simple-android-assistant` beside `pezzottify`, then run `npm ci` and
-`npm run build` in that repository before installing/building this web app.
-The three assistant packages currently use local file dependencies until release.
+The three assistant packages are installed from versioned npm archives in
+`vendor/simple-assistant`, including compiled JavaScript and WASM. `npm ci` and
+Docker builds work from this repository alone. See
+[the package update instructions](vendor/simple-assistant/README.md) when updating
+the shared assistant.
 Provider credentials, MCP, music tools, prompts and confirmation policy remain here;
 the shared Rust engine owns conversation and context state.

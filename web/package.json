@@ -26,9 +26,9 @@
     "vue-chartjs": "^5.3.3",
     "vue-router": "^4.5.0",
     "vue-virtual-draglist": "^3.3.8",
-    "@lelloman/simple-assistant": "file:../../simple-android-assistant/web/core",
-    "@lelloman/simple-assistant-vue": "file:../../simple-android-assistant/web/vue",
-    "@lelloman/simple-assistant-providers": "file:../../simple-android-assistant/web/providers"
+    "@lelloman/simple-assistant": "file:vendor/simple-assistant/lelloman-simple-assistant-0.2.0.tgz",
+    "@lelloman/simple-assistant-vue": "file:vendor/simple-assistant/lelloman-simple-assistant-vue-0.2.0.tgz",
+    "@lelloman/simple-assistant-providers": "file:vendor/simple-assistant/lelloman-simple-assistant-providers-0.2.0.tgz"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",

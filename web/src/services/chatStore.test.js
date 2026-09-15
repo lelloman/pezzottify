@@ -7,8 +7,9 @@ import { ref, shallowRef, computed, watch } from 'vue';
 import { AssistantSession } from '@lelloman/simple-assistant';
 import { useAssistant } from '@lelloman/simple-assistant-vue';
 import { assistantModes, requiresConfirmation, ASSISTANT_PROMPT } from './assistantModes.js';
-import { initSync, AssistantEngine } from '../../../../simple-android-assistant/web/core/wasm/assistant_wasm.js';
-initSync({ module: readFileSync(new URL('../../../../simple-android-assistant/web/core/wasm/assistant_wasm_bg.wasm', import.meta.url)) });
+const wasmDirectory = new URL('../wasm/', import.meta.resolve('@lelloman/simple-assistant'));
+const { initSync, AssistantEngine } = await import(new URL('assistant_wasm.js', wasmDirectory));
+initSync({ module: readFileSync(new URL('assistant_wasm_bg.wasm', wasmDirectory)) });
 function storeWith({ stream, connect = async () => {}, confirm = () => false } = {}) {
   setActivePinia(createPinia());
   globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };

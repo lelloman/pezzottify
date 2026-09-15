@@ -8,7 +8,8 @@ ARG VITE_OIDC_AUTHORITY
 ARG VITE_OIDC_CLIENT_ID
 
 WORKDIR /web
-COPY web/package*.json ./
+COPY web/package.json web/package-lock.json ./
+COPY web/vendor/ ./vendor/
 RUN npm ci
 COPY web/ .
 
