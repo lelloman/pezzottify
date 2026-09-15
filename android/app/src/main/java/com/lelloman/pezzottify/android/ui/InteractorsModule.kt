@@ -702,46 +702,8 @@ class InteractorsModule {
 
     @Provides
     fun provideBugReportScreenInteractor(
-        logFileManager: LogFileManager,
-        remoteApiClient: RemoteApiClient,
-        buildInfo: BuildInfo,
-        deviceInfoProvider: DeviceInfoProvider,
-    ): BugReportScreenViewModel.Interactor = object : BugReportScreenViewModel.Interactor {
-        private val maxLogSize = 1024 * 1024 // 1MB
-
-        override fun getLogs(): String? = logFileManager.getLogContent()
-            .takeIf { it.isNotBlank() }
-            ?.let { content ->
-                if (content.length > maxLogSize) {
-                    val truncated = content.substring(content.length - maxLogSize)
-                    // Skip partial first line from the cut point
-                    val firstNewline = truncated.indexOf('\n')
-                    if (firstNewline >= 0) truncated.substring(firstNewline + 1) else truncated
-                } else {
-                    content
-                }
-            }
-
-        override suspend fun submitBugReport(
-            title: String?,
-            description: String,
-            logs: String?,
-        ): SubmitResult {
-            val info = deviceInfoProvider.getDeviceInfo()
-            val deviceInfo = "${info.deviceName ?: info.deviceType} (${info.osInfo ?: "Unknown"})"
-            return when (val result = remoteApiClient.submitBugReport(
-                title = title,
-                description = description,
-                clientVersion = buildInfo.versionName,
-                deviceInfo = deviceInfo,
-                logs = logs,
-                attachments = null,
-            )) {
-                is RemoteApiResponse.Success -> SubmitResult.Success
-                is RemoteApiResponse.Error -> SubmitResult.Error(result.toString())
-            }
-        }
-    }
+        feedback:com.lelloman.pezzottify.android.assistant.AndroidFeedback,
+    ): BugReportScreenViewModel.Interactor = feedback
 
     @Provides
     fun provideSearchScreenInteractor(

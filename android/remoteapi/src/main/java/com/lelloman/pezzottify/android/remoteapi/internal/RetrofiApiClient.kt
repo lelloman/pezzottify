@@ -321,4 +321,9 @@ internal interface RetrofitApiClient {
         @Header("Authorization") authToken: String,
         @Body request: SubmitBugReportRequest,
     ): Response<SubmitBugReportResponse>
+
+    @POST("v1/reports")
+    suspend fun submitFeedback(@Header("Authorization") authToken:String,@Body request:com.lelloman.pezzottify.android.domain.remoteapi.FeedbackReport):Response<com.lelloman.pezzottify.android.domain.remoteapi.FeedbackReceipt>
+    @GET("v1/reports")
+    suspend fun listFeedback(@Header("Authorization") authToken:String,@Query("before") before:Long?,@Query("limit") limit:Int=25):Response<com.lelloman.pezzottify.android.domain.remoteapi.FeedbackPage>
 }

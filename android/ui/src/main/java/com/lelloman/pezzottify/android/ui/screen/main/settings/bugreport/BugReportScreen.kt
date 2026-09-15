@@ -41,8 +41,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 @Composable
-fun BugReportScreen(navController: NavController) {
+fun BugReportScreen(navController: NavController,messageId:String?=null) {
     val viewModel = hiltViewModel<BugReportScreenViewModel>()
+    androidx.compose.runtime.LaunchedEffect(messageId) {viewModel.selectMessage(messageId)}
     BugReportScreenInternal(
         state = viewModel.state,
         actions = viewModel,
@@ -62,7 +63,7 @@ private fun BugReportScreenInternal(
     MainScreenScaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.report_bug)) },
+                title = { Text(stringResource(R.string.feedback_title)) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(
@@ -81,6 +82,7 @@ private fun BugReportScreenInternal(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
         ) {
+            FeedbackOptions(currentState,actions)
             // Title field
             OutlinedTextField(
                 value = currentState.title,
@@ -144,6 +146,7 @@ private fun BugReportScreenInternal(
 
             Spacer(modifier = Modifier.height(32.dp))
 
+            FeedbackPreview(currentState)
             // Submit button
             if (currentState.isSubmitting) {
                 Row(
@@ -159,10 +162,12 @@ private fun BugReportScreenInternal(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = currentState.submitResult !is SubmitResult.Success,
                 ) {
-                    Text(stringResource(R.string.bug_report_submit))
+                    Text(stringResource(if(currentState.preview==null) R.string.feedback_review else R.string.bug_report_submit))
                 }
             }
 
+            currentState.reportId?.let {Text(stringResource(R.string.feedback_receipt,it))}
+            FeedbackReports(currentState,actions)
             // Show result
             currentState.submitResult?.let { result ->
                 Spacer(modifier = Modifier.height(16.dp))

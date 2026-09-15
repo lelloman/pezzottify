@@ -538,4 +538,39 @@
         <item quantity="other">%1$d brani</item>
     </plurals>
     <!-- PLAYLIST -->
+    <string name="feedback_title">Feedback e segnalazioni</string>
+    <string name="feedback_bug">Segnala un problema</string>
+    <string name="feedback_feature">Richiedi una funzionalità</string>
+    <string name="feedback_assistant">Assistente</string>
+    <string name="feedback_playback">Riproduzione</string>
+    <string name="feedback_downloads">Download</string>
+    <string name="feedback_interface">Interfaccia</string>
+    <string name="feedback_other">Altro</string>
+    <string name="feedback_privacy">La registrazione locale facoltativa conserva fino a 2 MB di chat e attività degli strumenti, separatamente dalla cronologia. È disattivata per impostazione predefinita. Cancellare la chat, cambiare account o disattivare la registrazione elimina la copia locale e le anteprime non inviate. Le segnalazioni inviate restano sul server. La rimozione dei dati sensibili non garantisce anonimato: controlla gli allegati prima di inviare.</string>
+    <string name="feedback_record">Registra localmente la diagnostica della chat</string>
+    <string name="feedback_attach_chat">Allega la chat registrata (facoltativo)</string>
+    <string name="feedback_all_chats">Includi tutte le conversazioni conservate, non solo la risposta selezionata o la conversazione corrente</string>
+    <string name="feedback_report_response">Segnala risposta</string>
+    <string name="feedback_review">Rivedi la segnalazione</string>
+    <string name="feedback_preview_ready">Questa è una copia fissa. Controlla gli allegati e poi invia. Un nuovo tentativo invia la stessa copia; una modifica ne crea una nuova.</string>
+    <string name="feedback_preview">Anteprima allegato</string>
+    <string name="feedback_preview_attachment">Anteprima %1$s (%2$d byte)</string>
+    <string name="feedback_receipt">Segnalazione inviata: %1$s</string>
+    <string name="feedback_my_reports">Le mie segnalazioni</string>
+    <string name="feedback_refresh">Aggiorna segnalazioni</string>
+    <string name="feedback_more">Carica altre</string>
+    <string name="feedback_status_new">Nuova</string>
+    <string name="feedback_status_investigating">In verifica</string>
+    <string name="feedback_status_planned">Pianificata</string>
+    <string name="feedback_status_resolved">Risolta</string>
+    <string name="feedback_status_closed">Chiusa</string>
+    <string name="feedback_too_large">La segnalazione è troppo grande. Titolo: 200 byte UTF-8; descrizione: 100 KB. Riduci o rimuovi gli allegati se necessario.</string>
+    <string name="feedback_sign_in">Account cambiato o permessi mancanti. Accedi e prepara una nuova segnalazione.</string>
+    <string name="feedback_conflict">Questa richiesta è già stata usata con contenuti diversi. Modifica la segnalazione per prepararne una nuova.</string>
+    <string name="feedback_rate_limit">Limite di segnalazioni raggiunto. Attendi prima di riprovare; non ci saranno tentativi automatici.</string>
+    <string name="feedback_capacity">Lo spazio per le segnalazioni è esaurito. Riprova più tardi o contatta un amministratore.</string>
+    <string name="feedback_send_failed">Invio non riuscito. Puoi riprovare manualmente con la stessa copia.</string>
+    <string name="feedback_prepare_failed">Impossibile preparare la segnalazione. Se hai selezionato la chat, abilita prima la registrazione locale e registra la conversazione interessata. Verifica di aver effettuato accesso.</string>
+    <string name="feedback_wait_seconds">Il server richiede di attendere %1$d secondi prima di riprovare.</string>
+    <string name="feedback_reports_failed">Impossibile caricare le segnalazioni. Tocca Aggiorna per riprovare.</string>
 </resources>

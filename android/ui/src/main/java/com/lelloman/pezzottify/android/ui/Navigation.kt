@@ -33,7 +33,7 @@ fun NavController.toStyleSettings() = navigate(Main.Home.StyleSettings)
 
 fun NavController.toLogViewer() = navigate(Main.Home.LogViewer)
 
-fun NavController.toBugReport() = navigate(Main.Home.BugReport)
+fun NavController.toBugReport(messageId:String?=null) = navigate(Main.Home.BugReport(messageId))
 
 fun NavController.fromProfileBackToLogin() = navigate(Login) {
     popUpTo(Main.Home, inclusive())
@@ -76,7 +76,7 @@ sealed interface Screen {
             data object LogViewer : Main
 
             @Serializable
-            data object BugReport : Main
+            data class BugReport(val messageId:String?=null) : Main
         }
 
         @Serializable

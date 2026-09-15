@@ -84,6 +84,13 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AssistantModule {
 
+    @Provides @Singleton
+    fun provideDiagnosticRecorder(@ApplicationContext context:Context):com.lelloman.simpleaiassistant.diagnostics.DiagnosticRecorder =
+        com.lelloman.simpleaiassistant.diagnostics.DiagnosticRecorder(
+            com.lelloman.simpleaiassistant.diagnostics.FileDiagnosticStorage(java.io.File(context.noBackupFilesDir,"assistant-diagnostics.json")),
+            metadata=mapOf("client_version" to BuildConfig.VERSION_NAME,"client_type" to "android"),
+        )
+
     @Provides
     @Singleton
     fun provideChatDatabase(@ApplicationContext context: Context): ChatDatabase {
@@ -173,6 +180,7 @@ object AssistantModule {
         getGenreTracks: GetGenreTracks,
         userPlaylistStore: UserPlaylistStore,
         confirmation: AssistantConfirmation,
+        diagnostics:com.lelloman.simpleaiassistant.diagnostics.DiagnosticRecorder,
     ): ToolRegistry {
         // Catalog/Search tools
         val searchCatalogTool = SearchCatalogTool(performSearch, staticsStore)
@@ -231,7 +239,10 @@ object AssistantModule {
             else object : Tool by tool {
                 override suspend fun execute(input: Map<String, Any?>): ToolResult {
                     val snapshot = input.toMap()
-                    if (!confirmation.confirm(tool.spec.name, snapshot.toString())) {
+                    val diagnosticTurn=diagnostics.activeTurn()
+                    val allowed=confirmation.confirm(tool.spec.name, snapshot.toString())
+                    diagnostics.event(diagnosticTurn,"confirmation",toolName=tool.spec.name,data=mapOf("accepted" to allowed))
+                    if (!allowed) {
                         return ToolResult(success = false, error = "User declined; action was not executed")
                     }
                     currentCoroutineContext().ensureActive()
@@ -351,14 +362,14 @@ object AssistantModule {
     ): AuthErrorHandler {
         val logger = loggerFactory.getLogger("AuthErrorHandler")
         return AuthErrorHandler { errorMessage ->
-            logger.info("Auth error received, attempting token refresh: $errorMessage")
+            logger.info("Auth error received, attempting token refresh")
             when (val result = tokenRefresher.refreshTokens()) {
                 is TokenRefresher.RefreshResult.Success -> {
                     logger.info("Token refresh successful")
                     true
                 }
                 is TokenRefresher.RefreshResult.Failed -> {
-                    logger.warn("Token refresh failed: ${result.reason}")
+                    logger.warn("Token refresh failed")
                     false
                 }
                 is TokenRefresher.RefreshResult.NotAvailable -> {
@@ -425,6 +436,7 @@ object AssistantModule {
         authStore: AuthStore,
         @ApplicationContext context: Context,
         scope: CoroutineScope,
+        diagnostics:com.lelloman.simpleaiassistant.diagnostics.DiagnosticRecorder,
     ): AccountChatRepository {
         val delegate = ChatRepositoryImpl(
             historyStore = RoomHistoryStore(chatDatabase, modeManager.getRootMode().id),
@@ -434,7 +446,8 @@ object AssistantModule {
             systemPromptBuilder = systemPromptBuilder,
             languagePreferences = languagePreferences,
             authErrorHandler = authErrorHandler,
-            modeManager = modeManager
+            modeManager = modeManager,
+            diagnostics = diagnostics,
         )
         val prefs = context.getSharedPreferences("assistant_session", Context.MODE_PRIVATE)
         return AccountChatRepository(
@@ -451,6 +464,12 @@ object AssistantModule {
                 check(prefs.edit().putString("owner", owner).commit()) { "Could not persist assistant account" }
             },
             scope = scope,
+            diagnostics = diagnostics,
+            diagnosticsEnabled = {
+                val current=authStore.getAuthState().value as? AuthState.LoggedIn
+                val owner=current?.let {"${it.remoteUrl.length}:${it.remoteUrl}${it.userHandle}"}
+                owner!=null && context.getSharedPreferences("assistant_diagnostics",Context.MODE_PRIVATE).getBoolean("enabled:$owner",false)
+            },
         )
     }
 

@@ -14,7 +14,8 @@ import com.lelloman.simpleaiassistant.ui.SettingsBottomSheet
 
 @Composable
 fun AssistantScreen(
-    viewModel: AssistantViewModel = hiltViewModel()
+    viewModel: AssistantViewModel = hiltViewModel(),
+    onReportMessage: (String)->Unit = {},
 ) {
     val state by viewModel.uiState.collectAsState()
     val confirmation by viewModel.confirmation.request.collectAsState()
@@ -47,6 +48,8 @@ fun AssistantScreen(
         onRestartFromMessage = viewModel::restartFromMessage,
         onLanguageSelected = viewModel::setLanguage,
         onModeSelected = viewModel::switchMode,
+        onReportMessage = onReportMessage,
+        reportLabel = stringResource(R.string.feedback_report_response),
         onCancel = viewModel::cancel,
         onConfirmRestart = viewModel::confirmRestart,
         onDismissRestart = viewModel::dismissRestart
