@@ -41,11 +41,13 @@ export default defineConfig({
     vueDevTools(),
   ],
   resolve: {
+    dedupe: ['vue'],
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
   server: {
+    fs: { allow: [fileURLToPath(new URL('../..', import.meta.url))] },
     proxy: {
       '/v1': {
         target: 'http://localhost:3001',  // Your backend server

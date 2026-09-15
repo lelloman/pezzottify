@@ -25,7 +25,11 @@ rootProject.name = "Pezzottify"
 
 // Opt-in local verification of unpublished assistant changes; normal builds use
 // the immutable JitPack revision in libs.versions.toml.
-providers.gradleProperty("assistantCheckout").orNull?.let { checkout ->
+// The Rust-backed 0.2 API requires the matching source checkout until release.
+val assistantCheckout = providers.gradleProperty("assistantCheckout").orNull
+    ?: file("../../simple-android-assistant").takeIf { it.isDirectory }?.absolutePath
+    ?: error("Check out simple-android-assistant beside pezzottify or set -PassistantCheckout=/path/to/checkout")
+assistantCheckout.let { checkout ->
     includeBuild(checkout) {
         dependencySubstitution {
             listOf("assistant-core", "assistant-compose", "provider-ollama", "provider-simpleai").forEach { artifact ->

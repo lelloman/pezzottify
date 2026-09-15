@@ -63,3 +63,11 @@ The app uses OIDC (OpenID Connect) for authentication with the following flow:
 The app sends the ID token as `Authorization: Bearer <token>` for API, media, and service-worker
 requests. The backend exchanges it for an HTTP-only session cookie when needed by browser
 WebSocket connections.
+
+## Shared assistant
+
+Check out `simple-android-assistant` beside `pezzottify`, then run `npm ci` and
+`npm run build` in that repository before installing/building this web app.
+The three assistant packages currently use local file dependencies until release.
+Provider credentials, MCP, music tools, prompts and confirmation policy remain here;
+the shared Rust engine owns conversation and context state.

@@ -40,6 +40,7 @@ import com.lelloman.simpleaiassistant.model.Language
 import com.lelloman.simpleaiassistant.util.LanguagePreferences
 import com.lelloman.simpleaiassistant.util.StringProvider
 import com.lelloman.simpleaiassistant.data.ChatRepository
+import com.lelloman.simpleaiassistant.data.local.RoomHistoryStore
 import com.lelloman.simpleaiassistant.data.ChatRepositoryImpl
 import com.lelloman.simpleaiassistant.data.DefaultSystemPromptBuilder
 import com.lelloman.simpleaiassistant.data.SystemPromptBuilder
@@ -90,7 +91,7 @@ object AssistantModule {
             context,
             ChatDatabase::class.java,
             "chat_database"
-        ).build()
+        ).addMigrations(ChatDatabase.MIGRATION_1_2).build()
     }
 
     @Provides
@@ -412,7 +413,7 @@ object AssistantModule {
     @Provides
     @Singleton
     fun provideAccountChatRepository(
-        chatMessageDao: ChatMessageDao,
+        chatDatabase: ChatDatabase,
         llmProvider: LlmProvider,
         toolRegistry: ToolRegistry,
         systemPromptBuilder: SystemPromptBuilder,
@@ -426,13 +427,12 @@ object AssistantModule {
         scope: CoroutineScope,
     ): AccountChatRepository {
         val delegate = ChatRepositoryImpl(
-            chatMessageDao = chatMessageDao,
+            historyStore = RoomHistoryStore(chatDatabase, modeManager.getRootMode().id),
+            scope = scope,
             llmProvider = llmProvider,
             toolRegistry = toolRegistry,
             systemPromptBuilder = systemPromptBuilder,
-            stringProvider = stringProvider,
             languagePreferences = languagePreferences,
-            logger = logger,
             authErrorHandler = authErrorHandler,
             modeManager = modeManager
         )

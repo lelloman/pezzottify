@@ -1,613 +1,103 @@
-/**
- * Chat Store
- *
- * Manages AI chat state:
- * - Message history
- * - LLM provider configuration
- * - Tool execution (MCP + UI tools)
- * - Streaming responses
- */
-
 import { defineStore } from 'pinia';
-import { ref, computed, watch } from 'vue';
-import { streamChat, quickPrompt, getProvider, getProviderIds } from '../services/llm';
+import { ref, shallowRef, computed, watch } from 'vue';
+import { AssistantSession } from '@lelloman/simple-assistant';
+import { useAssistant } from '@lelloman/simple-assistant-vue';
+import { createProvider, getProvider, getProviderIds } from '@lelloman/simple-assistant-providers';
 import { mcpClient } from '../services/mcp';
 import { uiTools } from '../services/uiTools';
-import { LANGUAGES, getLanguage, buildDetectionPrompt } from '../services/languages';
-
-import { ChatLifecycle, runToolLoop, requiresConfirmation } from '../services/chatLifecycle.js';
+import { LANGUAGES, getLanguage } from '../services/languages';
+import { getToolDescription, getToolResultDescription } from '../services/toolDescriptions';
+import { ASSISTANT_PROMPT, assistantModes, requiresConfirmation } from '../services/assistantModes';
 
 const CONFIG_KEY = 'ai_chat_config';
-
-// Compaction thresholds (in estimated tokens)
-const HOT_ZONE_TOKENS = 4000; // Always keep last ~4K tokens verbatim
-const STAGING_THRESHOLD = 4000; // Compact when staging area exceeds this
-
-/**
- * Estimate token count for a message
- * Rough heuristic: ~4 chars per token for English, ~2-3 for other languages
- * We use 3.5 as a middle ground
- */
-function estimateTokens(text) {
-  if (!text) return 0;
-  return Math.ceil(text.length / 3.5);
-}
-
-/**
- * Estimate tokens for a single message object
- */
-function estimateMessageTokens(msg) {
-  let tokens = 0;
-
-  // Content
-  tokens += estimateTokens(msg.content);
-
-  // Tool calls (if any)
-  if (msg.toolCalls) {
-    for (const tc of msg.toolCalls) {
-      tokens += estimateTokens(tc.name);
-      tokens += estimateTokens(JSON.stringify(tc.input));
-    }
-  }
-
-  // Role overhead
-  tokens += 4; // role markers
-
-  return tokens;
-}
-
-/**
- * Build the compaction prompt
- */
-function buildCompactionPrompt(existingSummary, messagesToCompact, languageCode) {
-  const lang = languageCode ? getLanguage(languageCode) : null;
-  const langInstruction = lang
-    ? `Write the summary in ${lang.name}.`
-    : 'Write the summary in English.';
-
-  const messagesText = messagesToCompact.map(msg => {
-    let text = `[${msg.role}]: ${msg.content || ''}`;
-    if (msg.toolCalls) {
-      text += ` (used tools: ${msg.toolCalls.map(tc => tc.name).join(', ')})`;
-    }
-    if (msg.toolName) {
-      text += ` (tool result for: ${msg.toolName})`;
-    }
-    return text;
-  }).join('\n');
-
-  if (existingSummary) {
-    return `You are summarizing a conversation for context preservation.
-
-EXISTING SUMMARY:
-${existingSummary}
-
-NEW MESSAGES TO ADD TO SUMMARY:
-${messagesText}
-
-Update the summary to include the key information from these new messages. Focus on:
-- What tasks were completed (playlists created, tracks played, searches done)
-- Any IDs that might be referenced later (playlist IDs, album IDs)
-- User preferences or patterns learned
-- Important decisions or choices made
-
-Keep the summary concise (2-4 sentences max). ${langInstruction}
-
-UPDATED SUMMARY:`;
-  } else {
-    return `You are summarizing a conversation for context preservation.
-
-MESSAGES TO SUMMARIZE:
-${messagesText}
-
-Create a brief summary focusing on:
-- What tasks were completed (playlists created, tracks played, searches done)
-- Any IDs that might be referenced later (playlist IDs, album IDs)
-- User preferences or patterns learned
-- Important decisions or choices made
-
-Keep the summary concise (2-4 sentences max). ${langInstruction}
-
-SUMMARY:`;
-  }
-}
-
-/**
- * Build the system prompt, optionally including language instruction
- */
-function buildSystemPrompt(languageCode) {
-  const basePrompt = `You are a helpful AI assistant integrated into Pezzottify, a music streaming application.
-
-You have access to tools that let you:
-- Search and browse the music catalog (via MCP tools like catalog.search, catalog.get)
-- Control music playback (play, pause, skip, queue tracks)
-- Navigate the app (go to albums, artists, playlists)
-- Manage user content (like/unlike, create playlists, add to playlists)
-- View and change settings
-
-IMPORTANT - ID handling rules:
-1. catalog.search returns three arrays: "artists", "albums", and "tracks". Each has items with "id" and "name".
-2. To add music to a playlist, you MUST use track IDs from the "tracks" array. Album and artist IDs will NOT work.
-3. To get tracks from an artist or album, use catalog.get with the artist/album ID to get detailed info including track IDs.
-4. ui.createPlaylist returns a "playlistId" (UUID). You MUST use this ID for ui.addToPlaylist, NOT the playlist name.
-5. Never make up or guess IDs - always use IDs returned by tools.
-
-When the user asks about music or wants to play something, use the appropriate tools.
-When showing search results or content, be concise but informative.
-Always prefer using tools over asking the user to do things manually.`;
-
-  if (languageCode) {
-    const lang = getLanguage(languageCode);
-    if (lang) {
-      return `${basePrompt}
-
-IMPORTANT: You MUST respond in ${lang.name} (${lang.nativeName}). All your responses should be written in ${lang.name}.`;
-    }
-  }
-
-  return basePrompt;
-}
-
 export const useChatStore = defineStore('chat', () => {
-  // ============================================================================
-  // STATE
-  // ============================================================================
-
-  // Message history: { id, role, content, toolCalls?, toolResults? }
-  const messages = ref([]);
-  const lifecycle = new ChatLifecycle();
-
-  // Loading state
-  const isLoading = ref(false);
-
-  // Panel open state
+  const session = shallowRef(null);
+  const binding = useAssistant(session);
   const isOpen = ref(false);
-
-  // Current streaming text (for display during streaming)
-  const streamingText = ref('');
-
-  // Error state
-  const error = ref(null);
-
-  // Provider configuration
-  const config = ref({
-    provider: 'anthropic',
-    apiKey: '',
-    model: '',
-    baseUrl: '', // For Ollama
-    language: null, // null = not set (will auto-detect), string = ISO 639-1 code
-    debugMode: false, // Show technical tool details vs friendly descriptions
-  });
-
-  // Whether we're currently detecting language
-  const isDetectingLanguage = ref(false);
-
-  // Whether we need to detect language on next message
-  const pendingLanguageDetection = ref(config.value.language === null);
-
-  // Context summary from compacted messages
-  const contextSummary = ref(null);
-
-  // Whether compaction is in progress
-  const isCompacting = ref(false);
-
-  // ============================================================================
-  // COMPUTED
-  // ============================================================================
-
+  const initializing = ref(false);
+  const initializationError = ref(null);
+  const rootMode = ref(null);
+  let generation = 0;
+  let initializingPromise = null;
+  // Web transcripts intentionally remain in memory, including their original mode snapshots.
+  let archive = null;
+  const config = ref({ provider: 'anthropic', apiKey: '', model: '', baseUrl: '', language: null, debugMode: false });
+  try { const saved = localStorage.getItem(CONFIG_KEY); if (saved) config.value = { ...config.value, ...JSON.parse(saved) }; } catch { /* no stored settings */ }
+  watch(config, value => { try { localStorage.setItem(CONFIG_KEY, JSON.stringify(value)); } catch { /* optional preferences */ } }, { deep: true });
+  watch(binding.language, language => { if (session.value) config.value.language = language; });
   const isConfigured = computed(() => {
     const provider = getProvider(config.value.provider);
-    if (!provider) return false;
-
-    if (provider.requiresApiKey && !config.value.apiKey) return false;
-    if (provider.requiresBaseUrl && !config.value.baseUrl) return false;
-
-    return true;
+    return !!provider && (!provider.requiresApiKey || !!config.value.apiKey) && (!provider.requiresBaseUrl || !!config.value.baseUrl);
   });
-
-  const currentProvider = computed(() => getProvider(config.value.provider));
-
-  const availableProviders = computed(() => {
-    return getProviderIds().map(id => ({
-      id,
-      ...getProvider(id),
-    }));
-  });
-
-  // Current language info (null if not set)
-  const currentLanguage = computed(() => {
-    if (!config.value.language) return null;
-    return getLanguage(config.value.language);
-  });
-
-  // List of all available languages
-  const availableLanguages = computed(() => LANGUAGES);
-
-  // Debug mode state
-  const debugMode = computed(() => config.value.debugMode);
-
-  // ============================================================================
-  // PERSISTENCE
-  // ============================================================================
-
-  // Load config from localStorage
-  const savedConfig = localStorage.getItem(CONFIG_KEY);
-  if (savedConfig) {
-    try {
-      const parsed = JSON.parse(savedConfig);
-      config.value = { ...config.value, ...parsed };
-    } catch (e) {
-      console.warn('Failed to parse saved chat config:', e);
-    }
-  }
-
-  // Save config to localStorage when it changes
-  watch(config, (newConfig) => {
-    localStorage.setItem(CONFIG_KEY, JSON.stringify(newConfig));
-  }, { deep: true });
-
-  // ============================================================================
-  // TOOL HELPERS
-  // ============================================================================
-
-  /**
-   * Get all available tools (MCP + UI)
-   */
-  function getAllTools() {
-    const mcpTools = mcpClient.getTools();
-    const uiToolsList = uiTools.getTools();
-    return [...mcpTools, ...uiToolsList];
-  }
-
-  /**
-   * Build the full message list for LLM including system prompt and context
-   */
-  function buildLlmMessages() {
-    const systemPrompt = buildSystemPrompt(config.value.language);
-    const llmMessages = [
-      { role: 'user', content: systemPrompt },
-      { role: 'assistant', content: 'I understand. I\'m ready to help you with music playback, searching, and managing your library. What would you like to do?' },
-    ];
-
-    // Add context summary if we have one
-    if (contextSummary.value) {
-      llmMessages.push({
-        role: 'user',
-        content: `[Previous conversation context: ${contextSummary.value}]`,
+  async function ensureSession() {
+    if (session.value && mcpClient.isConnected.value) return session.value;
+    if (initializingPromise) return initializingPromise;
+    const token = generation;
+    initializing.value = true; initializationError.value = null;
+    const promise = (async () => {
+      if (!mcpClient.isConnected.value) { try { await mcpClient.connect(); } catch { /* Local tools remain usable. */ } }
+      if (token !== generation) return null;
+      // Rebuild the tool catalog after reconnect, retaining the saved transcript.
+      if (session.value) {
+        const previous = session.value; session.value = null;
+        await previous.dispose();
+        if (token !== generation) return null;
+      }
+      const tools = [...mcpClient.getTools(), ...uiTools.getTools()];
+      const root = assistantModes(tools);
+      const engine = await AssistantSession.create({
+        config: { basePrompt: ASSISTANT_PROMPT, rootMode: root, tools },
+        provider: createProvider(config.value.provider, () => config.value),
+        history: { load: async () => archive, save: async value => { if (token === generation) archive = value; } },
+        executeTool: async (call, signal) => {
+          signal.throwIfAborted();
+          if (requiresConfirmation(call.name) && !window.confirm(`Allow AI action ${call.name}?\n\n${JSON.stringify(call.input, null, 2)}`)) return { error: 'User declined; action was not executed.' };
+          signal.throwIfAborted();
+          if (token !== generation) throw new DOMException('Session changed', 'AbortError');
+          return uiTools.isUiTool(call.name) ? uiTools.callTool(call.name, call.input) : mcpClient.callTool(call.name, call.input);
+        },
       });
-      llmMessages.push({
-        role: 'assistant',
-        content: 'I understand the context. How can I help you now?',
-      });
-    }
-
-    // Add current messages
-    llmMessages.push(...messages.value);
-
-    return llmMessages;
+      if (token !== generation) { await engine.dispose(); return null; }
+      if (config.value.language && !engine.state.language) engine.setLanguage(config.value.language);
+      rootMode.value = root; session.value = engine; return engine;
+    })();
+    initializingPromise = promise;
+    try { return await promise; }
+    catch (error) { if (token === generation) initializationError.value = error.message; return null; }
+    finally { if (token === generation) { initializing.value = false; initializingPromise = null; } }
   }
-
-  /**
-   * Execute a tool call
-   */
-  async function executeTool(name, args, signal) {
-    lifecycle.check(signal);
-    if (requiresConfirmation(name) && !window.confirm(`Allow AI action ${name}?\n\n${JSON.stringify(args, null, 2)}`)) {
-      return { error: 'User declined; action was not executed.' };
-    }
-    lifecycle.check(signal);
-    // Check if it's a UI tool
-    if (uiTools.isUiTool(name)) {
-      return await uiTools.callTool(name, args);
-    }
-
-    // Otherwise it's an MCP tool
-    try {
-      const result = await mcpClient.callTool(name, args);
-      return result;
-    } catch (e) {
-      return { error: e.message };
-    }
+  async function sendMessage(text) {
+    if (!text.trim() || !isConfigured.value || binding.isLoading.value || initializing.value) return;
+    const engine = await ensureSession(); engine?.send(text);
   }
-
-  // ============================================================================
-  // CHAT METHODS
-  // ============================================================================
-
-  /**
-   * Detect language from a user message
-   */
-  async function detectLanguage(userMessage, signal) {
-    console.log('[Lang] detectLanguage called, isConfigured:', isConfigured.value);
-    if (!isConfigured.value) return null;
-
-    isDetectingLanguage.value = true;
-    try {
-      const prompt = buildDetectionPrompt(userMessage);
-      console.log('[Lang] Sending detection prompt...');
-      const response = await quickPrompt(config.value.provider, { ...config.value, signal }, prompt);
-      lifecycle.check(signal);
-      console.log('[Lang] Got response:', response);
-
-      // Extract language code - look for a valid 2-letter code in the response
-      const cleanResponse = response.toLowerCase().trim();
-
-      // First try: exact match (response is just the code)
-      if (cleanResponse.length === 2 && getLanguage(cleanResponse)) {
-        console.log('[Lang] Exact match:', cleanResponse);
-        return cleanResponse;
-      }
-
-      // Second try: find any valid language code in the response
-      for (const lang of LANGUAGES) {
-        // Look for the code as a standalone word (not part of another word)
-        const regex = new RegExp(`\\b${lang.code}\\b`);
-        if (regex.test(cleanResponse)) {
-          console.log('[Lang] Found code in response:', lang.code);
-          return lang.code;
-        }
-      }
-
-      // Fallback to English
-      console.warn('[Lang] Could not parse response, falling back to en:', response);
-      return 'en';
-    } catch (e) {
-      console.warn('[Lang] Detection failed:', e);
-      return 'en';
-    } finally {
-      if (lifecycle.owns(signal)) isDetectingLanguage.value = false;
-    }
-  }
-
-  /**
-   * Calculate token distribution across messages
-   * Returns: { total, hotZone: { start, end, tokens }, staging: { start, end, tokens } }
-   */
-  function analyzeTokenDistribution() {
-    const msgList = messages.value;
-    if (msgList.length === 0) {
-      return { total: 0, hotZone: null, staging: null };
-    }
-
-    // Calculate tokens from the end (most recent first)
-    let total = 0;
-    const tokenCounts = msgList.map(msg => estimateMessageTokens(msg));
-    total = tokenCounts.reduce((a, b) => a + b, 0);
-
-    // Find hot zone boundary (last HOT_ZONE_TOKENS)
-    let hotZoneTokens = 0;
-    let hotZoneStart = msgList.length;
-    for (let i = msgList.length - 1; i >= 0; i--) {
-      if (hotZoneTokens + tokenCounts[i] > HOT_ZONE_TOKENS) {
-        break;
-      }
-      hotZoneTokens += tokenCounts[i];
-      hotZoneStart = i;
-    }
-
-    // Staging area is everything before hot zone
-    let stagingTokens = 0;
-    for (let i = 0; i < hotZoneStart; i++) {
-      stagingTokens += tokenCounts[i];
-    }
-
-    return {
-      total,
-      hotZone: {
-        start: hotZoneStart,
-        end: msgList.length,
-        tokens: hotZoneTokens,
-      },
-      staging: {
-        start: 0,
-        end: hotZoneStart,
-        tokens: stagingTokens,
-      },
-    };
-  }
-
-  /**
-   * Check if compaction is needed and run it asynchronously
-   */
-  async function maybeCompact(signal) {
-    if (isCompacting.value || !isConfigured.value || !lifecycle.owns(signal)) return;
-
-    const dist = analyzeTokenDistribution();
-
-    // Only compact if staging area exceeds threshold
-    if (!dist.staging || dist.staging.tokens < STAGING_THRESHOLD) {
-      return;
-    }
-
-    console.log(`[Chat] Compaction triggered: staging=${dist.staging.tokens} tokens, hot=${dist.hotZone.tokens} tokens`);
-
-    const messagesToCompact = messages.value.slice(dist.staging.start, dist.staging.end);
-    if (messagesToCompact.length === 0) return;
-
-    isCompacting.value = true;
-    try {
-
-      // Build compaction prompt
-      const prompt = buildCompactionPrompt(
-        contextSummary.value,
-        messagesToCompact,
-        config.value.language
-      );
-
-      // Get summary from LLM
-      const summary = await quickPrompt(config.value.provider, { ...config.value, signal }, prompt);
-      lifecycle.check(signal);
-
-      // Update state
-      contextSummary.value = summary.trim();
-
-      // Remove compacted messages
-      messages.value = messages.value.slice(dist.staging.end);
-
-      console.log(`[Chat] Compacted ${messagesToCompact.length} messages. New summary: "${contextSummary.value.slice(0, 100)}..."`);
-    } catch (e) {
-      console.error('[Chat] Compaction failed:', e);
-      // Non-fatal - we just keep the messages as-is
-    } finally {
-      if (lifecycle.owns(signal)) isCompacting.value = false;
-    }
-  }
-
-  /**
-   * Send a message and get a response
-   */
-  async function sendMessage(userMessage) {
-    if (!userMessage.trim() || isLoading.value || isCompacting.value || !isConfigured.value) return;
-    const signal = lifecycle.begin();
-    error.value = null;
-    streamingText.value = '';
-    isLoading.value = true; // Includes language detection, preventing overlapping sends.
-    const turnStart = messages.value.length;
-    try {
-      if (pendingLanguageDetection.value) {
-        const language = await detectLanguage(userMessage.trim(), signal);
-        lifecycle.check(signal);
-        config.value.language = language;
-        pendingLanguageDetection.value = false;
-      }
-      messages.value.push({ id: crypto.randomUUID(), role: 'user', content: userMessage.trim() });
-      if (!mcpClient.isConnected.value) {
-        try { await mcpClient.connect(); }
-        catch (error) { console.warn('MCP unavailable:', error); }
-      }
-      lifecycle.check(signal);
-      await runToolLoop({
-        stream: () => streamChat(config.value.provider, { ...config.value, signal }, buildLlmMessages(), getAllTools()),
-        execute: (name, args) => executeTool(name, args, signal),
-        append: message => messages.value.push({ id: crypto.randomUUID(), ...message }),
-        onText: text => { streamingText.value = text; },
-        check: () => lifecycle.check(signal),
-      });
-    } catch (e) {
-      if (lifecycle.owns(signal)) {
-        error.value = e.message;
-        // Keep tool/result pairs valid if a provider fails between rounds.
-      }
-    } finally {
-      if (lifecycle.owns(signal)) {
-        isLoading.value = false;
-        streamingText.value = '';
-        if (messages.value.length > turnStart) void maybeCompact(signal);
-      }
-    }
-  }
-
-  /**
-   * Clear chat history
-   */
-  function clearHistory() {
-    lifecycle.cancel();
+  function invalidate() {
+    generation++; initializingPromise = null; initializing.value = false; initializationError.value = null;
+    const old = session.value; session.value = null;
+    if (old) { old.cancel(); void old.dispose().catch(error => { initializationError.value = error.message; }); }
     mcpClient.disconnect();
-    isLoading.value = false;
-    isCompacting.value = false;
-    isDetectingLanguage.value = false;
-    messages.value = [];
-    contextSummary.value = null;
-    error.value = null;
-    streamingText.value = '';
-    // Reset language so it auto-detects on next conversation
-    config.value.language = null;
-    pendingLanguageDetection.value = true;
   }
-
-  /**
-   * Update configuration
-   */
-  function resetSession() {
-    clearHistory();
-    isOpen.value = false;
-    config.value.apiKey = '';
-    localStorage.removeItem(CONFIG_KEY);
-  }
-
-  function setConfig(newConfig) {
-    clearHistory();
-    config.value = { ...config.value, ...newConfig };
-  }
-
-  /**
-   * Toggle panel open/closed
-   */
-  function toggle() {
-    isOpen.value = !isOpen.value;
-  }
-
-  /**
-   * Open the panel
-   */
-  function open() {
-    isOpen.value = true;
-  }
-
-  /**
-   * Close the panel
-   */
-  function close() {
-    isOpen.value = false;
-  }
-
-  /**
-   * Set response language
-   */
-  function setLanguage(code) {
-    config.value.language = code;
-    pendingLanguageDetection.value = false;
-  }
-
-  /**
-   * Reset language (clear preference, will auto-detect on next message)
-   */
-  function resetLanguage() {
-    config.value.language = null;
-    pendingLanguageDetection.value = true;
-  }
-
-  /**
-   * Toggle debug mode
-   */
-  function toggleDebugMode() {
-    config.value.debugMode = !config.value.debugMode;
-  }
-
-  // ============================================================================
-  // RETURN
-  // ============================================================================
-
+  function clearHistory() { invalidate(); archive = null; config.value.language = null; }
+  function resetSession() { clearHistory(); isOpen.value = false; config.value.apiKey = ''; localStorage.removeItem(CONFIG_KEY); }
+  function setConfig(value) { clearHistory(); config.value = { ...config.value, ...value }; }
+  function setLanguage(code) { config.value.language = code; session.value?.setLanguage(code); }
+  const modes = computed(() => {
+    const flatten = (node, path = []) => [{ id: node.id, name: node.name, label: [...path, node.name].join(' / ') }, ...(node.children || []).flatMap(child => flatten(child, [...path, node.name]))];
+    return rootMode.value ? flatten(rootMode.value) : [];
+  });
   return {
-    // State
-    messages,
-    isLoading,
-    isOpen,
-    streamingText,
-    error,
-    config,
-    isDetectingLanguage,
-    isCompacting,
-    contextSummary,
-
-    // Computed
-    isConfigured,
-    currentProvider,
-    availableProviders,
-    currentLanguage,
-    availableLanguages,
-    debugMode,
-
-    // Methods
-    sendMessage,
-    clearHistory,
-    resetSession,
-    setConfig,
-    toggle,
-    open,
-    close,
-    setLanguage,
-    resetLanguage,
-    toggleDebugMode,
+    ...binding, config, isOpen, isConfigured, modes,
+    isLoading: computed(() => initializing.value || binding.isLoading.value),
+    error: computed(() => initializationError.value || binding.error.value),
+    contextSummary: computed(() => binding.state.value?.summary?.content ?? null),
+    currentProvider: computed(() => getProvider(config.value.provider)),
+    availableProviders: computed(() => getProviderIds().map(id => ({ id, ...getProvider(id) }))),
+    currentLanguage: computed(() => config.value.language ? getLanguage(config.value.language) : null),
+    availableLanguages: LANGUAGES, debugMode: computed(() => config.value.debugMode),
+    sendMessage, clearHistory, resetSession, setConfig, setLanguage, resetLanguage: () => setLanguage(null),
+    toggle: () => { isOpen.value = !isOpen.value; }, open: () => { isOpen.value = true; }, close: () => { isOpen.value = false; },
+    toggleDebugMode: () => { config.value.debugMode = !config.value.debugMode; },
+    welcome: 'Ask me anything about your music!',
+    suggestions: ['Search for jazz music', 'What is currently playing?', 'Show my liked albums'],
+    describeTool: getToolDescription, describeResult: getToolResultDescription,
   };
 });

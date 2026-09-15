@@ -46,7 +46,10 @@ fun AssistantScreen(
         onOpenSettings = { showSettings = true },
         onRestartFromMessage = viewModel::restartFromMessage,
         onLanguageSelected = viewModel::setLanguage,
-        onModeSelected = viewModel::switchMode
+        onModeSelected = viewModel::switchMode,
+        onCancel = viewModel::cancel,
+        onConfirmRestart = viewModel::confirmRestart,
+        onDismissRestart = viewModel::dismissRestart
     )
 
     if (showSettings) {

@@ -1,101 +1,51 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { setImmediate } from 'node:timers';
+import { setTimeout as delay } from 'node:timers/promises';
 import { createPinia, setActivePinia, defineStore } from 'pinia';
-import { ref, computed, watch } from 'vue';
-import { ChatLifecycle, runToolLoop, requiresConfirmation } from './chatLifecycle.js';
-
-// Load the real store with isolated provider/transport dependencies. No model or
-// server calls, and no importing the application's global playback/auth stores.
-function storeWith({ streamChat, quickPrompt = async () => 'en', confirm = () => false } = {}) {
+import { ref, shallowRef, computed, watch } from 'vue';
+import { AssistantSession } from '@lelloman/simple-assistant';
+import { useAssistant } from '@lelloman/simple-assistant-vue';
+import { assistantModes, requiresConfirmation, ASSISTANT_PROMPT } from './assistantModes.js';
+import { initSync, AssistantEngine } from '../../../../simple-android-assistant/web/core/wasm/assistant_wasm.js';
+initSync({ module: readFileSync(new URL('../../../../simple-android-assistant/web/core/wasm/assistant_wasm_bg.wasm', import.meta.url)) });
+function storeWith({ stream, connect = async () => {}, confirm = () => false } = {}) {
   setActivePinia(createPinia());
   globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
   globalThis.window = { confirm };
-  const uiCalls = [];
-  const mcp = { isConnected: { value: true }, connect: async () => {}, disconnect() {}, getTools: () => [] };
-  const uiTools = { getTools: () => [], isUiTool: () => true, callTool: async (...args) => { uiCalls.push(args); return 'ok'; } };
-  const source = readFileSync(new URL('../store/chat.js', import.meta.url), 'utf8')
-    .replace(/^import .*;\n/gm, '')
-    .replace('export const useChatStore', 'const useChatStore');
-  const factory = new Function('defineStore', 'ref', 'computed', 'watch', 'streamChat', 'quickPrompt',
-    'getProvider', 'getProviderIds', 'mcpClient', 'uiTools', 'LANGUAGES', 'getLanguage', 'buildDetectionPrompt',
-    'ChatLifecycle', 'runToolLoop', 'requiresConfirmation', source + '\nreturn useChatStore;');
-  const useStore = factory(defineStore, ref, computed, watch, streamChat, quickPrompt,
-    () => ({}), () => [], mcp, uiTools, [], code => ({ code, name: 'English' }), text => text,
-    ChatLifecycle, runToolLoop, requiresConfirmation);
-  return { store: useStore(), uiCalls };
+  const calls = [];
+  const mcp = { isConnected: { value: false }, connect, disconnect() {}, getTools: () => [] };
+  const tools = { getTools: () => [{ name: 'ui.deletePlaylist', inputSchema: { type: 'object' } }], isUiTool: () => true, callTool: async (...args) => { calls.push(args); return 'ok'; } };
+  const sessionClass = { create: options => AssistantSession.create({ ...options, createEngine: async (config, id, archive) => new AssistantEngine(JSON.stringify(config), id, archive ? JSON.stringify(archive) : undefined) }) };
+  const source = readFileSync(new URL('../store/chat.js', import.meta.url), 'utf8').replace(/^import .*;\n/gm, '').replace('export const useChatStore', 'const useChatStore');
+  const factory = new Function('defineStore','ref','shallowRef','computed','watch','AssistantSession','useAssistant','createProvider','getProvider','getProviderIds','mcpClient','uiTools','LANGUAGES','getLanguage','getToolDescription','getToolResultDescription','ASSISTANT_PROMPT','assistantModes','requiresConfirmation',source+'\nreturn useChatStore;');
+  const useStore = factory(defineStore,ref,shallowRef,computed,watch,sessionClass,useAssistant,()=>({stream}),()=>({}),()=>[],mcp,tools,[],code=>({code,name:'English'}),()=>'',()=>'',ASSISTANT_PROMPT,assistantModes,requiresConfirmation);
+  return { store: useStore(), calls, mcp };
 }
-
-test('clear during detection suppresses stale output and permits a new turn', async () => {
-  let finish;
-  let calls = 0;
-  const { store } = storeWith({
-    quickPrompt: () => new Promise(resolve => { finish = resolve; }),
-    streamChat: async function* () { calls++; yield { type: 'text', content: 'new response' }; },
-  });
-  const old = store.sendMessage('old');
-  assert.equal(store.isLoading, true);
-  store.clearHistory();
-  finish('en');
-  await old;
-  assert.equal(calls, 0);
-  assert.deepEqual(store.messages, []);
-  assert.equal(store.isLoading, false);
-  store.setLanguage('en');
-  await store.sendMessage('new');
-  assert.equal(store.messages.at(-1).content, 'new response');
+async function until(predicate) { for(let i=0;i<300;i++){if(predicate())return;await delay(5);}throw new Error('Timed out'); }
+test('session reset during connection prevents initialization and model calls',async()=>{
+ let finish, calls=0;const {store}=storeWith({connect:()=>new Promise(r=>{finish=r;}),stream:async function*(){calls++;yield {type:'done'};}});
+ const send=store.sendMessage('old');store.resetSession();finish();await send;assert.equal(calls,0);assert.deepEqual(store.messages,[]);assert.equal(store.isLoading,false);
+});
+test('declined tool confirmation never executes the application tool',async()=>{
+ let round=0;const {store,calls}=storeWith({stream:async function*(){if(round++===0)yield {type:'tool_use',id:'a',name:'ui.deletePlaylist',input:{playlistId:'A'}};else yield {type:'text',content:'cancelled'};yield {type:'done'};}});
+ store.setLanguage('en');await store.sendMessage('delete');await until(()=>!store.isLoading);assert.deepEqual(calls,[]);assert.match(store.messages.find(m=>m.role==='tool').content,/declined/);store.resetSession();
+});
+test('logout aborts real engine work and clears credentials',async()=>{
+ let finish, signal;const {store}=storeWith({stream:async function*(_request,s){signal=s;await new Promise(r=>{finish=r;});yield {type:'text',content:'secret'};yield {type:'done'};}});
+ store.setLanguage('en');await store.sendMessage('private');await until(()=>finish);store.resetSession();assert.equal(signal.aborted,true);finish();await delay(20);assert.deepEqual(store.messages,[]);assert.equal(store.config.apiKey,'');
+});
+test('mode definitions preserve host confirmation requirements',()=>{
+ assert.equal(requiresConfirmation('ui.deletePlaylist'),true);assert.equal(requiresConfirmation('catalog.search'),false);
+ const root=assistantModes([{name:'ui.deletePlaylist'},{name:'ui.play'}]);assert.deepEqual(root.children.find(m=>m.id==='help').toolIds,[]);assert.deepEqual(root.children.find(m=>m.id==='playlists').toolIds,['ui.deletePlaylist']);
 });
 
-test('declining an AI deletion does not call the UI tool', async () => {
-  let round = 0;
-  const { store, uiCalls } = storeWith({
-    streamChat: async function* () {
-      if (round++ === 0) yield { type: 'tool_use', id: 'delete', name: 'ui.deletePlaylist', input: { playlistId: 'A' } };
-      else yield { type: 'text', content: 'Cancelled' };
-    },
-  });
-  store.setLanguage('en');
-  await store.sendMessage('delete');
-  assert.deepEqual(uiCalls, []);
-  assert.match(store.messages.find(m => m.role === 'tool').content, /declined/);
-});
-
-test('session reset aborts the provider signal and clears private state', async () => {
-  let finish;
-  let signal;
-  const { store } = storeWith({
-    streamChat: async function* (provider, config) {
-      signal = config.signal;
-      await new Promise(resolve => { finish = resolve; });
-      yield { type: 'text', content: 'secret' };
-    },
-  });
-  store.setLanguage('en');
-  const send = store.sendMessage('private');
-  store.resetSession();
-  assert.equal(signal.aborted, true);
-  finish();
-  await send;
-  assert.deepEqual(store.messages, []);
-  assert.equal(store.streamingText, '');
-  assert.equal(store.config.apiKey, '');
-});
-
-test('clear during compaction cannot restore the previous summary', async () => {
-  let finish;
-  const { store } = storeWith({
-    quickPrompt: () => new Promise(resolve => { finish = resolve; }),
-    streamChat: async function* () { yield { type: 'text', content: 'done' }; },
-  });
-  store.setLanguage('en');
-  store.messages = Array.from({ length: 4 }, (_, i) => ({ id: String(i), role: 'user', content: 'x'.repeat(10000) }));
-  await store.sendMessage('summarize');
-  assert.equal(store.isCompacting, true);
-  store.clearHistory();
-  finish('old private summary');
-  await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(store.messages, []);
-  assert.equal(store.contextSummary, null);
-  assert.equal(store.isCompacting, false);
+test('reconnect refreshes available tools and retains transcript', async () => {
+ let connections=0; const requests=[];
+ const {store,mcp}=storeWith({connect:async()=>{connections++;},stream:async function*(request){requests.push(request);yield {type:'text',content:'ok'};yield {type:'done'};}});
+ store.setLanguage('en'); await store.sendMessage('first'); await until(()=>!store.isLoading);
+ mcp.getTools=()=>[{name:'catalog.search',inputSchema:{type:'object'}}];
+ await store.sendMessage('second'); await until(()=>!store.isLoading);
+ assert.equal(connections,2); assert.equal(store.messages.filter(m=>m.role==='user').length,2);
+ assert.ok(requests.at(-1).tools.some(t=>t.name==='catalog.search')); store.resetSession();
 });
