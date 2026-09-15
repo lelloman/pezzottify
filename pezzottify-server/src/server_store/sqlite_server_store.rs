@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use tracing::info;
 
 pub struct SqliteServerStore {
-    conn: Arc<Mutex<Connection>>,
+    pub(super) conn: Arc<Mutex<Connection>>,
 }
 
 impl SqliteServerStore {
@@ -230,6 +230,9 @@ impl SqliteServerStore {
 }
 
 impl ServerStore for SqliteServerStore {
+    fn reports(&self) -> Option<&dyn super::reports::ReportRepository> {
+        Some(self)
+    }
     fn record_job_start(&self, job_id: &str, triggered_by: &str) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
         let now = Self::format_datetime(&Utc::now());
@@ -481,7 +484,8 @@ impl ServerStore for SqliteServerStore {
     }
 
     fn insert_bug_report(&self, report: &super::BugReport) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let mut guard = self.conn.lock().unwrap();
+        let conn = guard.transaction()?;
         let created_at = Self::format_datetime(&report.created_at);
 
         conn.execute(
@@ -502,6 +506,8 @@ impl ServerStore for SqliteServerStore {
             ],
         )?;
 
+        super::report_repository::index_legacy(&conn, report)?;
+        conn.commit()?;
         Ok(())
     }
 
@@ -544,8 +550,10 @@ impl ServerStore for SqliteServerStore {
     }
 
     fn delete_bug_report(&self, id: &str) -> Result<bool> {
-        let conn = self.conn.lock().unwrap();
-        let deleted = conn.execute("DELETE FROM bug_reports WHERE id = ?1", params![id])?;
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let deleted = super::report_repository::delete_legacy(&tx, id)?;
+        tx.commit()?;
         Ok(deleted > 0)
     }
 
@@ -561,7 +569,8 @@ impl ServerStore for SqliteServerStore {
     }
 
     fn cleanup_bug_reports_to_size(&self, max_size: usize) -> Result<usize> {
-        let conn = self.conn.lock().unwrap();
+        let mut guard = self.conn.lock().unwrap();
+        let conn = guard.transaction()?;
         let mut deleted_count = 0;
 
         loop {
@@ -578,12 +587,17 @@ impl ServerStore for SqliteServerStore {
             }
 
             // Delete the oldest report
-            let deleted = conn.execute(
-                "DELETE FROM bug_reports WHERE id = (
-                    SELECT id FROM bug_reports ORDER BY created_at ASC LIMIT 1
-                )",
-                [],
-            )?;
+            let oldest: Option<String> = conn
+                .query_row(
+                    "SELECT id FROM bug_reports ORDER BY created_at ASC LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            let Some(oldest) = oldest else {
+                break;
+            };
+            let deleted = super::report_repository::delete_legacy(&conn, &oldest)?;
 
             if deleted == 0 {
                 break; // No more reports to delete
@@ -592,6 +606,7 @@ impl ServerStore for SqliteServerStore {
             deleted_count += deleted;
         }
 
+        conn.commit()?;
         Ok(deleted_count)
     }
 

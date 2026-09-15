@@ -69,6 +69,11 @@ impl TestHttpClient {
         self.protect(self.inner.put(url))
     }
 
+    #[allow(dead_code)]
+    pub fn patch(&self, url: impl reqwest::IntoUrl) -> reqwest::RequestBuilder {
+        self.protect(self.inner.patch(url))
+    }
+
     pub fn delete(&self, url: impl reqwest::IntoUrl) -> reqwest::RequestBuilder {
         self.protect(self.inner.delete(url))
     }
