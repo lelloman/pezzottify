@@ -1,0 +1,1 @@
+{"client_request_id":"f2a2fcdb-5973-49c3-bdb5-009027f6e99a","kind":"bug","category":"assistant","title":"Assistant request failed","description":"The assistant displayed a service error after I sent a message.","client_type":"web","client_version":"example","attachments":[{"kind":"technical_logs","content":"request-example: service unavailable","consent":true}]}
