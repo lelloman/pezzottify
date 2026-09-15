@@ -265,7 +265,7 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                 }
                 composable<Screen.Main.Search> { SearchScreen(navController) }
                 composable<Screen.Main.Library> { LibraryScreen(navController) }
-                composable<Screen.Main.Assistant> { AssistantScreen() }
+                composable<Screen.Main.Assistant> { AssistantScreen(onReportMessage={id->navController.navigate(Screen.Main.Home.BugReport(id))}) }
 
                 composable<Screen.Main.Home.Profile> {
                     ProfileScreen(navController, rootNavController)
@@ -279,8 +279,8 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                 composable<Screen.Main.Home.LogViewer> {
                     LogViewerScreen(navController)
                 }
-                composable<Screen.Main.Home.BugReport> {
-                    BugReportScreen(navController)
+                composable<Screen.Main.Home.BugReport> { entry ->
+                    BugReportScreen(navController,entry.toRoute<Screen.Main.Home.BugReport>().messageId)
                 }
                 composable<Screen.Main.Artist> {
                     ArtistScreen(it.toRoute<Screen.Main.Artist>().artistId, navController)

@@ -296,6 +296,10 @@ interface RemoteApiClient {
         attachments: List<String>? = null,
     ): RemoteApiResponse<SubmitBugReportResponse>
 
+    /** Explicitly binds sensitive uploads to a captured account/server, never dynamic credentials. */
+    suspend fun submitFeedback(report:FeedbackReport,serverUrl:String,token:String):FeedbackResult = FeedbackResult.Failed(null)
+    suspend fun listFeedback(serverUrl:String,token:String,before:Long?=null):RemoteApiResponse<FeedbackPage> = RemoteApiResponse.Error.Network
+
     @Serializable
     enum class SearchFilter {
         Album,

@@ -691,6 +691,26 @@ internal class RemoteApiClientImpl(
 
     // Streaming search (SSE)
 
+    private fun reportApi(serverUrl:String):RetrofitApiClient = Retrofit.Builder()
+        .baseUrl(serverUrl)
+        .client(okHttpClientFactory.createBuilder(serverUrl).followRedirects(false).followSslRedirects(false)
+            .retryOnConnectionFailure(false).callTimeout(45,java.util.concurrent.TimeUnit.SECONDS).build())
+        // Deliberately exclude general HTTP/logging interceptors from diagnostic requests.
+        .addConverterFactory(jsonConverter.asConverterFactory("application/json".toMediaType()))
+        .build().create(RetrofitApiClient::class.java)
+
+    override suspend fun submitFeedback(report:com.lelloman.pezzottify.android.domain.remoteapi.FeedbackReport,serverUrl:String,token:String):com.lelloman.pezzottify.android.domain.remoteapi.FeedbackResult {
+        return try {
+            val response=reportApi(serverUrl).submitFeedback(bearerAuthorization(token),report)
+            if(response.isSuccessful) response.body()?.let {com.lelloman.pezzottify.android.domain.remoteapi.FeedbackResult.Sent(it.id)} ?: com.lelloman.pezzottify.android.domain.remoteapi.FeedbackResult.Failed(response.code())
+            else com.lelloman.pezzottify.android.domain.remoteapi.FeedbackResult.Failed(response.code(),response.headers()["Retry-After"]?.toLongOrNull())
+        } catch(e:kotlinx.coroutines.CancellationException) {throw e}
+        catch(_:Exception) {com.lelloman.pezzottify.android.domain.remoteapi.FeedbackResult.Failed(null)}
+    }
+    override suspend fun listFeedback(serverUrl:String,token:String,before:Long?):RemoteApiResponse<com.lelloman.pezzottify.android.domain.remoteapi.FeedbackPage> = catchingNetworkError {
+        reportApi(serverUrl).listFeedback(bearerAuthorization(token),before).returnFromRetrofitResponse()
+    }
+
     override fun streamingSearch(query: String, excludeUnavailable: Boolean): Flow<SearchSection> = flow {
         val baseUrl = hostUrlProvider.hostUrl.first { isValidHttpUrl(it) }
         val encodedQuery = URLEncoder.encode(query, "UTF-8")

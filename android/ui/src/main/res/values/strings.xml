@@ -538,4 +538,39 @@
         <item quantity="other">%1$d tracks</item>
     </plurals>
     <!-- PLAYLIST -->
+    <string name="feedback_title">Feedback and reports</string>
+    <string name="feedback_bug">Bug report</string>
+    <string name="feedback_feature">Feature request</string>
+    <string name="feedback_assistant">Assistant</string>
+    <string name="feedback_playback">Playback</string>
+    <string name="feedback_downloads">Downloads</string>
+    <string name="feedback_interface">Interface</string>
+    <string name="feedback_other">Other</string>
+    <string name="feedback_privacy">Optional local recording keeps up to 2 MB of assistant chat and tool activity, separately from chat history. It is off by default. Clearing chat, switching accounts or disabling recording removes the local copy and unsent previews. Submitted reports remain on the server. Redaction cannot remove every piece of personal information: review attachments before sending.</string>
+    <string name="feedback_record">Record assistant diagnostics locally</string>
+    <string name="feedback_attach_chat">Attach recorded assistant chat (optional)</string>
+    <string name="feedback_all_chats">Include all retained conversations, not only the selected response or current conversation</string>
+    <string name="feedback_report_response">Report response</string>
+    <string name="feedback_review">Review report</string>
+    <string name="feedback_preview_ready">This is a fixed snapshot. Review the selected attachments, then submit. Retrying sends the same snapshot; editing creates a new one.</string>
+    <string name="feedback_preview">Attachment preview</string>
+    <string name="feedback_preview_attachment">Preview %1$s (%2$d bytes)</string>
+    <string name="feedback_receipt">Submitted report: %1$s</string>
+    <string name="feedback_my_reports">My reports</string>
+    <string name="feedback_refresh">Refresh reports</string>
+    <string name="feedback_more">Load more</string>
+    <string name="feedback_status_new">New</string>
+    <string name="feedback_status_investigating">Investigating</string>
+    <string name="feedback_status_planned">Planned</string>
+    <string name="feedback_status_resolved">Resolved</string>
+    <string name="feedback_status_closed">Closed</string>
+    <string name="feedback_too_large">The report is too large. Title: 200 UTF-8 bytes; description: 100 KB. Remove or reduce attachments if necessary.</string>
+    <string name="feedback_sign_in">The account changed or permission is missing. Sign in and prepare a new report.</string>
+    <string name="feedback_conflict">This request was already used with different content. Edit the report to prepare a new request.</string>
+    <string name="feedback_rate_limit">Report limit reached. Wait before retrying; no automatic retry will run.</string>
+    <string name="feedback_capacity">Report storage is full. Try again later or contact an administrator.</string>
+    <string name="feedback_send_failed">Could not send the report. You can retry the same snapshot manually.</string>
+    <string name="feedback_prepare_failed">Could not prepare the report. If chat is selected, enable local recording and record the relevant conversation first. Check that you are signed in.</string>
+    <string name="feedback_wait_seconds">The server requests waiting %1$d seconds before retrying.</string>
+    <string name="feedback_reports_failed">Could not load reports. Tap Refresh to try again.</string>
 </resources>

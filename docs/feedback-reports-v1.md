@@ -187,3 +187,26 @@ Validation includes shared Unicode/redaction fixtures, exact-byte boundaries,
 oversized turns, crash recovery, stale writes after clear/logout, unchanged snapshot
 uploads, auth/ownership matrix, concurrent idempotency/quotas, retention, SSRF and
 delivery crash/retry tests, migration/legacy compatibility and both client builds.
+
+## Android flow
+
+Settings opens the feedback form; each assistant response also has a report action
+that selects only the recorded turn correlated with that message. Recording is off
+by default and opted into separately for each server/account. It captures future
+activity, not a retroactive import of chat history. The diagnostic file lives in
+Android `noBackupFilesDir`. Recording failure does not interrupt normal chat.
+
+Both upload attachment switches start off. Review freezes metadata and attachment
+bytes; preview displays those same bytes and a separate Send action submits them.
+Retry is manual and reuses the same request UUID and snapshot. Editing creates a
+new snapshot/key. Account or recorder invalidation clears unsent drafts/previews.
+Uploads bind URL and credentials to one account state and exclude general HTTP
+logging/interceptors and redirects. An already dispatched upload may still arrive
+at its original server; it is never retargeted to a newly selected account.
+
+The form shows submitted report IDs and a refreshable, paginated owner status list.
+English and Italian UI explain local deletion versus already submitted reports,
+size/quota/capacity errors, and privacy limitations. Debug builds can use the isolated
+library checkout via `-PassistantCheckout=/tmp/simple-android-assistant-feedback`.
+The immutable library revision must be published before ordinary JitPack-based
+builds can resolve it; publication/deployment is a separate authorized step.
