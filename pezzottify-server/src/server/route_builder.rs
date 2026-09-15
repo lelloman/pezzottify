@@ -300,9 +300,6 @@ pub(super) fn admin_routes(state: &ServerState, limits: &RouteLimits) -> Router 
             "/embeddings/coverage",
             get(admin_get_audio_embedding_coverage),
         )
-        .route("/bug-reports", get(admin_list_bug_reports))
-        .route("/bug-report/{id}", get(admin_get_bug_report))
-        .route("/bug-report/{id}", delete(admin_delete_bug_report))
         .layer(GovernorLayer::new(limits.write.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
@@ -416,6 +413,15 @@ pub(super) fn admin_routes(state: &ServerState, limits: &RouteLimits) -> Router 
     );
 
     operations
+        .merge(
+            Router::new()
+                .route("/bug-reports", get(admin_list_bug_reports))
+                .route(
+                    "/bug-report/{id}",
+                    get(admin_get_bug_report).delete(admin_delete_bug_report),
+                )
+                .with_state(state.clone()),
+        )
         .merge(users)
         .merge(analytics)
         .merge(changelog)
@@ -492,6 +498,10 @@ pub(super) fn assemble_app(
         extract_user_id_for_rate_limit,
     ));
     app = app.layer(middleware::from_fn_with_state(state.clone(), require_csrf));
+    app = app.layer(middleware::from_fn_with_state(
+        super::super::report_admission::Admission::new(state.clone()),
+        super::super::report_admission::gate,
+    ));
     app = app.layer(middleware::from_fn_with_state(state.clone(), log_requests));
     app.layer(middleware::from_fn(http_api_no_store))
 }

@@ -3,6 +3,7 @@ mod schema;
 mod report_schema;
 pub mod reports;
 mod report_repository;
+mod report_limits;
 mod sqlite_server_store;
 
 pub use models::{
@@ -66,8 +67,9 @@ pub trait ServerStore: Send + Sync {
     fn delete_bug_report(&self, id: &str) -> Result<bool>;
     /// Returns total size in bytes of all bug reports (description + logs + attachments)
     fn get_bug_reports_total_size(&self) -> Result<usize>;
-    /// Deletes oldest bug reports until total size is under the given limit.
-    /// Returns the number of reports deleted.
+    /// Legacy compatibility entry point: expire diagnostics, never delete reports for capacity.
+    /// The size argument is ignored; transactional admission enforces capacity on new writes.
+    /// Returns the number of expired attachments.
     fn cleanup_bug_reports_to_size(&self, max_size: usize) -> Result<usize>;
 
     // Catalog events

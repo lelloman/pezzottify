@@ -617,6 +617,9 @@ async fn admin_add_user_extra_permission(
         "RequestContent" => Permission::RequestContent,
         "DownloadManagerAdmin" => Permission::DownloadManagerAdmin,
         "UseProxyStreaming" => Permission::UseProxyStreaming,
+        "TriageReports" => Permission::TriageReports,
+        "ViewReportDiagnostics" => Permission::ViewReportDiagnostics,
+        "ManageReportIntegrations" => Permission::ManageReportIntegrations,
         _ => return (StatusCode::BAD_REQUEST, "Invalid permission").into_response(),
     };
 

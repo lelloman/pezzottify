@@ -17,6 +17,7 @@ pub(super) fn delete_legacy(conn: &Connection, id: &str) -> ReportResult<usize> 
 
 pub(super) fn index_legacy(conn: &Connection, report: &super::BugReport) -> ReportResult<()> {
     let created = report.created_at.timestamp();
+    let retention = super::report_limits::settings(conn)?.retention_days as i64 * 86400;
     conn.execute("INSERT INTO report_metadata(report_id,user_id,kind,category,status,version,request_key,payload_hash,updated_at)
         VALUES (?1,?2,'bug','other','new',1,?1,'legacy',?3)",params![report.id,report.user_id as i64,created])?;
     for (kind, content) in [
@@ -26,7 +27,7 @@ pub(super) fn index_legacy(conn: &Connection, report: &super::BugReport) -> Repo
         if let Some(content) = content {
             conn.execute("INSERT INTO report_attachments(id,report_id,kind,content,size_bytes,created_at,expires_at,state)
                 VALUES (?1,?2,?3,?4,?5,?6,?7,'active')",
-                params![uuid::Uuid::new_v4().to_string(),report.id,kind,content,content.len() as i64,created,created+30*86400])?;
+                params![uuid::Uuid::new_v4().to_string(),report.id,kind,content,content.len() as i64,created,created+retention])?;
         }
     }
     event(
@@ -45,6 +46,7 @@ pub(super) fn event(
     kind: &str,
     data: serde_json::Value,
 ) -> ReportResult<()> {
+    super::report_limits::event_capacity(conn, id, data.to_string().len())?;
     conn.execute("INSERT INTO report_events(id,report_id,actor_id,kind,data,created_at) VALUES (?1,?2,?3,?4,?5,?6)",
         params![uuid::Uuid::new_v4().to_string(),id,actor as i64,kind,data.to_string(),now()])?;
     Ok(())
@@ -110,6 +112,47 @@ fn get(conn: &Connection, id: &str, owner: Option<usize>) -> ReportResult<Report
 }
 
 impl ReportRepository for SqliteServerStore {
+    fn audit_legacy(&self, id: &str, actor: usize, delete: bool) -> ReportResult<()> {
+        let mut c = self.conn.lock().map_err(|_| ReportError::Storage)?;
+        let tx = c.transaction()?;
+        get(&tx, id, None)?;
+        super::report_limits::expire(&tx, now())?;
+        event(
+            &tx,
+            if delete { "administration" } else { id },
+            actor,
+            if delete {
+                "legacy_delete_requested"
+            } else {
+                "legacy_diagnostics_read"
+            },
+            serde_json::json!({"report_id":id}),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+    fn settings(&self) -> ReportResult<ReportSettings> {
+        let c = self.conn.lock().map_err(|_| ReportError::Storage)?;
+        super::report_limits::settings(&c)
+    }
+    fn stats(&self) -> ReportResult<ReportStats> {
+        let c = self.conn.lock().map_err(|_| ReportError::Storage)?;
+        super::report_limits::stats(&c)
+    }
+    fn expire(&self) -> ReportResult<usize> {
+        let mut c = self.conn.lock().map_err(|_| ReportError::Storage)?;
+        let tx = c.transaction()?;
+        let n = super::report_limits::expire(&tx, now())?;
+        tx.commit()?;
+        Ok(n)
+    }
+    fn save_settings(&self, actor: usize, input: ReportSettings) -> ReportResult<ReportSettings> {
+        let mut c = self.conn.lock().map_err(|_| ReportError::Storage)?;
+        let tx = c.transaction()?;
+        let result = super::report_limits::save_settings(&tx, actor, input)?;
+        tx.commit()?;
+        Ok(result)
+    }
     fn create(
         &self,
         user_id: usize,
@@ -136,6 +179,19 @@ impl ReportRepository for SqliteServerStore {
         }
         let id = uuid::Uuid::new_v4().to_string();
         let timestamp = now();
+        let metadata = input.description.len()
+            + input.title.as_ref().map_or(0, String::len)
+            + input.client_type.len()
+            + input.client_version.as_ref().map_or(0, String::len)
+            + input.device_info.as_ref().map_or(0, String::len)
+            + user_handle.len();
+        let limits = super::report_limits::reserve(
+            &tx,
+            user_id,
+            metadata,
+            input.attachments.iter().map(|a| a.content.len()).sum(),
+            timestamp,
+        )?;
         tx.execute("INSERT INTO bug_reports(id,user_id,user_handle,title,description,client_type,client_version,device_info,created_at)
             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
             params![id,user_id as i64,user_handle,input.title.as_deref().unwrap_or(""),input.description,
@@ -147,7 +203,7 @@ impl ReportRepository for SqliteServerStore {
             tx.execute("INSERT INTO report_attachments(id,report_id,kind,content,size_bytes,created_at,expires_at,state)
                 VALUES (?1,?2,?3,?4,?5,?6,?7,'active')",
                 params![uuid::Uuid::new_v4().to_string(),id,attachment.kind,attachment.content,
-                    attachment.content.len() as i64,timestamp,timestamp+30*86400])?;
+                    attachment.content.len() as i64,timestamp,timestamp+(limits.retention_days*86400) as i64])?;
         }
         event(
             &tx,
@@ -274,7 +330,9 @@ impl ReportRepository for SqliteServerStore {
             return Err(ReportError::Invalid("Invalid pagination".into()));
         }
         let conn = self.conn.lock().map_err(|_| ReportError::Storage)?;
-        get(&conn, id, None)?;
+        if !["settings", "administration"].contains(&id) {
+            get(&conn, id, None)?;
+        }
         let mut q = conn.prepare(
             "SELECT seq,id,actor_id,kind,data,created_at FROM report_events
             WHERE report_id=?1 AND (?2 IS NULL OR seq<?2) ORDER BY seq DESC LIMIT ?3",
@@ -411,6 +469,86 @@ mod tests {
                 consent: true,
             }],
         }
+    }
+    #[test]
+    fn concurrent_quota_and_replays_are_atomic() {
+        let (_dir, s) = setup();
+        let mut settings = s.settings().unwrap();
+        settings.hourly_reports = 1;
+        s.save_settings(2, settings).unwrap();
+        let request = input();
+        std::thread::scope(|scope| {
+            let results: Vec<_> = (0..8)
+                .map(|_| scope.spawn(|| s.create(1, "a", request.clone())))
+                .collect();
+            let receipts: Vec<_> = results
+                .into_iter()
+                .map(|j| j.join().unwrap().unwrap())
+                .collect();
+            assert_eq!(receipts.iter().filter(|r| !r.replayed).count(), 1);
+        });
+        std::thread::scope(|scope| {
+            let results: Vec<_> = (0..8)
+                .map(|_| scope.spawn(|| s.create(1, "a", input())))
+                .collect();
+            for j in results {
+                assert!(matches!(j.join().unwrap(), Err(ReportError::Quota)));
+            }
+        });
+        assert_eq!(s.stats().unwrap().reports, 1);
+        assert_eq!(s.stats().unwrap().diagnostic_bytes, 5);
+    }
+    #[test]
+    fn retention_preserves_metadata_and_accounting_uses_bytes() {
+        let (_dir, s) = setup();
+        let mut req = input();
+        req.attachments[0].content = "🌍".into();
+        let id = s.create(1, "a", req).unwrap().id;
+        assert_eq!(s.stats().unwrap().diagnostic_bytes, 4);
+        let attachment = s.get(&id, Some(1)).unwrap().attachments[0].id.clone();
+        s.conn
+            .lock()
+            .unwrap()
+            .execute("UPDATE report_attachments SET expires_at=0", [])
+            .unwrap();
+        assert_eq!(s.expire().unwrap(), 1);
+        assert_eq!(s.expire().unwrap(), 0);
+        assert_eq!(s.stats().unwrap().diagnostic_bytes, 0);
+        assert_eq!(s.get(&id, Some(1)).unwrap().description, "Ciao 🌍");
+        assert!(matches!(
+            s.attachment(&id, &attachment, Some(1), 1),
+            Err(ReportError::NotFound)
+        ));
+    }
+    #[test]
+    fn diagnostic_capacity_rejects_without_partial_report_and_settings_conflict() {
+        let (_dir, s) = setup();
+        let mut limits = s.settings().unwrap();
+        limits.diagnostic_bytes = 4;
+        s.save_settings(2, limits.clone()).unwrap();
+        assert!(matches!(
+            s.save_settings(2, limits),
+            Err(ReportError::Conflict)
+        ));
+        assert!(matches!(
+            s.create(1, "a", input()),
+            Err(ReportError::Capacity)
+        ));
+        assert_eq!(s.stats().unwrap().reports, 0);
+        assert_eq!(s.stats().unwrap().diagnostic_bytes, 0);
+    }
+    #[test]
+    fn audit_capacity_reserves_room_for_owner_deletion() {
+        let (_dir, s) = setup();
+        let id = s.create(1, "a", input()).unwrap().id;
+        let attachment = s.get(&id, Some(1)).unwrap().attachments[0].id.clone();
+        s.conn.lock().unwrap().execute("WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<1998) INSERT INTO report_events(id,report_id,actor_id,kind,data,created_at) SELECT 'filler-'||x,?1,1,'test','{}',0 FROM n",[&id]).unwrap();
+        assert!(matches!(
+            s.attachment(&id, &attachment, Some(1), 1),
+            Err(ReportError::Capacity)
+        ));
+        s.delete_attachment(&id, &attachment, Some(1), 1).unwrap();
+        assert_eq!(s.stats().unwrap().diagnostic_bytes, 0);
     }
     #[test]
     fn legacy_delete_removes_extension_data() {

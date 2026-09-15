@@ -102,6 +102,23 @@ fn is_authentication_path(path: &str) -> bool {
             && (path.ends_with("/password") || path.ends_with("/credentials")))
 }
 
+pub(crate) fn is_report_path(path: &str) -> bool {
+    [
+        "/v1/reports",
+        "/v1/admin/reports",
+        "/v1/user/bug-report",
+        "/v1/admin/bug-report",
+        "/v1/admin/bug-reports",
+    ]
+    .iter()
+    .any(|prefix| {
+        path == *prefix
+            || path
+                .strip_prefix(prefix)
+                .is_some_and(|s| s.starts_with('/'))
+    })
+}
+
 fn is_sensitive_json_key(key: &str) -> bool {
     let key: String = key
         .chars()
@@ -136,6 +153,9 @@ fn redact_json(value: &mut Value) {
 }
 
 fn format_loggable_body(path: &str, headers: &HeaderMap, bytes: &[u8]) -> String {
+    if is_report_path(path) {
+        return "[omitted: report endpoint]".to_string();
+    }
     if is_authentication_path(path) {
         return "[omitted: authentication endpoint]".to_string();
     }
@@ -159,6 +179,29 @@ fn format_loggable_body(path: &str, headers: &HeaderMap, bytes: &[u8]) -> String
     };
     redact_json(&mut value);
     serde_json::to_string(&value).unwrap_or_else(|_| "[omitted: invalid JSON body]".to_string())
+}
+
+#[test]
+fn report_bodies_are_never_loggable() {
+    for path in [
+        "/v1/reports",
+        "/v1/reports/id/attachments/id",
+        "/v1/admin/reports/settings",
+        "/v1/user/bug-report",
+        "/v1/admin/bug-reports",
+        "/v1/admin/bug-report/id",
+    ] {
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", "application/json".parse().unwrap());
+        assert_eq!(
+            format_loggable_body(path, &headers, br#"{"description":"private chat"}"#),
+            "[omitted: report endpoint]"
+        );
+        assert_eq!(
+            format_loggable_body(path, &HeaderMap::new(), b"private chat"),
+            "[omitted: report endpoint]"
+        );
+    }
 }
 
 fn safe_request_target(uri: &Uri) -> &str {
@@ -197,7 +240,7 @@ pub async fn log_requests(
         }
     }
 
-    if level >= RequestsLoggingLevel::Body {
+    if level >= RequestsLoggingLevel::Body && !is_report_path(&path) {
         match parse_content_length(request.headers()) {
             ContentLengthParseResult::No(reason) => info!("  Req Body: {}", reason),
             ContentLengthParseResult::Ok(size) => {
@@ -239,7 +282,7 @@ pub async fn log_requests(
         }
     }
 
-    if level >= RequestsLoggingLevel::Body {
+    if level >= RequestsLoggingLevel::Body && !is_report_path(&path) {
         match parse_content_length(response.headers()) {
             ContentLengthParseResult::No(reason) => info!("  Resp Body: {}", reason),
             ContentLengthParseResult::Ok(size) => {

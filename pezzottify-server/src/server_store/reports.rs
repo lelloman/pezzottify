@@ -6,6 +6,65 @@ pub const MAX_LOG_BYTES: usize = 1024 * 1024;
 pub const MAX_BODY_BYTES: usize = 20 * 1024 * 1024;
 pub type ReportResult<T> = Result<T, ReportError>;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReportSettings {
+    pub version: i64,
+    pub hourly_reports: usize,
+    pub daily_reports: usize,
+    pub daily_attachment_bytes: usize,
+    pub user_reports: usize,
+    pub total_reports: usize,
+    pub metadata_bytes: usize,
+    pub diagnostic_bytes: usize,
+    pub retention_days: usize,
+}
+impl Default for ReportSettings {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            hourly_reports: 5,
+            daily_reports: 20,
+            daily_attachment_bytes: 32 * 1024 * 1024,
+            user_reports: 1000,
+            total_reports: 100_000,
+            metadata_bytes: 256 * 1024 * 1024,
+            diagnostic_bytes: 500 * 1024 * 1024,
+            retention_days: 30,
+        }
+    }
+}
+impl ReportSettings {
+    pub fn validate(&self) -> ReportResult<()> {
+        let ceiling = Self::default();
+        if self.version < 1
+            || !(1..=90).contains(&self.retention_days)
+            || [
+                (self.hourly_reports, ceiling.hourly_reports),
+                (self.daily_reports, ceiling.daily_reports),
+                (self.daily_attachment_bytes, ceiling.daily_attachment_bytes),
+                (self.user_reports, ceiling.user_reports),
+                (self.total_reports, ceiling.total_reports),
+                (self.metadata_bytes, ceiling.metadata_bytes),
+                (self.diagnostic_bytes, ceiling.diagnostic_bytes),
+            ]
+            .iter()
+            .any(|(v, max)| *v == 0 || v > max)
+        {
+            return Err(ReportError::Invalid("Settings exceed hard ceilings".into()));
+        }
+        Ok(())
+    }
+}
+#[derive(Debug, Serialize)]
+pub struct ReportStats {
+    pub reports: usize,
+    pub metadata_bytes: usize,
+    pub diagnostic_bytes: usize,
+    pub events: usize,
+    pub settings: ReportSettings,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ReportError {
     #[error("Invalid report: {0}")]
@@ -246,6 +305,11 @@ pub struct AttachmentContent {
 }
 
 pub trait ReportRepository: Send + Sync {
+    fn audit_legacy(&self, id: &str, actor: usize, delete: bool) -> ReportResult<()>;
+    fn settings(&self) -> ReportResult<ReportSettings>;
+    fn save_settings(&self, actor: usize, input: ReportSettings) -> ReportResult<ReportSettings>;
+    fn stats(&self) -> ReportResult<ReportStats>;
+    fn expire(&self) -> ReportResult<usize>;
     fn create(
         &self,
         user_id: usize,
