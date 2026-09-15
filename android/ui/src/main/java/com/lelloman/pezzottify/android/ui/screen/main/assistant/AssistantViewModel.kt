@@ -89,8 +89,10 @@ class AssistantViewModel @Inject constructor(
             combine(
                 repoFlow,
                 _debugMode,
-                _error
-            ) { repoState, debugMode, error ->
+                _error,
+                chatRepository.error,
+                chatRepository.restartChoice
+            ) { repoState, debugMode, error, engineError, restartChoice ->
                 // Get mode path from manager
                 val modePath = if (repoState.currentMode != null) {
                     modeManager.getCurrentPath()
@@ -105,7 +107,8 @@ class AssistantViewModel @Inject constructor(
                     language = repoState.language,
                     isDetectingLanguage = repoState.isDetectingLanguage,
                     debugMode = debugMode,
-                    error = error,
+                    error = error ?: engineError,
+                    restartChoice = restartChoice,
                     currentMode = repoState.currentMode,
                     allModes = modeManager.getAllModes(),
                     modePath = modePath
@@ -173,9 +176,14 @@ class AssistantViewModel @Inject constructor(
 
     fun saveProviderSettings(providerId: String, config: Map<String, Any?>) {
         viewModelScope.launch {
+            chatRepository.cancel()
             providerConfigStore.save(providerId, config)
         }
     }
+
+    fun cancel() { viewModelScope.launch { chatRepository.cancel() } }
+    fun confirmRestart(modeId: String, revision: Long) { viewModelScope.launch { chatRepository.confirmRestart(modeId, revision) } }
+    fun dismissRestart() { viewModelScope.launch { chatRepository.dismissRestart() } }
 
     fun switchMode(modeId: String) {
         viewModelScope.launch {

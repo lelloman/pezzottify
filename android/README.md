@@ -226,3 +226,10 @@ Default server URL can be configured in the app's settings or debug interface.
 ## License
 
 See the main project LICENSE file for details.
+
+## Shared assistant development
+
+The Rust-backed assistant is built from the sibling `simple-android-assistant` checkout
+(or `-PassistantCheckout=/path/to/checkout`) until the matching release is published.
+See that repository's README for the Rust/NDK prerequisites. Existing Room history
+is imported by the version 2 database migration.
