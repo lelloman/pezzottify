@@ -25,6 +25,13 @@
           </div>
         </div>
         <div class="artistActions">
+          <button
+            class="advancedRadioButton"
+            :disabled="playback.radioCreationState.status === 'creating'"
+            @click="playback.setArtistGreatestHits(artistId)"
+          >
+            ▶ Play greatest hits
+          </button>
           <ToggableFavoriteIcon
             :toggled="isArtistLiked"
             :clickCallback="handleClickOnFavoriteIcon"

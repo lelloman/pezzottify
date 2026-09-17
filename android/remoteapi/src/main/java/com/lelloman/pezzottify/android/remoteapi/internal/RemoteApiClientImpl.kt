@@ -491,6 +491,28 @@ internal class RemoteApiClientImpl(
             }
         }
 
+    override suspend fun getArtistGreatestHits(artistId: String): RemoteApiResponse<List<String>> = catchingNetworkError {
+        when (val response = getRetrofit().getArtistGreatestHits(authToken, artistId).returnFromRetrofitResponse()) {
+            is RemoteApiResponse.Success -> RemoteApiResponse.Success(response.data.trackIds)
+            is RemoteApiResponse.Error -> response
+        }
+    }
+
+    override suspend fun continueRadio(
+        context: com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext.Radio,
+        recentTrackIds: List<String>, excludeTrackIds: List<String>,
+    ): RemoteApiResponse<List<String>> = catchingNetworkError {
+        val request = com.lelloman.pezzottify.android.remoteapi.internal.requests.RadioContinuationRequest(
+            source = context.source,
+            seed = com.lelloman.pezzottify.android.remoteapi.internal.requests.RadioContinuationSeed(context.seedEntityType, context.seedEntityId),
+            settings = context.settings, contextTrackIds = recentTrackIds.takeLast(10), excludeTrackIds = excludeTrackIds,
+        )
+        when (val response = getRetrofit().continueRadio(authToken, request).returnFromRetrofitResponse()) {
+            is RemoteApiResponse.Success -> RemoteApiResponse.Success(response.data.trackIds)
+            is RemoteApiResponse.Error -> response
+        }
+    }
+
     override suspend fun getRadioTrackIds(
         entityType: String,
         entityId: String,

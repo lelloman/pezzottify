@@ -513,6 +513,11 @@ pub trait CatalogStore: Send + Sync {
         Ok(Vec::new())
     }
 
+    /// All available artist tracks, ranked by popularity and deduplicated by ISRC.
+    fn get_artist_greatest_hits_track_ids(&self, _artist_id: &str) -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+
     /// Get the most popular available tracks credited to an artist.
     fn get_artist_top_track_ids(&self, _artist_id: &str, _limit: usize) -> Result<Vec<String>> {
         Ok(Vec::new())

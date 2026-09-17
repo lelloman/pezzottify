@@ -164,6 +164,8 @@ private fun SettingsScreenInternal(
             PlaybackSettingsSection(
                 smartContinuationEnabled = currentState.smartContinuationEnabled,
                 onSmartContinuationChanged = actions::setSmartContinuationEnabled,
+                keepRadioOnQueueEdit = currentState.keepRadioOnQueueEdit,
+                onKeepRadioOnQueueEditChanged = actions::setKeepRadioOnQueueEdit,
                 proxyStreamingAvailable = currentState.proxyStreamingAvailable,
                 proxyModeEnabled = currentState.proxyModeEnabled,
                 onProxyModeChanged = actions::setProxyModeEnabled,
@@ -271,6 +273,7 @@ private fun SettingsScreenPreview() {
                 override fun setCacheEnabled(enabled: Boolean) {}
                 override fun setNotifyWhatsNewEnabled(enabled: Boolean) {}
                 override fun setSmartContinuationEnabled(enabled: Boolean) {}
+                override fun setKeepRadioOnQueueEdit(enabled: Boolean) {}
                 override fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) {}
                 override fun setSmartSearchEnabled(enabled: Boolean) {}
                 override fun setExcludeUnavailableEnabled(enabled: Boolean) {}
@@ -310,6 +313,7 @@ private fun SettingsScreenPreviewDark() {
                 override fun setCacheEnabled(enabled: Boolean) {}
                 override fun setNotifyWhatsNewEnabled(enabled: Boolean) {}
                 override fun setSmartContinuationEnabled(enabled: Boolean) {}
+                override fun setKeepRadioOnQueueEdit(enabled: Boolean) {}
                 override fun setBackgroundSyncInterval(interval: BackgroundSyncInterval) {}
                 override fun setSmartSearchEnabled(enabled: Boolean) {}
                 override fun setExcludeUnavailableEnabled(enabled: Boolean) {}

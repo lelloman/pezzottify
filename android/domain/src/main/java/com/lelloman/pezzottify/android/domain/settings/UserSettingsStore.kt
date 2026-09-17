@@ -24,6 +24,7 @@ interface UserSettingsStore {
      * nears its end. This setting is synced with the server.
      */
     val isSmartContinuationEnabled: StateFlow<Boolean>
+    val keepRadioOnQueueEdit: StateFlow<Boolean>
 
     /** User preference; the server still enforces its feature flag and permission. */
     val isProxyModeEnabled: StateFlow<Boolean>
@@ -54,6 +55,7 @@ interface UserSettingsStore {
     suspend fun setFileLoggingEnabled(enabled: Boolean)
     suspend fun setNotifyWhatsNewEnabled(enabled: Boolean)
     suspend fun setSmartContinuationEnabled(enabled: Boolean)
+    suspend fun setKeepRadioOnQueueEdit(enabled: Boolean)
     suspend fun setProxyModeEnabled(enabled: Boolean)
     fun setProxyStreamingAvailable(available: Boolean)
     fun setBackgroundSyncInterval(interval: BackgroundSyncInterval)

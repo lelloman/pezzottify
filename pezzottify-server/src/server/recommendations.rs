@@ -43,6 +43,18 @@ struct ContinuationRequest {
 }
 
 #[derive(Debug, Deserialize)]
+struct RadioContinuationRequest {
+    source: String,
+    seed: RadioSeed,
+    settings: Option<serde_json::Value>,
+    #[serde(default)]
+    context_track_ids: Vec<String>,
+    #[serde(default)]
+    exclude_track_ids: Vec<String>,
+    count: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
 struct RadioQuery {
     count: Option<usize>,
 }
@@ -196,9 +208,145 @@ pub fn recommendation_routes() -> Router<ServerState> {
             "/recommendations/continuation",
             post(post_continuation_recommendations),
         )
+        .route("/artist/{id}/greatest-hits", get(get_artist_greatest_hits))
+        .route("/radio/continue", post(post_radio_continuation))
         .route("/radio/options", get(get_radio_options))
         .route("/radio/build", post(post_radio_build))
         .route("/radio/{entity_type}/{entity_id}", get(get_radio))
+}
+
+async fn get_artist_greatest_hits(
+    _session: Session,
+    State(state): State<ServerState>,
+    Path(id): Path<String>,
+) -> Response {
+    match state
+        .database
+        .catalog_read
+        .run(DbPriority::Interactive, move |store| {
+            if store.get_artist_json(&id)?.is_none() {
+                return Ok(None);
+            }
+            store.get_artist_greatest_hits_track_ids(&id).map(Some)
+        })
+        .await
+    {
+        Ok(Some(track_ids)) => no_store_json(TrackIdsResponse { track_ids }),
+        Ok(None) => {
+            ApiError::not_found("catalog_item_not_found", "Artist not found").into_response()
+        }
+        Err(err) => ApiError::from(err).into_response(),
+    }
+}
+
+async fn post_radio_continuation(
+    _session: Session,
+    State(state): State<ServerState>,
+    Json(body): Json<RadioContinuationRequest>,
+) -> Response {
+    if !matches!(body.source.as_str(), "basic" | "custom" | "genre")
+        || (body.source == "genre" && body.seed.entity_type != "genre")
+        || (body.source != "genre"
+            && !matches!(body.seed.entity_type.as_str(), "track" | "album" | "artist"))
+    {
+        return ApiError::bad_request("invalid_radio_source", "Unsupported radio source or seed")
+            .into_response();
+    }
+    let settings = state.config.audio_embeddings.clone();
+    match state
+        .database
+        .catalog_read
+        .run(DbPriority::Interactive, move |store| {
+            continue_radio(store, settings.as_ref(), body)
+        })
+        .await
+    {
+        Ok(track_ids) => no_store_json(TrackIdsResponse { track_ids }),
+        Err(DbRunError::Store(err)) if err.to_string().starts_with("invalid radio request:") => {
+            ApiError::bad_request("invalid_radio_request", &err.to_string()).into_response()
+        }
+        Err(err) => ApiError::from(err).into_response(),
+    }
+}
+
+fn continue_radio(
+    store: &dyn CatalogStore,
+    settings: Option<&AudioEmbeddingsSettings>,
+    request: RadioContinuationRequest,
+) -> anyhow::Result<Vec<String>> {
+    let count = request.count.unwrap_or(10).clamp(1, 10);
+    let mut exclude: HashSet<String> = request.exclude_track_ids.into_iter().collect();
+    let recent = request
+        .context_track_ids
+        .into_iter()
+        .rev()
+        .take(10)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>();
+    exclude.extend(recent.iter().cloned());
+    if request.source == "genre" {
+        return Ok(store
+            .get_random_tracks_by_genre(
+                &request.seed.entity_id,
+                count.saturating_add(exclude.len()),
+            )?
+            .into_iter()
+            .filter(|id| !exclude.contains(id))
+            .take(count)
+            .collect());
+    }
+    if request.source == "custom" {
+        let mut recipe: RadioBuildRequest =
+            serde_json::from_value(request.settings.unwrap_or_default())
+                .map_err(|err| anyhow::anyhow!("invalid radio request: {err}"))?;
+        recipe.seed = request.seed;
+        recipe.count = Some(count);
+        return build_radio_with_history(store, settings, recipe, exclude, &recent);
+    }
+    let namespace = track_namespace(settings);
+    let Some(vector) = radio_seed_vector(store, settings, &request.seed, &namespace)? else {
+        return Ok(Vec::new());
+    };
+    if request.seed.entity_type == "album" {
+        exclude.extend(store.get_available_album_track_ids(&request.seed.entity_id)?);
+    }
+    let mut result = Vec::new();
+    let mut album_cooldowns = HashMap::new();
+    let mut artist_cooldowns = HashMap::new();
+    let mut artist_last_positions = HashMap::new();
+    let mut selection = RadioSelectionState {
+        result: &mut result,
+        exclude: &mut exclude,
+        album_cooldowns: &mut album_cooldowns,
+        artist_cooldowns: &mut artist_cooldowns,
+        artist_last_positions: &mut artist_last_positions,
+    };
+    initialize_radio_history(store, &recent, &mut selection)?;
+    let prefix = selection.result.len();
+    append_radio_recommendations(
+        store,
+        &namespace,
+        &vector,
+        count + prefix,
+        DEFAULT_RADIO_DIVERSITY,
+        &mut selection,
+    )?;
+    Ok(result.into_iter().skip(prefix).collect())
+}
+
+fn initialize_radio_history(
+    store: &dyn CatalogStore,
+    recent: &[String],
+    selection: &mut RadioSelectionState<'_>,
+) -> anyhow::Result<()> {
+    for id in recent {
+        if let Some(track) = store.get_resolved_track(id)? {
+            push_radio_result(id.clone(), &track, selection);
+        }
+    }
+    Ok(())
 }
 
 async fn post_continuation_recommendations(
@@ -541,6 +689,17 @@ fn build_radio(
     settings: Option<&AudioEmbeddingsSettings>,
     request: RadioBuildRequest,
 ) -> anyhow::Result<Vec<String>> {
+    build_radio_with_history(catalog_store, settings, request, HashSet::new(), &[])
+}
+
+fn build_radio_with_history(
+    catalog_store: &dyn CatalogStore,
+    settings: Option<&AudioEmbeddingsSettings>,
+    request: RadioBuildRequest,
+    mut exclude: HashSet<String>,
+    recent: &[String],
+) -> anyhow::Result<Vec<String>> {
+    let continuing = !exclude.is_empty() || !recent.is_empty();
     validate_entity_type(&request.seed.entity_type)?;
     if request.criteria.len() > 8 || request.toward.len() > 8 || request.away.len() > 8 {
         return Err(anyhow::anyhow!(
@@ -593,7 +752,6 @@ fn build_radio(
         .include_seed_tracks
         .unwrap_or_else(|| request.seed.entity_type != "album");
     let seed_track_ids = seed_track_ids(catalog_store, &request.seed)?;
-    let mut exclude = HashSet::new();
     let mut result = Vec::with_capacity(count);
     if !include_seed_tracks {
         exclude.extend(seed_track_ids.iter().cloned());
@@ -618,11 +776,22 @@ fn build_radio(
         else {
             continue;
         };
-        let results = catalog_store.search_available_track_embeddings(
-            &criterion.namespace,
-            &query,
-            oversample,
-        )?;
+        let results = if continuing {
+            continuation_candidates(
+                catalog_store,
+                &criterion.namespace,
+                &query,
+                oversample,
+                &exclude,
+                request.filters.as_ref(),
+            )?
+        } else {
+            catalog_store.search_available_track_embeddings(
+                &criterion.namespace,
+                &query,
+                oversample,
+            )?
+        };
         for search_result in results {
             if exclude.contains(&search_result.entity_id) {
                 continue;
@@ -664,9 +833,8 @@ fn build_radio(
             artist_cooldowns: &mut artist_cooldowns,
             artist_last_positions: &mut artist_last_positions,
         };
-        if include_seed_tracks {
-            selection.result.clear();
-            selection.exclude.clear();
+        initialize_radio_history(catalog_store, recent, &mut selection)?;
+        if include_seed_tracks && !continuing {
             for track_id in &seed_track_ids {
                 if selection.result.len() >= count {
                     break;
@@ -730,10 +898,58 @@ fn build_radio(
             artist_cooldowns: &mut artist_cooldowns,
             artist_last_positions: &mut artist_last_positions,
         };
-        select_radio_candidates(ranked, count, diversity, &mut selection);
+        let prefix = selection.result.len();
+        select_radio_candidates(
+            ranked,
+            if continuing { count + prefix } else { count },
+            diversity,
+            &mut selection,
+        );
+        if continuing {
+            selection.result.drain(..prefix);
+        }
     }
 
     Ok(result)
+}
+
+// Grow the search window until there are enough unseen, filter-matching candidates.
+// Do not resolve metadata for the entire catalog on every continuation request.
+fn continuation_candidates(
+    store: &dyn CatalogStore,
+    namespace: &str,
+    query: &[f32],
+    target: usize,
+    exclude: &HashSet<String>,
+    filters: Option<&RadioFilters>,
+) -> anyhow::Result<Vec<crate::catalog_store::EntityEmbeddingSearchResult>> {
+    let mut limit = target.saturating_add(exclude.len());
+    let mut scanned = 0;
+    let mut candidates = Vec::new();
+    loop {
+        let results = store.search_available_track_embeddings(namespace, query, limit)?;
+        let exhausted = results.len() < limit;
+        let result_count = results.len();
+        for result in results.into_iter().skip(scanned) {
+            if exclude.contains(&result.entity_id) {
+                continue;
+            }
+            let Some(track) = store.get_resolved_track(&result.entity_id)? else {
+                continue;
+            };
+            if resolved_track_passes_filters(&track, filters) {
+                candidates.push(result);
+                if candidates.len() == target {
+                    return Ok(candidates);
+                }
+            }
+        }
+        if exhausted || result_count == scanned {
+            return Ok(candidates);
+        }
+        scanned = result_count;
+        limit = limit.saturating_mul(2);
+    }
 }
 
 fn select_radio_candidates(
@@ -1197,7 +1413,9 @@ fn append_radio_recommendations(
         return Ok(());
     }
 
-    let oversample = (count.saturating_sub(selection.result.len()) * 16).clamp(100, 1000);
+    let oversample = (count.saturating_sub(selection.result.len()) * 16)
+        .clamp(100, 1000)
+        .saturating_add(selection.exclude.len());
     let results = catalog_store.search_available_track_embeddings(namespace, seed, oversample)?;
 
     let mut rng = rand::rng();
@@ -1707,12 +1925,14 @@ mod tests {
             &crate::backup::DbRegistry::new(),
         )
         .unwrap();
-        let first = resolved_track("seed-1", "album-seed", &["artist"]);
+        let mut first = resolved_track("seed-1", "album-seed", &["artist"]);
+        first.artists[0].artist.genres = vec!["rock".into()];
         store.create_artist(&first.artists[0].artist).unwrap();
         store
             .create_album(&first.album, &["artist".into()])
             .unwrap();
-        let other = resolved_track("other", "album-other", &["artist"]);
+        let mut other = resolved_track("other", "album-other", &["artist"]);
+        other.track.popularity = 100;
         store
             .create_album(&other.album, &["artist".into()])
             .unwrap();
@@ -1732,7 +1952,11 @@ mod tests {
                     "track",
                     &track.track.id,
                     DEFAULT_TRACK_NAMESPACE,
-                    vec![1.0, 0.0],
+                    if track.track.id == "other" {
+                        vec![0.7, 0.7]
+                    } else {
+                        vec![1.0, 0.0]
+                    },
                 ))
                 .unwrap();
         }
@@ -1761,6 +1985,90 @@ mod tests {
             .unwrap(),
             vec!["other"]
         );
+
+        let filtered = continuation_candidates(
+            &store,
+            DEFAULT_TRACK_NAMESPACE,
+            &[1.0, 0.0],
+            1,
+            &HashSet::new(),
+            Some(&RadioFilters {
+                popularity_min: Some(90),
+                ..Default::default()
+            }),
+        )
+        .unwrap();
+        assert_eq!(
+            filtered
+                .iter()
+                .map(|r| r.entity_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["other"]
+        );
+        let genre_request = |excluded: Vec<&str>| {
+            serde_json::from_value::<RadioContinuationRequest>(serde_json::json!({
+                "source": "genre", "seed": {"entity_type":"genre", "entity_id":"rock"},
+                "exclude_track_ids": excluded, "count": 10,
+            }))
+            .unwrap()
+        };
+        assert_eq!(
+            continue_radio(&store, None, genre_request(vec!["seed-1", "seed-2"])).unwrap(),
+            vec!["other"]
+        );
+        assert!(continue_radio(
+            &store,
+            None,
+            genre_request(vec!["seed-1", "seed-2", "other"])
+        )
+        .unwrap()
+        .is_empty());
+        for entity_type in ["track", "artist"] {
+            let entity_id = if entity_type == "track" {
+                "seed-1"
+            } else {
+                "artist"
+            };
+            let request = serde_json::from_value::<RadioContinuationRequest>(serde_json::json!({
+                "source":"basic", "seed":{"entity_type":entity_type,"entity_id":entity_id},
+                "exclude_track_ids":["seed-1","seed-2"], "count":10,
+            }))
+            .unwrap();
+            assert_eq!(
+                continue_radio(&store, None, request).unwrap(),
+                vec!["other"]
+            );
+        }
+
+        // Continuation keeps the original seed and excludes earlier batches, including seeds.
+        for source in ["basic", "custom"] {
+            let continuing = |excluded: Vec<&str>| {
+                serde_json::from_value::<RadioContinuationRequest>(serde_json::json!({
+                "source": source,
+                "seed": {"entity_type": "album", "entity_id": "album-seed"},
+                "settings": {"seed": {"entity_type": "album", "entity_id": "album-seed"}, "include_seed_tracks": false, "randomness": 0},
+                "context_track_ids": ["seed-1"], "exclude_track_ids": excluded, "count": 10,
+            })).unwrap()
+            };
+            assert_eq!(
+                continue_radio(&store, None, continuing(vec!["seed-1"])).unwrap(),
+                vec!["other"]
+            );
+            assert!(
+                continue_radio(&store, None, continuing(vec!["seed-1", "other"]))
+                    .unwrap()
+                    .is_empty()
+            );
+        }
+        let included_then_continued = build_radio_with_history(
+            &store,
+            None,
+            request(true),
+            ["seed-1".into(), "seed-2".into()].into_iter().collect(),
+            &["seed-1".into(), "seed-2".into()],
+        )
+        .unwrap();
+        assert_eq!(included_then_continued, vec!["other"]);
 
         // An unavailable nearest neighbour must not consume the result limit.
         store

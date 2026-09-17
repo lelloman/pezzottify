@@ -409,6 +409,17 @@ fun ArtistLoadedScreen(
         }
 
         IconButton(
+            onClick = { actions.clickOnGreatestHits() },
+            modifier = Modifier.align(Alignment.TopEnd)
+                .offset { IntOffset(0, (headerHeight - likeButtonSize / 2).roundToPx()) }
+                .padding(end = 144.dp).size(likeButtonSize)
+        ) {
+            Icon(painter = painterResource(R.drawable.baseline_play_arrow_24),
+                contentDescription = stringResource(R.string.play_greatest_hits),
+                tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
+        }
+
+        IconButton(
             onClick = { actions.clickOnRadio() },
             modifier = Modifier
                 .align(Alignment.TopEnd)

@@ -8,6 +8,8 @@ interface ArtistScreenActions {
 
     fun clickOnRadio()
 
+    fun clickOnGreatestHits()
+
     fun loadMoreAlbums()
 
     fun loadMoreFeatures()

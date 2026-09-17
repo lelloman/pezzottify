@@ -327,6 +327,9 @@ class SettingsScreenViewModelTest {
         override fun getLogFilesSize(): String = _logFilesSize
         override fun getBaseUrl(): String = _baseUrl
         override fun isNotifyWhatsNewEnabled(): Boolean = false
+        override fun keepRadioOnQueueEdit(): Boolean = true
+        override fun observeKeepRadioOnQueueEdit(): Flow<Boolean> = MutableStateFlow(true)
+        override suspend fun setKeepRadioOnQueueEdit(enabled: Boolean) {}
         override fun isSmartContinuationEnabled(): Boolean = _smartContinuationEnabled
         override fun getBackgroundSyncInterval() = BackgroundSyncInterval.Default
         override fun isSmartSearchEnabled(): Boolean = false

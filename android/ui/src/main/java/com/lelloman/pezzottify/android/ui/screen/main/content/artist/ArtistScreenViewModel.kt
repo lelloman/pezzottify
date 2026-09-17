@@ -83,6 +83,10 @@ class ArtistScreenViewModel @AssistedInject constructor(
         }
     }
 
+    override fun clickOnGreatestHits() {
+        viewModelScope.launch { interactor.playGreatestHits(artistId) }
+    }
+
     override fun clickOnRadio() {
         viewModelScope.launch {
             interactor.playRadio(artistId)
@@ -115,6 +119,7 @@ class ArtistScreenViewModel @AssistedInject constructor(
         fun isLiked(contentId: String): Flow<Boolean>
         fun toggleLike(contentId: String, currentlyLiked: Boolean)
         suspend fun playRadio(artistId: String)
+        suspend fun playGreatestHits(artistId: String)
         fun observeDiscographyState(artistId: String): Flow<DiscographyUiState>
         suspend fun fetchFirstDiscographyPage(artistId: String)
         suspend fun fetchMoreDiscography(artistId: String)

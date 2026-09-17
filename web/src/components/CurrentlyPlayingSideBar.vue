@@ -150,7 +150,9 @@ watch(
       playingContextText = "Your mix";
     } else if (playlist.type == playback.PLAYBACK_CONTEXTS.radio) {
       const seedLabel = playlist.context?.seed?.label || "Radio";
-      if (playlist.context?.source === "custom") {
+      if (playlist.context?.source === "greatest_hits") {
+        playingContextText = seedLabel + " · Greatest hits";
+      } else if (playlist.context?.source === "custom") {
         playingContextText = "Custom radio: " + seedLabel;
       } else if (playlist.context?.source === "genre") {
         playingContextText = "Genre radio: " + seedLabel;
@@ -158,6 +160,7 @@ watch(
         playingContextText = "Radio: " + seedLabel;
       }
     }
+    if (playlist.context?.edited) playingContextText += " (edited)";
     playingContext.value.text = playingContextText;
   },
   { immediate: true },

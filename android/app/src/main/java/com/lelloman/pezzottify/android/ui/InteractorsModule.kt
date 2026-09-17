@@ -499,6 +499,7 @@ class InteractorsModule {
         updateNotifyWhatsNewSetting: UpdateNotifyWhatsNewSetting,
         updateProxyModeSetting: UpdateProxyModeSetting,
         updateSmartContinuationSetting: UpdateSmartContinuationSetting,
+        updateKeepRadioOnQueueEditSetting: com.lelloman.pezzottify.android.domain.settings.usecase.UpdateKeepRadioOnQueueEditSetting,
         logFileManager: LogFileManager,
         configStore: ConfigStore,
         permissionsStore: PermissionsStore,
@@ -530,6 +531,10 @@ class InteractorsModule {
 
         override fun isNotifyWhatsNewEnabled(): Boolean =
             userSettingsStore.isNotifyWhatsNewEnabled.value
+
+        override fun keepRadioOnQueueEdit() = userSettingsStore.keepRadioOnQueueEdit.value
+        override fun observeKeepRadioOnQueueEdit() = userSettingsStore.keepRadioOnQueueEdit
+        override suspend fun setKeepRadioOnQueueEdit(enabled: Boolean) { updateKeepRadioOnQueueEditSetting(enabled) }
 
         override fun isSmartContinuationEnabled(): Boolean =
             userSettingsStore.isSmartContinuationEnabled.value
@@ -1252,6 +1257,26 @@ class InteractorsModule {
             toggleLikeUseCase(contentId, DomainLikedContent.ContentType.Artist, currentlyLiked)
         }
 
+        override suspend fun playGreatestHits(artistId: String) {
+            radioCreation.start {
+                when (val response = remoteApiClient.getArtistGreatestHits(artistId)) {
+                    is RemoteApiResponse.Error -> error("Greatest hits request failed")
+                    is RemoteApiResponse.Success -> if (response.data.isEmpty()) null else {
+                        val snapshot = response.data
+                        val tracks = snapshot.take(10)
+                        val label = resolveRadioSeedLabel(staticsStore, "artist", artistId)
+                        val context = DomainPlaybackPlaylistContext.Radio(
+                            source = "greatest_hits", seedEntityType = "artist", seedEntityId = artistId,
+                            seedLabel = label, count = snapshot.size,
+                        )
+                        val continuation = com.lelloman.pezzottify.android.domain.player.RadioContinuation.create(tracks, snapshot)
+                        val commit: () -> Unit = { player.loadRadio(tracks, context, continuation) }
+                        commit
+                    }
+                }
+            }
+        }
+
         override suspend fun playRadio(artistId: String) {
             startBasicRadio(radioCreation, remoteApiClient, staticsStore, player, "artist", artistId)
         }
@@ -1348,11 +1373,18 @@ class InteractorsModule {
         playbackSessionHandler: PlaybackSessionHandler,
     ): MainScreenViewModel.Interactor =
         object : MainScreenViewModel.Interactor {
-            override fun getRadioCreationStatus() = radioCreation.status.map {
-                com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi.valueOf(it.name)
+            override fun getRadioCreationStatus() = radioCreation.status.combine(player.radioContinuationError) { status, continuationError ->
+                if (status == com.lelloman.pezzottify.android.domain.player.RadioCreationStatus.Idle && continuationError)
+                    com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi.ContinuationError
+                else com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi.valueOf(status.name)
             }
-            override fun retryRadioCreation() = radioCreation.retry()
-            override fun dismissRadioCreation() = radioCreation.cancel()
+            override fun retryRadioCreation() {
+                if (player.radioContinuationError.value) player.retryRadioContinuation() else radioCreation.retry()
+            }
+            override fun dismissRadioCreation() {
+                player.dismissRadioContinuationError()
+                radioCreation.cancel()
+            }
 
             val logger = loggerFactory.getLogger(MainScreenViewModel.Interactor::class)
 
@@ -1532,11 +1564,18 @@ class InteractorsModule {
         updateSmartContinuationSetting: UpdateSmartContinuationSetting,
     ): PlayerScreenViewModel.Interactor =
         object : PlayerScreenViewModel.Interactor {
-            override fun getRadioCreationStatus() = radioCreation.status.map {
-                com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi.valueOf(it.name)
+            override fun getRadioCreationStatus() = radioCreation.status.combine(player.radioContinuationError) { status, continuationError ->
+                if (status == com.lelloman.pezzottify.android.domain.player.RadioCreationStatus.Idle && continuationError)
+                    com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi.ContinuationError
+                else com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi.valueOf(status.name)
             }
-            override fun retryRadioCreation() = radioCreation.retry()
-            override fun dismissRadioCreation() = radioCreation.cancel()
+            override fun retryRadioCreation() {
+                if (player.radioContinuationError.value) player.retryRadioContinuation() else radioCreation.retry()
+            }
+            override fun dismissRadioCreation() {
+                player.dismissRadioContinuationError()
+                radioCreation.cancel()
+            }
             override fun getPlaybackState(): Flow<PlayerScreenViewModel.Interactor.PlaybackState?> =
                 playbackMetadataProvider.queueState
                     .combine(player.isPlaying) { queueState, isPlaying -> queueState to isPlaying }
@@ -1625,7 +1664,13 @@ class InteractorsModule {
                                 RepeatMode.ALL -> RepeatModeUi.ALL
                                 RepeatMode.ONE -> RepeatModeUi.ONE
                             }
+                            val radioContext = data.queueState?.context as? DomainPlaybackPlaylistContext.Radio
                             PlayerScreenViewModel.Interactor.PlaybackState.Loaded(
+                                isRadio = radioContext != null,
+                                radioLabel = radioContext?.let {
+                                    (if (it.source == "greatest_hits") "${it.seedLabel} · Greatest hits" else "Radio · ${it.seedLabel}") +
+                                        (if (it.isEdited) " (edited)" else "")
+                                },
                                 isPlaying = data.isPlaying,
                                 trackId = currentTrack?.trackId ?: "",
                                 trackName = currentTrack?.trackName ?: "",
@@ -1761,7 +1806,8 @@ class InteractorsModule {
 
                                     is com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext.Radio -> Triple(
                                         com.lelloman.pezzottify.android.ui.screen.queue.QueueContextType.Radio,
-                                        playlistContext.seedLabel,
+                                        (if (playlistContext.source == "greatest_hits") "${playlistContext.seedLabel} · Greatest hits" else playlistContext.seedLabel) +
+                                            (if (playlistContext.isEdited) " (edited)" else ""),
                                         true
                                     )
                                 }

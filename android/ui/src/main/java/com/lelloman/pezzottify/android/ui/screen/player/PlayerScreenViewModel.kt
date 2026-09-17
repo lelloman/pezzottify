@@ -95,6 +95,8 @@ class PlayerScreenViewModel @Inject constructor(
                             shuffleEnabled = playbackState.shuffleEnabled,
                             repeatMode = playbackState.repeatMode,
                             playerError = playbackState.playerError,
+                            isRadio = playbackState.isRadio,
+                            radioLabel = playbackState.radioLabel,
                         )
                     }
                 }
@@ -172,6 +174,8 @@ class PlayerScreenViewModel @Inject constructor(
                 val shuffleEnabled: Boolean,
                 val repeatMode: RepeatModeUi,
                 val playerError: PlayerErrorUi?,
+                val isRadio: Boolean = false,
+                val radioLabel: String? = null,
             ) : PlaybackState
         }
     }

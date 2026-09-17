@@ -12,7 +12,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.lelloman.pezzottify.android.ui.R
 
-enum class RadioCreationStatusUi { Idle, Creating, Error, TimedOut, Empty }
+enum class RadioCreationStatusUi { Idle, Creating, Error, TimedOut, Empty, ContinuationError }
 
 @Composable
 fun RadioCreationNotice(status: RadioCreationStatusUi, onRetry: () -> Unit, onDismiss: () -> Unit) {
@@ -25,6 +25,7 @@ fun RadioCreationNotice(status: RadioCreationStatusUi, onRetry: () -> Unit, onDi
         ) {
             if (status == RadioCreationStatusUi.Creating) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
             Text(stringResource(when (status) {
+                RadioCreationStatusUi.ContinuationError -> R.string.radio_continuation_error
                 RadioCreationStatusUi.Creating -> R.string.radio_creating
                 RadioCreationStatusUi.TimedOut -> R.string.radio_creation_timeout
                 RadioCreationStatusUi.Empty -> R.string.radio_creation_empty

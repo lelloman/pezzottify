@@ -296,6 +296,35 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  const fetchArtistGreatestHits = async (artistId, signal) => {
+    const response = await axios.get(
+      `/v1/content/artist/${encodeURIComponent(artistId)}/greatest-hits`,
+      { signal, timeout: 60000 },
+    );
+    return response.data.track_ids;
+  };
+
+  const fetchRadioContinuation = async (
+    context,
+    trackIds,
+    excludeTrackIds,
+    signal,
+  ) => {
+    const response = await axios.post(
+      "/v1/content/radio/continue",
+      {
+        source: context.source,
+        seed: context.seed,
+        settings: context.settings,
+        context_track_ids: trackIds.slice(-10),
+        exclude_track_ids: excludeTrackIds,
+        count: 10,
+      },
+      { signal, timeout: 20000 },
+    );
+    return response.data.track_ids;
+  };
+
   const fetchContinuationRecommendations = async ({
     contextTrackIds,
     excludeTrackIds,
@@ -1379,6 +1408,8 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchGenreTracks,
     fetchGenreRadio,
     fetchContinuationRecommendations,
+    fetchArtistGreatestHits,
+    fetchRadioContinuation,
     fetchRadioTrackIds,
     fetchRadioOptions,
     buildRadioTrackIds,

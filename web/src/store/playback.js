@@ -13,6 +13,12 @@ import { LocalOutlet } from "./playbackOutlets/LocalOutlet";
 import { useRemoteStore } from "./remote";
 import { useUserStore } from "./user";
 import { createRadioCreation } from "../utils/radioCreation";
+import {
+  createRadioContinuation,
+  editRadioContinuation,
+  nextSnapshotBatch,
+  appendRadioBatch,
+} from "../utils/radioContinuation";
 
 export const usePlaybackStore = defineStore("playback", () => {
   const staticsStore = useStaticsStore();
@@ -55,6 +61,9 @@ export const usePlaybackStore = defineStore("playback", () => {
   const currentPlaylistIndex = ref(null);
   const smartContinuationInFlightSignature = ref(null);
   const radioCreationState = ref({ status: "idle" });
+  const radioContinuationError = ref(false);
+  let radioRequest = null;
+  let waitingForRadio = null;
   const radioCreation = createRadioCreation({
     onState: (state) => {
       radioCreationState.value = state;
@@ -377,7 +386,10 @@ export const usePlaybackStore = defineStore("playback", () => {
     const trackIds = queue.map((item) => item.id);
     playlistsHistory.value = [
       {
-        context: context || { name: "Remote", id: null, edited: false },
+        context: context
+          ? { ...context, continuation: undefined }
+          : { name: "Remote", id: null, edited: false },
+        continuation: context?.continuation || null,
         tracksIds: trackIds,
         type:
           context?.type === "radio"
@@ -394,6 +406,7 @@ export const usePlaybackStore = defineStore("playback", () => {
 
   function enterRemoteMode() {
     radioCreation.cancel();
+    cancelRadioContinuation();
     console.info("[Playback] enterRemoteMode");
     localOutlet.stop();
     mode.value = "remote";
@@ -449,7 +462,15 @@ export const usePlaybackStore = defineStore("playback", () => {
   }
 
   function snapshotQueueContext() {
-    return currentPlaylist.value?.context || null;
+    const playlist = currentPlaylist.value;
+    return playlist
+      ? {
+          ...playlist.context,
+          ...(playlist.continuation
+            ? { continuation: playlist.continuation }
+            : {}),
+        }
+      : null;
   }
 
   // ============================================
@@ -483,11 +504,14 @@ export const usePlaybackStore = defineStore("playback", () => {
   const makePlaylistFromRadio = (trackIds, radioContext) => ({
     context: {
       ...radioContext,
+      continuation: undefined,
       type: "radio",
       edited: Boolean(radioContext?.edited),
     },
     tracksIds: trackIds,
     type: PLAYBACK_CONTEXTS.radio,
+    continuation:
+      radioContext.continuation || createRadioContinuation(trackIds),
   });
 
   const resolveRadioSeedLabel = async (entityType, entityId) => {
@@ -539,6 +563,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     if (mode.value !== "local") return;
     if (!userStore.isSmartContinuationEnabled) return;
     if (!currentPlaylist.value || currentTrackIndex.value === null) return;
+    if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.radio) return;
 
     const tracksIds = currentPlaylist.value.tracksIds || [];
     const remaining = tracksIds.length - currentTrackIndex.value - 1;
@@ -573,6 +598,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     if (smartContinuationInFlightSignature.value !== signature) return;
     smartContinuationInFlightSignature.value = null;
     if (!userStore.isSmartContinuationEnabled || mode.value !== "local") return;
+    if (currentPlaylist.value?.type === PLAYBACK_CONTEXTS.radio) return;
     if (currentQueueSignature() !== signature) return;
     const existingTrackIds = new Set(currentPlaylist.value?.tracksIds || []);
     const additions = [...new Set(nextTrackIds)].filter(
@@ -583,12 +609,121 @@ export const usePlaybackStore = defineStore("playback", () => {
     }
   };
 
+  function cancelRadioContinuation() {
+    radioRequest?.abort();
+    radioRequest = null;
+    waitingForRadio = null;
+    radioContinuationError.value = false;
+  }
+
+  function markRadioEdited(playlist) {
+    if (playlist.type !== PLAYBACK_CONTEXTS.radio) return;
+    cancelRadioContinuation();
+    playlist.context.edited = true;
+    playlist.continuation = editRadioContinuation(
+      playlist.continuation || createRadioContinuation(playlist.tracksIds),
+      playlist.tracksIds,
+      userStore.keepRadioOnQueueEdit,
+    );
+  }
+
+  async function maybeContinueRadio(force = false) {
+    const playlist = currentPlaylist.value;
+    const index =
+      currentTrackIndex.value ?? (playlist?.tracksIds.length === 0 ? 0 : null);
+    if (
+      mode.value !== "local" ||
+      (!isPlaying.value && !force) ||
+      !playlist ||
+      index === null ||
+      playlist.type !== PLAYBACK_CONTEXTS.radio
+    )
+      return;
+    if (!playlist.continuation)
+      playlist.continuation = createRadioContinuation(playlist.tracksIds);
+    const state = playlist.continuation;
+    if (
+      state.status !== "active" ||
+      playlist.tracksIds.length - index - 1 > 1 ||
+      radioRequest ||
+      radioContinuationError.value
+    )
+      return;
+    const controller = new AbortController();
+    radioRequest = controller;
+    const valid = () =>
+      radioRequest === controller &&
+      !controller.signal.aborted &&
+      mode.value === "local" &&
+      currentPlaylist.value?.continuation === state;
+    try {
+      let trackIds;
+      let nextIndex;
+      if (state.strategy === "ranked_snapshot") {
+        ({ trackIds, nextIndex } = nextSnapshotBatch(state));
+      } else {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            trackIds = await remoteStore.fetchRadioContinuation(
+              playlist.context,
+              playlist.tracksIds,
+              state.seen_track_ids,
+              controller.signal,
+            );
+            break;
+          } catch (error) {
+            if (!valid() || attempt === 2) throw error;
+            await new Promise((resolve) =>
+              setTimeout(resolve, 1500 * (attempt + 1)),
+            );
+            if (!valid()) return;
+          }
+        }
+      }
+      if (!valid()) return;
+      const previousLength = playlist.tracksIds.length;
+      const result = appendRadioBatch(
+        currentPlaylist.value,
+        currentTrackIndex.value ?? 0,
+        trackIds,
+        nextIndex,
+      );
+      const resume = waitingForRadio === state.session_id;
+      const added =
+        result.playlist.continuation.seen_track_ids.length -
+        state.seen_track_ids.length;
+      const trimmed = previousLength + added - result.playlist.tracksIds.length;
+      // Update the index without reloading the audio that is already playing.
+      currentTrackIndex.value = result.index;
+      playlistsHistory.value[currentPlaylistIndex.value] = result.playlist;
+      savePlaylistHistory(playlistsHistory.value);
+      getSessionStore()?.notifyQueueChanged();
+      getSessionStore()?.notifyStateChanged();
+      if (previousLength === 0 && added && !resume) loadTrack(0);
+      if (resume && added) {
+        waitingForRadio = null;
+        loadTrack(previousLength - trimmed);
+        play();
+      }
+    } catch {
+      if (valid()) radioContinuationError.value = true;
+    } finally {
+      if (radioRequest === controller) radioRequest = null;
+    }
+  }
+
+  const retryRadioContinuation = () => {
+    radioContinuationError.value = false;
+    maybeContinueRadio(true);
+  };
+
   // ============================================
   // Playlist management
   // ============================================
 
   const setNewPlayingPlaylist = (newPlaylist) => {
     radioCreation.cancel();
+    cancelRadioContinuation();
     console.debug("[Playback] setNewPlayingPlaylist", {
       size: newPlaylist?.tracksIds?.length || 0,
     });
@@ -723,6 +858,29 @@ export const usePlaybackStore = defineStore("playback", () => {
     }
   };
 
+  const setArtistGreatestHits = (artistId) =>
+    radioCreation.start(async (signal) => {
+      const snapshot = await remoteStore.fetchArtistGreatestHits(
+        artistId,
+        signal,
+      );
+      const trackIds = snapshot.slice(0, 10);
+      const label = await resolveRadioSeedLabel("artist", artistId);
+      return {
+        trackIds,
+        context: {
+          ...buildRadioContext({
+            source: "greatest_hits",
+            entityType: "artist",
+            entityId: artistId,
+            label,
+            count: snapshot.length,
+          }),
+          continuation: createRadioContinuation(trackIds, snapshot),
+        },
+      };
+    }, commitRadio);
+
   const setRadioFromItem = (entityType, entityId, count = 50) =>
     radioCreation.start(async (signal) => {
       const trackIds = await remoteStore.fetchRadioTrackIds(
@@ -844,6 +1002,7 @@ export const usePlaybackStore = defineStore("playback", () => {
       return;
     }
 
+    cancelRadioContinuation();
     console.debug("[Playback] pause");
     localOutlet.pause();
     isPlaying.value = false;
@@ -879,6 +1038,8 @@ export const usePlaybackStore = defineStore("playback", () => {
     });
     const nextIndex = currentTrackIndex.value + 1;
     if (nextIndex >= currentPlaylist.value.tracksIds.length) {
+      if (radioRequest && isPlaying.value)
+        waitingForRadio = currentPlaylist.value.continuation?.session_id;
       localOutlet.stop();
       isPlaying.value = false;
       progressPercent.value = 0.0;
@@ -1003,6 +1164,7 @@ export const usePlaybackStore = defineStore("playback", () => {
 
   const stop = () => {
     radioCreation.cancel();
+    cancelRadioContinuation();
     if (mode.value === "remote") return;
 
     localOutlet.stop();
@@ -1062,6 +1224,7 @@ export const usePlaybackStore = defineStore("playback", () => {
       tracksIds: newTracks,
     };
 
+    markRadioEdited(newPlaylist);
     if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.album) {
       newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
       newPlaylist.context = { name: null, id: null, edited: false };
@@ -1109,6 +1272,7 @@ export const usePlaybackStore = defineStore("playback", () => {
       tracksIds: newTracks,
     };
 
+    if (!automatic) markRadioEdited(newPlaylist);
     if (!automatic && currentPlaylist.value.type === PLAYBACK_CONTEXTS.album) {
       newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
       newPlaylist.context = { name: null, id: null, edited: false };
@@ -1137,6 +1301,14 @@ export const usePlaybackStore = defineStore("playback", () => {
   const removeTrackFromPlaylist = (index) => {
     if (mode.value === "remote") return;
     if (!currentPlaylist.value) return;
+    if (
+      !Number.isInteger(index) ||
+      index < 0 ||
+      index >= currentPlaylist.value.tracksIds.length
+    )
+      return;
+    const removingCurrent = index === currentTrackIndex.value;
+    const wasPlaying = isPlaying.value;
 
     let pushNewHistory = false;
     const newTracks = [...currentPlaylist.value.tracksIds];
@@ -1148,6 +1320,7 @@ export const usePlaybackStore = defineStore("playback", () => {
       tracksIds: newTracks,
     };
 
+    markRadioEdited(newPlaylist);
     if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.album) {
       newPlaylist.type = PLAYBACK_CONTEXTS.userMix;
       newPlaylist.context = { name: null, id: null, edited: false };
@@ -1158,11 +1331,7 @@ export const usePlaybackStore = defineStore("playback", () => {
       newPlaylist.context.edited = true;
     }
 
-    if (index === currentTrackIndex.value) {
-      skipNextTrack();
-    } else if (index < currentTrackIndex.value) {
-      currentTrackIndex.value -= 1;
-    }
+    if (index < currentTrackIndex.value) currentTrackIndex.value -= 1;
 
     if (pushNewHistory) {
       setNewPlayingPlaylist(newPlaylist);
@@ -1171,6 +1340,26 @@ export const usePlaybackStore = defineStore("playback", () => {
       savePlaylistHistory(playlistsHistory.value);
       getSessionStore()?.notifyQueueChanged();
     }
+    if (removingCurrent) {
+      if (index < newTracks.length) {
+        loadTrack(index);
+        if (wasPlaying) play();
+      } else {
+        localOutlet.stop();
+        isPlaying.value = false;
+        currentTrackIndex.value = newTracks.length
+          ? newTracks.length - 1
+          : null;
+        currentTrackId.value = newTracks.at(-1) ?? null;
+        progressPercent.value = 0;
+        progressSec.value = 0;
+        if (newPlaylist.continuation?.status === "active") {
+          if (wasPlaying) waitingForRadio = newPlaylist.continuation.session_id;
+          maybeContinueRadio(true);
+        }
+      }
+      getSessionStore()?.notifyStateChanged();
+    }
   };
 
   watch(
@@ -1178,9 +1367,12 @@ export const usePlaybackStore = defineStore("playback", () => {
       currentTrackIndex,
       currentPlaylist,
       () => userStore.isSmartContinuationEnabled,
+      isPlaying,
+      mode,
     ],
     () => {
       maybeFetchSmartContinuation();
+      maybeContinueRadio();
     },
   );
 
@@ -1192,6 +1384,9 @@ export const usePlaybackStore = defineStore("playback", () => {
     // Core state
     mode,
     radioCreationState,
+    radioContinuationError,
+    retryRadioContinuation,
+    setArtistGreatestHits,
     cancelRadioCreation: radioCreation.cancel,
     retryRadioCreation: radioCreation.retry,
     currentTrackId,

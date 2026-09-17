@@ -140,6 +140,16 @@ class ArtistScreenViewModelTest {
     }
 
     @Test
+    fun `greatest hits button sends the selected artist to playback`() = runTest {
+        fakeContentResolver.artistResults["artist-1"] = flowOf(Content.Loading("artist-1"))
+        createViewModel("artist-1")
+        advanceUntilIdle()
+        viewModel.clickOnGreatestHits()
+        advanceUntilIdle()
+        assertThat(fakeInteractor.lastGreatestHitsArtistId).isEqualTo("artist-1")
+    }
+
+    @Test
     fun `logs viewed artist when loaded`() = runTest {
         val artist = Artist("artist-1", "Artist", null, emptyList())
         fakeContentResolver.artistResults["artist-1"] = flowOf(Content.Resolved("artist-1", artist))
@@ -181,6 +191,9 @@ class ArtistScreenViewModelTest {
             lastToggleLikeContentId = contentId
             lastToggleLikeCurrentlyLiked = currentlyLiked
         }
+
+        var lastGreatestHitsArtistId: String? = null
+        override suspend fun playGreatestHits(artistId: String) { lastGreatestHitsArtistId = artistId }
 
         override suspend fun playRadio(artistId: String) {
             lastRadioArtistId = artistId

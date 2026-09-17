@@ -26,4 +26,5 @@ sealed interface PlaybackPlaylistContext {
 data class PlaybackPlaylist(
     val context: PlaybackPlaylistContext,
     val tracksIds: List<String>,
+    val continuation: RadioContinuation? = null,
 )

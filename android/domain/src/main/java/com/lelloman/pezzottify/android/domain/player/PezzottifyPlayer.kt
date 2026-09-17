@@ -15,7 +15,10 @@ interface PezzottifyPlayer : ControlsAndStatePlayer, AppInitializer{
     fun addUserPlaylistToQueue(userPlaylistId: String)
     fun loadSingleTrack(trackId: String)
     fun loadTrackIds(trackIds: List<String>)
-    fun loadRadio(trackIds: List<String>, context: PlaybackPlaylistContext.Radio)
+    fun loadRadio(trackIds: List<String>, context: PlaybackPlaylistContext.Radio, continuation: RadioContinuation? = null)
+    val radioContinuationError: StateFlow<Boolean>
+    fun retryRadioContinuation()
+    fun dismissRadioContinuationError()
 
 
     fun goToPreviousPlaylist()

@@ -521,7 +521,12 @@
     <!-- PLAYBACK SETTINGS -->
     <string name="playback_section">Playback</string>
     <string name="smart_continuation">Smart continuation</string>
-    <string name="smart_continuation_description">Automatically queue related tracks as the current queue nears its end.</string>
+    <string name="smart_continuation_description">Automatically queue related tracks after ordinary queues. Radios manage their own continuation.</string>
+    <string name="radio_queue_edit">When editing a radio queue</string>
+    <string name="radio_keep_going">Keep radio going</string>
+    <string name="radio_stop_adding">Stop adding tracks</string>
+    <string name="play_greatest_hits">Play greatest hits</string>
+    <string name="radio_continuation_error">Could not add more radio tracks. Please try again.</string>
     <string name="listen_to_radio">Listen to radio</string>
     <string name="radio_creating">Creating radio…</string>
     <string name="radio_creation_timeout">Radio creation timed out. Please try again.</string>

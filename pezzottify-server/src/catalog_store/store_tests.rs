@@ -18,6 +18,34 @@ mod tests {
     }
 
     #[test]
+    fn greatest_hits_ranks_available_artist_credits_and_deduplicates_recordings() {
+        let (store, _dir) = create_test_store();
+        {
+            let conn = store.write_conn.lock().unwrap();
+            conn.execute_batch("INSERT INTO artists (id, name, followers_total, popularity) VALUES ('artist', 'Artist', 0, 0), ('other', 'Other', 0, 0);
+                INSERT INTO albums (id, name, album_type, label, popularity, release_date, release_date_precision) VALUES ('album', 'Album', 'album', '', 0, '2026', 'year');").unwrap();
+            for (id, popularity, isrc, available, artist) in [
+                ("a", 90, Some(" us-ab-123 "), 1, 1),
+                ("duplicate", 80, Some("USAB123"), 1, 1),
+                ("missing", 100, Some("USAB123"), 0, 1),
+                ("b", 70, None, 1, 1),
+                ("c", 70, Some(""), 1, 1),
+                ("feature", 95, Some("FEATURE"), 1, 1),
+                ("unrelated", 100, None, 1, 2),
+            ] {
+                conn.execute("INSERT INTO tracks (id, name, album_rowid, track_number, external_id_isrc, popularity, disc_number, duration_ms, explicit, track_available) VALUES (?1, ?1, 1, 1, ?2, ?3, 1, 1000, 0, ?4)", params![id, isrc, popularity, available]).unwrap();
+                let rowid = conn.last_insert_rowid();
+                conn.execute("INSERT INTO track_artists (track_rowid, artist_rowid, role) VALUES (?1, ?2, 1)", params![rowid, artist]).unwrap();
+                if id == "feature" {
+                    conn.execute("INSERT INTO track_artists (track_rowid, artist_rowid, role) VALUES (?1, 2, 0)", params![rowid]).unwrap();
+                }
+            }
+        }
+        assert_eq!(store.get_artist_greatest_hits_track_ids("artist").unwrap(), vec!["feature", "a", "b", "c"]);
+        assert!(store.get_artist_greatest_hits_track_ids("missing-artist").unwrap().is_empty());
+    }
+
+    #[test]
     fn float_vector_blob_round_trip_and_length_validation() {
         let vector = [0.0, -1.25, f32::MIN_POSITIVE, f32::MAX, f32::NAN];
         let encoded = SqliteCatalogStore::encode_f32_vector(&vector);

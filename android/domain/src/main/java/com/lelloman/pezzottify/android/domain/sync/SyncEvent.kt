@@ -45,6 +45,10 @@ sealed interface UserSetting {
     data class SmartContinuationEnabled(val value: Boolean) : UserSetting
 
     @Serializable
+    @SerialName("keep_radio_on_queue_edit")
+    data class KeepRadioOnQueueEdit(val value: Boolean) : UserSetting
+
+    @Serializable
     @SerialName("proxy_mode_enabled")
     data class ProxyModeEnabled(val value: Boolean) : UserSetting
 }
