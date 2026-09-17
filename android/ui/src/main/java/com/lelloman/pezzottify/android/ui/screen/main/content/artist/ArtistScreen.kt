@@ -18,7 +18,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -47,6 +47,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.ui.R
+import com.lelloman.pezzottify.android.ui.screen.main.content.ContentOverflowMenu
+import com.lelloman.pezzottify.android.ui.screen.main.content.ContentPlaybackActions
 import com.lelloman.pezzottify.android.ui.component.AlbumGridItem
 import com.lelloman.pezzottify.android.ui.component.ArtistAvatarRow
 import com.lelloman.pezzottify.android.ui.component.LoadingScreen
@@ -373,75 +375,31 @@ fun ArtistLoadedScreen(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = textTopPadding)
+                        .padding(start = 16.dp, end = 72.dp, bottom = 16.dp, top = textTopPadding)
                 )
             }
         }
 
-        // Floating like button - positioned at bottom-right of header, straddling the boundary
-        IconButton(
-            onClick = { actions.clickOnLike() },
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset { IntOffset(0, (headerHeight - likeButtonSize / 2).roundToPx()) }
-                .padding(end = 16.dp)
-                .size(likeButtonSize)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                // Background circle
-                Icon(
-                    modifier = Modifier.size(likeButtonSize),
-                    painter = painterResource(R.drawable.baseline_circle_24),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.surfaceVariant,
-                )
-                // Heart icon
-                Icon(
-                    modifier = Modifier.size(28.dp),
-                    painter = painterResource(
-                        if (isLiked) R.drawable.baseline_favorite_24
-                        else R.drawable.baseline_favorite_border_24
-                    ),
-                    contentDescription = stringResource(if (isLiked) R.string.unlike else R.string.like),
-                    tint = if (isLiked) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        IconButton(
-            onClick = { actions.clickOnGreatestHits() },
+        ContentOverflowMenu(
             modifier = Modifier.align(Alignment.TopEnd)
-                .offset { IntOffset(0, (headerHeight - likeButtonSize / 2).roundToPx()) }
-                .padding(end = 144.dp).size(likeButtonSize)
-        ) {
-            Icon(painter = painterResource(R.drawable.baseline_play_arrow_24),
-                contentDescription = stringResource(R.string.play_greatest_hits),
-                tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
+                .padding(top = statusBarHeight + 8.dp, end = 8.dp),
+        ) { dismiss ->
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.listen_to_radio)) },
+                onClick = { dismiss(); actions.clickOnRadio() },
+            )
         }
 
-        IconButton(
-            onClick = { actions.clickOnRadio() },
+        ContentPlaybackActions(
+            isLiked = isLiked,
+            onLike = actions::clickOnLike,
+            onPlay = actions::clickOnGreatestHits,
+            playDescription = stringResource(R.string.play_greatest_hits),
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .offset { IntOffset(0, (headerHeight - likeButtonSize / 2).roundToPx()) }
-                .padding(end = 80.dp)
-                .size(likeButtonSize)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    modifier = Modifier.size(likeButtonSize),
-                    painter = painterResource(R.drawable.baseline_circle_24),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.surfaceVariant,
-                )
-                Icon(
-                    modifier = Modifier.size(28.dp),
-                    painter = painterResource(R.drawable.baseline_queue_music_24),
-                    contentDescription = stringResource(R.string.listen_to_radio),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+                .padding(end = 16.dp),
+        )
     }
 }
 

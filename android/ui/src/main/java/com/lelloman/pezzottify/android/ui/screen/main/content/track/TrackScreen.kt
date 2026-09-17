@@ -20,7 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -44,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.lelloman.pezzottify.android.ui.R
+import com.lelloman.pezzottify.android.ui.screen.main.content.ContentOverflowMenu
+import com.lelloman.pezzottify.android.ui.screen.main.content.ContentPlaybackActions
 import com.lelloman.pezzottify.android.ui.component.ArtistAvatarRow
 import com.lelloman.pezzottify.android.ui.component.DurationText
 import com.lelloman.pezzottify.android.ui.component.LoadingScreen
@@ -323,72 +325,40 @@ private fun TrackLoadedScreen(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = textTopPadding)
+                        .padding(start = 16.dp, end = 72.dp, bottom = 16.dp, top = textTopPadding)
                 )
             }
         }
 
-        // Floating like button
-        IconButton(
-            onClick = { actions.clickOnLike() },
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset { IntOffset(0, (headerHeight - playButtonSize / 2).roundToPx()) }
-                .padding(end = 80.dp)
-                .size(playButtonSize)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    modifier = Modifier.size(playButtonSize),
-                    painter = painterResource(R.drawable.baseline_circle_24),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.surfaceVariant,
-                )
-                Icon(
-                    modifier = Modifier.size(28.dp),
-                    painter = painterResource(
-                        if (isLiked) R.drawable.baseline_favorite_24
-                        else R.drawable.baseline_favorite_border_24
-                    ),
-                    contentDescription = stringResource(if (isLiked) R.string.unlike else R.string.like),
-                    tint = if (isLiked) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+        ContentOverflowMenu(
+            modifier = Modifier.align(Alignment.TopEnd)
+                .padding(top = statusBarHeight + 8.dp, end = 8.dp),
+        ) { dismiss ->
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.play_single_track)) },
+                enabled = track.isPlayable,
+                onClick = { dismiss(); actions.clickOnPlaySingle() },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.add_to_queue)) },
+                onClick = { dismiss(); actions.clickOnAddToQueue() },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.go_to_album)) },
+                onClick = { dismiss(); onAlbumClick(track.albumId) },
+            )
         }
 
-        // Floating play button
-        IconButton(
-            onClick = { actions.clickOnPlayTrack() },
-            enabled = track.isPlayable,
+        ContentPlaybackActions(
+            isLiked = isLiked,
+            onLike = actions::clickOnLike,
+            onPlay = actions::clickOnPlayTrack,
+            playEnabled = track.isPlayable,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .offset { IntOffset(0, (headerHeight - playButtonSize / 2).roundToPx()) }
-                .padding(end = 16.dp)
-                .size(playButtonSize)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    modifier = Modifier.size(playButtonSize),
-                    painter = painterResource(R.drawable.baseline_circle_24),
-                    contentDescription = null,
-                    tint = if (track.isPlayable) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                    },
-                )
-                Icon(
-                    modifier = Modifier.size(28.dp),
-                    painter = painterResource(R.drawable.baseline_play_arrow_24),
-                    contentDescription = stringResource(R.string.play),
-                    tint = if (track.isPlayable) {
-                        MaterialTheme.colorScheme.onPrimary
-                    } else {
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                    },
-                )
-            }
-        }
+                .padding(end = 16.dp),
+        )
     }
 }
 

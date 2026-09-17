@@ -26,7 +26,6 @@ import com.lelloman.pezzottify.android.ui.component.LoaderSize
 import com.lelloman.pezzottify.android.ui.component.PezzottifyLoader
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
@@ -70,6 +69,8 @@ import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.lelloman.pezzottify.android.ui.R
+import com.lelloman.pezzottify.android.ui.screen.main.content.ContentMoreButton
+import com.lelloman.pezzottify.android.ui.screen.main.content.ContentPlaybackActions
 import com.lelloman.pezzottify.android.ui.component.ArtistAvatarRow
 import com.lelloman.pezzottify.android.ui.component.DurationText
 import com.lelloman.pezzottify.android.ui.component.LoadingScreen
@@ -476,81 +477,23 @@ fun AlbumLoadedScreen(
                         .padding(start = 16.dp, end = 64.dp, bottom = 16.dp, top = textTopPadding)
                 )
 
-                IconButton(
+                ContentMoreButton(
                     onClick = onAlbumMoreClick,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = statusBarHeight + 8.dp, end = 8.dp)
-                        .size(48.dp)
-                ) {
-                    Icon(
-                        modifier = Modifier.size(24.dp),
-                        painter = painterResource(R.drawable.baseline_more_vert_24),
-                        contentDescription = stringResource(R.string.more_options),
-                        tint = textColor,
-                    )
-                }
-            }
-        }
-
-        // Floating like button - positioned to the left of other buttons
-        IconButton(
-            onClick = { actions.clickOnLike() },
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset { IntOffset(0, (headerHeight - playButtonSize / 2).roundToPx()) }
-                .padding(end = 144.dp)
-                .size(playButtonSize)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                // Background circle
-                Icon(
-                    modifier = Modifier.size(playButtonSize),
-                    painter = painterResource(R.drawable.baseline_circle_24),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.surfaceVariant,
-                )
-                // Heart icon
-                Icon(
-                    modifier = Modifier.size(28.dp),
-                    painter = painterResource(
-                        if (isLiked) R.drawable.baseline_favorite_24
-                        else R.drawable.baseline_favorite_border_24
-                    ),
-                    contentDescription = stringResource(if (isLiked) R.string.unlike else R.string.like),
-                    tint = if (isLiked) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                        .padding(top = statusBarHeight + 8.dp, end = 8.dp),
                 )
             }
         }
 
-        // Floating play button - positioned at bottom-right of header, straddling the boundary
-        IconButton(
-            onClick = {
-                actions.clickOnPlayAlbum(album.id)
-            },
+        ContentPlaybackActions(
+            isLiked = isLiked,
+            onLike = actions::clickOnLike,
+            onPlay = { actions.clickOnPlayAlbum(album.id) },
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .offset { IntOffset(0, (headerHeight - playButtonSize / 2).roundToPx()) }
-                .padding(end = 16.dp)
-                .size(playButtonSize)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                // Background circle
-                Icon(
-                    modifier = Modifier.size(playButtonSize),
-                    painter = painterResource(R.drawable.baseline_circle_24),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                // Play icon
-                Icon(
-                    modifier = Modifier.size(28.dp),
-                    painter = painterResource(R.drawable.baseline_play_arrow_24),
-                    contentDescription = stringResource(R.string.play),
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                )
-            }
-        }
+                .padding(end = 16.dp),
+        )
     }
 }
 
