@@ -66,6 +66,7 @@ pub(super) fn create_schema(conn: &Connection) -> Result<()> {
         provider TEXT NOT NULL, external_id TEXT NOT NULL, work_id TEXT NOT NULL REFERENCES works_v1(id),
         PRIMARY KEY(provider,external_id), UNIQUE(work_id,provider)
     );")?;
+    conn.execute_batch(include_str!("work_graph.sql"))?;
     Ok(())
 }
 

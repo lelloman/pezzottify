@@ -1,5 +1,10 @@
 dummy-catalog/
 dev-data/
+.local-work-enrichment/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
 
 # Android build artifacts
 android/**/build/
