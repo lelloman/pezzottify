@@ -74,6 +74,14 @@ class TrackScreenViewModel @AssistedInject constructor(
         }
     }
 
+    override fun clickOnPlaySingle() {
+        interactor.playSingleTrack(trackId)
+    }
+
+    override fun clickOnAddToQueue() {
+        interactor.addToQueue(trackId)
+    }
+
     override fun clickOnLike() {
         interactor.toggleLike(trackId, state.value.isLiked)
     }
@@ -92,6 +100,8 @@ class TrackScreenViewModel @AssistedInject constructor(
 
     interface Interactor {
         fun playTrack(albumId: String, trackId: String)
+        fun playSingleTrack(trackId: String)
+        fun addToQueue(trackId: String)
         fun logViewedTrack(trackId: String)
         fun getCurrentPlayingTrackId(): Flow<String?>
         fun isLiked(contentId: String): Flow<Boolean>

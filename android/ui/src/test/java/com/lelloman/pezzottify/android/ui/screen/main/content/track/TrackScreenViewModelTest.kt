@@ -212,6 +212,12 @@ class TrackScreenViewModelTest {
             lastPlayedTrackId = trackId
         }
 
+        override fun playSingleTrack(trackId: String) {
+            lastPlayedTrackId = trackId
+        }
+
+        override fun addToQueue(trackId: String) = Unit
+
         override fun logViewedTrack(trackId: String) {
             loggedViewedTrackId = trackId
         }

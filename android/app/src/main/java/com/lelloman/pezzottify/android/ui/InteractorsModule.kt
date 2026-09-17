@@ -1335,6 +1335,10 @@ class InteractorsModule {
         getLikedStateUseCase: GetLikedStateUseCase,
         toggleLikeUseCase: ToggleLikeUseCase,
     ): TrackScreenViewModel.Interactor = object : TrackScreenViewModel.Interactor {
+        override fun playSingleTrack(trackId: String) = player.loadSingleTrack(trackId)
+
+        override fun addToQueue(trackId: String) = player.addTracksToPlaylist(listOf(trackId))
+
         override fun playTrack(albumId: String, trackId: String) {
             // Always play the track by loading the album starting from this track
             player.loadAlbum(albumId, trackId)
