@@ -171,7 +171,8 @@ fun ArtistLoadedScreen(
 
     // Define header dimensions
     val maxHeaderHeight = 300.dp
-    val minHeaderHeight = 80.dp + statusBarHeight
+    // Reserve a 64dp app bar, then 8dp clearance above the floating 56dp actions.
+    val minHeaderHeight = statusBarHeight + 64.dp + 8.dp + 56.dp / 2
     val collapseRangeDp = maxHeaderHeight - minHeaderHeight
     val collapseRangePx = with(density) { collapseRangeDp.toPx() }
     val likeButtonSize = 56.dp
@@ -369,18 +370,23 @@ fun ArtistLoadedScreen(
                 val textTopPadding = statusBarHeight * collapseProgress
                 Text(
                     text = artist.name,
-                    style = MaterialTheme.typography.headlineLarge,
+                    style = androidx.compose.ui.text.lerp(
+                        MaterialTheme.typography.headlineLarge,
+                        MaterialTheme.typography.titleLarge,
+                        collapseProgress,
+                    ),
                     color = textColor,
-                    maxLines = 2,
+                    maxLines = if (collapseProgress > 0.5f) 1 else 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(start = 16.dp, end = 72.dp, bottom = 16.dp, top = textTopPadding)
+                        .padding(start = 16.dp, end = 72.dp, bottom = 16.dp + 40.dp * collapseProgress, top = textTopPadding)
                 )
             }
         }
 
         ContentOverflowMenu(
+            tint = lerp(MaterialTheme.colorScheme.onSurface, Color.White, imageAlpha),
             modifier = Modifier.align(Alignment.TopEnd)
                 .padding(top = statusBarHeight + 8.dp, end = 8.dp),
         ) { dismiss ->
