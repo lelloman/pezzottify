@@ -2221,15 +2221,18 @@ impl CatalogStore for SqliteCatalogStore {
     }
 
     fn get_artist_greatest_hits_track_ids(&self, artist_id: &str) -> Result<Vec<String>> {
+        // Resolve the artist's track rowids once before checking availability. A correlated
+        // EXISTS scans every available track and repeats the artist-credit lookup per row.
         let conn = self.get_read_conn();
         let conn = conn.lock().unwrap();
         let mut stmt = conn.prepare_cached(
             "SELECT t.id, NULLIF(UPPER(REPLACE(TRIM(t.external_id_isrc), '-', '')), '')
              FROM tracks t
-             WHERE t.track_available = 1 AND EXISTS (
-                 SELECT 1 FROM track_artists ta JOIN artists a ON a.rowid = ta.artist_rowid
-                 WHERE ta.track_rowid = t.rowid AND a.id = ?1
-             ) ORDER BY t.popularity DESC, t.id",
+             WHERE t.rowid IN (
+                 SELECT ta.track_rowid FROM track_artists ta
+                 WHERE ta.artist_rowid = (SELECT a.rowid FROM artists a WHERE a.id = ?1)
+             ) AND t.track_available = 1
+             ORDER BY t.popularity DESC, t.id",
         )?;
         let mut seen = std::collections::HashSet::new();
         let rows = stmt.query_map(params![artist_id], |row| {

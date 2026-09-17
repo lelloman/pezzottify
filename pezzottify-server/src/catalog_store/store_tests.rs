@@ -46,6 +46,35 @@ mod tests {
     }
 
     #[test]
+    fn greatest_hits_does_not_scan_unrelated_available_tracks() {
+        let (store, _dir) = create_test_store();
+        {
+            let conn = store.write_conn.lock().unwrap();
+            conn.execute_batch(
+                "INSERT INTO artists (id, name, followers_total, popularity)
+                 VALUES ('artist', 'Artist', 0, 0), ('other', 'Other', 0, 0);
+                 INSERT INTO albums (id, name, album_type, label, popularity, release_date, release_date_precision)
+                 VALUES ('album', 'Album', 'album', '', 0, '2026', 'year');
+                 WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n + 1 FROM ids WHERE n < 10000)
+                 INSERT INTO tracks (id, name, album_rowid, track_number, popularity, disc_number, duration_ms, explicit, track_available)
+                 SELECT 'track-' || n, 'Track', 1, 1, 0, 1, 1000, 0, 1 FROM ids;
+                 INSERT INTO track_artists (track_rowid, artist_rowid, role)
+                 SELECT rowid, CASE WHEN id = 'track-1' THEN 1 ELSE 2 END, 0 FROM tracks;",
+            ).unwrap();
+        }
+        // Bound SQLite work instead of wall-clock time: looking up one artist's
+        // single track should never walk the 9,999 unrelated available tracks.
+        for conn in &store.read_pool {
+            conn.lock().unwrap().progress_handler(10_000, Some(|| true));
+        }
+        let result = store.get_artist_greatest_hits_track_ids("artist");
+        for conn in &store.read_pool {
+            conn.lock().unwrap().progress_handler(0, None::<fn() -> bool>);
+        }
+        assert_eq!(result.unwrap(), vec!["track-1"]);
+    }
+
+    #[test]
     fn float_vector_blob_round_trip_and_length_validation() {
         let vector = [0.0, -1.25, f32::MIN_POSITIVE, f32::MAX, f32::NAN];
         let encoded = SqliteCatalogStore::encode_f32_vector(&vector);
