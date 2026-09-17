@@ -521,7 +521,12 @@
     <!-- PLAYBACK SETTINGS -->
     <string name="playback_section">Riproduzione</string>
     <string name="smart_continuation">Continuazione intelligente</string>
-    <string name="smart_continuation_description">Aggiunge automaticamente brani correlati quando la coda si avvicina alla fine.</string>
+    <string name="smart_continuation_description">Aggiunge automaticamente brani correlati alle code normali. Le radio gestiscono autonomamente la continuazione.</string>
+    <string name="radio_queue_edit">Quando modifichi la coda di una radio</string>
+    <string name="radio_keep_going">Continua la radio</string>
+    <string name="radio_stop_adding">Smetti di aggiungere brani</string>
+    <string name="play_greatest_hits">Riproduci i maggiori successi</string>
+    <string name="radio_continuation_error">Impossibile aggiungere altri brani alla radio. Riprova.</string>
     <string name="listen_to_radio">Ascolta la radio</string>
     <string name="radio_creating">Creazione della radio…</string>
     <string name="radio_creation_timeout">La creazione della radio ha impiegato troppo tempo. Riprova.</string>

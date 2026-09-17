@@ -18,6 +18,8 @@ import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import com.lelloman.pezzottify.android.domain.player.RadioContinuation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,6 +50,12 @@ class PlayerImpl(
     private var smartContinuationJob: Job? = null
     private var smartContinuationRequestJob: Job? = null
     private var smartContinuationInFlightSignature: String? = null
+    private var activeRadioSession: String? = null
+    private var radioRequestJob: Job? = null
+    private var radioGeneration = 0L
+    private val mutableRadioContinuationError = MutableStateFlow(false)
+    override val radioContinuationError = mutableRadioContinuationError.asStateFlow()
+    private var radioErrorSession: String? = null
     private var restorationAttempted = false
     private var restorationInProgress = false
 
@@ -106,10 +114,16 @@ class PlayerImpl(
                 playbackPlaylist,
                 platformPlayer.currentTrackIndex,
                 userSettingsStore.isSmartContinuationEnabled,
-            ) { playlist, index, enabled ->
-                SmartContinuationState(playlist, index, enabled)
+                platformPlayer.isPlaying,
+            ) { playlist, index, enabled, playing ->
+                SmartContinuationState(playlist, index, enabled, playing)
             }.collect { state ->
+                if (state.playlist?.continuation?.sessionId != activeRadioSession) {
+                    cancelRadioRequest()
+                    activeRadioSession = state.playlist?.continuation?.sessionId
+                }
                 maybeFetchSmartContinuation(state)
+                maybeContinueRadio(state.playing)
             }
         }
     }
@@ -125,10 +139,12 @@ class PlayerImpl(
         val playlist: PlaybackPlaylist?,
         val trackIndex: Int?,
         val enabled: Boolean,
+        val playing: Boolean,
     )
 
     private fun maybeFetchSmartContinuation(state: SmartContinuationState) {
         val playlist = state.playlist ?: return
+        if (playlist.context is PlaybackPlaylistContext.Radio) return
         val trackIndex = state.trackIndex ?: return
         if (!state.enabled) return
         val remaining = playlist.tracksIds.lastIndex - trackIndex
@@ -159,6 +175,7 @@ class PlayerImpl(
             if (smartContinuationInFlightSignature != signature) return@launch
             smartContinuationInFlightSignature = null
             val currentPlaylist = mutablePlaybackPlaylist.value ?: return@launch
+            if (currentPlaylist.context is PlaybackPlaylistContext.Radio) return@launch
             val currentIndex = platformPlayer.currentTrackIndex.value ?: return@launch
             val currentSignature = "$currentIndex:${currentPlaylist.tracksIds.joinToString(",")}"
             if (currentSignature != signature) return@launch
@@ -167,6 +184,93 @@ class PlayerImpl(
             val additions = nextTrackIds.distinct().filter { it !in currentPlaylist.tracksIds }
             if (additions.isNotEmpty()) appendTracks(additions, automatic = true)
         }
+    }
+
+    private fun cancelRadioRequest() {
+        radioGeneration++
+        radioRequestJob?.cancel()
+        radioRequestJob = null
+        mutableRadioContinuationError.value = false
+        radioErrorSession = null
+    }
+
+    private fun maybeContinueRadio(playing: Boolean) {
+        val playlist = mutablePlaybackPlaylist.value ?: return
+        val context = playlist.context as? PlaybackPlaylistContext.Radio ?: return
+        val index = platformPlayer.currentTrackIndex.value ?: if (playlist.tracksIds.isEmpty()) 0 else return
+        val state = playlist.continuation ?: run {
+            val restored = RadioContinuation.create(playlist.tracksIds)
+            mutablePlaybackPlaylist.value = playlist.copy(continuation =
+                if (context.source == "greatest_hits") restored.copy(status = "stopped") else restored)
+            return
+        }
+        if (radioErrorSession != null && radioErrorSession != state.sessionId) {
+            mutableRadioContinuationError.value = false
+            radioErrorSession = null
+        }
+        if (!playing || state.status != "active" || (playlist.tracksIds.isNotEmpty() && playlist.tracksIds.lastIndex - index !in 0..1) ||
+            radioRequestJob?.isActive == true || radioErrorSession == state.sessionId) return
+        val token = ++radioGeneration
+        radioRequestJob = coroutineScope.launch(Dispatchers.Main) {
+            fun valid() = token == radioGeneration && mutablePlaybackPlaylist.value?.continuation === state
+            try {
+                var cursor = state.nextIndex
+                val trackIds = if (state.strategy == "ranked_snapshot") {
+                    state.nextBatch().let { (ids, next) -> cursor = next; ids }
+                } else {
+                    var ids: List<String>? = null
+                    for (attempt in 0..2) {
+                        if (attempt > 0) delay(1500L * attempt)
+                        if (!valid()) return@launch
+                        val response = withTimeoutOrNull(20_000) {
+                            remoteApiClient.continueRadio(context, playlist.tracksIds.takeLast(10), state.seenTrackIds)
+                        }
+                        if (response is RemoteApiResponse.Success) { ids = response.data; break }
+                    }
+                    ids ?: error("Radio continuation failed")
+                }
+                if (!valid()) return@launch
+                val current = mutablePlaybackPlaylist.value ?: return@launch
+                val currentIndex = platformPlayer.currentTrackIndex.value ?: if (current.tracksIds.isEmpty()) 0 else return@launch
+                val seen = state.seenTrackIds.toHashSet()
+                val additions = trackIds.distinct().filter { it !in seen }
+                val trim = minOf(currentIndex, (current.tracksIds.size + additions.size - 500).coerceAtLeast(0))
+                // Remove only preceding media items: Media3 preserves the current item and position.
+                repeat(trim) { platformPlayer.removeMediaItem(0) }
+                val baseUrl = configStore.baseUrl.value
+                platformPlayer.addMediaItems(additions.map { "$baseUrl/v1/content/stream/$it" })
+                if (current.tracksIds.isEmpty() && additions.isNotEmpty()) platformPlayer.loadTrack(0, 0)
+                mutablePlaybackPlaylist.value = current.copy(
+                    tracksIds = current.tracksIds.drop(trim) + additions,
+                    continuation = state.appended(additions, cursor),
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (valid()) {
+                    radioErrorSession = state.sessionId
+                    mutableRadioContinuationError.value = true
+                    logger.warn("Radio continuation failed: ${error.message}")
+                }
+            }
+        }
+    }
+
+    override fun retryRadioContinuation() {
+        runOnPlayerThread {
+            radioErrorSession = null
+            mutableRadioContinuationError.value = false
+            maybeContinueRadio(true)
+        }
+    }
+
+    override fun dismissRadioContinuationError() { mutableRadioContinuationError.value = false }
+
+    private fun editedContinuation(playlist: PlaybackPlaylist, trackIds: List<String>): RadioContinuation? {
+        if (playlist.context !is PlaybackPlaylistContext.Radio) return playlist.continuation
+        cancelRadioRequest()
+        return (playlist.continuation ?: RadioContinuation.create(playlist.tracksIds))
+            .edited(trackIds, userSettingsStore.keepRadioOnQueueEdit.value)
     }
 
     /**
@@ -204,6 +308,7 @@ class PlayerImpl(
      * Override togglePlayPause to attempt state restoration if player is inactive.
      */
     override fun togglePlayPause() {
+        if (platformPlayer.isPlaying.value) cancelRadioRequest()
         // If restoration is in progress, ignore this toggle to avoid race conditions
         if (restorationInProgress) {
             logger.debug("togglePlayPause() - restoration in progress, ignoring")
@@ -232,6 +337,7 @@ class PlayerImpl(
      * Override setIsPlaying to attempt state restoration if player is inactive.
      */
     override fun setIsPlaying(isPlaying: Boolean) {
+        if (!isPlaying) cancelRadioRequest()
         // If restoration is in progress, ignore this call to avoid race conditions
         if (restorationInProgress) {
             logger.debug("setIsPlaying($isPlaying) - restoration in progress, ignoring")
@@ -399,14 +505,25 @@ class PlayerImpl(
         }
     }
 
-    override fun loadRadio(trackIds: List<String>, context: PlaybackPlaylistContext.Radio) {
+    override fun loadRadio(trackIds: List<String>, context: PlaybackPlaylistContext.Radio, continuation: RadioContinuation?) {
         if (trackIds.isEmpty()) return
         runOnPlayerThread {
+            cancelRadioRequest()
             loadNexPlaylistJob?.cancel()
+            if (context.source == "greatest_hits") {
+                if (platformPlayer.shuffleEnabled.value) platformPlayer.toggleShuffle()
+                val repeatSteps = when (platformPlayer.repeatMode.value) {
+                    com.lelloman.pezzottify.android.domain.player.RepeatMode.OFF -> 0
+                    com.lelloman.pezzottify.android.domain.player.RepeatMode.ALL -> 2
+                    com.lelloman.pezzottify.android.domain.player.RepeatMode.ONE -> 1
+                }
+                repeat(repeatSteps) { platformPlayer.cycleRepeatMode() }
+            }
             val baseUrl = configStore.baseUrl.value
             val urls = trackIds.map { "$baseUrl/v1/content/stream/$it" }
             platformPlayer.loadPlaylist(urls, playWhenReady = true)
             mutablePlaybackPlaylist.value = PlaybackPlaylist(
+                continuation = continuation ?: RadioContinuation.create(trackIds),
                 context = context,
                 tracksIds = trackIds,
             )
@@ -423,6 +540,7 @@ class PlayerImpl(
     }
 
     override fun stop() {
+        cancelRadioRequest()
         platformPlayer.stop()
     }
 
@@ -467,7 +585,7 @@ class PlayerImpl(
             }
 
             platformPlayer.moveMediaItem(fromIndex, toIndex)
-            mutablePlaybackPlaylist.value = PlaybackPlaylist(newContext, reorderedTracks)
+            mutablePlaybackPlaylist.value = PlaybackPlaylist(newContext, reorderedTracks, editedContinuation(currentPlaylist, reorderedTracks))
             logger.info("Moved track from index $fromIndex to $toIndex")
         }
     }
@@ -491,6 +609,7 @@ class PlayerImpl(
                 mutablePlaybackPlaylist.value = PlaybackPlaylist(
                     context = newContext,
                     tracksIds = newTracksIds,
+                    continuation = if (automatic) currentPlaylist.continuation else editedContinuation(currentPlaylist, newTracksIds),
                 )
                 // Add new tracks to platform player
                 val baseUrl = configStore.baseUrl.value
@@ -552,14 +671,17 @@ class PlayerImpl(
         mutablePlaybackPlaylist.value = PlaybackPlaylist(
             context = newContext,
             tracksIds = newTracksIds,
+            continuation = editedContinuation(currentPlaylist, newTracksIds),
         )
 
         // Remove from platform player
         platformPlayer.removeMediaItem(trackIndex)
+        if (newTracksIds.isEmpty()) maybeContinueRadio(true)
         logger.info("Removed track at index $trackIndex from playlist")
     }
 
     override fun clearSession() {
+        cancelRadioRequest()
         loadNexPlaylistJob?.cancel()
         loadNexPlaylistJob = null
         smartContinuationRequestJob?.cancel()

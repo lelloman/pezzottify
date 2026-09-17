@@ -1,8 +1,16 @@
 <template>
   <footer
-    v-if="hasPlayback || playback.radioCreationState.status !== 'idle'"
+    v-if="
+      hasPlayback ||
+      playback.radioCreationState.status !== 'idle' ||
+      playback.radioContinuationError
+    "
     class="footerPlayer"
-    :class="{ hasRadioCreation: playback.radioCreationState.status !== 'idle' }"
+    :class="{
+      hasRadioCreation:
+        playback.radioCreationState.status !== 'idle' ||
+        playback.radioContinuationError,
+    }"
   >
     <div
       v-if="playback.radioCreationState.status !== 'idle'"
@@ -34,6 +42,17 @@
             : "Dismiss"
         }}
       </button>
+    </div>
+    <div
+      v-if="
+        playback.radioContinuationError &&
+        playback.radioCreationState.status === 'idle'
+      "
+      class="radioCreationStatus"
+      role="status"
+    >
+      <span>Could not add more radio tracks.</span>
+      <button @click="playback.retryRadioContinuation">Retry</button>
     </div>
     <template v-if="hasPlayback">
       <div class="trackInfoRow">
@@ -117,6 +136,9 @@
         />
         <button
           type="button"
+          v-if="
+            playback.currentPlaylist?.type !== playback.PLAYBACK_CONTEXTS.radio
+          "
           class="lightControlFill scaleClickFeedback scalingIcon mediumIcon smartContinuationButton"
           :class="{ active: smartContinuationEnabled }"
           :title="

@@ -15,6 +15,7 @@ data class SettingsScreenState(
     val storageInfo: StorageInfo? = null,
     val notifyWhatsNewEnabled: Boolean = false,
     val smartContinuationEnabled: Boolean = false,
+    val keepRadioOnQueueEdit: Boolean = true,
     val proxyModeEnabled: Boolean = true,
     val proxyStreamingAvailable: Boolean = false,
     val backgroundSyncInterval: BackgroundSyncInterval = BackgroundSyncInterval.Default,

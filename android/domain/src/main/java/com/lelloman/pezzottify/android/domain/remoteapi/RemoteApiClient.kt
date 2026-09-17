@@ -183,6 +183,13 @@ interface RemoteApiClient {
         count: Int = 1,
     ): RemoteApiResponse<List<String>>
 
+    suspend fun getArtistGreatestHits(artistId: String): RemoteApiResponse<List<String>>
+    suspend fun continueRadio(
+        context: com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext.Radio,
+        recentTrackIds: List<String>,
+        excludeTrackIds: List<String>,
+    ): RemoteApiResponse<List<String>>
+
     suspend fun getRadioTrackIds(
         entityType: String,
         entityId: String,

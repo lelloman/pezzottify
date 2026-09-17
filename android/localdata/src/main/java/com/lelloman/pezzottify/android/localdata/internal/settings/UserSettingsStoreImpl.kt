@@ -88,6 +88,12 @@ internal class UserSettingsStoreImpl(
     }
     override val isSmartContinuationEnabled: StateFlow<Boolean> = mutableSmartContinuationEnabled.asStateFlow()
 
+    private val mutableKeepRadioOnQueueEdit by lazy {
+        val enabled = prefs.getBoolean(KEY_KEEP_RADIO_ON_QUEUE_EDIT_ENABLED, DEFAULT_KEEP_RADIO_ON_QUEUE_EDIT_ENABLED)
+        MutableStateFlow(enabled)
+    }
+    override val keepRadioOnQueueEdit: StateFlow<Boolean> = mutableKeepRadioOnQueueEdit.asStateFlow()
+
     private val mutableProxyModeEnabled by lazy {
         MutableStateFlow(prefs.getBoolean(KEY_PROXY_MODE_ENABLED, DEFAULT_PROXY_MODE_ENABLED))
     }
@@ -141,6 +147,17 @@ internal class UserSettingsStoreImpl(
                 setting = UserSetting.SmartContinuationEnabled(enabled),
                 modifiedAt = modifiedAt,
                 syncStatus = smartContinuationStatus,
+            )
+        }
+        val keepRadioOnQueueEditStatus = prefs.getString(KEY_KEEP_RADIO_ON_QUEUE_EDIT_SYNC_STATUS, null)
+            ?.let { parseSyncStatus(it) }
+        if (keepRadioOnQueueEditStatus != null && keepRadioOnQueueEditStatus != SyncStatus.Synced) {
+            val enabled = prefs.getBoolean(KEY_KEEP_RADIO_ON_QUEUE_EDIT_ENABLED, DEFAULT_KEEP_RADIO_ON_QUEUE_EDIT_ENABLED)
+            val modifiedAt = prefs.getLong(KEY_KEEP_RADIO_ON_QUEUE_EDIT_MODIFIED_AT, System.currentTimeMillis())
+            settings[KEY_SETTING_KEEP_RADIO_ON_QUEUE_EDIT] = SyncedUserSetting(
+                setting = UserSetting.KeepRadioOnQueueEdit(enabled),
+                modifiedAt = modifiedAt,
+                syncStatus = keepRadioOnQueueEditStatus,
             )
         }
         val proxyModeStatus = prefs.getString(KEY_PROXY_MODE_SYNC_STATUS, null)
@@ -217,6 +234,20 @@ internal class UserSettingsStoreImpl(
                 .commit()
             val updatedSettings = mutableSyncedSettings.value.toMutableMap()
             updatedSettings.remove(KEY_SETTING_SMART_CONTINUATION)
+            mutableSyncedSettings.value = updatedSettings
+        }
+    }
+
+    override suspend fun setKeepRadioOnQueueEdit(enabled: Boolean) {
+        withContext(dispatcher) {
+            mutableKeepRadioOnQueueEdit.value = enabled
+            prefs.edit()
+                .putBoolean(KEY_KEEP_RADIO_ON_QUEUE_EDIT_ENABLED, enabled)
+                .putString(KEY_KEEP_RADIO_ON_QUEUE_EDIT_SYNC_STATUS, SyncStatus.Synced.name)
+                .remove(KEY_KEEP_RADIO_ON_QUEUE_EDIT_MODIFIED_AT)
+                .commit()
+            val updatedSettings = mutableSyncedSettings.value.toMutableMap()
+            updatedSettings.remove(KEY_SETTING_KEEP_RADIO_ON_QUEUE_EDIT)
             mutableSyncedSettings.value = updatedSettings
         }
     }
@@ -301,6 +332,28 @@ internal class UserSettingsStoreImpl(
                     }
                     mutableSyncedSettings.value = updatedSettings
                 }
+                is UserSetting.KeepRadioOnQueueEdit -> {
+                    val enabled = setting.value
+                    val modifiedAt = System.currentTimeMillis()
+                    mutableKeepRadioOnQueueEdit.value = enabled
+                    prefs.edit()
+                        .putBoolean(KEY_KEEP_RADIO_ON_QUEUE_EDIT_ENABLED, enabled)
+                        .putString(KEY_KEEP_RADIO_ON_QUEUE_EDIT_SYNC_STATUS, syncStatus.name)
+                        .putLong(KEY_KEEP_RADIO_ON_QUEUE_EDIT_MODIFIED_AT, modifiedAt)
+                        .commit()
+
+                    val updatedSettings = mutableSyncedSettings.value.toMutableMap()
+                    if (syncStatus == SyncStatus.Synced) {
+                        updatedSettings.remove(KEY_SETTING_KEEP_RADIO_ON_QUEUE_EDIT)
+                    } else {
+                        updatedSettings[KEY_SETTING_KEEP_RADIO_ON_QUEUE_EDIT] = SyncedUserSetting(
+                            setting = setting,
+                            modifiedAt = modifiedAt,
+                            syncStatus = syncStatus,
+                        )
+                    }
+                    mutableSyncedSettings.value = updatedSettings
+                }
                 is UserSetting.ProxyModeEnabled -> {
                     val modifiedAt = System.currentTimeMillis()
                     mutableProxyModeEnabled.value = setting.value
@@ -366,6 +419,22 @@ internal class UserSettingsStoreImpl(
                         mutableSyncedSettings.value = updatedSettings
                     }
                 }
+                KEY_SETTING_KEEP_RADIO_ON_QUEUE_EDIT -> {
+                    prefs.edit()
+                        .putString(KEY_KEEP_RADIO_ON_QUEUE_EDIT_SYNC_STATUS, status.name)
+                        .commit()
+
+                    val updatedSettings = mutableSyncedSettings.value.toMutableMap()
+                    val existing = updatedSettings[settingKey]
+                    if (existing != null) {
+                        if (status == SyncStatus.Synced) {
+                            updatedSettings.remove(settingKey)
+                        } else {
+                            updatedSettings[settingKey] = existing.copy(syncStatus = status)
+                        }
+                        mutableSyncedSettings.value = updatedSettings
+                    }
+                }
                 KEY_SETTING_PROXY_MODE -> {
                     prefs.edit().putString(KEY_PROXY_MODE_SYNC_STATUS, status.name).commit()
                     val updatedSettings = mutableSyncedSettings.value.toMutableMap()
@@ -383,6 +452,7 @@ internal class UserSettingsStoreImpl(
         withContext(dispatcher) {
             mutableNotifyWhatsNewEnabled.value = DEFAULT_NOTIFY_WHATSNEW_ENABLED
             mutableSmartContinuationEnabled.value = DEFAULT_SMART_CONTINUATION_ENABLED
+            mutableKeepRadioOnQueueEdit.value = DEFAULT_KEEP_RADIO_ON_QUEUE_EDIT_ENABLED
             mutableProxyModeEnabled.value = DEFAULT_PROXY_MODE_ENABLED
             mutableProxyStreamingAvailable.value = false
             prefs.edit()
@@ -392,6 +462,9 @@ internal class UserSettingsStoreImpl(
                 .remove(KEY_SMART_CONTINUATION_ENABLED)
                 .remove(KEY_SMART_CONTINUATION_SYNC_STATUS)
                 .remove(KEY_SMART_CONTINUATION_MODIFIED_AT)
+                .remove(KEY_KEEP_RADIO_ON_QUEUE_EDIT_ENABLED)
+                .remove(KEY_KEEP_RADIO_ON_QUEUE_EDIT_SYNC_STATUS)
+                .remove(KEY_KEEP_RADIO_ON_QUEUE_EDIT_MODIFIED_AT)
                 .remove(KEY_PROXY_MODE_ENABLED)
                 .remove(KEY_PROXY_MODE_SYNC_STATUS)
                 .remove(KEY_PROXY_MODE_MODIFIED_AT)
@@ -448,6 +521,10 @@ internal class UserSettingsStoreImpl(
         const val KEY_SMART_CONTINUATION_SYNC_STATUS = "SmartContinuationSyncStatus"
         const val KEY_SMART_CONTINUATION_MODIFIED_AT = "SmartContinuationModifiedAt"
         const val DEFAULT_SMART_CONTINUATION_ENABLED = false
+        const val KEY_KEEP_RADIO_ON_QUEUE_EDIT_ENABLED = "KeepRadioOnQueueEdit"
+        const val KEY_KEEP_RADIO_ON_QUEUE_EDIT_SYNC_STATUS = "KeepRadioOnQueueEditSyncStatus"
+        const val KEY_KEEP_RADIO_ON_QUEUE_EDIT_MODIFIED_AT = "KeepRadioOnQueueEditModifiedAt"
+        const val DEFAULT_KEEP_RADIO_ON_QUEUE_EDIT_ENABLED = true
         const val KEY_PROXY_MODE_ENABLED = "ProxyModeEnabled"
         const val KEY_PROXY_MODE_SYNC_STATUS = "ProxyModeSyncStatus"
         const val KEY_PROXY_MODE_MODIFIED_AT = "ProxyModeModifiedAt"
@@ -455,6 +532,7 @@ internal class UserSettingsStoreImpl(
         // Setting keys for synced settings map
         const val KEY_SETTING_NOTIFY_WHATSNEW = "notify_whatsnew"
         const val KEY_SETTING_SMART_CONTINUATION = "smart_continuation_enabled"
+        const val KEY_SETTING_KEEP_RADIO_ON_QUEUE_EDIT = "keep_radio_on_queue_edit"
         const val KEY_SETTING_PROXY_MODE = "proxy_mode_enabled"
         // Legacy value for migration - AmoledBlack was removed and converted to Amoled theme mode
         const val LEGACY_AMOLED_BLACK_PALETTE = "AmoledBlack"

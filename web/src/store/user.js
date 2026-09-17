@@ -264,6 +264,14 @@ export const useUserStore = defineStore("user", () => {
     );
   };
 
+  const keepRadioOnQueueEdit = computed(
+    () =>
+      !("keep_radio_on_queue_edit" in settings.value) ||
+      isTruthySetting(settings.value.keep_radio_on_queue_edit),
+  );
+  const setKeepRadioOnQueueEdit = (enabled) =>
+    setSetting("keep_radio_on_queue_edit", enabled);
+
   const isSmartContinuationEnabled = computed(() => {
     return isTruthySetting(settings.value.smart_continuation_enabled);
   });
@@ -675,6 +683,8 @@ export const useUserStore = defineStore("user", () => {
     putPlaylistRef,
     getSetting,
     setSetting,
+    keepRadioOnQueueEdit,
+    setKeepRadioOnQueueEdit,
     isSmartContinuationEnabled,
     setSmartContinuationEnabled,
     canUseProxyStreaming,

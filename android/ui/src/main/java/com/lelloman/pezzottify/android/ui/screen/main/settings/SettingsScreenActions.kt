@@ -18,6 +18,7 @@ interface SettingsScreenActions {
     fun setNotifyWhatsNewEnabled(enabled: Boolean)
 
     fun setSmartContinuationEnabled(enabled: Boolean)
+    fun setKeepRadioOnQueueEdit(enabled: Boolean)
 
     fun setProxyModeEnabled(enabled: Boolean) {}
 

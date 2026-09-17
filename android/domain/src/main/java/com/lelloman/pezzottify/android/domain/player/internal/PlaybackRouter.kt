@@ -288,20 +288,30 @@ class PlaybackRouter @Inject constructor(
         }
     }
 
-    override fun loadRadio(trackIds: List<String>, context: PlaybackPlaylistContext.Radio) {
+    override fun loadRadio(trackIds: List<String>, context: PlaybackPlaylistContext.Radio, continuation: com.lelloman.pezzottify.android.domain.player.RadioContinuation?) {
         radioCreation.cancel()
         if (isRemote) {
             sendRemoteCommand(
                 "loadTrackIds",
                 mapOf(
                     "trackIds" to trackIds,
-                    "context" to context.toRemoteCommandPayload(),
+                    "context" to (context.toRemoteCommandPayload() + mapOf("continuation" to continuation?.toWireJson())),
                 )
             )
         } else {
-            localPlayer.loadRadio(trackIds, context)
+            localPlayer.loadRadio(trackIds, context, continuation)
         }
     }
+
+    override val radioContinuationError: StateFlow<Boolean> = MutableStateFlow(false).also { flow ->
+        GlobalScope.launch {
+            playbackModeManager.mode.flatMapLatest { mode ->
+                if (mode is PlaybackMode.Local) localPlayer.radioContinuationError else kotlinx.coroutines.flow.flowOf(false)
+            }.collect { flow.value = it }
+        }
+    }
+    override fun retryRadioContinuation() { if (!isRemote) localPlayer.retryRadioContinuation() }
+    override fun dismissRadioContinuationError() { localPlayer.dismissRadioContinuationError() }
 
     override fun goToPreviousPlaylist() {
         if (!isRemote) localPlayer.goToPreviousPlaylist()

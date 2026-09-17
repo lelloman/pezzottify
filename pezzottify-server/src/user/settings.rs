@@ -20,6 +20,9 @@ pub enum UserSetting {
     #[serde(rename = "smart_continuation_enabled")]
     SmartContinuationEnabled(bool),
 
+    #[serde(rename = "keep_radio_on_queue_edit")]
+    KeepRadioOnQueueEdit(bool),
+
     /// Whether an authorized user wants missing tracks streamed on demand.
     #[serde(rename = "proxy_mode_enabled")]
     ProxyModeEnabled(bool),
@@ -38,6 +41,7 @@ impl UserSetting {
         match self {
             Self::NotifyWhatsNew(_) => "notify_whatsnew",
             Self::SmartContinuationEnabled(_) => "smart_continuation_enabled",
+            Self::KeepRadioOnQueueEdit(_) => "keep_radio_on_queue_edit",
             Self::ProxyModeEnabled(_) => "proxy_mode_enabled",
             Self::EnableExternalSearch(_) => "enable_external_search",
         }
@@ -49,6 +53,7 @@ impl UserSetting {
         match self {
             Self::NotifyWhatsNew(enabled) => enabled.to_string(),
             Self::SmartContinuationEnabled(enabled) => enabled.to_string(),
+            Self::KeepRadioOnQueueEdit(enabled) => enabled.to_string(),
             Self::ProxyModeEnabled(enabled) => enabled.to_string(),
             Self::EnableExternalSearch(enabled) => enabled.to_string(),
         }
@@ -73,6 +78,10 @@ impl UserSetting {
                     .map_err(|_| format!("Invalid boolean value for {}: {}", key, value))?;
                 Ok(Self::NotifyWhatsNew(enabled))
             }
+            "keep_radio_on_queue_edit" => value
+                .parse::<bool>()
+                .map(Self::KeepRadioOnQueueEdit)
+                .map_err(|_| format!("Invalid boolean value for {}: {}", key, value)),
             "smart_continuation_enabled" => {
                 let enabled = value
                     .parse::<bool>()
@@ -102,6 +111,7 @@ impl UserSetting {
             key,
             "notify_whatsnew"
                 | "smart_continuation_enabled"
+                | "keep_radio_on_queue_edit"
                 | "proxy_mode_enabled"
                 | "enable_external_search"
         )
@@ -113,6 +123,7 @@ impl UserSetting {
         match key {
             "notify_whatsnew" => Some(Self::NotifyWhatsNew(false)),
             "smart_continuation_enabled" => Some(Self::SmartContinuationEnabled(false)),
+            "keep_radio_on_queue_edit" => Some(Self::KeepRadioOnQueueEdit(true)),
             "proxy_mode_enabled" => Some(Self::ProxyModeEnabled(false)),
             // Don't provide defaults for deprecated settings
             "enable_external_search" => None,
@@ -124,6 +135,27 @@ impl UserSetting {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn radio_edit_setting_defaults_and_round_trips() {
+        assert_eq!(
+            UserSetting::default_for_key("keep_radio_on_queue_edit"),
+            Some(UserSetting::KeepRadioOnQueueEdit(true))
+        );
+        assert!(UserSetting::is_known_key("keep_radio_on_queue_edit"));
+        for enabled in [false, true] {
+            let setting = UserSetting::KeepRadioOnQueueEdit(enabled);
+            assert_eq!(
+                UserSetting::from_key_value(setting.key(), &setting.value_to_string()).unwrap(),
+                setting
+            );
+            assert_eq!(
+                serde_json::from_str::<UserSetting>(&serde_json::to_string(&setting).unwrap())
+                    .unwrap(),
+                setting
+            );
+        }
+    }
 
     #[test]
     fn test_key() {

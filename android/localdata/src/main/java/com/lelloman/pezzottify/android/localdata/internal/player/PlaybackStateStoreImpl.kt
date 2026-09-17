@@ -55,6 +55,7 @@ internal class PlaybackStateStoreImpl(
                     isEdited = ctx.isEdited,
                 )
             },
+            continuation = playlist.continuation,
             tracksIds = playlist.tracksIds,
             currentTrackIndex = currentTrackIndex,
             positionMs = positionMs,
@@ -102,6 +103,7 @@ internal class PlaybackStateStoreImpl(
                 playlist = PlaybackPlaylist(
                     context = context,
                     tracksIds = persistable.tracksIds,
+                    continuation = persistable.continuation,
                 ),
                 currentTrackIndex = persistable.currentTrackIndex,
                 positionMs = persistable.positionMs,
@@ -134,6 +136,7 @@ internal class PlaybackStateStoreImpl(
 private data class PersistablePlaybackState(
     val context: PersistableContext,
     val tracksIds: List<String>,
+    val continuation: com.lelloman.pezzottify.android.domain.player.RadioContinuation? = null,
     val currentTrackIndex: Int,
     val positionMs: Long,
     val isPlaying: Boolean,

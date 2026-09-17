@@ -368,6 +368,40 @@ class PlaybackSessionHandlerTest {
         assertThat(afterTwoIntervals).isGreaterThan(afterOneInterval)
     }
 
+    @Test
+    fun `web greatest hits command retains snapshot with null settings`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+        capturedMessageHandler.onMessage("playback.command", """{
+            "command":"loadTrackIds", "payload": {
+                "trackIds":["one"],
+                "context":{"type":"radio","source":"greatest_hits","seed":{"entity_type":"artist","entity_id":"artist","label":"Artist"},"count":2,"settings":null,"edited":false,
+                    "continuation":{"session_id":"web-session","strategy":"ranked_snapshot","status":"active","seen_track_ids":["one"],"ordered_track_ids":["one","two"],"next_index":1}}
+            }
+        }""")
+        testScheduler.runCurrent()
+        verify { player.loadRadio(listOf("one"), match { it.source == "greatest_hits" && it.settings == null }, match {
+            it.sessionId == "web-session" && it.nextBatch().first == listOf("two")
+        }) }
+    }
+
+    @Test
+    fun `remote queue keeps continuation separately from lightweight display context`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+        capturedMessageHandler.onMessage("playback.device_queue", """{
+            "device_id":42,"queue":[{"id":"one"}],"context":{
+                "type":"radio","source":"greatest_hits","seed":{"entity_type":"artist","entity_id":"artist","label":"Artist"},"count":2,"settings":null,
+                "continuation":{"session_id":"remote","strategy":"ranked_snapshot","status":"stopped","seen_track_ids":["one"],"ordered_track_ids":["one","two"],"next_index":1}
+            }
+        }""")
+        testScheduler.runCurrent()
+        assertThat(handler.otherDeviceRadioContinuations.value[42]?.status).isEqualTo("stopped")
+        assertThat(handler.otherDeviceQueueContexts.value[42]).isInstanceOf(PlaybackPlaylistContext.Radio::class.java)
+    }
+
     // ========== Command Tests ==========
 
     @Test

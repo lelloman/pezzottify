@@ -6,6 +6,7 @@ import com.google.common.truth.Truth.assertThat
 import com.lelloman.pezzottify.android.domain.settings.AppFontFamily
 import com.lelloman.pezzottify.android.domain.settings.ColorPalette
 import com.lelloman.pezzottify.android.domain.settings.ThemeMode
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -29,6 +30,24 @@ class UserSettingsStoreImplTest {
             UserSettingsStoreImpl.SHARED_PREF_FILE_NAME,
             Context.MODE_PRIVATE
         ).edit().clear().commit()
+    }
+
+    @Test
+    fun `radio edit preference defaults true and survives pending sync and recreation`() = runTest(testDispatcher) {
+        val store = UserSettingsStoreImpl(context, testDispatcher)
+        assertThat(store.keepRadioOnQueueEdit.value).isTrue()
+        store.setSyncedSetting(
+            com.lelloman.pezzottify.android.domain.sync.UserSetting.KeepRadioOnQueueEdit(false),
+            com.lelloman.pezzottify.android.domain.usercontent.SyncStatus.PendingSync,
+        )
+        val restored = UserSettingsStoreImpl(context, testDispatcher)
+        assertThat(restored.keepRadioOnQueueEdit.value).isFalse()
+        assertThat(restored.getPendingSyncSettings().first().single().key).isEqualTo("keep_radio_on_queue_edit")
+        restored.setKeepRadioOnQueueEdit(true)
+        assertThat(restored.getPendingSyncSettings().first()).isEmpty()
+        assertThat(restored.keepRadioOnQueueEdit.value).isTrue()
+        restored.clearSyncedSettings()
+        assertThat(restored.keepRadioOnQueueEdit.value).isTrue()
     }
 
     @Test

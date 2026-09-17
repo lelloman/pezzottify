@@ -389,6 +389,9 @@ impl CatalogStore for MediaCatalogView {
     fn get_available_album_track_ids(&self, _album_id: &str) -> Result<Vec<String>> {
         self.inner.get_available_album_track_ids(_album_id)
     }
+    fn get_artist_greatest_hits_track_ids(&self, artist_id: &str) -> Result<Vec<String>> {
+        self.inner.get_artist_greatest_hits_track_ids(artist_id)
+    }
     fn get_artist_top_track_ids(&self, _artist_id: &str, _limit: usize) -> Result<Vec<String>> {
         self.inner.get_artist_top_track_ids(_artist_id, _limit)
     }

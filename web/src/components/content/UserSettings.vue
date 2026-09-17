@@ -65,10 +65,25 @@
       </div>
       <div class="settingRow">
         <div class="settingInfo">
+          <span class="settingLabel">When editing a radio queue</span>
+          <span class="settingDescription"
+            >Applies to all radios, including artist greatest hits.</span
+          >
+        </div>
+        <select
+          v-model="keepRadioOnQueueEdit"
+          aria-label="When editing a radio queue"
+        >
+          <option :value="true">Keep radio going</option>
+          <option :value="false">Stop adding tracks</option>
+        </select>
+      </div>
+      <div class="settingRow">
+        <div class="settingInfo">
           <span class="settingLabel">Smart Continuation</span>
           <span class="settingDescription">
-            Automatically queue related tracks as the current queue nears its
-            end.
+            Automatically queue related tracks after ordinary queues. Radios
+            manage their own continuation.
           </span>
         </div>
         <label class="toggle">
@@ -90,6 +105,10 @@ const debugStore = useDebugStore();
 const { useOrganicSearch, imagesEnabled, excludeUnavailable } =
   storeToRefs(debugStore);
 const userStore = useUserStore();
+const keepRadioOnQueueEdit = computed({
+  get: () => userStore.keepRadioOnQueueEdit,
+  set: (value) => userStore.setKeepRadioOnQueueEdit(value),
+});
 const smartContinuationEnabled = computed({
   get: () => userStore.isSmartContinuationEnabled,
   set: (enabled) => userStore.setSmartContinuationEnabled(enabled),

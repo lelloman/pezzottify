@@ -283,6 +283,8 @@ private fun PlayerScreenContent(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
+                state.radioLabel?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
+
                 // Track info
                 ScrollingTextRow(
                     text = state.trackName,
@@ -322,6 +324,7 @@ private fun PlayerScreenContent(
                     shuffleEnabled = state.shuffleEnabled,
                     repeatMode = state.repeatMode,
                     smartContinuationEnabled = state.smartContinuationEnabled,
+                    showSmartContinuation = !state.isRadio,
                     onPlayPause = actions::clickOnPlayPause,
                     onSkipNext = actions::clickOnSkipNext,
                     onSkipPrevious = actions::clickOnSkipPrevious,
@@ -458,6 +461,7 @@ private fun PlaybackControls(
     shuffleEnabled: Boolean,
     repeatMode: RepeatModeUi,
     smartContinuationEnabled: Boolean,
+    showSmartContinuation: Boolean,
     onPlayPause: () -> Unit,
     onSkipNext: () -> Unit,
     onSkipPrevious: () -> Unit,
@@ -566,7 +570,7 @@ private fun PlaybackControls(
             )
         }
 
-        IconButton(
+        if (showSmartContinuation) IconButton(
             onClick = onSmartContinuation,
             modifier = Modifier.size(48.dp),
         ) {

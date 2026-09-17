@@ -19,6 +19,7 @@ data class SyncedUserSetting(
         get() = when (setting) {
             is UserSetting.NotifyWhatsNew -> "notify_whatsnew"
             is UserSetting.SmartContinuationEnabled -> "smart_continuation_enabled"
+            is UserSetting.KeepRadioOnQueueEdit -> "keep_radio_on_queue_edit"
             is UserSetting.ProxyModeEnabled -> "proxy_mode_enabled"
         }
 }

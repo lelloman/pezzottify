@@ -19,6 +19,8 @@ import com.lelloman.pezzottify.android.ui.R
 fun PlaybackSettingsSection(
     smartContinuationEnabled: Boolean,
     onSmartContinuationChanged: (Boolean) -> Unit,
+    keepRadioOnQueueEdit: Boolean = true,
+    onKeepRadioOnQueueEditChanged: (Boolean) -> Unit = {},
     proxyStreamingAvailable: Boolean = false,
     proxyModeEnabled: Boolean = true,
     onProxyModeChanged: (Boolean) -> Unit = {},
@@ -51,6 +53,14 @@ fun PlaybackSettingsSection(
             Spacer(modifier = Modifier.height(16.dp))
         }
 
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.radio_queue_edit), style = MaterialTheme.typography.bodyLarge)
+                Text(stringResource(if (keepRadioOnQueueEdit) R.string.radio_keep_going else R.string.radio_stop_adding), style = MaterialTheme.typography.bodySmall)
+            }
+            Switch(checked = keepRadioOnQueueEdit, onCheckedChange = onKeepRadioOnQueueEditChanged)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically

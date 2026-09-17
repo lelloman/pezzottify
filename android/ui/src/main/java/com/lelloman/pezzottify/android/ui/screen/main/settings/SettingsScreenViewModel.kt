@@ -9,6 +9,7 @@ import com.lelloman.pezzottify.android.ui.theme.AppFontFamily
 import com.lelloman.pezzottify.android.ui.theme.ColorPalette
 import com.lelloman.pezzottify.android.ui.theme.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -41,6 +42,7 @@ class SettingsScreenViewModel @Inject constructor(
                 storageInfo = interactor.getStorageInfo(),
                 notifyWhatsNewEnabled = interactor.isNotifyWhatsNewEnabled(),
                 smartContinuationEnabled = interactor.isSmartContinuationEnabled(),
+                keepRadioOnQueueEdit = interactor.keepRadioOnQueueEdit(),
                 proxyModeEnabled = interactor.isProxyModeEnabled(),
                 proxyStreamingAvailable = interactor.isProxyStreamingAvailable(),
                 backgroundSyncInterval = interactor.getBackgroundSyncInterval(),
@@ -82,6 +84,11 @@ class SettingsScreenViewModel @Inject constructor(
             launch {
                 interactor.observeNotifyWhatsNewEnabled().collect { enabled ->
                     mutableState.update { it.copy(notifyWhatsNewEnabled = enabled) }
+                }
+            }
+            launch {
+                interactor.observeKeepRadioOnQueueEdit().collect { enabled ->
+                    mutableState.update { it.copy(keepRadioOnQueueEdit = enabled) }
                 }
             }
             launch {
@@ -176,6 +183,10 @@ class SettingsScreenViewModel @Inject constructor(
         viewModelScope.launch {
             interactor.setNotifyWhatsNewEnabled(enabled)
         }
+    }
+
+    override fun setKeepRadioOnQueueEdit(enabled: Boolean) {
+        viewModelScope.launch { interactor.setKeepRadioOnQueueEdit(enabled) }
     }
 
     override fun setSmartContinuationEnabled(enabled: Boolean) {
@@ -301,6 +312,9 @@ class SettingsScreenViewModel @Inject constructor(
         fun isCacheEnabled(): Boolean
         fun getStorageInfo(): StorageInfo?
         fun isNotifyWhatsNewEnabled(): Boolean
+        fun keepRadioOnQueueEdit(): Boolean
+        fun observeKeepRadioOnQueueEdit(): Flow<Boolean>
+        suspend fun setKeepRadioOnQueueEdit(enabled: Boolean)
         fun isSmartContinuationEnabled(): Boolean
         fun isProxyModeEnabled(): Boolean = false
         fun isProxyStreamingAvailable(): Boolean = false

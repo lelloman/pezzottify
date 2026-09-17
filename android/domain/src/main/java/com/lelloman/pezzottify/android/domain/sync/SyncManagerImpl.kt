@@ -581,6 +581,9 @@ class SyncManagerImpl internal constructor(
             is UserSetting.NotifyWhatsNew -> {
                 userSettingsStore.setNotifyWhatsNewEnabled(setting.value)
             }
+            is UserSetting.KeepRadioOnQueueEdit -> {
+                userSettingsStore.setKeepRadioOnQueueEdit(setting.value)
+            }
             is UserSetting.SmartContinuationEnabled -> {
                 userSettingsStore.setSmartContinuationEnabled(setting.value)
             }
