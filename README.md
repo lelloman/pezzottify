@@ -40,18 +40,28 @@ Start with the component docs when working in a specific area:
 
 Requirements:
 
-- Docker and Docker Compose
+- Docker with BuildKit and Docker Compose 2.17 or newer
 - Git
+- A sibling `simple-server` checkout (used by the Rust path dependency)
 
 Run the development stack:
 
 ```bash
 git clone https://github.com/lelloman/pezzottify
+git clone https://github.com/lelloman/simple-server
 cd pezzottify
 mkdir -p dev-data
 cp pezzottify-server/config.example.toml pezzottify-server/config.toml
 # Edit pezzottify-server/config.toml for your paths and optional services.
 docker compose up --build
+```
+
+If `simple-server` is checked out elsewhere, set `SIMPLE_SERVER_CONTEXT` to its
+absolute path. Direct image builds must also supply the named context:
+
+```bash
+docker build --build-context simple-server-source=../simple-server \
+  -f pezzottify-server/Dockerfile .
 ```
 
 The server listens on `http://localhost:3001` by default. If the frontend is served by the server build, open that URL in a browser; otherwise run the web dev server from `web/`.
