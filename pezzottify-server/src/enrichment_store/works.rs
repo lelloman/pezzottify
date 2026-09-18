@@ -67,6 +67,48 @@ pub(super) fn create_schema(conn: &Connection) -> Result<()> {
         PRIMARY KEY(provider,external_id), UNIQUE(work_id,provider)
     );")?;
     conn.execute_batch(include_str!("work_graph.sql"))?;
+    // Keep search normalization separate from conservative Work identity matching.
+    // A savepoint makes the initial index creation/backfill atomic, including upgrades.
+    conn.execute_batch("SAVEPOINT work_search_schema")?;
+    let search_setup = (|| -> Result<()> {
+        let exists: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='work_search_v1')",
+            [],
+            |row| row.get(0),
+        )?;
+        conn.execute_batch(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS work_search_v1 USING fts5(
+                title, creators_json, content='works_v1', content_rowid='rowid',
+                tokenize='unicode61 remove_diacritics 2'
+            );
+            CREATE TRIGGER IF NOT EXISTS work_search_insert AFTER INSERT ON works_v1 BEGIN
+                INSERT INTO work_search_v1(rowid,title,creators_json)
+                VALUES(new.rowid,new.title,new.creators_json);
+            END;
+            CREATE TRIGGER IF NOT EXISTS work_search_delete AFTER DELETE ON works_v1 BEGIN
+                INSERT INTO work_search_v1(work_search_v1,rowid,title,creators_json)
+                VALUES('delete',old.rowid,old.title,old.creators_json);
+            END;
+            CREATE TRIGGER IF NOT EXISTS work_search_update AFTER UPDATE ON works_v1 BEGIN
+                INSERT INTO work_search_v1(work_search_v1,rowid,title,creators_json)
+                VALUES('delete',old.rowid,old.title,old.creators_json);
+                INSERT INTO work_search_v1(rowid,title,creators_json)
+                VALUES(new.rowid,new.title,new.creators_json);
+            END;",
+        )?;
+        if !exists {
+            conn.execute(
+                "INSERT INTO work_search_v1(work_search_v1) VALUES('rebuild')",
+                [],
+            )?;
+        }
+        Ok(())
+    })();
+    if let Err(error) = search_setup {
+        conn.execute_batch("ROLLBACK TO work_search_schema; RELEASE work_search_schema")?;
+        return Err(error);
+    }
+    conn.execute_batch("RELEASE work_search_schema")?;
     Ok(())
 }
 
@@ -194,6 +236,87 @@ mod tests {
             confidence: 0.95,
             rationale: "Recognized composition and songwriter".into(),
         }
+    }
+
+    #[test]
+    fn work_search_matches_title_and_creators_with_accents_and_prefixes() {
+        let (store, _tmp) = setup();
+        for (track, title, creator) in [
+            ("a", "Étude Op. 10 No. 3", "Frédéric Chopin"),
+            ("b", "Étude Op. 25 No. 1", "Frédéric Chopin"),
+            ("c", "Étude", "Franz Liszt"),
+            ("d", "Nocturne", "Frédéric Chopin"),
+        ] {
+            store
+                .resolve_track_work(
+                    track,
+                    Some(&proposal(title, creator)),
+                    &serde_json::json!({}),
+                    "",
+                )
+                .unwrap();
+        }
+        for query in [
+            "chopin etude",
+            "ETUDE CHOPIN",
+            "  chopin   étu  ",
+            "frederic etude",
+            "chopin e\u{0301}tude",
+            "\"chopin\" (etude)",
+        ] {
+            let works = store.search_works(query, 25).unwrap();
+            assert_eq!(works.len(), 2, "{query}");
+            assert!(works
+                .iter()
+                .all(|work| work.creators == ["Frédéric Chopin"]));
+        }
+        assert_eq!(store.search_works("chopin etude 25", 25).unwrap().len(), 1);
+        assert_eq!(store.search_works("etude", 25).unwrap().len(), 3);
+        assert_eq!(store.search_works("chopin", 25).unwrap().len(), 3);
+        assert_eq!(store.search_works("chopin etude", 1).unwrap().len(), 1);
+        for query in ["", "  ", "* () :", "chopin missing", "chopin OR liszt"] {
+            assert!(store.search_works(query, 25).unwrap().is_empty(), "{query}");
+        }
+    }
+
+    #[test]
+    fn work_search_backfills_existing_works_and_tracks_changes() {
+        let (store, _tmp) = setup();
+        store
+            .resolve_track_work(
+                "a",
+                Some(&proposal("Étude", "Chopin")),
+                &serde_json::json!({}),
+                "",
+            )
+            .unwrap();
+        {
+            let conn = store.write_conn.lock().unwrap();
+            // Simulate a database created before the search index existed.
+            conn.execute_batch("DROP TRIGGER work_search_insert; DROP TRIGGER work_search_update; DROP TRIGGER work_search_delete; DROP TABLE work_search_v1;").unwrap();
+            super::create_schema(&conn).unwrap();
+            super::create_schema(&conn).unwrap();
+        }
+        assert_eq!(store.search_works("chopin etude", 25).unwrap().len(), 1);
+        {
+            let conn = store.write_conn.lock().unwrap();
+            conn.execute(
+                "UPDATE works_v1 SET title='Nocturne', creators_json='[\"Another Writer\"]'",
+                [],
+            )
+            .unwrap();
+        }
+        assert!(store.search_works("chopin etude", 25).unwrap().is_empty());
+        assert_eq!(store.search_works("writer nocturne", 25).unwrap().len(), 1);
+        {
+            let conn = store.write_conn.lock().unwrap();
+            conn.execute("DELETE FROM work_resolutions_v1", []).unwrap();
+            conn.execute("DELETE FROM works_v1", []).unwrap();
+        }
+        assert!(store
+            .search_works("writer nocturne", 25)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -429,9 +552,20 @@ impl SqliteEnrichmentStore {
     }
 
     pub(super) fn find_works(&self, query: &str, limit: usize) -> Result<Vec<Work>> {
+        // Treat user input as literal terms, never as FTS operators. Prefix matching
+        // supports incomplete words while requiring every term across title/creators.
+        let query = query
+            .split(|c: char| !c.is_alphanumeric() && !matches!(c, '\u{0300}'..='\u{036f}'))
+            .filter(|term| !term.is_empty())
+            .map(|term| format!("\"{term}\"*"))
+            .collect::<Vec<_>>()
+            .join(" AND ");
+        if query.is_empty() || limit == 0 {
+            return Ok(Vec::new());
+        }
         let conn = self.read_conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT id,title,creators_json,catalog_number,kind,created_at,(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='wikidata'),(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='musicbrainz') FROM works_v1 WHERE instr(lower(title),lower(?1)) > 0 ORDER BY title,id LIMIT ?2")?;
-        let rows = stmt.query_map(params![query.trim(), limit.min(100) as i64], work_from_row)?;
+        let mut stmt = conn.prepare("SELECT id,works_v1.title,works_v1.creators_json,catalog_number,kind,created_at,(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='wikidata'),(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='musicbrainz') FROM works_v1 JOIN work_search_v1 ON work_search_v1.rowid=works_v1.rowid WHERE work_search_v1 MATCH ?1 ORDER BY bm25(work_search_v1),works_v1.title,id LIMIT ?2")?;
+        let rows = stmt.query_map(params![query, limit.min(100) as i64], work_from_row)?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
