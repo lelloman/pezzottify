@@ -4,7 +4,9 @@ mod store;
 mod trait_def;
 mod works;
 
-pub use works::{Work, WorkPresentation, WorkProposal, WorkResolution, WorkRelation, WorkRecording};
+pub use works::{
+    Work, WorkPresentation, WorkProposal, WorkRecording, WorkRelation, WorkResolution,
+};
 
 pub use models::{
     AlbumEnrichment, AlbumEnrichmentV1, ArtistEnrichment, ArtistEnrichmentV1, AudioFeatures,

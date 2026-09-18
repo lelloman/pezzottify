@@ -1,7 +1,8 @@
 //! Shared admission for modern and legacy reports, before any body buffering.
 use super::{http_layers::requests_logging::is_report_path, session::Session, state::ServerState};
 use crate::{db_executor::DbPriority, server_store::reports::MAX_BODY_BYTES, user::Permission};
-use axum::{
+use simple_server::axum::{
+    self,
     body::{to_bytes, Body},
     extract::{FromRequestParts, Request, State},
     http::StatusCode,

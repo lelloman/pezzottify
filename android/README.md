@@ -231,5 +231,10 @@ See the main project LICENSE file for details.
 
 The Rust-backed assistant is built from the sibling `simple-android-assistant` checkout
 (or `-PassistantCheckout=/path/to/checkout`) until the matching release is published.
+From the repository root, run `bash scripts/checkout-simple-android-assistant.sh`
+to provision the revision pinned in `simple-android-assistant.rev`. The script
+leaves existing checkouts unchanged and requires them to match the pin and be clean.
+Android CI provisions this checkout, all four Android Rust targets, NDK
+27.0.12077973, and cargo-ndk 4.1.2 before running lint and unit tests.
 See that repository's README for the Rust/NDK prerequisites. Existing Room history
 is imported by the version 2 database migration.

@@ -4,18 +4,25 @@ on:
   pull_request:
     paths:
       - 'android/**'
+      - 'simple-android-assistant.rev'
+      - 'scripts/checkout-simple-android-assistant.sh'
       - '.github/workflows/android.yml'
 
 jobs:
   unit-tests:
     name: Build & Unit Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: android
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check out the pinned assistant dependency
+        run: bash scripts/checkout-simple-android-assistant.sh
+        working-directory: .
 
       - name: Setup JDK
         uses: actions/setup-java@v4
@@ -25,6 +32,17 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      - name: Install Rust toolchain for the assistant JNI library
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+
+      - name: Install assistant native build tools
+        run: |
+          sdkmanager "platforms;android-36" "ndk;27.0.12077973"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> "$GITHUB_ENV"
+          cargo install cargo-ndk --version 4.1.2 --locked
 
       - name: Lint and test
         run: ./gradlew lintDebug testDebugUnitTest
