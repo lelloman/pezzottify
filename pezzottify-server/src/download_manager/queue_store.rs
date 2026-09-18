@@ -62,7 +62,11 @@ pub trait DownloadQueueStore: Send + Sync {
 
     /// Start an external attempt against a queue snapshot. Returns an attempt token.
     /// The cron worker serializes work; the snapshot prevents stale claims.
-    fn start_external_attempt(&self, id: &str, previous_attempt: Option<i64>) -> Result<Option<i64>>;
+    fn start_external_attempt(
+        &self,
+        id: &str,
+        previous_attempt: Option<i64>,
+    ) -> Result<Option<i64>>;
 
     /// Record failure only for the matching active external attempt.
     fn fail_external_attempt(&self, id: &str, attempt: i64, message: &str) -> Result<bool>;

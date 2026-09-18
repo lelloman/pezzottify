@@ -4,14 +4,15 @@ use super::{
     state::{DatabaseHandles, ServerState},
 };
 use crate::{db_executor::DbPriority, server_store::reports::*, user::Permission};
-use axum::{
+use serde::Serialize;
+use simple_server::axum::{
+    self,
     extract::{DefaultBodyLimit, Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
-use serde::Serialize;
 
 impl IntoResponse for ReportError {
     fn into_response(self) -> Response {
@@ -38,7 +39,7 @@ impl IntoResponse for ReportError {
     }
 }
 
-fn permission(session: &Session, admin: bool) -> Result<(), Response> {
+fn permission(session: &Session, admin: bool) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
     let permission = if admin {
         Permission::TriageReports
     } else {
@@ -47,7 +48,12 @@ fn permission(session: &Session, admin: bool) -> Result<(), Response> {
     if session.has_permission(permission) {
         Ok(())
     } else {
-        Err((StatusCode::FORBIDDEN,Json(serde_json::json!({"error":{"code":"forbidden","message":"Report permission required"}}))).into_response())
+        Err((
+            StatusCode::FORBIDDEN,
+            Json(
+                serde_json::json!({"error":{"code":"forbidden","message":"Report permission required"}}),
+            ),
+        ))
     }
 }
 
@@ -75,7 +81,7 @@ async fn submit(
     Json(input): Json<NewReport>,
 ) -> Response {
     if let Err(r) = permission(&session, false) {
-        return r;
+        return r.into_response();
     }
     let uid = session.user_id;
     let handle = match db
@@ -105,7 +111,7 @@ async fn owner_list(
     Query(filter): Query<ReportFilter>,
 ) -> Response {
     if let Err(r) = permission(&session, false) {
-        return r;
+        return r.into_response();
     }
     output(run(db, move |s| s.list(Some(session.user_id), filter)).await)
 }
@@ -115,7 +121,7 @@ async fn admin_list(
     Query(filter): Query<ReportFilter>,
 ) -> Response {
     if let Err(r) = permission(&session, true) {
-        return r;
+        return r.into_response();
     }
     output(run(db, move |s| s.list(None, filter)).await)
 }
@@ -125,7 +131,7 @@ async fn owner_get(
     Path(id): Path<String>,
 ) -> Response {
     if let Err(r) = permission(&session, false) {
-        return r;
+        return r.into_response();
     }
     output(run(db, move |s| s.get(&id, Some(session.user_id))).await)
 }
@@ -135,7 +141,7 @@ async fn admin_get(
     Path(id): Path<String>,
 ) -> Response {
     if let Err(r) = permission(&session, true) {
-        return r;
+        return r.into_response();
     }
     output(run(db, move |s| s.get(&id, None)).await)
 }
@@ -146,7 +152,7 @@ async fn update(
     Json(input): Json<ReportUpdate>,
 ) -> Response {
     if let Err(r) = permission(&session, true) {
-        return r;
+        return r.into_response();
     }
     output(run(db, move |s| s.update(&id, session.user_id, input)).await)
 }
@@ -172,7 +178,7 @@ async fn owner_attachment(
     Path((id, attachment)): Path<(String, String)>,
 ) -> Response {
     if let Err(r) = permission(&session, false) {
-        return r;
+        return r.into_response();
     }
     output(
         run(db, move |s| {
@@ -202,7 +208,7 @@ async fn owner_delete_attachment(
     Path((id, attachment)): Path<(String, String)>,
 ) -> Response {
     if let Err(r) = permission(&session, false) {
-        return r;
+        return r.into_response();
     }
     output(
         run(db, move |s| {
@@ -249,7 +255,7 @@ async fn stats(
     axum::Extension(admission): axum::Extension<std::sync::Arc<super::report_admission::Admission>>,
 ) -> Response {
     if let Err(r) = permission(&session, true) {
-        return r;
+        return r.into_response();
     }
     match run(db, |s| s.stats()).await {
         Ok(s) => {

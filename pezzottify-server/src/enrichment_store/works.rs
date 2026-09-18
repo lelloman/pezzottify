@@ -61,9 +61,10 @@ impl WorkPresentation {
             // or the timestamp when this Work was imported into our database.
             if matches!(role, "composer" | "writer") {
                 for field in ["begin_date", "end_date"] {
-                    if let Some(year) = relation[field].get(0).and_then(|v| {
-                        v.as_i64().or_else(|| v.as_str()?.parse().ok())
-                    }) {
+                    if let Some(year) = relation[field]
+                        .get(0)
+                        .and_then(|v| v.as_i64().or_else(|| v.as_str()?.parse().ok()))
+                    {
                         if (1..=9999).contains(&year) {
                             years.push(year);
                         }
@@ -345,7 +346,10 @@ mod tests {
         ]});
         let result = WorkPresentation::from_evidence(&imported);
         assert_eq!(result.composition_year.as_deref(), Some("1829–1832"));
-        assert_eq!(result.creator_mbids, ["09ff1fe8-d61c-4b98-bb82-18487c74d7b7"]);
+        assert_eq!(
+            result.creator_mbids,
+            ["09ff1fe8-d61c-4b98-bb82-18487c74d7b7"]
+        );
     }
 
     #[test]
@@ -353,8 +357,21 @@ mod tests {
         let (store, _tmp) = setup();
         {
             let conn = store.write_conn.lock().unwrap();
-            for id in ["parent", "first", "second", "nested", "arrangement", "arranged-part", "unrelated", "distant"] {
-                conn.execute("INSERT INTO works_v1 VALUES (?1,?1,'[\"Composer\"]',NULL,'composition',?1,0)", [id]).unwrap();
+            for id in [
+                "parent",
+                "first",
+                "second",
+                "nested",
+                "arrangement",
+                "arranged-part",
+                "unrelated",
+                "distant",
+            ] {
+                conn.execute(
+                    "INSERT INTO works_v1 VALUES (?1,?1,'[\"Composer\"]',NULL,'composition',?1,0)",
+                    [id],
+                )
+                .unwrap();
                 if id != "parent" {
                     conn.execute("INSERT INTO work_resolutions_v1 VALUES (?1,?1,'linked','','{}',0,0,NULL,'source')", [id]).unwrap();
                 }
@@ -368,28 +385,70 @@ mod tests {
                 ("nested", "arrangement", "other version", 0),
                 ("arrangement", "distant", "based on", 0),
                 ("nested", "first", "parts", 0), // cycle, not a tree
-            ].into_iter().enumerate() {
+            ]
+            .into_iter()
+            .enumerate()
+            {
                 conn.execute("INSERT INTO work_relationships_v1 VALUES ('musicbrainz',?1,?2,?3,?4,?4,?5,'{}','test',0)", params![i.to_string(), source, target, kind, ordering]).unwrap();
             }
         }
         let relations = store.work_relations("parent").unwrap();
-        assert_eq!(relations.iter().map(|r| r.work.id.as_str()).collect::<Vec<_>>(), ["first", "second"]);
+        assert_eq!(
+            relations
+                .iter()
+                .map(|r| r.work.id.as_str())
+                .collect::<Vec<_>>(),
+            ["first", "second"]
+        );
         assert!(relations.iter().all(|r| r.direction == "outgoing"));
-        assert!(store.work_relations("first").unwrap().iter().any(|r| r.work.id == "parent" && r.direction == "incoming"));
-        assert!(store.list_work_track_ids("parent", 100, 0).unwrap().is_empty());
+        assert!(store
+            .work_relations("first")
+            .unwrap()
+            .iter()
+            .any(|r| r.work.id == "parent" && r.direction == "incoming"));
+        assert!(store
+            .list_work_track_ids("parent", 100, 0)
+            .unwrap()
+            .is_empty());
         let all = store.work_recordings("parent", "all", 100, 0).unwrap();
-        assert_eq!(all.iter().map(|r| r.track_id.as_str()).collect::<Vec<_>>(), ["first", "nested", "second", "arranged-part", "arrangement"]);
+        assert_eq!(
+            all.iter().map(|r| r.track_id.as_str()).collect::<Vec<_>>(),
+            ["first", "nested", "second", "arranged-part", "arrangement"]
+        );
         assert!(all[..3].iter().all(|r| r.scope == "part"));
         assert!(all[3..].iter().all(|r| r.scope == "related"));
         let page = store.work_recordings("parent", "all", 2, 2).unwrap();
-        assert_eq!(page.iter().map(|r| r.track_id.as_str()).collect::<Vec<_>>(), ["second", "arranged-part"]);
-        assert!(store.work_recordings("parent", "all", 2, 5).unwrap().is_empty());
-        assert_eq!(store.work_recordings("parent", "parts", 100, 0).unwrap().len(), 3);
-        assert_eq!(store.work_recordings("parent", "related", 100, 0).unwrap().len(), 2);
+        assert_eq!(
+            page.iter().map(|r| r.track_id.as_str()).collect::<Vec<_>>(),
+            ["second", "arranged-part"]
+        );
+        assert!(store
+            .work_recordings("parent", "all", 2, 5)
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            store
+                .work_recordings("parent", "parts", 100, 0)
+                .unwrap()
+                .len(),
+            3
+        );
+        assert_eq!(
+            store
+                .work_recordings("parent", "related", 100, 0)
+                .unwrap()
+                .len(),
+            2
+        );
         let first = store.work_recordings("first", "all", 100, 0).unwrap();
         assert_eq!(first[0].scope, "direct");
-        assert!(!first.iter().any(|r| r.track_id == "second" || r.track_id == "distant"));
-        assert!(store.work_recordings("missing", "all", 100, 0).unwrap().is_empty());
+        assert!(!first
+            .iter()
+            .any(|r| r.track_id == "second" || r.track_id == "distant"));
+        assert!(store
+            .work_recordings("missing", "all", 100, 0)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -732,15 +791,37 @@ impl SqliteEnrichmentStore {
                  FROM work_relationships_v1 WHERE source_work_id=?1 OR target_work_id=?1
                  ORDER BY relationship_type, ordering, 1"
             )?;
-            let rows = stmt.query_map([id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, i64>(3)?)))?;
+            let rows = stmt.query_map([id], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, i64>(3)?,
+                ))
+            })?;
             rows.collect::<rusqlite::Result<Vec<_>>>()?
         };
-        rows.into_iter().filter(|(other, _, _, _)| other != id).map(|(other, relationship_type, direction, ordering)| {
-            Ok(self.read_work(&other)?.map(|work| WorkRelation { work, relationship_type, direction, ordering }))
-        }).collect::<Result<Vec<_>>>().map(|rows| rows.into_iter().flatten().collect())
+        rows.into_iter()
+            .filter(|(other, _, _, _)| other != id)
+            .map(|(other, relationship_type, direction, ordering)| {
+                Ok(self.read_work(&other)?.map(|work| WorkRelation {
+                    work,
+                    relationship_type,
+                    direction,
+                    ordering,
+                }))
+            })
+            .collect::<Result<Vec<_>>>()
+            .map(|rows| rows.into_iter().flatten().collect())
     }
 
-    pub(super) fn read_work_recordings(&self, id: &str, scope: &str, limit: usize, offset: usize) -> Result<Vec<WorkRecording>> {
+    pub(super) fn read_work_recordings(
+        &self,
+        id: &str,
+        scope: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<WorkRecording>> {
         let conn = self.read_conn.lock().unwrap();
         // Deduplicate by node identity to handle cycles and multiple paths.
         // Related works are one non-parts hop away, plus their contained parts.
@@ -766,9 +847,17 @@ impl SqliteEnrichmentStore {
              ORDER BY CASE scope WHEN 'direct' THEN 0 WHEN 'part' THEN 1 ELSE 2 END, w.title, w.id, t.track_id
              LIMIT ?3 OFFSET ?4"
         )?;
-        let rows = stmt.query_map(params![id, scope, limit.min(100) as i64, offset as i64], |r| Ok(WorkRecording {
-            track_id: r.get(0)?, work_id: r.get(1)?, work_title: r.get(2)?, scope: r.get(3)?,
-        }))?;
+        let rows = stmt.query_map(
+            params![id, scope, limit.min(100) as i64, offset as i64],
+            |r| {
+                Ok(WorkRecording {
+                    track_id: r.get(0)?,
+                    work_id: r.get(1)?,
+                    work_title: r.get(2)?,
+                    scope: r.get(3)?,
+                })
+            },
+        )?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 

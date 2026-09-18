@@ -463,9 +463,10 @@ pub trait CatalogStore: Send + Sync {
             if available.len() >= limit {
                 break;
             }
-            if self.get_track(&result.entity_id)?.is_some_and(|track| {
-                track.availability == super::TrackAvailability::Available
-            }) {
+            if self
+                .get_track(&result.entity_id)?
+                .is_some_and(|track| track.availability == super::TrackAvailability::Available)
+            {
                 available.push(result);
             }
         }
