@@ -1,8 +1,10 @@
 <template>
   <div>
-    <section v-if="works.length || workError" class="workResults">
+    <section v-if="query.trim()" class="workResults" :aria-busy="workLoading">
       <h2>Works</h2>
-      <p v-if="workError" role="status">Could not load matching works.</p>
+      <p v-if="workLoading" role="status">Searching works…</p>
+      <p v-else-if="workError" role="status">Could not load matching works.</p>
+      <p v-else-if="!works.length" role="status">No matching works.</p>
       <ul v-else>
         <li v-for="work in works" :key="work.id">
           <RouterLink :to="{ name: 'work', params: { workId: work.id } }">{{
@@ -43,12 +45,15 @@ const props = defineProps({
 
 const works = ref([]);
 const workError = ref(false);
+const workLoading = ref(false);
 watch(
   () => props.query,
   async (query, _, onCleanup) => {
     works.value = [];
     workError.value = false;
+    workLoading.value = false;
     if (!query.trim()) return;
+    workLoading.value = true;
     const controller = new AbortController();
     onCleanup(() => controller.abort());
     try {
@@ -59,6 +64,8 @@ watch(
       if (!controller.signal.aborted) works.value = data;
     } catch {
       if (!controller.signal.aborted) workError.value = true;
+    } finally {
+      if (!controller.signal.aborted) workLoading.value = false;
     }
   },
   { immediate: true },

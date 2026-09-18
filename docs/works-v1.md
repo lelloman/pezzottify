@@ -91,8 +91,10 @@ label or a truncated fact result is not accepted as a complete identity.
 
 - `GET /v1/content/work/{id}?limit=50&offset=0` returns `work`, resolved `tracks`,
   `next_offset`, and `has_more`. Each resolved track also includes its album.
-- `GET /v1/content/works?query=...&limit=25` searches Work titles. This is a bounded
-  title substring search, independent of the main catalog search index.
+- `GET /v1/content/works?query=...&limit=25` searches Work titles and creators.
+  All query terms must match, in any order, with word-prefix matching and
+  case/accent folding. A separate FTS index is backfilled on upgrade and kept
+  current as Works change. Web search shows loading, empty, and error states.
 - Track detail responses include `work_resolution` and `work_enrichment_status`.
 - Web track pages link to `/work/:workId`; Work pages list performances and their
   albums. Web search shows a separate Works section.
