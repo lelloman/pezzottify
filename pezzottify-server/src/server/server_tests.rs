@@ -12,8 +12,8 @@ mod tests {
     use crate::user::{
         UserAuthCredentialsStore, UserAuthTokenStore, UserBandwidthStore, UserStore,
     };
-    use axum::extract::ConnectInfo;
-    use axum::{body::Body, http::Request};
+    use simple_server::axum::extract::ConnectInfo;
+    use simple_server::axum::{body::Body, http::Request};
     use std::collections::HashMap;
     use std::sync::RwLock;
     use tower::ServiceExt; // for `call`, `oneshot`, and `ready
@@ -26,12 +26,14 @@ mod tests {
             .find(|family| family.get_name() == metric_name)
             .is_some_and(|family| {
                 family.get_metric().iter().any(|metric| {
-                    expected_labels.iter().all(|(expected_name, expected_value)| {
-                        metric.get_label().iter().any(|label| {
-                            label.get_name() == *expected_name
-                                && label.get_value() == *expected_value
+                    expected_labels
+                        .iter()
+                        .all(|(expected_name, expected_value)| {
+                            metric.get_label().iter().any(|label| {
+                                label.get_name() == *expected_name
+                                    && label.get_value() == *expected_value
+                            })
                         })
-                    })
                 })
             })
     }
@@ -39,11 +41,8 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn password_work_runs_off_the_async_runtime_thread() {
         let runtime_thread = std::thread::current().id();
-        let pool = PasswordWorkPool::with_limits(
-            1,
-            Duration::from_millis(100),
-            Duration::from_secs(1),
-        );
+        let pool =
+            PasswordWorkPool::with_limits(1, Duration::from_millis(100), Duration::from_secs(1));
 
         let worker_thread = pool
             .run(|| std::thread::current().id())
@@ -55,11 +54,8 @@ mod tests {
 
     #[tokio::test]
     async fn password_work_rejects_when_its_bounded_queue_times_out() {
-        let pool = PasswordWorkPool::with_limits(
-            1,
-            Duration::from_millis(20),
-            Duration::from_secs(1),
-        );
+        let pool =
+            PasswordWorkPool::with_limits(1, Duration::from_millis(20), Duration::from_secs(1));
         let gate = Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
         let (started_tx, started_rx) = tokio::sync::oneshot::channel();
 
@@ -68,7 +64,9 @@ mod tests {
         let first = tokio::spawn(async move {
             first_pool
                 .run(move || {
-                    started_tx.send(()).expect("test receiver should remain open");
+                    started_tx
+                        .send(())
+                        .expect("test receiver should remain open");
                     let (lock, condvar) = &*first_gate;
                     let mut released = lock.lock().unwrap();
                     while !*released {
@@ -97,11 +95,8 @@ mod tests {
 
     #[tokio::test]
     async fn password_work_reports_panics_without_panicking_the_runtime() {
-        let pool = PasswordWorkPool::with_limits(
-            1,
-            Duration::from_millis(100),
-            Duration::from_secs(1),
-        );
+        let pool =
+            PasswordWorkPool::with_limits(1, Duration::from_millis(100), Duration::from_secs(1));
 
         let error = pool
             .run(|| panic!("sentinel password worker panic"))
@@ -119,11 +114,8 @@ mod tests {
     async fn filesystem_work_reads_and_atomically_replaces_cache_files() {
         let temp = tempfile::tempdir().unwrap();
         let cache_path = temp.path().join("nested").join("cover.jpg");
-        let pool = FilesystemWorkPool::with_limits(
-            1,
-            Duration::from_millis(100),
-            Duration::from_secs(1),
-        );
+        let pool =
+            FilesystemWorkPool::with_limits(1, Duration::from_millis(100), Duration::from_secs(1));
 
         pool.write_atomic(cache_path.clone(), b"first image".to_vec())
             .await

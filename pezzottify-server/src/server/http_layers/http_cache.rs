@@ -1,6 +1,6 @@
 //! Route-level HTTP cache policy middleware.
 
-use axum::{
+use simple_server::axum::{
     body::Body,
     extract::State,
     http::{
@@ -118,7 +118,7 @@ fn add_vary(headers: &mut HeaderMap, required: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{
+    use simple_server::axum::{
         body::Body,
         http::{header::AUTHORIZATION, Response as HttpResponse},
         middleware,

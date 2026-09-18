@@ -6,14 +6,14 @@
 //! - Managing the human review queue
 //! - Admin job management
 
-use axum::{
+use serde::{Deserialize, Serialize};
+use simple_server::axum::{
     extract::{DefaultBodyLimit, Multipart, Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
 use crate::db_executor::{DbHandle, DbPriority, DbRunError};

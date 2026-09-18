@@ -2,15 +2,15 @@
 
 use std::collections::{HashMap, HashSet};
 
-use axum::{
+use rand::Rng;
+use serde::{Deserialize, Serialize};
+use simple_server::axum::{
     extract::{Path, Query, State},
     http::{header, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
-use rand::Rng;
-use serde::{Deserialize, Serialize};
 use tracing::error;
 
 use crate::catalog_store::{CatalogStore, ResolvedTrack, TrackAvailability};
@@ -263,7 +263,7 @@ async fn post_radio_continuation(
     {
         Ok(track_ids) => no_store_json(TrackIdsResponse { track_ids }),
         Err(DbRunError::Store(err)) if err.to_string().starts_with("invalid radio request:") => {
-            ApiError::bad_request("invalid_radio_request", &err.to_string()).into_response()
+            ApiError::bad_request("invalid_radio_request", err.to_string()).into_response()
         }
         Err(err) => ApiError::from(err).into_response(),
     }

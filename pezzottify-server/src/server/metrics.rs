@@ -1,14 +1,14 @@
 #![allow(dead_code)]
 
-use axum::{
-    extract::{MatchedPath, State},
-    http::{Extensions, StatusCode},
-    response::IntoResponse,
-};
 use lazy_static::lazy_static;
 use prometheus::{
     Counter, CounterVec, Encoder, Gauge, GaugeVec, Histogram, HistogramOpts, HistogramVec, Opts,
     Registry, TextEncoder,
+};
+use simple_server::axum::{
+    extract::{MatchedPath, State},
+    http::{Extensions, StatusCode},
+    response::IntoResponse,
 };
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -1064,7 +1064,7 @@ mod tests {
         started_rx.await.unwrap();
 
         let started = Instant::now();
-        let response = metrics_handler(axum::extract::State(pool))
+        let response = metrics_handler(simple_server::axum::extract::State(pool))
             .await
             .into_response();
         assert_eq!(response.status(), StatusCode::OK);

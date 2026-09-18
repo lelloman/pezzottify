@@ -457,13 +457,13 @@ pub async fn run_server(
         .unwrap();
 
     tokio::select! {
-        result = axum::serve(
+        result = simple_server::axum::serve(
             main_listener,
             app.into_make_service_with_connect_info::<SocketAddr>(),
         ) => {
             result?;
         }
-        result = axum::serve(metrics_listener, metrics_app) => {
+        result = simple_server::axum::serve(metrics_listener, metrics_app) => {
             result?;
         }
     }

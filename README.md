@@ -166,6 +166,13 @@ For endpoint-level documentation, see [pezzottify-server/README.md#api-endpoints
 
 Server:
 
+The server uses `simple_server::axum` from the sibling `simple-server` checkout,
+which centrally pins Axum to 0.8.9. From this repository's root, run
+`bash scripts/checkout-simple-server.sh` to obtain the revision recorded in
+`simple-server.rev`. CI uses the same script. It verifies existing checkouts
+without overwriting local work; coordinated local development can use the path
+dependency directly. Update the revision after validating a shared-library change.
+
 ```bash
 cd pezzottify-server
 cargo run --features fast -- --config ./config.toml

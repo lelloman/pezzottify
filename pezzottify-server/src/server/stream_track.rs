@@ -10,7 +10,7 @@ use crate::downloader::DownloadPriority;
 #[cfg(test)]
 use crate::media::audio_content_type;
 use crate::user::{Permission, UserSetting};
-use axum::{
+use simple_server::axum::{
     body::Body,
     extract::{FromRequestParts, Path, State},
     http::{header, HeaderMap, StatusCode},
@@ -130,7 +130,7 @@ impl FromRequestParts<ServerState> for ByteRangeRequest {
     type Rejection = std::convert::Infallible;
 
     async fn from_request_parts(
-        parts: &mut axum::http::request::Parts,
+        parts: &mut simple_server::axum::http::request::Parts,
         _state: &ServerState,
     ) -> Result<Self, Self::Rejection> {
         Ok(Self(parse_range_headers(&parts.headers)))
@@ -295,7 +295,7 @@ pub async fn stream_track(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::HeaderValue;
+    use simple_server::axum::http::HeaderValue;
     use std::path::PathBuf;
 
     fn inclusive(start: u64, end: u64) -> ByteRange {

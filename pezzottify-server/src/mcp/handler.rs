@@ -4,14 +4,14 @@
 
 use std::sync::Arc;
 
-use axum::{
+use futures::{SinkExt, StreamExt};
+use simple_server::axum::{
     extract::{
         ws::{Message, WebSocket},
         State, WebSocketUpgrade,
     },
     response::Response,
 };
-use futures::{SinkExt, StreamExt};
 use tracing::{debug, error, info};
 
 use super::context::ToolContext;

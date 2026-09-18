@@ -5,14 +5,14 @@
 //! - User rate limit status
 //! - Admin queue management and audit logs
 
-use axum::{
+use serde::{Deserialize, Serialize};
+use simple_server::axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{delete, get, post},
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
 use crate::db_executor::{DbHandle, DbPriority, DbRunError};

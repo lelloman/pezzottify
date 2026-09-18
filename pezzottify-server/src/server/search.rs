@@ -7,7 +7,9 @@ use crate::search::{
     HashedItemType, RelevanceFilterConfig, ResolvedSearchResult, SearchResult, SearchVault,
 };
 
-use axum::{
+use futures::stream;
+use serde::{Deserialize, Serialize};
+use simple_server::axum::{
     extract::{Query, State},
     http::StatusCode,
     response::{
@@ -17,8 +19,6 @@ use axum::{
     routing::{get, post, put},
     Json, Router,
 };
-use futures::stream;
-use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::convert::Infallible;
 use std::time::{Duration, Instant};
@@ -73,7 +73,7 @@ enum SearchResponse {
 }
 
 impl IntoResponse for SearchResponse {
-    fn into_response(self) -> axum::response::Response {
+    fn into_response(self) -> simple_server::axum::response::Response {
         match self {
             SearchResponse::Raw(t) => t.into_response(),
             SearchResponse::Resolved(t) => t.into_response(),
