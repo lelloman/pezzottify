@@ -35,11 +35,7 @@ const artistNames = computed(() => {
   return props.track.artist_names ? props.track.artist_names.join(", ") : "";
 });
 
-const formattedDuration = computed(() => {
-  // duration_ms is in milliseconds
-  const seconds = Math.floor(props.track.duration_ms / 1000);
-  return formatDuration(seconds);
-});
+const formattedDuration = computed(() => formatDuration(props.track.duration_ms));
 
 const handleClick = () => {
   router.push("/album/" + props.track.album_id);
