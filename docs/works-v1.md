@@ -89,8 +89,11 @@ Facts are filtered to musical work/composition (`Q105543609`), composed musical
 work (`Q207628`), or song (`Q7366`) classes and their subclasses. A missing creator
 label or a truncated fact result is not accepted as a complete identity.
 
-- `GET /v1/content/work/{id}?limit=50&offset=0` returns `work`, resolved `tracks`,
-  `next_offset`, and `has_more`. Each resolved track also includes its album.
+- `GET /v1/content/work/{id}?limit=50&offset=0&scope=all` returns `work`, typed
+  `relations`, resolved `tracks`, `next_offset`, and `has_more`. Each track includes
+  its album, `recording_work` (ID/title), and `relationship_scope` (`direct`, `part`,
+  or `related`). `scope=parts` includes this work and its descendants;
+  `scope=related` includes only related works. Invalid scopes return 400.
 - `GET /v1/content/works?query=...&limit=25` searches Work titles and creators.
   All query terms must match, in any order, with word-prefix matching and
   case/accent folding. A separate FTS index is backfilled on upgrade and kept
@@ -99,7 +102,7 @@ label or a truncated fact result is not accepted as a complete identity.
 - Web track pages link to `/work/:workId`; Work pages list performances and their
   albums. Web search shows a separate Works section.
 
-Work search results also expose `creator_artist_ids` and nullable
+Work search results and Work detail headers also expose `creator_artist_ids` and nullable
 `composition_year`. Creator portraits resolve imported MusicBrainz creator IDs
 against catalog artist IDs, without name matching. The year (or year range) uses
 imported composer/writer relationship dates; missing dates stay unset. Recording
@@ -107,6 +110,16 @@ release dates and database creation timestamps are never used as composition
 dates. Web results use the standard search-row grid, with up to four creator
 portraits, an image fallback, and six initial results expandable to the returned
 result limit.
+
+Work detail pages display creator portraits, writing dates, ordered parts,
+parent links and other directed relationships (arrangements, revisions,
+quotations, etc.). Recordings include recursively contained parts, plus works
+one non-containment relationship away from the work or its parts and their
+contained parts. Related works are labelled separately and filterable; they are
+not merged into the work's identity. Traversal deduplicates nodes and tolerates
+cycles. It does not walk upwards through parent links or recursively expand an
+unbounded chain of related works. Imported writing dates support numeric and
+string years; Op. 10's imported `"1829"`–`"1832"` range is displayed correctly.
 
 Work content routes use the same catalog authentication and rate limits as
 tracks. Limits are capped at 100. Deleted catalog tracks are omitted from the
@@ -230,9 +243,10 @@ temporary evaluation settings do not change production enrichment.
 
 ## Deliberate v1 limits
 
-Each track links to at most one Work; composite tracks abstain. Parent/child
-Work relationships, aliases, manual merge/correction tools,
-and Android Work screens are not implemented. Existing links are immutable to
+Each track links to at most one Work; composite tracks abstain. Work aliases,
+manual merge/correction tools, and Android Work screens are not implemented.
+Imported parent/child and other Work relationships are browsable on the web.
+Existing links are immutable to
 automatic enrichment; a future correction flow must preserve attachment
 identity. Existing linked tracks are not automatically revalidated; dry runs can
 evaluate them against references. Missing source coverage yields abstention,

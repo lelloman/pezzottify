@@ -285,6 +285,7 @@ struct WorkQuery {
     limit: Option<usize>,
     #[serde(default)]
     offset: usize,
+    scope: Option<String>,
 }
 
 async fn search_works(
@@ -330,6 +331,10 @@ async fn get_work(
     Path(id): Path<String>,
     Query(query): Query<WorkQuery>,
 ) -> Response {
+    let scope = query.scope.unwrap_or_else(|| "all".into());
+    if !matches!(scope.as_str(), "all" | "parts" | "related") {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
     let Some(store) = &database.enrichment_read else {
         return StatusCode::NOT_FOUND.into_response();
     };
@@ -338,22 +343,35 @@ async fn get_work(
             let Some(work) = store.get_work(&id)? else {
                 return Ok(None);
             };
-            let ids = store.list_work_track_ids(
-                &id,
-                query.limit.unwrap_or(50).clamp(1, 100),
-                query.offset,
+            let presentation = store.work_presentation(&id)?;
+            let relations = store.work_relations(&id)?;
+            let recordings = store.work_recordings(
+                &id, &scope, query.limit.unwrap_or(50).clamp(1, 100), query.offset,
             )?;
-            let next_offset = query.offset.saturating_add(ids.len());
-            let has_more = !store.list_work_track_ids(&id, 1, next_offset)?.is_empty();
-            Ok(Some((work, ids, next_offset, has_more)))
+            let next_offset = query.offset.saturating_add(recordings.len());
+            let has_more = !store.work_recordings(&id, &scope, 1, next_offset)?.is_empty();
+            Ok(Some((work, presentation, relations, recordings, next_offset, has_more)))
         })
         .await;
     match result {
-        Ok(Some((work, ids, next_offset, has_more))) => {
+        Ok(Some((work, presentation, relations, recordings, next_offset, has_more))) => {
             match database.catalog_read.run(DbPriority::Interactive, move |catalog| {
-                ids.iter().map(|id| catalog.get_resolved_track(id)).collect::<anyhow::Result<Vec<_>>>()
+                let creator_artist_ids = catalog.get_artist_ids_by_mbids(&presentation.creator_mbids)?;
+                let mut work = serde_json::to_value(work)?;
+                work["creator_artist_ids"] = serde_json::json!(creator_artist_ids);
+                work["composition_year"] = serde_json::json!(presentation.composition_year);
+                let mut tracks = Vec::new();
+                for recording in recordings {
+                    if let Some(track) = catalog.get_resolved_track(&recording.track_id)? {
+                        let mut value = serde_json::to_value(track)?;
+                        value["recording_work"] = serde_json::json!({"id":recording.work_id,"title":recording.work_title});
+                        value["relationship_scope"] = serde_json::json!(recording.scope);
+                        tracks.push(value);
+                    }
+                }
+                Ok(serde_json::json!({"work":work,"relations":relations,"tracks":tracks,"next_offset":next_offset,"has_more":has_more}))
             }).await {
-                Ok(tracks) => Json(serde_json::json!({"work":work,"tracks":tracks.into_iter().flatten().collect::<Vec<_>>(),"next_offset":next_offset,"has_more":has_more})).into_response(),
+                Ok(payload) => Json(payload).into_response(),
                 Err(err) => ApiError::from(err).into_response(),
             }
         }

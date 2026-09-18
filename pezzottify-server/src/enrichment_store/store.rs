@@ -318,6 +318,12 @@ impl EnrichmentStore for SqliteEnrichmentStore {
     fn work_presentation(&self, id: &str) -> Result<super::WorkPresentation> {
         self.read_work_presentation(id)
     }
+    fn work_relations(&self, id: &str) -> Result<Vec<super::WorkRelation>> {
+        self.read_work_relations(id)
+    }
+    fn work_recordings(&self, id: &str, scope: &str, limit: usize, offset: usize) -> Result<Vec<super::WorkRecording>> {
+        self.read_work_recordings(id, scope, limit, offset)
+    }
     fn get_work_resolution(&self, track_id: &str) -> Result<Option<super::WorkResolution>> {
         self.read_work_resolution(track_id)
     }

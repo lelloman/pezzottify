@@ -3,19 +3,10 @@
     class="searchResultRow workResult"
     :to="{ name: 'work', params: { workId: result.id } }"
   >
-    <div
-      class="searchResultImage creatorArtwork"
-      :class="{ collage: artistIds.length > 1 }"
-      aria-hidden="true"
-    >
-      <template v-if="artistIds.length">
-        <div v-for="id in artistIds" :key="id" class="portrait">
-          <span class="imageFallback">♪</span>
-          <MultiSourceImage :urls="[formatImageUrl(id)]" />
-        </div>
-      </template>
-      <span v-else class="imageFallback">♪</span>
-    </div>
+    <WorkArtwork
+      class="searchResultImage"
+      :artistIds="result.creator_artist_ids || []"
+    />
     <div class="column">
       <span class="title" :title="result.title">{{ result.title }}</span>
       <span class="creators" :title="creators">{{
@@ -35,13 +26,9 @@
 <script setup>
 import "@/assets/search.css";
 import { computed } from "vue";
-import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
-import { formatImageUrl } from "@/utils";
+import WorkArtwork from "@/components/common/WorkArtwork.vue";
 
 const props = defineProps({ result: { type: Object, required: true } });
-const artistIds = computed(() =>
-  [...new Set(props.result.creator_artist_ids || [])].slice(0, 4),
-);
 const creators = computed(() => (props.result.creators || []).join(", "));
 </script>
 
@@ -54,39 +41,6 @@ const creators = computed(() => (props.result.creators || []).join(", "));
 .workResult:focus-visible {
   outline: 2px solid var(--accent-color);
   outline-offset: -2px;
-}
-.creatorArtwork {
-  display: grid;
-  position: relative;
-  background: var(--surface-raised);
-}
-.creatorArtwork.collage {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.portrait {
-  position: relative;
-  min-height: 0;
-  overflow: hidden;
-}
-.portrait:last-child:nth-child(3) {
-  grid-column: 1 / -1;
-}
-.portrait img {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.portrait img:not([src]) {
-  visibility: hidden;
-}
-.imageFallback {
-  display: grid;
-  place-items: center;
-  position: absolute;
-  inset: 0;
-  color: var(--text-subdued);
-  font-size: 24px;
 }
 .column {
   display: flex;
