@@ -260,3 +260,37 @@ test("removing the last loaded radio track still honors keep-radio-going", async
   assert.deepEqual(store.currentPlaylist.tracksIds, ids(20).slice(10));
   store.stop();
 });
+
+test("all versions starts with the selected recording and ends without unrelated music", async () => {
+  const { store, remote, calls } = harness();
+  remote.fetchWorkVersions = async () => [
+    { id: "other", availability: "available" },
+    { id: "missing", availability: "unavailable" },
+    { id: "selected", availability: "available" },
+    { id: "other", availability: "available" },
+  ];
+  await store.setWorkVersions("work", "selected", "Composition");
+  assert.deepEqual(store.currentPlaylist.tracksIds, ["selected", "other"]);
+  assert.equal(store.currentPlaylist.context.source, "work_versions");
+  assert.equal(store.currentPlaylist.continuation.status, "exhausted");
+  store.loadTrackIndex(1);
+  await flush();
+  assert.equal(calls.smart, 0);
+  assert.equal(calls.radio, 0);
+  store.stop();
+});
+
+test("all versions respects proxy playback and preserves the queue on an empty result", async () => {
+  const { store, remote, user } = harness();
+  remote.fetchWorkVersions = async () => [
+    { id: "remote", availability: "unavailable" },
+  ];
+  user.isProxyModeEnabled = true;
+  await store.setWorkVersions("work", "remote", "Composition");
+  assert.deepEqual(store.currentPlaylist.tracksIds, ["remote"]);
+  user.isProxyModeEnabled = false;
+  await store.setWorkVersions("work", "remote", "Composition");
+  assert.equal(store.radioCreationState.status, "error");
+  assert.deepEqual(store.currentPlaylist.tracksIds, ["remote"]);
+  store.stop();
+});

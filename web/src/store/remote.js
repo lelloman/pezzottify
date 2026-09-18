@@ -296,6 +296,23 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  const fetchWorkVersions = async (workId, signal) => {
+    const tracks = [];
+    let offset = 0;
+    while (true) {
+      const { data } = await axios.get(
+        `/v1/content/work/${encodeURIComponent(workId)}`,
+        { params: { limit: 100, offset }, signal, timeout: 60000 },
+      );
+      tracks.push(...data.tracks.map((entry) => entry.track));
+      if (!data.has_more) return tracks;
+      if (!Number.isInteger(data.next_offset) || data.next_offset <= offset) {
+        throw new Error("Work pagination did not advance");
+      }
+      offset = data.next_offset;
+    }
+  };
+
   const fetchArtistGreatestHits = async (artistId, signal) => {
     const response = await axios.get(
       `/v1/content/artist/${encodeURIComponent(artistId)}/greatest-hits`,
@@ -1409,6 +1426,7 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchGenreRadio,
     fetchContinuationRecommendations,
     fetchArtistGreatestHits,
+    fetchWorkVersions,
     fetchRadioContinuation,
     fetchRadioTrackIds,
     fetchRadioOptions,

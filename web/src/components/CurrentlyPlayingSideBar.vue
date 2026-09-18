@@ -152,6 +152,8 @@ watch(
       const seedLabel = playlist.context?.seed?.label || "Radio";
       if (playlist.context?.source === "greatest_hits") {
         playingContextText = seedLabel + " · Greatest hits";
+      } else if (playlist.context?.source === "work_versions") {
+        playingContextText = seedLabel + " · All versions";
       } else if (playlist.context?.source === "custom") {
         playingContextText = "Custom radio: " + seedLabel;
       } else if (playlist.context?.source === "genre") {

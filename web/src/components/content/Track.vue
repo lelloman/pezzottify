@@ -58,6 +58,20 @@
             Customize radio
           </button>
           <button
+            v-if="track.work_resolution?.work"
+            class="secondaryActionButton"
+            type="button"
+            @click.stop="
+              playback.setWorkVersions(
+                track.work_resolution.work.id,
+                trackId,
+                track.work_resolution.work.title,
+              )
+            "
+          >
+            Play all versions
+          </button>
+          <button
             v-if="showDownloadButton"
             class="secondaryActionButton"
             type="button"
