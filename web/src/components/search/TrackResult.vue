@@ -51,7 +51,8 @@ const props = defineProps({
 // Image endpoint takes album ID (tracks use their album's image)
 const imageUrl = computedImageUrl(props.result.album_id);
 
-const duration = formatDuration(props.result.duration);
+// Search results expose duration in seconds; the formatter expects milliseconds.
+const duration = computed(() => formatDuration(props.result.duration * 1000));
 
 const isTrackAvailable = computed(() => {
   return (
