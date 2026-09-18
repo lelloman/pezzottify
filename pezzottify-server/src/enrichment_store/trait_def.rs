@@ -26,6 +26,9 @@ pub trait EnrichmentStore: Send + Sync {
     fn search_works(&self, _query: &str, _limit: usize) -> Result<Vec<super::Work>> {
         Ok(Vec::new())
     }
+    fn work_presentation(&self, _id: &str) -> Result<super::WorkPresentation> {
+        Ok(Default::default())
+    }
     fn get_work_resolution(&self, _track_id: &str) -> Result<Option<super::WorkResolution>> {
         Ok(None)
     }

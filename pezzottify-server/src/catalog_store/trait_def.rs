@@ -586,6 +586,11 @@ pub trait CatalogStore: Send + Sync {
     /// Look up an artist rowid by MusicBrainz ID.
     fn get_artist_rowid_by_mbid(&self, mbid: &str) -> Result<Option<i64>>;
 
+    /// Resolve Work creators to catalog IDs without guessing from display names.
+    fn get_artist_ids_by_mbids(&self, _mbids: &[String]) -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+
     /// Look up multiple artist rowids by MusicBrainz ID.
     ///
     /// Stores should override this with a single batched query. The default

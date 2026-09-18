@@ -2445,6 +2445,21 @@ impl CatalogStore for SqliteCatalogStore {
         SqliteCatalogStore::get_artist_rowid_by_mbid(self, mbid)
     }
 
+    fn get_artist_ids_by_mbids(&self, mbids: &[String]) -> Result<Vec<String>> {
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+        let mut stmt = conn.prepare_cached("SELECT id FROM artists WHERE mbid=?1 ORDER BY popularity DESC, id LIMIT 1")?;
+        let mut ids = Vec::new();
+        for mbid in mbids {
+            if let Some(id) = stmt.query_row([mbid], |row| row.get::<_, String>(0)).optional()? {
+                if !ids.contains(&id) {
+                    ids.push(id);
+                }
+            }
+        }
+        Ok(ids)
+    }
+
     fn get_artist_rowids_by_mbids(&self, mbids: &[String]) -> Result<Vec<(String, i64)>> {
         SqliteCatalogStore::get_artist_rowids_by_mbids(self, mbids)
     }

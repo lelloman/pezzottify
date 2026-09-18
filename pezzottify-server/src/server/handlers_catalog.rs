@@ -300,11 +300,26 @@ async fn search_works(
     }
     match store
         .run(DbPriority::Interactive, move |store| {
-            store.search_works(&query.query, query.limit.unwrap_or(25).clamp(1, 100))
+            store.search_works(&query.query, query.limit.unwrap_or(25).clamp(1, 100))?
+                .into_iter().map(|work| {
+                    let presentation = store.work_presentation(&work.id)?;
+                    Ok((work, presentation))
+                }).collect::<anyhow::Result<Vec<_>>>()
         })
         .await
     {
-        Ok(works) => Json(works).into_response(),
+        Ok(works) => match database.catalog_read.run(DbPriority::Interactive, move |catalog| {
+            works.into_iter().map(|(work, presentation)| {
+                let creator_artist_ids = catalog.get_artist_ids_by_mbids(&presentation.creator_mbids)?;
+                let mut value = serde_json::to_value(work)?;
+                value["creator_artist_ids"] = serde_json::json!(creator_artist_ids);
+                value["composition_year"] = serde_json::json!(presentation.composition_year);
+                Ok(value)
+            }).collect::<anyhow::Result<Vec<_>>>()
+        }).await {
+            Ok(works) => Json(works).into_response(),
+            Err(err) => ApiError::from(err).into_response(),
+        },
         Err(err) => ApiError::from(err).into_response(),
     }
 }

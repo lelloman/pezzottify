@@ -17,6 +17,49 @@ pub struct Work {
     pub musicbrainz_id: Option<String>,
 }
 
+#[derive(Debug, Default, PartialEq)]
+pub struct WorkPresentation {
+    pub creator_mbids: Vec<String>,
+    pub composition_year: Option<String>,
+}
+
+impl WorkPresentation {
+    fn from_evidence(evidence: &serde_json::Value) -> Self {
+        let mut result = Self::default();
+        let mut years = Vec::new();
+        for relation in evidence["artist_relations"].as_array().into_iter().flatten() {
+            let role = relation["type"].as_str().unwrap_or_default();
+            if !matches!(role, "composer" | "writer" | "lyricist" | "librettist") {
+                continue;
+            }
+            if let Some(mbid) = relation["artist"]["mbid"].as_str() {
+                if !mbid.is_empty() && !result.creator_mbids.iter().any(|id| id == mbid) {
+                    result.creator_mbids.push(mbid.to_owned());
+                }
+            }
+            // Writing dates belong to the composition, never to its recordings
+            // or the timestamp when this Work was imported into our database.
+            if matches!(role, "composer" | "writer") {
+                for field in ["begin_date", "end_date"] {
+                    if let Some(year) = relation[field].get(0).and_then(|v| v.as_i64()) {
+                        if (1..=9999).contains(&year) {
+                            years.push(year);
+                        }
+                    }
+                }
+            }
+        }
+        if let (Some(first), Some(last)) = (years.iter().min(), years.iter().max()) {
+            result.composition_year = Some(if first == last {
+                first.to_string()
+            } else {
+                format!("{first}–{last}")
+            });
+        }
+        result
+    }
+}
+
 /// A model proposes identity; storage decides whether it can be accepted.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -236,6 +279,43 @@ mod tests {
             confidence: 0.95,
             rationale: "Recognized composition and songwriter".into(),
         }
+    }
+
+    #[test]
+    fn work_presentation_uses_creator_identity_and_writing_dates_only() {
+        let evidence = serde_json::json!({"artist_relations": [
+            {"type":"composer", "artist":{"mbid":"composer"}, "begin_date":[1829, null, null], "end_date":[1832, null, null]},
+            {"type":"writer", "artist":{"mbid":"composer"}, "begin_date":[1830, 1, 1]},
+            {"type":"lyricist", "artist":{"mbid":"lyricist"}, "begin_date":[1900, 1, 1]},
+            {"type":"arranger", "artist":{"mbid":"arranger"}, "begin_date":[2000, 1, 1]}
+        ]});
+        let presentation = WorkPresentation::from_evidence(&evidence);
+        assert_eq!(presentation.creator_mbids, ["composer", "lyricist"]);
+        assert_eq!(presentation.composition_year.as_deref(), Some("1829–1832"));
+        assert_eq!(WorkPresentation::from_evidence(&serde_json::json!({})), WorkPresentation::default());
+        let single = serde_json::json!({"artist_relations": [
+            {"type":"composer", "artist":{"mbid":"composer"}, "begin_date":[1832, null, null], "end_date":[1832, null, null]}
+        ]});
+        assert_eq!(WorkPresentation::from_evidence(&single).composition_year.as_deref(), Some("1832"));
+        let unknown = serde_json::json!({"artist_relations": [
+            {"type":"composer", "artist":{"mbid":"composer"}, "begin_date":[null, null, null], "end_date":[0, null, null]}
+        ]});
+        assert_eq!(WorkPresentation::from_evidence(&unknown).composition_year, None);
+    }
+
+    #[test]
+    fn work_presentation_reads_imported_evidence_and_defaults_when_absent() {
+        let (store, _tmp) = setup();
+        let resolved = store.resolve_track_work("track", Some(&proposal("Etude", "Composer")), &serde_json::json!({}), "").unwrap();
+        let id = resolved.work.unwrap().id;
+        assert_eq!(store.work_presentation(&id).unwrap(), WorkPresentation::default());
+        store.write_conn.lock().unwrap().execute(
+            "INSERT INTO work_source_evidence_v1 VALUES ('musicbrainz', 'work-mbid', ?1, 'snapshot', ?2, 0)",
+            params![id, serde_json::json!({"artist_relations":[{"type":"composer","artist":{"mbid":"artist-mbid"},"begin_date":[1832,null,null]}]}).to_string()],
+        ).unwrap();
+        let presentation = store.work_presentation(&id).unwrap();
+        assert_eq!(presentation.creator_mbids, ["artist-mbid"]);
+        assert_eq!(presentation.composition_year.as_deref(), Some("1832"));
     }
 
     #[test]
@@ -544,6 +624,16 @@ fn work_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Work> {
 }
 
 impl SqliteEnrichmentStore {
+    pub(super) fn read_work_presentation(&self, id: &str) -> Result<WorkPresentation> {
+        let evidence: Option<String> = self.read_conn.lock().unwrap().query_row(
+            "SELECT evidence_json FROM work_source_evidence_v1 WHERE work_id=?1 AND provider='musicbrainz'",
+            [id], |row| row.get(0),
+        ).optional()?;
+        match evidence {
+            Some(json) => Ok(WorkPresentation::from_evidence(&serde_json::from_str(&json)?)),
+            None => Ok(WorkPresentation::default()),
+        }
+    }
     pub(super) fn read_work(&self, id: &str) -> Result<Option<Work>> {
         Ok(self.read_conn.lock().unwrap().query_row(
             "SELECT id,title,creators_json,catalog_number,kind,created_at,(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='wikidata'),(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='musicbrainz') FROM works_v1 WHERE id=?1",
