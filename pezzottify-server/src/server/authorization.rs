@@ -1,6 +1,6 @@
 //! Named authorization policies used at HTTP route boundaries.
 
-use axum::{
+use simple_server::axum::{
     body::Body,
     extract::Request,
     http::StatusCode,

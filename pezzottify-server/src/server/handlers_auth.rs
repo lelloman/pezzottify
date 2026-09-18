@@ -81,8 +81,8 @@ async fn login(
                     {
                         error!("Device association failed: {}", error);
                     }
-                    if let Err(error) = manager
-                        .enforce_user_device_limit(credentials.user_id, MAX_DEVICES_PER_USER)
+                    if let Err(error) =
+                        manager.enforce_user_device_limit(credentials.user_id, MAX_DEVICES_PER_USER)
                     {
                         error!("Device limit enforcement failed: {}", error);
                     }
@@ -300,7 +300,7 @@ async fn oidc_callback(
     // Redirect to the app after successful authentication
     let mut response = response::Builder::new()
         .status(StatusCode::FOUND)
-        .header(axum::http::header::LOCATION, "/")
+        .header(simple_server::axum::http::header::LOCATION, "/")
         .body(Body::empty())
         .unwrap();
     append_session_cookies(&mut response, session_token, None, &config);
@@ -364,9 +364,7 @@ fn complete_oidc_login(
                 .ok()?;
                 match manager.register_or_update_device(&registration) {
                     Ok(device_id) => {
-                        if let Err(error) =
-                            manager.associate_device_with_user(device_id, user_id)
-                        {
+                        if let Err(error) = manager.associate_device_with_user(device_id, user_id) {
                             debug!(
                                 "Could not associate OIDC device {} with user {}: {}",
                                 device_id, user_id, error

@@ -1,9 +1,9 @@
-use axum::{
+use serde::Serialize;
+use simple_server::axum::{
     http::{header::HeaderName, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
-use serde::Serialize;
 use tracing::error;
 
 use crate::{catalog_store::CatalogMutationError, db_executor::DbRunError, user::UserServiceError};
@@ -195,7 +195,7 @@ impl IntoResponse for ApiError {
         if let Some(retry_after) = self.retry_after {
             response
                 .headers_mut()
-                .insert(axum::http::header::RETRY_AFTER, retry_after);
+                .insert(simple_server::axum::http::header::RETRY_AFTER, retry_after);
         }
         response
     }
@@ -227,7 +227,7 @@ mod tests {
         let response = ApiError::user_database(DbRunError::QueueTimeout).into_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(
-            response.headers()[axum::http::header::RETRY_AFTER],
+            response.headers()[simple_server::axum::http::header::RETRY_AFTER],
             RETRY_AFTER_SECONDS
         );
     }
@@ -243,7 +243,7 @@ mod tests {
             .to_str()
             .unwrap()
             .to_owned();
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        let body = simple_server::axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -264,12 +264,12 @@ mod tests {
             let response = ApiError::from(error).into_response();
             assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
             assert_eq!(
-                response.headers()[axum::http::header::RETRY_AFTER],
+                response.headers()[simple_server::axum::http::header::RETRY_AFTER],
                 RETRY_AFTER_SECONDS
             );
             assert!(response.headers().contains_key(REQUEST_ID_HEADER));
 
-            let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            let body = simple_server::axum::body::to_bytes(response.into_body(), usize::MAX)
                 .await
                 .unwrap();
             let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -286,12 +286,12 @@ mod tests {
         let response = ApiError::password_work_unavailable().into_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(
-            response.headers()[axum::http::header::RETRY_AFTER],
+            response.headers()[simple_server::axum::http::header::RETRY_AFTER],
             RETRY_AFTER_SECONDS
         );
         assert!(response.headers().contains_key(REQUEST_ID_HEADER));
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        let body = simple_server::axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -311,9 +311,9 @@ mod tests {
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
         assert!(!response
             .headers()
-            .contains_key(axum::http::header::RETRY_AFTER));
+            .contains_key(simple_server::axum::http::header::RETRY_AFTER));
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        let body = simple_server::axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();

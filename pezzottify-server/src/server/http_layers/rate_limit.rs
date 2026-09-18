@@ -5,15 +5,15 @@
 #![allow(dead_code)]
 
 use crate::server::metrics::{record_rate_limit_hit, request_route_label};
-use axum::{
+use serde::Deserialize;
+use sha2::{Digest, Sha256};
+use simple_server::axum::{
     body::{to_bytes, Body},
     extract::{ConnectInfo, Request},
     http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use serde::Deserialize;
-use sha2::{Digest, Sha256};
 use std::net::{IpAddr, SocketAddr};
 use tower_governor::{key_extractor::KeyExtractor, GovernorError};
 use tracing::warn;
@@ -245,7 +245,7 @@ pub async fn extract_user_id_for_rate_limit(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{http::Method, middleware, routing::post, Router};
+    use simple_server::axum::{http::Method, middleware, routing::post, Router};
     use std::{
         net::{IpAddr, Ipv4Addr},
         sync::Arc,
@@ -455,7 +455,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_account_extraction_restores_body_for_login_handler() {
-        async fn handler(axum::Json(body): axum::Json<LoginAccountBody>) -> String {
+        async fn handler(
+            simple_server::axum::Json(body): simple_server::axum::Json<LoginAccountBody>,
+        ) -> String {
             body.user_handle
         }
 

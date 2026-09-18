@@ -229,7 +229,7 @@ mod tests {
 
     #[tokio::test]
     async fn wikidata_work_http_lookup_searches_then_fetches_filtered_facts() {
-        use axum::{extract::Query, routing::get, Json, Router};
+        use simple_server::axum::{extract::Query, routing::get, Json, Router};
         let app = Router::new()
             .route(
                 "/api",
@@ -257,7 +257,7 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let task = tokio::spawn(async move {
-            axum::serve(listener, app).await.unwrap();
+            simple_server::axum::serve(listener, app).await.unwrap();
         });
         let result = lookup_at(
             "Song - Live",
@@ -273,7 +273,7 @@ mod tests {
 
     #[tokio::test]
     async fn wikidata_work_http_errors_are_not_treated_as_empty_searches() {
-        use axum::{routing::get, Json, Router};
+        use simple_server::axum::{routing::get, Json, Router};
         let app = Router::new()
             .route(
                 "/lag",
@@ -281,7 +281,7 @@ mod tests {
             )
             .route(
                 "/limited",
-                get(|| async { axum::http::StatusCode::TOO_MANY_REQUESTS }),
+                get(|| async { simple_server::axum::http::StatusCode::TOO_MANY_REQUESTS }),
             )
             .route(
                 "/empty",
@@ -290,7 +290,7 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let task = tokio::spawn(async move {
-            axum::serve(listener, app).await.unwrap();
+            simple_server::axum::serve(listener, app).await.unwrap();
         });
         for path in ["lag", "limited"] {
             assert!(lookup_at(

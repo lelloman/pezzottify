@@ -1,11 +1,11 @@
 //! Random slowdown middleware for testing
 #![allow(dead_code)] // Feature-gated middleware
 
-use axum::body::Body;
-use axum::extract::Request;
-use axum::middleware::Next;
-use axum::response::IntoResponse;
 use rand_distr::{Distribution, Normal};
+use simple_server::axum::body::Body;
+use simple_server::axum::extract::Request;
+use simple_server::axum::middleware::Next;
+use simple_server::axum::response::IntoResponse;
 
 /// Middleware that slows down the request for a random amount of time.
 /// The random amount of time is a gaussian distribution with a mean of 2 seconds and a standard deviation of 1 second.

@@ -5,15 +5,15 @@ use super::super::state::ServerState;
 use crate::server::metrics::{
     categorize_endpoint, record_bandwidth, record_http_request, request_route_label,
 };
-use axum::extract::State;
-use axum::{
+use chrono::Datelike;
+use serde_json::Value;
+use simple_server::axum::extract::State;
+use simple_server::axum::{
     body::Body,
     http::{header::HeaderMap, Request, Response, Uri},
     middleware::Next,
     response::IntoResponse,
 };
-use chrono::Datelike;
-use serde_json::Value;
 use std::time::Instant;
 use tracing::{debug, error, info};
 
@@ -246,13 +246,15 @@ pub async fn log_requests(
             ContentLengthParseResult::Ok(size) => {
                 if size < MAX_LOGGABLE_BODY_LENGTH {
                     let (parts, body) = request.into_parts();
-                    let bytes = match axum::body::to_bytes(body, size).await {
+                    let bytes = match simple_server::axum::body::to_bytes(body, size).await {
                         Ok(bytes) => bytes,
                         Err(err) => {
                             error!("Failed to read request body: {:?}", err);
                             return Response::builder()
                                 .status(500)
-                                .body(axum::body::Body::from("Internal Server Error"))
+                                .body(simple_server::axum::body::Body::from(
+                                    "Internal Server Error",
+                                ))
                                 .unwrap();
                         }
                     };
@@ -288,13 +290,15 @@ pub async fn log_requests(
             ContentLengthParseResult::Ok(size) => {
                 if size < MAX_LOGGABLE_BODY_LENGTH {
                     let (parts, body) = response.into_parts();
-                    let bytes = match axum::body::to_bytes(body, size).await {
+                    let bytes = match simple_server::axum::body::to_bytes(body, size).await {
                         Ok(bytes) => bytes,
                         Err(err) => {
                             error!("Failed to read response body: {:?}", err);
                             return Response::builder()
                                 .status(500)
-                                .body(axum::body::Body::from("Internal Server Error"))
+                                .body(simple_server::axum::body::Body::from(
+                                    "Internal Server Error",
+                                ))
                                 .unwrap();
                         }
                     };
@@ -361,7 +365,7 @@ mod tests {
         format_loggable_body, format_safe_headers, is_authentication_path, safe_request_target,
         RequestsLoggingLevel, SAFE_REQUEST_HEADERS, SAFE_RESPONSE_HEADERS,
     };
-    use axum::http::{HeaderMap, HeaderValue, Uri};
+    use simple_server::axum::http::{HeaderMap, HeaderValue, Uri};
 
     #[test]
     fn level_ordering() {

@@ -37,7 +37,8 @@ use crate::{
 use axum_extra::extract::cookie::CookieJar;
 use tower_http::services::{ServeDir, ServeFile};
 
-use axum::{
+use serde::{Deserialize, Serialize};
+use simple_server::axum::{
     body::Body,
     extract::{DefaultBodyLimit, Path, Query, State},
     http::{header, response, HeaderMap, HeaderValue, StatusCode},
@@ -46,7 +47,6 @@ use axum::{
     routing::{delete, get, post, put},
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
 use tower_governor::GovernorLayer;
 
 use super::api_error::ApiError;

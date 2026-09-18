@@ -1,10 +1,10 @@
-use axum::{
+use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
+use simple_server::axum::{
     extract::{Request, State},
     http::{header, HeaderMap, HeaderValue, Method, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 

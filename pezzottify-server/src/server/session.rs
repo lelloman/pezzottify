@@ -5,12 +5,12 @@ use crate::user::auth::AuthTokenValue;
 use crate::user::device::{DeviceRegistration, DeviceType};
 use crate::user::{Permission, UserManager};
 
-use axum::{
+use axum_extra::extract::cookie::{Cookie, CookieJar};
+use simple_server::axum::{
     extract::FromRequestParts,
     http::{header::AUTHORIZATION, request::Parts, HeaderMap, StatusCode},
     response::IntoResponse,
 };
-use axum_extra::extract::cookie::{Cookie, CookieJar};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
 use tracing::{debug, warn};
@@ -42,7 +42,7 @@ pub enum SessionExtractionError {
 }
 
 impl IntoResponse for SessionExtractionError {
-    fn into_response(self) -> axum::response::Response {
+    fn into_response(self) -> simple_server::axum::response::Response {
         match self {
             SessionExtractionError::AccessDenied => StatusCode::UNAUTHORIZED.into_response(),
             SessionExtractionError::InternalError => {
@@ -491,7 +491,7 @@ impl FromRequestParts<ServerState> for Option<Session> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{HeaderMap, HeaderValue, Method};
+    use simple_server::axum::http::{HeaderMap, HeaderValue, Method};
 
     #[test]
     fn session_has_permission_returns_true_when_permission_exists() {
@@ -543,7 +543,7 @@ mod tests {
     }
 
     fn create_parts_with_headers(headers: HeaderMap) -> Parts {
-        let request = axum::http::Request::builder()
+        let request = simple_server::axum::http::Request::builder()
             .method(Method::GET)
             .uri("/")
             .body(())
@@ -688,7 +688,10 @@ mod tests {
     fn session_executor_saturation_is_retryable() {
         let response = SessionExtractionError::Database(DbRunError::QueueTimeout).into_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
-        assert_eq!(response.headers()[axum::http::header::RETRY_AFTER], "1");
+        assert_eq!(
+            response.headers()[simple_server::axum::http::header::RETRY_AFTER],
+            "1"
+        );
     }
 
     #[test]

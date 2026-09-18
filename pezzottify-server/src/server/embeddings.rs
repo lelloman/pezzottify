@@ -1,14 +1,14 @@
 //! Generic embedding API routes.
 
-use axum::{
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use simple_server::axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post, put},
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::catalog_store::{EntityEmbedding, EntityEmbeddingSearchResult, EntityEmbeddingUpsert};
 

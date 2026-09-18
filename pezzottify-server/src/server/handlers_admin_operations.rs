@@ -34,7 +34,7 @@ async fn admin_prepare_backup(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            (status, axum::Json(backup_result)).into_response()
+            (status, simple_server::axum::Json(backup_result)).into_response()
         }
         Err(e) => ApiError::from(e).into_response(),
     }
@@ -49,10 +49,9 @@ async fn admin_get_storage_report(
     debug!("Storage report requested by user_id={}", session.user_id);
 
     let db_paths = db_registry.all();
-    let result = filesystem_work.run(move || {
-        super::storage_report::collect_storage_report(&config, db_paths)
-    })
-    .await;
+    let result = filesystem_work
+        .run(move || super::storage_report::collect_storage_report(&config, db_paths))
+        .await;
 
     match result {
         Ok(report) => (StatusCode::OK, Json(report)).into_response(),
@@ -379,7 +378,7 @@ async fn admin_trigger_job(
     session: Session,
     State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
     Path(job_id): Path<String>,
-    body: Result<Json<TriggerJobRequest>, axum::extract::rejection::JsonRejection>,
+    body: Result<Json<TriggerJobRequest>, simple_server::axum::extract::rejection::JsonRejection>,
 ) -> Response {
     let handle = match scheduler_handle {
         Some(h) => h,

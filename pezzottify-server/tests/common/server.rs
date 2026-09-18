@@ -332,7 +332,7 @@ impl TestServer {
 
         // Spawn server in background task with graceful shutdown
         tokio::spawn(async move {
-            axum::serve(
+            simple_server::axum::serve(
                 listener,
                 app.into_make_service_with_connect_info::<SocketAddr>(),
             )
