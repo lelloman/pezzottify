@@ -858,6 +858,40 @@ export const usePlaybackStore = defineStore("playback", () => {
     }
   };
 
+  const setWorkVersions = (workId, trackId, label) =>
+    radioCreation.start(async (signal) => {
+      const tracks = await remoteStore.fetchWorkVersions(workId, signal);
+      const playableIds = [
+        ...new Set(
+          tracks
+            .filter(
+              (track) =>
+                userStore.isProxyModeEnabled ||
+                !track.availability ||
+                track.availability === "available",
+            )
+            .map((track) => track.id),
+        ),
+      ];
+      const trackIds = playableIds.includes(trackId)
+        ? [trackId, ...playableIds.filter((id) => id !== trackId)]
+        : playableIds;
+      return {
+        trackIds,
+        context: {
+          ...buildRadioContext({
+            source: "work_versions",
+            entityType: "track",
+            entityId: trackId,
+            label,
+            count: trackIds.length,
+            settings: { work_id: workId },
+          }),
+          continuation: createRadioContinuation(trackIds, trackIds),
+        },
+      };
+    }, commitRadio);
+
   const setArtistGreatestHits = (artistId) =>
     radioCreation.start(async (signal) => {
       const snapshot = await remoteStore.fetchArtistGreatestHits(
@@ -1414,6 +1448,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     setGenreRadio,
     createGenreRadio,
     setRadioFromItem,
+    setWorkVersions,
     setAdvancedRadioFromItem,
 
     // Playback controls
