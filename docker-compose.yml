@@ -5,6 +5,8 @@ services:
     build:
       context: .
       dockerfile: pezzottify-server/Dockerfile
+      additional_contexts:
+        simple-server-source: ${SIMPLE_SERVER_CONTEXT:-../simple-server}
       args:
         GIT_HASH: ${GIT_HASH:-unknown}
         GIT_DIRTY: ${GIT_DIRTY:-0}

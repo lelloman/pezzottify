@@ -31,6 +31,8 @@ services:
     build:
       context: ..
       dockerfile: pezzottify-server/Dockerfile
+      additional_contexts:
+        simple-server-source: ${SIMPLE_SERVER_CONTEXT:-../../simple-server}
       args:
         VITE_OIDC_AUTHORITY: http://mock-oidc:8080
         VITE_OIDC_CLIENT_ID: pezzottify-e2e
