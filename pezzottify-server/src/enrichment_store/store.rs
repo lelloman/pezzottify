@@ -315,6 +315,9 @@ impl EnrichmentStore for SqliteEnrichmentStore {
     fn search_works(&self, query: &str, limit: usize) -> Result<Vec<super::Work>> {
         self.find_works(query, limit)
     }
+    fn work_presentation(&self, id: &str) -> Result<super::WorkPresentation> {
+        self.read_work_presentation(id)
+    }
     fn get_work_resolution(&self, track_id: &str) -> Result<Option<super::WorkResolution>> {
         self.read_work_resolution(track_id)
     }

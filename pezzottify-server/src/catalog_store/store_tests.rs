@@ -18,6 +18,19 @@ mod tests {
     }
 
     #[test]
+    fn work_creator_images_resolve_ids_not_names() {
+        let (store, _dir) = create_test_store();
+        store.write_conn.lock().unwrap().execute_batch(
+            "INSERT INTO artists (id,name,followers_total,popularity,mbid) VALUES
+            ('correct','Same name',0,10,'creator-mbid'),
+            ('duplicate','Same name',0,1,'creator-mbid'),
+            ('wrong','Same name',0,100,'other-mbid');"
+        ).unwrap();
+        assert_eq!(store.get_artist_ids_by_mbids(&["creator-mbid".into(), "missing".into(), "creator-mbid".into()]).unwrap(), ["correct"]);
+        assert!(store.get_artist_ids_by_mbids(&[]).unwrap().is_empty());
+    }
+
+    #[test]
     fn greatest_hits_ranks_available_artist_credits_and_deduplicates_recordings() {
         let (store, _dir) = create_test_store();
         {

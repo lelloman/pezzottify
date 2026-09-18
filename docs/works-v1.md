@@ -99,6 +99,15 @@ label or a truncated fact result is not accepted as a complete identity.
 - Web track pages link to `/work/:workId`; Work pages list performances and their
   albums. Web search shows a separate Works section.
 
+Work search results also expose `creator_artist_ids` and nullable
+`composition_year`. Creator portraits resolve imported MusicBrainz creator IDs
+against catalog artist IDs, without name matching. The year (or year range) uses
+imported composer/writer relationship dates; missing dates stay unset. Recording
+release dates and database creation timestamps are never used as composition
+dates. Web results use the standard search-row grid, with up to four creator
+portraits, an image fallback, and six initial results expandable to the returned
+result limit.
+
 Work content routes use the same catalog authentication and rate limits as
 tracks. Limits are capped at 100. Deleted catalog tracks are omitted from the
 response; pagination offsets count stored links so callers can still advance.
