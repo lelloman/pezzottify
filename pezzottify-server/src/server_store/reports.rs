@@ -116,11 +116,22 @@ pub struct NewReport {
 }
 impl NewReport {
     pub fn validate(&self) -> ReportResult<()> {
+        self.validate_client(false)
+    }
+
+    // Legacy clients used arbitrary labels. Preserve them without relaxing the
+    // versioned API's supported-client enum or any of the shared limits.
+    pub(super) fn validate_legacy(&self) -> ReportResult<()> {
+        self.validate_client(true)
+    }
+
+    fn validate_client(&self, legacy: bool) -> ReportResult<()> {
         if uuid::Uuid::parse_str(&self.client_request_id).is_err()
             || !["bug", "feature"].contains(&self.kind.as_str())
             || !["assistant", "playback", "downloads", "ui", "other"]
                 .contains(&self.category.as_str())
-            || !["web", "android"].contains(&self.client_type.as_str())
+            || (!legacy && !["web", "android"].contains(&self.client_type.as_str()))
+            || self.client_type.trim().is_empty()
             || self.description.trim().is_empty()
         {
             return Err(ReportError::Invalid(
@@ -129,6 +140,7 @@ impl NewReport {
         }
         if self.title.as_ref().map_or(0, String::len) > 200
             || self.description.len() > 100 * 1024
+            || self.client_type.len() > 4096
             || self.client_version.as_ref().map_or(0, String::len)
                 + self.device_info.as_ref().map_or(0, String::len)
                 > 4096

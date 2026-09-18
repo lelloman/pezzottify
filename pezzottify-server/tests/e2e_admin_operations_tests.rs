@@ -143,6 +143,7 @@ async fn bug_report_round_trip_preserves_user_and_admin_contracts() {
     let report: Value = response.json().await.unwrap();
     assert_eq!(report["title"], "Test report");
     assert_eq!(report["user_handle"], "testuser");
+    assert_eq!(report["client_type"], "rust-integration");
 
     let response = admin
         .client

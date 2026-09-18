@@ -507,7 +507,7 @@ impl ServerStore for SqliteServerStore {
                 .into_iter()
                 .collect(),
         };
-        validation.validate()?;
+        validation.validate_legacy()?;
         let bytes = report.logs.as_ref().map_or(0, String::len)
             + report.attachments.as_ref().map_or(0, String::len);
         if bytes > 2 * 1024 * 1024 {
