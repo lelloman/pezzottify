@@ -9,27 +9,10 @@
     </p>
     <template v-if="work">
       <header class="workHeader">
-        <div class="compositionMark" aria-hidden="true">
-          <svg viewBox="0 0 160 160" fill="none">
-            <path d="M24 52h112M24 68h112M24 84h112M24 100h112M24 116h112" />
-            <path class="noteStem" d="M69 101V42l42-9v58M69 55l42-9" />
-            <ellipse
-              cx="59"
-              cy="104"
-              rx="12"
-              ry="8"
-              transform="rotate(-20 59 104)"
-            />
-            <ellipse
-              cx="101"
-              cy="94"
-              rx="12"
-              ry="8"
-              transform="rotate(-20 101 94)"
-            />
-          </svg>
-          <span>COMPOSITION</span>
-        </div>
+        <WorkArtwork
+          class="compositionMark"
+          :artistIds="work.creator_artist_ids || []"
+        />
         <div class="workIdentity">
           <p class="eyebrow">
             Work<span v-if="work.kind">
@@ -42,10 +25,51 @@
             <p class="creators">{{ work.creators.join(" · ") }}</p>
           </div>
           <p class="workCaption">
-            One composition. Its recordings and interpretations.
+            <template v-if="work.composition_year"
+              >Composed {{ work.composition_year }} ·
+            </template>
+            Recordings, parts and related works.
           </p>
         </div>
       </header>
+
+      <section
+        v-if="relationGroups.length"
+        class="relations"
+        aria-label="Work relationships"
+      >
+        <details
+          v-for="group in relationGroups"
+          :key="group.label"
+          :open="
+            group.label === 'Parts & movements' || group.label === 'Part of'
+          "
+        >
+          <summary>
+            {{ group.label }} <span>{{ group.items.length }}</span>
+          </summary>
+          <ul class="relationList">
+            <li
+              v-for="relation in group.items"
+              :key="`${relation.work.id}-${relation.ordering}`"
+            >
+              <RouterLink
+                :to="{ name: 'work', params: { workId: relation.work.id } }"
+              >
+                <span v-if="relation.ordering > 0" class="partNumber"
+                  >{{ relation.ordering }}.</span
+                >
+                <span
+                  >{{ relation.work.title
+                  }}<small>{{
+                    relation.work.creators.join(" · ")
+                  }}</small></span
+                >
+              </RouterLink>
+            </li>
+          </ul>
+        </details>
+      </section>
 
       <section class="recordings" aria-labelledby="recordings-title">
         <div class="sectionHeading">
@@ -60,9 +84,24 @@
             }}</span
           >
         </div>
-        <p v-if="!tracks.length && !loading" class="statePanel">
-          No recordings linked yet. They’ll appear here as tracks are matched to
-          this work.
+        <label class="recordingFilter"
+          >Show recordings
+          <select v-model="scope" @change="changeScope">
+            <option value="all">
+              This work, its parts &amp; related works
+            </option>
+            <option value="parts">This work &amp; its parts</option>
+            <option value="related">Related works only</option>
+          </select>
+        </label>
+        <p v-if="!tracks.length && !loading && !error" class="statePanel">
+          {{
+            scope === "related"
+              ? "No recordings linked to related works yet."
+              : scope === "parts"
+                ? "No recordings linked to this work or its parts yet."
+                : "No recordings linked to this work, its parts or related works yet."
+          }}
         </p>
         <div v-else class="recordingList">
           <div class="listHeading" aria-hidden="true">
@@ -73,18 +112,38 @@
             :key="entry.track.id"
             class="recordingRow"
           >
-            <LoadTrackListItem
-              :trackId="entry.track.id"
-              :trackNumber="index + 1"
-              :isCurrentlyPlaying="playback.currentTrackId === entry.track.id"
-              @track-clicked="playback.setTrack($event)"
-              @track-image-clicked="
-                router.push({
-                  name: 'track',
-                  params: { trackId: entry.track.id },
-                })
-              "
-            />
+            <div class="recordingTrack">
+              <LoadTrackListItem
+                :trackId="entry.track.id"
+                :trackNumber="index + 1"
+                :isCurrentlyPlaying="playback.currentTrackId === entry.track.id"
+                @track-clicked="playback.setTrack($event)"
+                @track-image-clicked="
+                  router.push({
+                    name: 'track',
+                    params: { trackId: entry.track.id },
+                  })
+                "
+              />
+              <p
+                v-if="
+                  entry.recording_work && entry.relationship_scope !== 'direct'
+                "
+                class="recordingWork"
+              >
+                {{
+                  entry.relationship_scope === "part" ? "Part" : "Related work"
+                }}
+                ·
+                <RouterLink
+                  :to="{
+                    name: 'work',
+                    params: { workId: entry.recording_work.id },
+                  }"
+                  >{{ entry.recording_work.title }}</RouterLink
+                >
+              </p>
+            </div>
             <RouterLink
               v-if="entry.album"
               class="albumLink"
@@ -134,8 +193,9 @@
 </template>
 
 <script setup>
-import { ref, watch, onBeforeUnmount } from "vue";
+import { computed, ref, watch, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
+import WorkArtwork from "@/components/common/WorkArtwork.vue";
 import LoadTrackListItem from "@/components/common/LoadTrackListItem.vue";
 import { usePlaybackStore } from "@/store/playback";
 import axios from "axios";
@@ -144,6 +204,46 @@ const router = useRouter();
 const playback = usePlaybackStore();
 const work = ref(null);
 const tracks = ref([]);
+const relations = ref([]);
+const scope = ref("all");
+const relationGroups = computed(() => {
+  const groups = new Map();
+  for (const relation of relations.value) {
+    const label = relationLabel(relation);
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push(relation);
+  }
+  return [...groups].map(([label, items]) => ({ label, items }));
+});
+function relationLabel({ relationship_type: type, direction }) {
+  const outgoing = direction === "outgoing";
+  const labels = {
+    parts: ["Parts & movements", "Part of"],
+    arrangement: ["Arrangements", "Arrangement of"],
+    orchestration: ["Orchestrations", "Orchestration of"],
+    "based on": ["Works based on this", "Based on"],
+    "other version": ["Other versions", "Version of"],
+    adaptation: ["Adaptations", "Adaptation of"],
+    "revision of": ["Revisions", "Revision of"],
+    "included works": ["Included works", "Included in"],
+    medley: ["Medley of", "Included in medleys"],
+    "musical quotation": ["Quotes music from", "Music quoted in"],
+    "lyrical quotation": ["Quotes lyrics from", "Lyrics quoted in"],
+    "named after work": ["Named after", "Inspired the name of"],
+  };
+  return (
+    labels[type]?.[outgoing ? 0 : 1] ||
+    `${type} (${outgoing ? "outgoing" : "incoming"})`
+  );
+}
+function changeScope() {
+  controller?.abort();
+  tracks.value = [];
+  hasMore.value = false;
+  loading.value = false;
+  offset = 0;
+  load();
+}
 const loading = ref(false);
 const error = ref("");
 const hasMore = ref(false);
@@ -158,10 +258,14 @@ async function load() {
   try {
     const { data } = await axios.get(
       `/v1/content/work/${encodeURIComponent(props.workId)}`,
-      { params: { limit: 50, offset }, signal: request.signal },
+      {
+        params: { limit: 50, offset, scope: scope.value },
+        signal: request.signal,
+      },
     );
     if (request.signal.aborted) return;
     work.value = data.work;
+    relations.value = data.relations || [];
     tracks.value.push(...data.tracks);
     hasMore.value = data.has_more;
     offset = data.next_offset;
@@ -182,6 +286,8 @@ watch(
   () => {
     controller?.abort();
     work.value = null;
+    relations.value = [];
+    scope.value = "all";
     tracks.value = [];
     hasMore.value = false;
     loading.value = false;
@@ -211,35 +317,8 @@ onBeforeUnmount(() => controller?.abort());
 }
 .compositionMark {
   aspect-ratio: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  border: 1px solid rgba(29, 185, 84, 0.22);
-  border-radius: 8px;
-  background: rgba(10, 28, 21, 0.65);
-  color: var(--accent-color);
-}
-.compositionMark svg {
-  width: 76%;
-}
-.compositionMark path {
-  stroke: currentColor;
-  stroke-width: 1;
-  opacity: 0.3;
-}
-.compositionMark .noteStem {
-  stroke-width: 4;
-  opacity: 1;
-  stroke-linejoin: round;
-}
-.compositionMark ellipse {
-  fill: currentColor;
-}
-.compositionMark span {
-  font-size: 9px;
-  letter-spacing: 0.22em;
-  margin-bottom: 12px;
+  width: 100%;
+  font-size: 40px;
 }
 .workIdentity {
   min-width: 0;
@@ -282,6 +361,62 @@ dt {
 }
 .recordings {
   margin-top: 36px;
+}
+.relations {
+  margin-top: 24px;
+}
+.relations details {
+  border-bottom: 1px solid var(--surface-border);
+}
+.relations summary span {
+  display: inline;
+  margin: 0 0 0 12px;
+}
+.relationList {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px;
+}
+.relationList a {
+  display: flex;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+}
+.relationList a:hover {
+  background: var(--surface-hover);
+}
+.relationList small {
+  display: block;
+  color: var(--text-subdued);
+  margin-top: 4px;
+}
+.partNumber {
+  flex: 0 0 24px;
+  color: var(--text-subdued);
+}
+.recordingFilter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--text-subdued);
+  margin: 0 8px 20px;
+  font-size: 13px;
+}
+.recordingFilter select {
+  max-width: 100%;
+  padding: 8px;
+  background: var(--surface-raised);
+  color: var(--text-base);
+  border: 1px solid var(--surface-border);
+  border-radius: 6px;
+}
+.recordingWork {
+  margin: 0 12px 8px 48px;
+  color: var(--text-subdued);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 .sectionHeading {
   display: flex;

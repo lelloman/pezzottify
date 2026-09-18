@@ -23,11 +23,31 @@ pub struct WorkPresentation {
     pub composition_year: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct WorkRelation {
+    pub work: Work,
+    pub relationship_type: String,
+    pub direction: String,
+    pub ordering: i64,
+}
+
+#[derive(Debug)]
+pub struct WorkRecording {
+    pub track_id: String,
+    pub work_id: String,
+    pub work_title: String,
+    pub scope: String,
+}
+
 impl WorkPresentation {
     fn from_evidence(evidence: &serde_json::Value) -> Self {
         let mut result = Self::default();
         let mut years = Vec::new();
-        for relation in evidence["artist_relations"].as_array().into_iter().flatten() {
+        for relation in evidence["artist_relations"]
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
             let role = relation["type"].as_str().unwrap_or_default();
             if !matches!(role, "composer" | "writer" | "lyricist" | "librettist") {
                 continue;
@@ -41,7 +61,9 @@ impl WorkPresentation {
             // or the timestamp when this Work was imported into our database.
             if matches!(role, "composer" | "writer") {
                 for field in ["begin_date", "end_date"] {
-                    if let Some(year) = relation[field].get(0).and_then(|v| v.as_i64()) {
+                    if let Some(year) = relation[field].get(0).and_then(|v| {
+                        v.as_i64().or_else(|| v.as_str()?.parse().ok())
+                    }) {
                         if (1..=9999).contains(&year) {
                             years.push(year);
                         }
@@ -292,23 +314,100 @@ mod tests {
         let presentation = WorkPresentation::from_evidence(&evidence);
         assert_eq!(presentation.creator_mbids, ["composer", "lyricist"]);
         assert_eq!(presentation.composition_year.as_deref(), Some("1829–1832"));
-        assert_eq!(WorkPresentation::from_evidence(&serde_json::json!({})), WorkPresentation::default());
+        assert_eq!(
+            WorkPresentation::from_evidence(&serde_json::json!({})),
+            WorkPresentation::default()
+        );
         let single = serde_json::json!({"artist_relations": [
             {"type":"composer", "artist":{"mbid":"composer"}, "begin_date":[1832, null, null], "end_date":[1832, null, null]}
         ]});
-        assert_eq!(WorkPresentation::from_evidence(&single).composition_year.as_deref(), Some("1832"));
+        assert_eq!(
+            WorkPresentation::from_evidence(&single)
+                .composition_year
+                .as_deref(),
+            Some("1832")
+        );
         let unknown = serde_json::json!({"artist_relations": [
             {"type":"composer", "artist":{"mbid":"composer"}, "begin_date":[null, null, null], "end_date":[0, null, null]}
         ]});
-        assert_eq!(WorkPresentation::from_evidence(&unknown).composition_year, None);
+        assert_eq!(
+            WorkPresentation::from_evidence(&unknown).composition_year,
+            None
+        );
+    }
+
+    #[test]
+    fn work_presentation_accepts_imported_string_years() {
+        let imported = serde_json::json!({"artist_relations": [
+            {"type":"composer", "artist":{"mbid":"09ff1fe8-d61c-4b98-bb82-18487c74d7b7"},
+             "begin_date":["1829",null,null], "end_date":["1832",null,null]},
+            {"type":"dedication", "artist":{"mbid":"liszt"}, "begin_date":["9999",null,null]}
+        ]});
+        let result = WorkPresentation::from_evidence(&imported);
+        assert_eq!(result.composition_year.as_deref(), Some("1829–1832"));
+        assert_eq!(result.creator_mbids, ["09ff1fe8-d61c-4b98-bb82-18487c74d7b7"]);
+    }
+
+    #[test]
+    fn work_graph_recordings_include_parts_and_related_versions_without_siblings_or_duplicates() {
+        let (store, _tmp) = setup();
+        {
+            let conn = store.write_conn.lock().unwrap();
+            for id in ["parent", "first", "second", "nested", "arrangement", "arranged-part", "unrelated", "distant"] {
+                conn.execute("INSERT INTO works_v1 VALUES (?1,?1,'[\"Composer\"]',NULL,'composition',?1,0)", [id]).unwrap();
+                if id != "parent" {
+                    conn.execute("INSERT INTO work_resolutions_v1 VALUES (?1,?1,'linked','','{}',0,0,NULL,'source')", [id]).unwrap();
+                }
+            }
+            for (i, (source, target, kind, ordering)) in [
+                ("parent", "second", "parts", 2),
+                ("parent", "first", "parts", 1),
+                ("first", "nested", "parts", 1),
+                ("first", "arrangement", "arrangement", 0),
+                ("arrangement", "arranged-part", "parts", 1),
+                ("nested", "arrangement", "other version", 0),
+                ("arrangement", "distant", "based on", 0),
+                ("nested", "first", "parts", 0), // cycle, not a tree
+            ].into_iter().enumerate() {
+                conn.execute("INSERT INTO work_relationships_v1 VALUES ('musicbrainz',?1,?2,?3,?4,?4,?5,'{}','test',0)", params![i.to_string(), source, target, kind, ordering]).unwrap();
+            }
+        }
+        let relations = store.work_relations("parent").unwrap();
+        assert_eq!(relations.iter().map(|r| r.work.id.as_str()).collect::<Vec<_>>(), ["first", "second"]);
+        assert!(relations.iter().all(|r| r.direction == "outgoing"));
+        assert!(store.work_relations("first").unwrap().iter().any(|r| r.work.id == "parent" && r.direction == "incoming"));
+        assert!(store.list_work_track_ids("parent", 100, 0).unwrap().is_empty());
+        let all = store.work_recordings("parent", "all", 100, 0).unwrap();
+        assert_eq!(all.iter().map(|r| r.track_id.as_str()).collect::<Vec<_>>(), ["first", "nested", "second", "arranged-part", "arrangement"]);
+        assert!(all[..3].iter().all(|r| r.scope == "part"));
+        assert!(all[3..].iter().all(|r| r.scope == "related"));
+        let page = store.work_recordings("parent", "all", 2, 2).unwrap();
+        assert_eq!(page.iter().map(|r| r.track_id.as_str()).collect::<Vec<_>>(), ["second", "arranged-part"]);
+        assert!(store.work_recordings("parent", "all", 2, 5).unwrap().is_empty());
+        assert_eq!(store.work_recordings("parent", "parts", 100, 0).unwrap().len(), 3);
+        assert_eq!(store.work_recordings("parent", "related", 100, 0).unwrap().len(), 2);
+        let first = store.work_recordings("first", "all", 100, 0).unwrap();
+        assert_eq!(first[0].scope, "direct");
+        assert!(!first.iter().any(|r| r.track_id == "second" || r.track_id == "distant"));
+        assert!(store.work_recordings("missing", "all", 100, 0).unwrap().is_empty());
     }
 
     #[test]
     fn work_presentation_reads_imported_evidence_and_defaults_when_absent() {
         let (store, _tmp) = setup();
-        let resolved = store.resolve_track_work("track", Some(&proposal("Etude", "Composer")), &serde_json::json!({}), "").unwrap();
+        let resolved = store
+            .resolve_track_work(
+                "track",
+                Some(&proposal("Etude", "Composer")),
+                &serde_json::json!({}),
+                "",
+            )
+            .unwrap();
         let id = resolved.work.unwrap().id;
-        assert_eq!(store.work_presentation(&id).unwrap(), WorkPresentation::default());
+        assert_eq!(
+            store.work_presentation(&id).unwrap(),
+            WorkPresentation::default()
+        );
         store.write_conn.lock().unwrap().execute(
             "INSERT INTO work_source_evidence_v1 VALUES ('musicbrainz', 'work-mbid', ?1, 'snapshot', ?2, 0)",
             params![id, serde_json::json!({"artist_relations":[{"type":"composer","artist":{"mbid":"artist-mbid"},"begin_date":[1832,null,null]}]}).to_string()],
@@ -624,13 +723,64 @@ fn work_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Work> {
 }
 
 impl SqliteEnrichmentStore {
+    pub(super) fn read_work_relations(&self, id: &str) -> Result<Vec<WorkRelation>> {
+        let rows = {
+            let conn = self.read_conn.lock().unwrap();
+            let mut stmt = conn.prepare(
+                "SELECT DISTINCT CASE WHEN source_work_id=?1 THEN target_work_id ELSE source_work_id END,
+                 relationship_type, CASE WHEN source_work_id=?1 THEN 'outgoing' ELSE 'incoming' END, ordering
+                 FROM work_relationships_v1 WHERE source_work_id=?1 OR target_work_id=?1
+                 ORDER BY relationship_type, ordering, 1"
+            )?;
+            let rows = stmt.query_map([id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, i64>(3)?)))?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        rows.into_iter().filter(|(other, _, _, _)| other != id).map(|(other, relationship_type, direction, ordering)| {
+            Ok(self.read_work(&other)?.map(|work| WorkRelation { work, relationship_type, direction, ordering }))
+        }).collect::<Result<Vec<_>>>().map(|rows| rows.into_iter().flatten().collect())
+    }
+
+    pub(super) fn read_work_recordings(&self, id: &str, scope: &str, limit: usize, offset: usize) -> Result<Vec<WorkRecording>> {
+        let conn = self.read_conn.lock().unwrap();
+        // Deduplicate by node identity to handle cycles and multiple paths.
+        // Related works are one non-parts hop away, plus their contained parts.
+        // Never walk upwards through containment and include sibling movements.
+        let mut stmt = conn.prepare(
+            "WITH RECURSIVE parts(id) AS (
+                SELECT ?1 UNION
+                SELECT r.target_work_id FROM work_relationships_v1 r JOIN parts p ON r.source_work_id=p.id
+                WHERE r.relationship_type='parts'
+             ), related(id) AS (
+                SELECT CASE WHEN r.source_work_id=p.id THEN r.target_work_id ELSE r.source_work_id END
+                FROM work_relationships_v1 r JOIN parts p ON r.source_work_id=p.id OR r.target_work_id=p.id
+                WHERE r.relationship_type!='parts'
+                UNION
+                SELECT r.target_work_id FROM work_relationships_v1 r JOIN related p ON r.source_work_id=p.id
+                WHERE r.relationship_type='parts'
+             ), nodes(id) AS (SELECT id FROM parts UNION SELECT id FROM related)
+             SELECT t.track_id, w.id, w.title,
+                CASE WHEN w.id=?1 THEN 'direct' WHEN w.id IN (SELECT id FROM parts) THEN 'part' ELSE 'related' END AS scope
+             FROM nodes n JOIN work_resolutions_v1 t ON t.work_id=n.id JOIN works_v1 w ON w.id=n.id
+             WHERE ?2='all' OR (?2='parts' AND w.id IN (SELECT id FROM parts))
+                OR (?2='related' AND w.id NOT IN (SELECT id FROM parts))
+             ORDER BY CASE scope WHEN 'direct' THEN 0 WHEN 'part' THEN 1 ELSE 2 END, w.title, w.id, t.track_id
+             LIMIT ?3 OFFSET ?4"
+        )?;
+        let rows = stmt.query_map(params![id, scope, limit.min(100) as i64, offset as i64], |r| Ok(WorkRecording {
+            track_id: r.get(0)?, work_id: r.get(1)?, work_title: r.get(2)?, scope: r.get(3)?,
+        }))?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
     pub(super) fn read_work_presentation(&self, id: &str) -> Result<WorkPresentation> {
         let evidence: Option<String> = self.read_conn.lock().unwrap().query_row(
             "SELECT evidence_json FROM work_source_evidence_v1 WHERE work_id=?1 AND provider='musicbrainz'",
             [id], |row| row.get(0),
         ).optional()?;
         match evidence {
-            Some(json) => Ok(WorkPresentation::from_evidence(&serde_json::from_str(&json)?)),
+            Some(json) => Ok(WorkPresentation::from_evidence(&serde_json::from_str(
+                &json,
+            )?)),
             None => Ok(WorkPresentation::default()),
         }
     }

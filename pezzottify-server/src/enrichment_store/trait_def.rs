@@ -29,6 +29,16 @@ pub trait EnrichmentStore: Send + Sync {
     fn work_presentation(&self, _id: &str) -> Result<super::WorkPresentation> {
         Ok(Default::default())
     }
+    fn work_relations(&self, _id: &str) -> Result<Vec<super::WorkRelation>> {
+        Ok(Vec::new())
+    }
+    fn work_recordings(&self, id: &str, scope: &str, limit: usize, offset: usize) -> Result<Vec<super::WorkRecording>> {
+        if scope == "related" { return Ok(Vec::new()); }
+        let Some(work) = self.get_work(id)? else { return Ok(Vec::new()); };
+        Ok(self.list_work_track_ids(id, limit, offset)?.into_iter().map(|track_id| super::WorkRecording {
+            track_id, work_id: id.to_owned(), work_title: work.title.clone(), scope: "direct".into(),
+        }).collect())
+    }
     fn get_work_resolution(&self, _track_id: &str) -> Result<Option<super::WorkResolution>> {
         Ok(None)
     }
