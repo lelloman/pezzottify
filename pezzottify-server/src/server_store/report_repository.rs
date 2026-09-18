@@ -471,6 +471,24 @@ mod tests {
         }
     }
     #[test]
+    fn legacy_client_labels_remain_supported_without_relaxing_modern_validation() {
+        let mut request = input();
+        request.client_type = "rust-integration".into();
+        assert!(request.validate_legacy().is_ok());
+        assert!(matches!(request.validate(), Err(ReportError::Invalid(_))));
+        request.client_type = "x".repeat(4097);
+        assert!(matches!(
+            request.validate_legacy(),
+            Err(ReportError::TooLarge)
+        ));
+        request.client_type = "android".into();
+        request.attachments[0].consent = false;
+        assert!(matches!(
+            request.validate_legacy(),
+            Err(ReportError::Invalid(_))
+        ));
+    }
+    #[test]
     fn concurrent_quota_and_replays_are_atomic() {
         let (_dir, s) = setup();
         let mut settings = s.settings().unwrap();
