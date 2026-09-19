@@ -386,7 +386,8 @@ async fn streaming_search(
         + server_state.config.streaming_search.other_results_limit;
     let max_results = desired_results + 50;
     let (sender, receiver) = tokio::sync::mpsc::channel::<Result<Event, Infallible>>(32);
-    tokio::spawn(async move {
+    let tasks = server_state.runtime_tasks.tasks.clone();
+    tasks.spawn(async move {
         let started = Instant::now();
         let query = params.q.clone();
         let mode = params.search_mode;

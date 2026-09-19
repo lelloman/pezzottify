@@ -23,7 +23,7 @@ use pezzottify_server::db_executor::{DbExecutor, DbExecutorConfig};
 use pezzottify_server::enrichment_store::SqliteEnrichmentStore;
 use pezzottify_server::ingestion::{IngestionStore, SqliteIngestionStore};
 use pezzottify_server::search::{Fts5LevenshteinSearchVault, NoopSearchVault};
-use pezzottify_server::server::{metrics, run_server, RequestsLoggingLevel};
+use pezzottify_server::server::{metrics, prepare_server, RequestsLoggingLevel};
 use pezzottify_server::server_store::{self, ServerStore, SqliteServerStore};
 use pezzottify_server::user::{self, SqliteUserStore, UserManager};
 
@@ -128,32 +128,17 @@ impl From<&CliArgs> for config::CliConfig {
     }
 }
 
-#[cfg(unix)]
-async fn shutdown_signal() -> &'static str {
-    let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-        .expect("failed to install SIGTERM handler");
-
-    tokio::select! {
-        result = tokio::signal::ctrl_c() => {
-            if let Err(e) = result {
-                error!("Failed to listen for SIGINT: {}", e);
-            }
-            "SIGINT"
-        }
-        _ = terminate.recv() => "SIGTERM",
-    }
-}
-
-#[cfg(not(unix))]
-async fn shutdown_signal() -> &'static str {
-    if let Err(e) = tokio::signal::ctrl_c().await {
-        error!("Failed to listen for shutdown signal: {}", e);
-    }
-    "Ctrl+C"
-}
-
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() {
+    if let Err(error) = run().await {
+        error!(error = ?error, "Server failed");
+        // A timed-out blocking job cannot be forcibly cancelled by Tokio.
+        // Do not let runtime teardown extend the application shutdown deadline.
+        std::process::exit(1);
+    }
+}
+
+async fn run() -> Result<()> {
     let cli_args = CliArgs::parse();
 
     tracing_subscriber::registry()
@@ -166,6 +151,14 @@ async fn main() -> Result<()> {
         )
         .try_init()
         .unwrap();
+
+    let signals = simple_server::lifecycle::Signals::install()?;
+    let mut lifecycle =
+        simple_server::lifecycle::Lifecycle::new(simple_server::lifecycle::ShutdownOptions {
+            grace_period: Duration::from_secs(30),
+        });
+    let runtime_tasks =
+        pezzottify_server::server::lifecycle::RuntimeTasks::new(lifecycle.shutdown());
 
     // Load TOML config if provided
     let file_config = match &cli_args.config {
@@ -494,7 +487,8 @@ async fn main() -> Result<()> {
             retention_days, interval_hours
         );
 
-        tokio::spawn(async move {
+        let shutdown = lifecycle.shutdown();
+        lifecycle.service("event-pruning", async move {
             let interval = Duration::from_secs(interval_hours * 60 * 60);
             let mut ticker = tokio::time::interval(interval);
 
@@ -502,7 +496,11 @@ async fn main() -> Result<()> {
             ticker.tick().await;
 
             loop {
-                ticker.tick().await;
+                tokio::select! {
+                    biased;
+                    _ = shutdown.requested() => break,
+                    _ = ticker.tick() => {},
+                }
 
                 let cutoff = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
@@ -510,7 +508,10 @@ async fn main() -> Result<()> {
                     .as_secs() as i64
                     - (retention_days as i64 * 24 * 60 * 60);
 
-                match pruning_user_store.prune_events_older_than(cutoff) {
+                let store = pruning_user_store.clone();
+                match tokio::task::spawn_blocking(move || store.prune_events_older_than(cutoff))
+                    .await?
+                {
                     Ok(count) => {
                         if count > 0 {
                             info!("Pruned {} old sync events", count);
@@ -521,7 +522,8 @@ async fn main() -> Result<()> {
                     }
                 }
             }
-        });
+            Ok::<(), std::io::Error>(())
+        })?;
     }
 
     // NOTE: Download manager disabled for Spotify schema (catalog is read-only)
@@ -529,7 +531,8 @@ async fn main() -> Result<()> {
     // Spawn background task for storage metrics updates
     let db_dir_for_metrics = app_config.db_dir.clone();
     let media_path_for_metrics = app_config.media_path.clone();
-    tokio::spawn(async move {
+    let shutdown = lifecycle.shutdown();
+    lifecycle.service("storage-metrics", async move {
         // Recursively walking the media catalog performs blocking filesystem
         // metadata I/O. Keep it off Tokio's HTTP executor so a cold directory
         // cache cannot stall metrics scrapes and API requests.
@@ -548,7 +551,11 @@ async fn main() -> Result<()> {
         let mut interval = tokio::time::interval(Duration::from_secs(15 * 60));
         interval.tick().await;
         loop {
-            interval.tick().await;
+            tokio::select! {
+                biased;
+                _ = shutdown.requested() => break,
+                _ = interval.tick() => {},
+            }
             let db_dir = db_dir_for_metrics.clone();
             let media_path = media_path_for_metrics.clone();
             if let Err(e) = tokio::task::spawn_blocking(move || {
@@ -559,16 +566,22 @@ async fn main() -> Result<()> {
                 error!("Storage metrics update task failed: {}", e);
             }
         }
-    });
+        Ok::<(), std::io::Error>(())
+    })?;
 
     // Spawn periodic passive WAL checkpoint task (hourly)
     let checkpoint_registry = db_registry.clone();
-    tokio::spawn(async move {
+    let shutdown = lifecycle.shutdown();
+    lifecycle.service("wal-checkpoint", async move {
         let mut interval = tokio::time::interval(Duration::from_secs(60 * 60));
         // Skip the first immediate tick
         interval.tick().await;
         loop {
-            interval.tick().await;
+            tokio::select! {
+                biased;
+                _ = shutdown.requested() => break,
+                _ = interval.tick() => {},
+            }
             let registry = checkpoint_registry.clone();
             if let Err(e) = tokio::task::spawn_blocking(move || {
                 pezzottify_server::backup::passive_checkpoint_all(&registry);
@@ -578,61 +591,62 @@ async fn main() -> Result<()> {
                 error!("Passive checkpoint task panicked: {}", e);
             }
         }
-    });
+        Ok::<(), std::io::Error>(())
+    })?;
 
+    prepare_server(
+        catalog_store,
+        guarded_search_vault,
+        user_store,
+        user_manager,
+        app_config.logging_level.clone(),
+        app_config.port,
+        app_config.metrics_port,
+        app_config.content_cache_age_sec,
+        app_config.frontend_dir_path.clone(),
+        app_config.secure_session_cookies,
+        app_config.session_cookie_max_age_secs,
+        app_config.allow_legacy_raw_authorization,
+        app_config.login_rate_limit_per_minute,
+        app_config.login_rate_limit_per_hour,
+        Some(scheduler_handle),
+        server_store,
+        oidc_config,
+        app_config.search.streaming.clone(),
+        app_config.download_manager.clone(),
+        app_config.proxy_mode.clone(),
+        app_config.downloader_url.clone(),
+        app_config.downloader_timeout_sec,
+        app_config.db_dir.clone(),
+        app_config.media_path.clone(),
+        app_config.agent.clone(),
+        app_config.ingestion.clone(),
+        app_config.audio_embeddings.clone(),
+        db_registry.clone(),
+        enrichment_store
+            .clone()
+            .map(|store| store as Arc<dyn pezzottify_server::enrichment_store::EnrichmentStore>),
+        db_executor,
+        media,
+        &mut lifecycle,
+        runtime_tasks.clone(),
+    )
+    .await?;
+
+    let shutdown = lifecycle.shutdown();
+    lifecycle.service("scheduler", async move {
+        let task = scheduler.run();
+        tokio::pin!(task);
+        tokio::select! {
+            _ = &mut task => return Ok::<(), std::io::Error>(()),
+            _ = shutdown.requested() => shutdown_token.cancel(),
+        }
+        task.await;
+        Ok(())
+    })?;
     info!("Ready to serve at port {}!", app_config.port);
     info!("Metrics available at port {}!", app_config.metrics_port);
-
-    // Keep polling the scheduler after cancellation so it can finish job cleanup.
-    let scheduler_task = scheduler.run();
-    tokio::pin!(scheduler_task);
-    tokio::select! {
-        result = run_server(
-            catalog_store,
-            guarded_search_vault,
-            user_store,
-            user_manager,
-            app_config.logging_level.clone(),
-            app_config.port,
-            app_config.metrics_port,
-            app_config.content_cache_age_sec,
-            app_config.frontend_dir_path.clone(),
-            app_config.secure_session_cookies,
-            app_config.session_cookie_max_age_secs,
-            app_config.allow_legacy_raw_authorization,
-            app_config.login_rate_limit_per_minute,
-            app_config.login_rate_limit_per_hour,
-            Some(scheduler_handle),
-            server_store,
-            oidc_config,
-            app_config.search.streaming.clone(),
-            app_config.download_manager.clone(),
-            app_config.proxy_mode.clone(),
-            app_config.downloader_url.clone(),
-            app_config.downloader_timeout_sec,
-            app_config.db_dir.clone(),
-            app_config.media_path.clone(),
-            app_config.agent.clone(),
-            app_config.ingestion.clone(),
-            app_config.audio_embeddings.clone(),
-            db_registry.clone(),
-            enrichment_store.clone().map(|store| store as Arc<dyn pezzottify_server::enrichment_store::EnrichmentStore>),
-            db_executor,
-            media,
-        ) => {
-            info!("HTTP server stopped: {:?}", result);
-            shutdown_token.cancel();
-            result
-        },
-        _ = &mut scheduler_task => {
-            info!("Scheduler stopped");
-            Ok(())
-        },
-        signal = shutdown_signal() => {
-            info!("Received {}, initiating graceful shutdown", signal);
-            shutdown_token.cancel();
-            scheduler_task.await;
-            Ok(())
-        }
-    }
+    let report = lifecycle.run(signals.wait(), runtime_tasks.drain()).await?;
+    info!(?report, "Graceful shutdown complete");
+    Ok(())
 }

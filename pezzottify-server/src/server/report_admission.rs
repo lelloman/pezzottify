@@ -56,10 +56,15 @@ impl Admission {
             counters: Mutex::new(Counters::default()),
         });
         let weak = Arc::downgrade(&state);
-        tokio::spawn(async move {
+        let shutdown = state.server.runtime_tasks.shutdown.clone();
+        state.server.runtime_tasks.tasks.spawn(async move {
             let mut timer = tokio::time::interval(Duration::from_secs(60));
             loop {
-                timer.tick().await;
+                tokio::select! {
+                    biased;
+                    _ = shutdown.requested() => break,
+                    _ = timer.tick() => {},
+                }
                 let Some(state) = weak.upgrade() else { break };
                 let result = state
                     .server

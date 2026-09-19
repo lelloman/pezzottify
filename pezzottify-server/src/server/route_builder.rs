@@ -552,11 +552,16 @@ pub(super) fn auth_routes(state: &ServerState) -> Router {
     let ip_sustained_limiter = login_ip_sustained_limit.limiter().clone();
     let account_burst_limiter = login_account_burst_limit.limiter().clone();
     let account_sustained_limiter = login_account_sustained_limit.limiter().clone();
-    tokio::spawn(async move {
+    let shutdown = state.runtime_tasks.shutdown.clone();
+    state.runtime_tasks.tasks.spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(600));
         interval.tick().await;
         loop {
-            interval.tick().await;
+            tokio::select! {
+                biased;
+                _ = shutdown.requested() => break,
+                _ = interval.tick() => {},
+            }
             ip_burst_limiter.retain_recent();
             ip_sustained_limiter.retain_recent();
             account_burst_limiter.retain_recent();

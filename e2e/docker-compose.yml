@@ -27,6 +27,8 @@ services:
       - e2e-net
 
   pezzottify-server:
+    # Allow the application its full 30-second shutdown budget.
+    stop_grace_period: 35s
     image: pezzottify-e2e-server:latest
     build:
       context: ..

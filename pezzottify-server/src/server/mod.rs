@@ -7,6 +7,7 @@ mod embeddings;
 pub(crate) mod filesystem_work;
 mod http_layers;
 mod ingestion_routes;
+pub mod lifecycle;
 pub mod metrics;
 mod password_work;
 mod recommendations;
@@ -34,4 +35,4 @@ pub use ingestion_routes::ingestion_routes;
 pub use recommendations::recommendation_routes;
 use search::{make_search_admin_routes, make_search_routes};
 #[allow(unused_imports)] // Used by main.rs
-pub use server::run_server;
+pub use server::prepare_server;

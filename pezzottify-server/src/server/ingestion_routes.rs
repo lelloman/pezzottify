@@ -208,6 +208,7 @@ fn executor_status(error: &DbRunError) -> StatusCode {
 
 /// POST /upload - Upload a file for ingestion (multipart/form-data)
 async fn upload_file(
+    State(runtime_tasks): State<super::lifecycle::RuntimeTasks>,
     session: Session,
     State(database): State<DatabaseHandles>,
     mut multipart: Multipart,
@@ -333,7 +334,7 @@ async fn upload_file(
             for job_id in &result.job_ids {
                 let manager_clone = manager.clone();
                 let job_id_clone = job_id.clone();
-                tokio::spawn(async move {
+                runtime_tasks.tasks.spawn(async move {
                     debug!("Auto-processing job {}", job_id_clone);
                     let runtime = tokio::runtime::Handle::current();
                     let logged_job_id = job_id_clone.clone();

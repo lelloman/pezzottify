@@ -1132,6 +1132,7 @@ impl ServerState {
         ));
 
         ServerState {
+            runtime_tasks: Default::default(),
             config,
             start_time: Instant::now(),
             catalog_store,

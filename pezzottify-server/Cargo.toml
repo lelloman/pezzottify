@@ -23,7 +23,7 @@ libc = "0.2"
 ctrlc = "3.4"
 argon2 = "0.5.3"
 async-trait = "0.1.85"
-simple-server = { path = "../../simple-server", features = ["ws", "multipart"] }
+simple-server = { path = "../../simple-server", features = ["ws", "multipart", "lifecycle"] }
 axum-extra = { version = "0.10.0", features = ["cookie"] }
 byte-unit = "5.1.6"
 chrono = "0.4.39"
@@ -54,7 +54,7 @@ thiserror = "1.0"
 time = "0.3.37"
 toml = "0.8"
 tokio = { version = "1.43.0", features = ["full"] }
-tokio-util = { version = "0.7.13", features = ["io"] }
+tokio-util = { version = "0.7.13", features = ["io", "rt"] }
 tower = "0.5.2"
 tower_governor = "0.8"
 tower-http = { version = "0.6.2", features = ["fs"] }

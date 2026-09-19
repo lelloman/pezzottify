@@ -1,15 +1,14 @@
-async fn reboot_server(session: Session) -> Response {
+async fn reboot_server(
+    session: Session,
+    State(runtime_tasks): State<super::lifecycle::RuntimeTasks>,
+) -> Response {
     info!(
         "Server reboot requested by user_id={}, initiating shutdown...",
         session.user_id
     );
 
-    // Spawn a task to exit the process after responding
-    tokio::spawn(async {
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        info!("Server shutting down for reboot");
-        std::process::exit(0);
-    });
+    // The listener drains this accepted response while the coordinator stops peers.
+    runtime_tasks.shutdown.request();
 
     (StatusCode::ACCEPTED, "Server reboot initiated").into_response()
 }

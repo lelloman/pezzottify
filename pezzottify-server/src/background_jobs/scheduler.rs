@@ -956,7 +956,9 @@ impl JobScheduler {
             if behavior == ShutdownBehavior::WaitForCompletion {
                 info!("Waiting for job {} to complete...", job_id);
             }
-            let _ = tokio::time::timeout(Duration::from_secs(30), handle).await;
+            if let Err(error) = handle.await {
+                error!(%job_id, %error, "Job task failed during shutdown");
+            }
         }
 
         self.job_cancel_tokens.clear();
