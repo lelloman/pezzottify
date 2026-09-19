@@ -37,6 +37,7 @@ android {
     buildFeatures {
         compose = true
     }
+    testOptions.unitTests.isIncludeAndroidResources = true
 }
 
 dependencies {
@@ -71,6 +72,8 @@ dependencies {
     testImplementation(libs.truth)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.ui.test.junit4)
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

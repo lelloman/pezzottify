@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="equalizer_title">Equalizer</string>
+    <string name="equalizer_on">On · Applied to playback on this device</string>
+    <string name="equalizer_off">Off · Original sound</string>
+    <string name="equalizer_description">Adjust your sound while listening, or prepare a profile with the equalizer off.</string>
+    <string name="equalizer_settings_description">Tune your sound and save profiles for headphones or speakers</string>
+    <string name="equalizer_headroom">Boosting bands automatically lowers overall gain to leave headroom and reduce distortion.</string>
+    <string name="equalizer_custom">Custom</string>
+    <string name="equalizer_modified">%1$s · Modified</string>
+    <string name="equalizer_gain">%1$+.1f dB</string>
+    <string name="equalizer_flat">Reset to flat</string>
+    <string name="equalizer_update">Save changes to %1$s</string>
+    <string name="equalizer_save_as">Save as new profile</string>
+    <string name="equalizer_profiles">Your profiles</string>
+    <string name="equalizer_no_profiles">Save your first profile for a favorite pair of headphones or a speaker.</string>
+    <string name="equalizer_local_profiles">Profiles stay on this device. Select one manually when changing your audio output. Loading a profile replaces the current adjustments; saved profiles change only when you save.</string>
+    <string name="equalizer_profile_name">Profile name</string>
+    <string name="equalizer_profile_example">Sony Headphones, Speaker…</string>
+    <string name="equalizer_duplicate">A profile with this name already exists.</string>
+    <string name="equalizer_save">Save</string>
+    <string name="equalizer_rename">Rename</string>
+    <string name="equalizer_delete">Delete profile</string>
+    <string name="equalizer_delete_confirmation">Delete “%1$s”? Your current sound settings will be kept.</string>
+</resources>

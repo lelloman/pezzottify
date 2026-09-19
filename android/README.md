@@ -201,6 +201,29 @@ CI can clone it. Separate builds are required because the projects use different
 ./gradlew assembleRelease     # Build release APK
 ```
 
+### Equalizer
+
+Phone and TV Settings expose a device-local five-band equalizer (60 Hz, 230 Hz,
+910 Hz, 3.6 kHz, 14 kHz; ±12 dB in 0.5 dB steps). It defaults off. The current
+curve, enabled state, and named profiles survive process restarts. Profiles can
+be loaded, saved, updated, renamed, and deleted. Editing a loaded profile changes
+the current sound but never overwrites the saved curve without explicit Save.
+Reset produces a flat custom curve; deleting a profile retains the current sound.
+Profiles do not sync to the server or switch automatically with output devices.
+
+PlaybackService inserts a PCM audio processor into Media3's sink. It uses peaking
+biquads ([RBJ cookbook](https://www.w3.org/TR/audio-eq-cookbook/)), independent
+channel history, 20 ms transitions, automatic headroom based on combined frequency
+response, and saturating 16-bit output. Frequencies at/above Nyquist are skipped.
+The processor remains in the chain when disabled to support live toggling;
+disabled/flat output is an exact PCM bypass after any transition. Float output,
+encoded passthrough and hardware offload are disabled to prevent bypassing the
+equalizer, so high-resolution input is converted to 16-bit PCM by Media3.
+This affects only playback on this Android device, not remotely controlled clients.
+
+Tests cover persistence/profile isolation, invalid stored settings, frequency
+response, stereo isolation, buffer/flush lifecycle, live toggling and UI actions.
+
 ### Diagnostic tools
 
 Phone and TV Settings include a **Diagnostic session** button opening Androidoscopy's
