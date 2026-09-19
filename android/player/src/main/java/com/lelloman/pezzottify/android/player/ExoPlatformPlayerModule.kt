@@ -19,6 +19,10 @@ import javax.inject.Singleton
 internal class ExoPlatformPlayerModule {
 
     @Provides
+    fun provideEqualizerOutputController(controller: com.lelloman.pezzottify.android.player.equalizer.AndroidEqualizerOutputController):
+        com.lelloman.pezzottify.android.domain.equalizer.EqualizerOutputController = controller
+
+    @Provides
     @Singleton
     fun providePlayerServiceEventsEmitter(applicationScope: CoroutineScope) =
         PlayerServiceEventsEmitter(applicationScope)

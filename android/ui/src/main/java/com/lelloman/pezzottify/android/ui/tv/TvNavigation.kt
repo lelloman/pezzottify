@@ -46,4 +46,7 @@ sealed interface TvScreen {
 
     @Serializable
     data object Equalizer : TvScreen
+
+    @Serializable
+    data object EqualizerProfiles : TvScreen
 }

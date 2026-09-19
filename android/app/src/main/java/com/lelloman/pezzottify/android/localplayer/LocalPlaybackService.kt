@@ -22,7 +22,14 @@ import androidx.media3.session.MediaSessionService
  * Provides notification controls and lock screen integration.
  * No server dependencies - purely for local files.
  */
+@dagger.hilt.android.AndroidEntryPoint
 class LocalPlaybackService : MediaSessionService() {
+
+    @javax.inject.Inject
+    lateinit var equalizerStore: com.lelloman.pezzottify.android.domain.equalizer.EqualizerStore
+
+    @javax.inject.Inject
+    lateinit var equalizerOutputs: com.lelloman.pezzottify.android.player.equalizer.AndroidEqualizerOutputController
 
     private var mediaSession: MediaSession? = null
     private var player: ExoPlayer? = null
@@ -45,7 +52,7 @@ class LocalPlaybackService : MediaSessionService() {
 
     @OptIn(UnstableApi::class)
     private fun makePlayer(): ExoPlayer = ExoPlayer
-        .Builder(this)
+        .Builder(this, com.lelloman.pezzottify.android.player.equalizer.EqualizerRenderersFactory(this, equalizerStore, equalizerOutputs))
         .setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)

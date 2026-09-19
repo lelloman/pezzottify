@@ -65,7 +65,11 @@ fun TvAppUi(
                     TvSettingsScreen(navController)
                 }
                 composable<TvScreen.Equalizer> {
-                    com.lelloman.pezzottify.android.ui.screen.main.settings.EqualizerScreen(navController)
+                    com.lelloman.pezzottify.android.ui.screen.main.settings.EqualizerScreen(navController,
+                        onProfiles = { navController.navigate(TvScreen.EqualizerProfiles) })
+                }
+                composable<TvScreen.EqualizerProfiles> {
+                    com.lelloman.pezzottify.android.ui.screen.main.settings.EqualizerProfilesScreen(navController)
                 }
             }
         }

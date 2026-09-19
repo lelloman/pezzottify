@@ -1,0 +1,5 @@
+<resources>
+    <string name="eq_device_speaker">Device speaker</string>
+    <string name="eq_unknown_output">Unknown output</string>
+    <string name="eq_multiple_outputs">Multiple audio outputs</string>
+</resources>
