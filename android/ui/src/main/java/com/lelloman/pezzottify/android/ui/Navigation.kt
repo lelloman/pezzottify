@@ -78,6 +78,9 @@ sealed interface Screen {
             data object Equalizer : Main
 
             @Serializable
+            data object EqualizerProfiles : Main
+
+            @Serializable
             data object LogViewer : Main
 
             @Serializable

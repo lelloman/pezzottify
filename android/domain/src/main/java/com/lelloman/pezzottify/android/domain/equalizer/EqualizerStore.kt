@@ -40,11 +40,26 @@ object EqualizerBands {
 data class EqualizerProfile(val id: String, val name: String, val gains: List<Float>)
 
 @Serializable
+data class EqualizerOutputAssociation(val outputKey: String, val outputName: String, val profileId: String)
+
+data class EqualizerOutput(val key: String?, val name: String, val bluetooth: Boolean = false,
+    val needsBluetoothPermission: Boolean = false)
+
+/** Only reports the route used by our playing AudioTrack, never merely connected devices. */
+interface EqualizerOutputController {
+    val output: StateFlow<EqualizerOutput?>
+    fun refresh()
+    /** Rechecks the live route before associating, to avoid a stale UI binding the wrong output. */
+    fun associateCurrentOutput(profileId: String, expectedKey: String): Boolean
+}
+
+@Serializable
 data class EqualizerSettings(
     val enabled: Boolean = false,
     val gains: List<Float> = EqualizerBands.flat,
     val profiles: List<EqualizerProfile> = emptyList(),
     val selectedProfileId: String? = null,
+    val outputAssociations: List<EqualizerOutputAssociation> = emptyList(),
 ) {
     val selectedProfile get() = profiles.find { it.id == selectedProfileId }
     val isModified get() = selectedProfile?.let { it.gains != gains } ?: false
@@ -61,4 +76,7 @@ interface EqualizerStore {
     fun updateProfile()
     fun renameProfile(id: String, name: String)
     fun deleteProfile(id: String)
+    fun associateOutput(outputKey: String, outputName: String, profileId: String)
+    fun removeOutputAssociation(outputKey: String)
+    fun applyOutput(outputKey: String?)
 }

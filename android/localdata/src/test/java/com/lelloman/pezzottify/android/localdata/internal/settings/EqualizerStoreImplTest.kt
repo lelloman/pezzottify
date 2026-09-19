@@ -18,6 +18,56 @@ class EqualizerStoreImplTest {
         assertEquals(EqualizerSettings(), EqualizerStoreImpl(context).state.value)
     }
 
+    @Test fun `output bindings persist and switch curves without turning EQ on`() {
+        val store = EqualizerStoreImpl(context)
+        store.saveProfile("Speaker")
+        val speaker = store.state.value.selectedProfileId!!
+        store.associateOutput("builtin:speaker", "Speaker", speaker)
+        store.setBand(0, 6f)
+        store.saveProfile("Sony")
+        val sony = store.state.value.selectedProfileId!!
+        store.associateOutput("bluetooth:AA:BB:CC:DD:EE:FF", "Sony headphones", sony)
+        assertEquals(store.state.value, EqualizerStoreImpl(context).state.value)
+        store.applyOutput("builtin:speaker")
+        assertEquals(speaker, store.state.value.selectedProfileId)
+        assertEquals(EqualizerBands.flat, store.state.value.gains)
+        store.applyOutput("bluetooth:AA:BB:CC:DD:EE:FF")
+        assertEquals(6f, store.state.value.gains[0])
+        assertFalse(store.state.value.enabled)
+        store.setEnabled(true)
+        store.applyOutput("unknown")
+        assertTrue(store.state.value.enabled)
+        assertNull(store.state.value.selectedProfileId)
+        assertEquals(EqualizerBands.flat, store.state.value.gains)
+    }
+
+    @Test fun `manual-only users keep their curve on route changes`() {
+        val store = EqualizerStoreImpl(context)
+        store.setBand(2, -5f)
+        store.applyOutput("builtin:speaker")
+        assertEquals(-5f, store.state.value.gains[2])
+    }
+
+    @Test fun `association replacement removal and profile deletion leave no dangling bindings`() {
+        val store = EqualizerStoreImpl(context)
+        store.saveProfile("One")
+        val one = store.state.value.selectedProfileId!!
+        store.associateOutput("device", "Device", one)
+        store.saveProfile("Two")
+        val two = store.state.value.selectedProfileId!!
+        store.associateOutput("device", "Renamed device", two)
+        assertEquals(two, store.state.value.outputAssociations.single().profileId)
+        store.renameProfile(two, "New profile name")
+        store.applyOutput("device")
+        assertEquals("New profile name", store.state.value.selectedProfile!!.name)
+        store.removeOutputAssociation("device")
+        assertTrue(store.state.value.outputAssociations.isEmpty())
+        store.associateOutput("device", "Device", two)
+        store.deleteProfile(two)
+        assertTrue(store.state.value.outputAssociations.isEmpty())
+        assertEquals(store.state.value, EqualizerStoreImpl(context).state.value)
+    }
+
     @Test fun `legacy profiles migrate without losing names selection or unsaved changes`() {
         context.getSharedPreferences("Equalizer", Context.MODE_PRIVATE).edit().putString("settings", """
             {"enabled":true,"gains":[12,6,0,-6,-12],"selectedProfileId":"sony",

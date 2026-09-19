@@ -54,6 +54,9 @@ class PlaybackService : MediaSessionService() {
     lateinit var equalizerStore: EqualizerStore
 
     @Inject
+    lateinit var equalizerOutputs: com.lelloman.pezzottify.android.player.equalizer.AndroidEqualizerOutputController
+
+    @Inject
     lateinit var authStore: AuthStore
 
     @Inject
@@ -151,7 +154,7 @@ class PlaybackService : MediaSessionService() {
 
     @OptIn(UnstableApi::class)
     private fun makePlayer(): ExoPlayer = ExoPlayer
-        .Builder(this, EqualizerRenderersFactory(this, equalizerStore)).setMediaSourceFactory(
+        .Builder(this, EqualizerRenderersFactory(this, equalizerStore, equalizerOutputs)).setMediaSourceFactory(
             DefaultMediaSourceFactory(this).setDataSourceFactory(
                 DefaultDataSource.Factory(
                     this,

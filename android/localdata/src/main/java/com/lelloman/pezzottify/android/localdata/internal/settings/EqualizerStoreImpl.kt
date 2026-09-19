@@ -30,12 +30,18 @@ internal class EqualizerStoreImpl(context: Context) : EqualizerStore {
                     EqualizerBands.validate(it.gains)
                 }
                 require(settings.selectedProfileId == null || settings.selectedProfile != null)
+                require(settings.outputAssociations.map { it.outputKey }.distinct().size == settings.outputAssociations.size)
+                require(settings.outputAssociations.all { association ->
+                    association.outputKey.isNotBlank() && association.outputName.isNotBlank() &&
+                        settings.profiles.any { it.id == association.profileId }
+                })
             }
     }.getOrElse { EqualizerSettings() }
 
     @Synchronized
     private fun change(transform: (EqualizerSettings) -> EqualizerSettings) {
         val next = transform(mutableState.value)
+        if (next == mutableState.value) return
         prefs.edit().putString("settings", json.encodeToString(next)).apply()
         mutableState.value = next
     }
@@ -75,6 +81,26 @@ internal class EqualizerStoreImpl(context: Context) : EqualizerStore {
     }
     override fun deleteProfile(id: String) = change {
         it.copy(profiles = it.profiles.filterNot { p -> p.id == id },
+            outputAssociations = it.outputAssociations.filterNot { a -> a.profileId == id },
             selectedProfileId = it.selectedProfileId.takeUnless { selected -> selected == id })
+    }
+
+    override fun associateOutput(outputKey: String, outputName: String, profileId: String) = change {
+        require(outputKey.isNotBlank() && outputName.isNotBlank())
+        val profile = requireNotNull(it.profiles.find { p -> p.id == profileId })
+        it.copy(outputAssociations = it.outputAssociations.filterNot { a -> a.outputKey == outputKey } +
+            EqualizerOutputAssociation(outputKey, outputName, profileId),
+            gains = profile.gains.toList(), selectedProfileId = profileId)
+    }
+
+    override fun removeOutputAssociation(outputKey: String) = change {
+        it.copy(outputAssociations = it.outputAssociations.filterNot { a -> a.outputKey == outputKey })
+    }
+
+    override fun applyOutput(outputKey: String?) = change {
+        if (it.outputAssociations.isEmpty()) return@change it // Preserve existing manual-only behavior.
+        val id = it.outputAssociations.find { a -> a.outputKey == outputKey }?.profileId
+        val profile = it.profiles.find { p -> p.id == id }
+        it.copy(gains = profile?.gains?.toList() ?: EqualizerBands.flat, selectedProfileId = profile?.id)
     }
 }

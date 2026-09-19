@@ -209,7 +209,28 @@ curve, enabled state, and named profiles survive process restarts. Profiles can
 be loaded, saved, updated, renamed, and deleted. Editing a loaded profile changes
 the current sound but never overwrites the saved curve without explicit Save.
 Reset produces a flat custom curve; deleting a profile retains the current sound.
-Profiles do not sync to the server or switch automatically with output devices.
+The compact band rows place frequency, slider, and gain side by side. A dedicated
+**Profiles and audio outputs** screen manages profiles and their device associations.
+While Pezzottify is playing, each profile offers **Associate with current output: …**.
+Associating loads the saved curve immediately, replacing current unsaved adjustments.
+An output can have one assigned profile; a profile can be assigned to multiple outputs.
+Removing an association keeps the current sound; deleting a profile also removes its associations.
+Profiles and associations never sync to the server.
+
+Routing is observed on the actual Media3 AudioTrack (routing listener plus a one-second
+refresh while playing), not from the list of connected devices. A route change loads
+the assigned profile, or flat for an unassigned output once any associations exist.
+The master EQ switch is never changed automatically. Duplicate route events, pauses,
+and AudioTrack recreation on the same output do not overwrite manual adjustments.
+Both catalog playback and the separate local-file playback service use this integration.
+
+Bluetooth associations use a normalized device address, with name/alias for display;
+on Android 12+ the UI requests Nearby devices (`BLUETOOTH_CONNECT`) permission.
+No scan/location permission is needed. Speaker identity is fixed. Missing/redacted
+addresses (including older Android versions without AudioDeviceInfo addresses),
+unidentified analog headsets, and multiple simultaneous outputs cannot be associated.
+The user must start playback to identify an output; the button rechecks its identity
+before saving to prevent a stale UI binding the wrong device.
 Existing five-band curves and saved profiles migrate using logarithmic-frequency
 interpolation, retaining names, selection, and enabled state. This approximates
 the old settings; the response is not identical with the new band spacing.
