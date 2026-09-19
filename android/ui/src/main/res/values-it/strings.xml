@@ -6,6 +6,11 @@
     <string name="diagnostic_session_privacy">Associa solo PC fidati. I log sono integrali e gli strumenti diagnostici possono modificare i dati.</string>
     <string name="diagnostic_session_inactive">Disattivata · Avviala quando serve</string>
     <string name="diagnostic_session_active">Sessione attiva</string>
+    <string name="diagnostic_session_waiting">In attesa di un PC</string>
+    <string name="diagnostic_session_pairing">Richiesta di associazione · Controlla il codice</string>
+    <string name="diagnostic_session_connected">PC connesso</string>
+    <string name="diagnostic_session_disconnected">Connessione interrotta</string>
+    <string name="diagnostic_session_accept_all">Accetta tutti attivo · I nuovi PC vengono approvati automaticamente</string>
     <string name="diagnostic_session_remaining">Attiva · %1$d min rimanenti</string>
     <string name="open_diagnostic_session">Apri diagnostica</string>
     <string name="ai_confirm_action">Conferma azione IA</string>

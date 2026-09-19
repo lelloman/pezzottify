@@ -6,6 +6,11 @@
     <string name="diagnostic_session_privacy">Pair only with a trusted PC. Logs are unredacted and diagnostic tools can change app data.</string>
     <string name="diagnostic_session_inactive">Off · Start only when you need it</string>
     <string name="diagnostic_session_active">Session active</string>
+    <string name="diagnostic_session_waiting">Waiting for a PC</string>
+    <string name="diagnostic_session_pairing">Pairing request · Check the code</string>
+    <string name="diagnostic_session_connected">PC connected</string>
+    <string name="diagnostic_session_disconnected">Connection interrupted</string>
+    <string name="diagnostic_session_accept_all">Accept all is on · New PCs are approved automatically</string>
     <string name="diagnostic_session_remaining">Active · %1$d min remaining</string>
     <string name="open_diagnostic_session">Open diagnostics</string>
     <string name="ai_confirm_action">Confirm AI action</string>
