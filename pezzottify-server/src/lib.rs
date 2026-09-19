@@ -29,6 +29,6 @@ pub mod user;
 
 // Re-export commonly used types for convenience
 pub use search::{Fts5LevenshteinSearchVault, SearchVault};
-pub use server::{run_server, RequestsLoggingLevel};
+pub use server::{prepare_server, RequestsLoggingLevel};
 pub use server_store::{ServerStore, SqliteServerStore};
 pub use user::{SqliteUserStore, UserRole, UserStore};

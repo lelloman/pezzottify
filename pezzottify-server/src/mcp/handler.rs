@@ -46,7 +46,11 @@ pub async fn mcp_handler(
         session.permissions.len()
     );
 
-    ws.on_upgrade(move |socket| handle_mcp_socket(socket, session, server_state, mcp_state))
+    let token = server_state.runtime_tasks.tasks.token();
+    ws.on_upgrade(move |socket| async move {
+        let _token = token;
+        handle_mcp_socket(socket, session, server_state, mcp_state).await;
+    })
 }
 
 /// Handle an established MCP WebSocket connection
@@ -64,7 +68,18 @@ async fn handle_mcp_socket(
     // Process messages
     let mut initialized = false;
 
-    while let Some(result) = ws_stream.next().await {
+    loop {
+        let result = tokio::select! {
+            biased;
+            _ = server_state.runtime_tasks.shutdown.requested() => {
+                let _ = ws_sink.send(Message::Close(None)).await;
+                break;
+            }
+            result = ws_stream.next() => match result {
+                Some(result) => result,
+                None => break,
+            },
+        };
         match result {
             Ok(Message::Text(text)) => {
                 // Handshake authentication is not lifetime authorization.

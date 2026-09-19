@@ -2,6 +2,8 @@
 
 services:
   pezzottify-server:
+    # Allow the application its full 30-second shutdown budget.
+    stop_grace_period: 35s
     build:
       context: .
       dockerfile: pezzottify-server/Dockerfile

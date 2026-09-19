@@ -24,6 +24,8 @@ pub async fn make_app(
         enrichment_store,
         crate::db_executor::DbExecutor::new(Default::default()),
         None,
+        None,
+        Default::default(),
     )
     .await
 }
@@ -42,6 +44,8 @@ async fn make_app_with_executor(
     enrichment_store: OptionalEnrichmentStore,
     db_executor: crate::db_executor::DbExecutor,
     media: Option<Arc<crate::media::MediaManager>>,
+    mut lifecycle: Option<&mut simple_server::lifecycle::Lifecycle<'static>>,
+    runtime_tasks: super::lifecycle::RuntimeTasks,
 ) -> Result<Router> {
     let catalog_store = crate::media::MediaCatalogView::wrap(catalog_store);
     // Initialize OIDC client if configured
@@ -85,17 +89,24 @@ async fn make_app_with_executor(
         media,
     );
     state.oidc_client = oidc_client;
+    state.runtime_tasks = runtime_tasks.clone();
 
     // Spawn orphaned session checker task
     {
         let playback_manager = state.playback_session_manager.clone();
-        tokio::spawn(async move {
+        let shutdown = runtime_tasks.shutdown.clone();
+        super::lifecycle::maintenance(&mut lifecycle, "playback-maintenance", async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
             loop {
-                interval.tick().await;
+                tokio::select! {
+                    biased;
+                    _ = shutdown.requested() => break,
+                    _ = interval.tick() => {}
+                }
                 playback_manager.check_stale_devices().await;
             }
-        });
+            Ok(())
+        })?;
     }
 
     // The active search index is a full-catalog index. Do not attach the legacy
@@ -161,11 +172,16 @@ async fn make_app_with_executor(
             warn!(%error, "Cache cleanup remains pending");
         }
         let media = Arc::downgrade(&media);
-        tokio::spawn(async move {
+        let shutdown = runtime_tasks.shutdown.clone();
+        super::lifecycle::maintenance(&mut lifecycle, "media-recovery", async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
             interval.tick().await;
             loop {
-                interval.tick().await;
+                tokio::select! {
+                    biased;
+                    _ = shutdown.requested() => break,
+                    _ = interval.tick() => {}
+                }
                 let Some(manager) = media.upgrade() else {
                     break;
                 };
@@ -173,14 +189,17 @@ async fn make_app_with_executor(
                     warn!(%error, "Cache cleanup remains pending");
                 }
                 let pool = manager.filesystem_work();
+                let stop = shutdown.clone();
                 if !matches!(
-                    pool.run(move || manager.recover(&|| false)).await,
+                    pool.run(move || manager.recover(&|| stop.is_requested()))
+                        .await,
                     Ok(Ok(_))
                 ) {
                     warn!("Media recovery has pending operations; retrying on next tick");
                 }
             }
-        });
+            Ok(())
+        })?;
     }
 
     // Initialize download manager if enabled
@@ -201,11 +220,7 @@ async fn make_app_with_executor(
 
                 // Set the search vault for availability updates
                 {
-                    let manager_clone = manager.clone();
-                    let search_vault_clone = search_vault.clone();
-                    tokio::spawn(async move {
-                        manager_clone.set_search_vault(search_vault_clone).await;
-                    });
+                    manager.set_search_vault(search_vault.clone()).await;
                 }
 
                 // Wire up sync notifier for WebSocket download status updates
@@ -216,10 +231,7 @@ async fn make_app_with_executor(
                             state.ws_connection_manager.clone(),
                             state.server_store.clone(),
                         ));
-                    let manager_for_notifier = manager.clone();
-                    tokio::spawn(async move {
-                        manager_for_notifier.set_sync_notifier(sync_notifier).await;
-                    });
+                    manager.set_sync_notifier(sync_notifier).await;
                 }
 
                 state.database.download = Some(crate::db_executor::DbHandle::new(
@@ -348,12 +360,8 @@ async fn make_app_with_executor(
     ))
 }
 
-/// Interval between stale batch checks (10 minutes in seconds)
-/// The actual staleness threshold is configured in ChangeLogStore (default 1 hour).
-const STALE_BATCH_CHECK_INTERVAL_SECS: u64 = 600;
-
 #[allow(clippy::too_many_arguments)]
-pub async fn run_server(
+pub async fn prepare_server(
     catalog_store: Arc<dyn CatalogStore>,
     guarded_search_vault: super::state::GuardedSearchVault,
     user_store: Arc<dyn FullUserStore>,
@@ -385,6 +393,8 @@ pub async fn run_server(
     enrichment_store: OptionalEnrichmentStore,
     db_executor: crate::db_executor::DbExecutor,
     media: Arc<crate::media::MediaManager>,
+    lifecycle: &mut simple_server::lifecycle::Lifecycle<'static>,
+    runtime_tasks: super::lifecycle::RuntimeTasks,
 ) -> Result<()> {
     let disable_password_auth = oidc_config
         .as_ref()
@@ -427,6 +437,8 @@ pub async fn run_server(
         enrichment_store,
         db_executor,
         Some(media),
+        Some(lifecycle),
+        runtime_tasks,
     )
     .await?;
 
@@ -434,51 +446,21 @@ pub async fn run_server(
     let metrics_app = Router::new()
         .route("/metrics", get(super::metrics::metrics_handler))
         .with_state(super::filesystem_work::FilesystemWorkPool::default());
-    let metrics_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", metrics_port))
-        .await
-        .unwrap();
-
-    // Spawn the stale batch auto-close background task
-    let catalog_store_for_bg = catalog_store.clone();
-    let search_vault_for_bg = guarded_search_vault.clone();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(
-            STALE_BATCH_CHECK_INTERVAL_SECS,
-        ));
-        loop {
-            interval.tick().await;
-            check_and_close_stale_batches(&catalog_store_for_bg, &search_vault_for_bg);
-        }
-    });
-
-    info!("Starting HTTP server on port {}", port);
-    let main_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
-        .await
-        .unwrap();
-
-    tokio::select! {
-        result = simple_server::axum::serve(
+    let metrics_listener = simple_server::http::bind(format!("0.0.0.0:{}", metrics_port)).await?;
+    let main_listener = simple_server::http::bind(format!("0.0.0.0:{}", port)).await?;
+    lifecycle.service(
+        "http",
+        simple_server::http::serve(
             main_listener,
             app.into_make_service_with_connect_info::<SocketAddr>(),
-        ) => {
-            result?;
-        }
-        result = simple_server::axum::serve(metrics_listener, metrics_app) => {
-            result?;
-        }
-    }
-
+            lifecycle.shutdown(),
+        ),
+    )?;
+    lifecycle.service(
+        "metrics",
+        simple_server::http::serve(metrics_listener, metrics_app, lifecycle.shutdown()),
+    )?;
     Ok(())
-}
-
-/// Close stale changelog batches automatically and rebuild search index if any were closed.
-/// NOTE: Disabled for Spotify schema - catalog is read-only, no changelog batches.
-fn check_and_close_stale_batches(
-    _catalog_store: &Arc<dyn CatalogStore>,
-    _search_vault: &super::state::GuardedSearchVault,
-) {
-    // Changelog functionality disabled - Spotify schema is read-only
-    // No stale batches to close
 }
 
 include!("server_tests.rs");

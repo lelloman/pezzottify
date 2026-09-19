@@ -22,7 +22,7 @@ use super::ServerConfig;
 use crate::media::MediaManager;
 
 pub type GuardedCatalogStore = Arc<dyn CatalogStore>;
-/// SearchVault is internally thread-safe (uses separate read/write connections with internal Mutex).
+/// SearchVault is internally thread-safe (uses separate read/write runtime_tasks with internal Mutex).
 /// No external Mutex needed - the implementation handles concurrent access.
 pub type GuardedSearchVault = Arc<dyn SearchVault>;
 pub type GuardedUserManager = Arc<UserManager>;
@@ -125,6 +125,7 @@ impl DatabaseHandles {
 
 #[derive(Clone)]
 pub struct ServerState {
+    pub runtime_tasks: super::lifecycle::RuntimeTasks,
     pub config: ServerConfig,
     pub start_time: Instant,
     pub catalog_store: GuardedCatalogStore,
@@ -150,6 +151,12 @@ pub struct ServerState {
     pub playback_session_manager: GuardedPlaybackSessionManager,
     /// Database registry for backup checkpoint operations
     pub db_registry: GuardedDbRegistry,
+}
+
+impl FromRef<ServerState> for super::lifecycle::RuntimeTasks {
+    fn from_ref(input: &ServerState) -> Self {
+        input.runtime_tasks.clone()
+    }
 }
 
 // Keep thread-safety checked by the compiler as fields are added to ServerState.

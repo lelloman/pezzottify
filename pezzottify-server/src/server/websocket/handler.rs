@@ -39,6 +39,7 @@ pub async fn ws_handler(
     session: Session,
     State(connection_manager): State<GuardedConnectionManager>,
     State(playback_session_manager): State<GuardedPlaybackSessionManager>,
+    State(runtime_tasks): State<crate::server::lifecycle::RuntimeTasks>,
 ) -> Response {
     let state = Arc::new(WsState {
         connection_manager,
@@ -70,8 +71,18 @@ pub async fn ws_handler(
         session.user_id, device_id, device_type
     );
 
-    ws.on_upgrade(move |socket| {
-        handle_socket(socket, session.user_id, device_id, device_type, state)
+    let token = runtime_tasks.tasks.token();
+    ws.on_upgrade(move |socket| async move {
+        let _token = token;
+        handle_socket(
+            socket,
+            session.user_id,
+            device_id,
+            device_type,
+            state,
+            runtime_tasks.shutdown,
+        )
+        .await;
     })
 }
 
@@ -82,6 +93,7 @@ async fn handle_socket(
     device_id: usize,
     device_type_str: String,
     state: Arc<WsState>,
+    shutdown: simple_server::lifecycle::Shutdown,
 ) {
     debug!(
         "WebSocket connected: user {} device {} ({})",
@@ -112,17 +124,29 @@ async fn handle_socket(
         outgoing_rx,
         raw_rx,
         connected_msg,
+        shutdown.clone(),
     ));
 
     // Process incoming messages
-    process_incoming(ws_stream, user_id, device_id, &state, raw_tx).await;
+    process_incoming(
+        ws_stream,
+        user_id,
+        device_id,
+        &state,
+        raw_tx,
+        shutdown.clone(),
+    )
+    .await;
 
     // Cleanup
     debug!(
         "WebSocket disconnected: user {} device {}",
         user_id, device_id
     );
-    outgoing_handle.abort();
+    if !shutdown.is_requested() {
+        outgoing_handle.abort();
+    }
+    let _ = outgoing_handle.await;
 
     // Notify playback session manager of disconnect
     state
@@ -142,6 +166,7 @@ async fn forward_outgoing(
     mut outgoing_rx: mpsc::Receiver<ServerMessage>,
     mut raw_rx: mpsc::Receiver<Message>,
     initial_msg: ServerMessage,
+    shutdown: simple_server::lifecycle::Shutdown,
 ) {
     // Send initial connected message
     if let Ok(json) = serde_json::to_string(&initial_msg) {
@@ -153,6 +178,11 @@ async fn forward_outgoing(
     // Forward all subsequent messages
     loop {
         tokio::select! {
+            biased;
+            _ = shutdown.requested() => {
+                let _ = ws_sink.send(Message::Close(None)).await;
+                break;
+            }
             Some(msg) = outgoing_rx.recv() => {
                 match serde_json::to_string(&msg) {
                     Ok(json) => {
@@ -182,8 +212,17 @@ async fn process_incoming(
     device_id: usize,
     state: &WsState,
     raw_tx: mpsc::Sender<Message>,
+    shutdown: simple_server::lifecycle::Shutdown,
 ) {
-    while let Some(result) = ws_stream.next().await {
+    loop {
+        let result = tokio::select! {
+            biased;
+            _ = shutdown.requested() => break,
+            result = ws_stream.next() => match result {
+                Some(result) => result,
+                None => break,
+            },
+        };
         match result {
             Ok(Message::Text(text)) => {
                 match serde_json::from_str::<ClientMessage>(&text) {

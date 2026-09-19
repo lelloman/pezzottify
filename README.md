@@ -195,6 +195,10 @@ cd android
 ./gradlew test
 ```
 
+The server uses a shared 30-second graceful shutdown budget for HTTP, scheduler,
+maintenance, WebSocket, and tracked request tasks. See [Step 02 lifecycle](docs/step-02-lifecycle.md)
+for shutdown behavior, scope, and validation.
+
 End-to-end server tests live in [pezzottify-server/tests](pezzottify-server/tests/README.md).
 
 ## Monitoring

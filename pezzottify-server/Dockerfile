@@ -36,6 +36,7 @@ WORKDIR /app
 # Supply the sibling checkout as a named context without copying its build artifacts.
 COPY --from=simple-server-source Cargo.toml /simple-server/Cargo.toml
 COPY --from=simple-server-source src/ /simple-server/src/
+COPY --from=simple-server-source examples/ /simple-server/examples/
 
 COPY pezzottify-server/ pezzottify-server/
 COPY VERSION VERSION
