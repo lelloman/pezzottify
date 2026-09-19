@@ -2,7 +2,12 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="diagnostic_session">Diagnostic session</string>
     <string name="manage_diagnostic_session">Manage diagnostic session</string>
-    <string name="diagnostic_session_description">A trusted PC can read unredacted logs and app data, control playback retries, sync and clear caches. Release sessions expire after 15 minutes of inactivity.</string>
+    <string name="diagnostic_session_description">Inspect logs, playback and sync from Androidoscopy on your PC. Release sessions end after 15 minutes of inactivity.</string>
+    <string name="diagnostic_session_privacy">Pair only with a trusted PC. Logs are unredacted and diagnostic tools can change app data.</string>
+    <string name="diagnostic_session_inactive">Off · Start only when you need it</string>
+    <string name="diagnostic_session_active">Session active</string>
+    <string name="diagnostic_session_remaining">Active · %1$d min remaining</string>
+    <string name="open_diagnostic_session">Open diagnostics</string>
     <string name="ai_confirm_action">Confirm AI action</string>
     <string name="ai_allow_action">Allow</string>
 

@@ -2,7 +2,12 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="diagnostic_session">Sessione diagnostica</string>
     <string name="manage_diagnostic_session">Gestisci sessione diagnostica</string>
-    <string name="diagnostic_session_description">Un PC fidato può leggere log integrali e dati, ritentare la riproduzione, sincronizzare e svuotare le cache. Nelle versioni release, le sessioni scadono dopo 15 minuti di inattività.</string>
+    <string name="diagnostic_session_description">Controlla log, riproduzione e sincronizzazione da Androidoscopy sul PC. Le sessioni release terminano dopo 15 minuti di inattività.</string>
+    <string name="diagnostic_session_privacy">Associa solo PC fidati. I log sono integrali e gli strumenti diagnostici possono modificare i dati.</string>
+    <string name="diagnostic_session_inactive">Disattivata · Avviala quando serve</string>
+    <string name="diagnostic_session_active">Sessione attiva</string>
+    <string name="diagnostic_session_remaining">Attiva · %1$d min rimanenti</string>
+    <string name="open_diagnostic_session">Apri diagnostica</string>
     <string name="ai_confirm_action">Conferma azione IA</string>
     <string name="ai_allow_action">Consenti</string>
 
