@@ -6,6 +6,8 @@ on:
       - 'android/**'
       - 'simple-android-assistant.rev'
       - 'scripts/checkout-simple-android-assistant.sh'
+      - 'androidoscopy.rev'
+      - 'scripts/prepare-androidoscopy.sh'
       - '.github/workflows/android.yml'
 
 jobs:
@@ -48,6 +50,10 @@ jobs:
           sdkmanager "platforms;android-36" "ndk;27.0.12077973"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> "$GITHUB_ENV"
           cargo install cargo-ndk --version 4.1.2 --locked
+
+      - name: Prepare pinned Androidoscopy artifacts
+        run: bash scripts/prepare-androidoscopy.sh
+        working-directory: .
 
       - name: Lint and test
         run: ./gradlew lintDebug testDebugUnitTest :app:lintPhoneDebug :app:testPhoneDebugUnitTest :app:compilePhoneReleaseKotlin

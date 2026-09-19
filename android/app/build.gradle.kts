@@ -239,7 +239,7 @@ dependencies {
     implementation(libs.simple.android.assistant.core)
     implementation(libs.simple.android.assistant.provider.ollama)
     implementation(libs.simple.android.assistant.provider.simpleai)
-    debugImplementation(project(":debuginterface"))
+    implementation(project(":debuginterface"))
 
     // DuckMapper for automatic mapping code generation
     implementation("com.github.lelloman.duckmapper:annotations:0.3.0")
