@@ -34,7 +34,7 @@ class EqualizerAudioProcessorTest {
         configure()
         val input = ShortArray(12000) { if (it % 2 == 0) 10000 else -10000 }
         assertArrayEquals(input, process(input))
-        state.value = EqualizerSettings(enabled = true, gains = List(5) { 12f })
+        state.value = EqualizerSettings(enabled = true, gains = List(EqualizerBands.frequencies.size) { 12f })
         val filtered = process(input)
         assertFalse(input.contentEquals(filtered))
         assertTrue(filtered.all { kotlin.math.abs(it.toInt()) <= 32768 })
@@ -44,7 +44,7 @@ class EqualizerAudioProcessorTest {
     }
 
     @Test fun `flush resets filter history and handles sample rate and channel changes`() {
-        state.value = EqualizerSettings(enabled = true, gains = List(5) { -6f })
+        state.value = EqualizerSettings(enabled = true, gains = List(EqualizerBands.frequencies.size) { -6f })
         configure()
         process(ShortArray(12000) { 20000 })
         processor.flush()
@@ -57,7 +57,7 @@ class EqualizerAudioProcessorTest {
     }
 
     @Test fun `buffers preserve channel alignment`() {
-        state.value = EqualizerSettings(enabled = true, gains = List(5) { -6f })
+        state.value = EqualizerSettings(enabled = true, gains = List(EqualizerBands.frequencies.size) { -6f })
         configure()
         repeat(100) {
             val output = process(shortArrayOf(12000, 0, -12000, 0))

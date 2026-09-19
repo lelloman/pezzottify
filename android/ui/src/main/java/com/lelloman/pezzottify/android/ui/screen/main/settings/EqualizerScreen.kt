@@ -20,6 +20,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.lelloman.pezzottify.android.domain.equalizer.*
 import com.lelloman.pezzottify.android.ui.R
+import com.lelloman.pezzottify.android.ui.screen.main.MainScreenScaffold
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlin.math.round
@@ -32,7 +33,7 @@ class EqualizerViewModel @Inject constructor(val store: EqualizerStore) : ViewMo
 fun EqualizerScreen(navController: NavController) {
     val viewModel = hiltViewModel<EqualizerViewModel>()
     val state by viewModel.store.state.collectAsStateWithLifecycle()
-    Scaffold(topBar = {
+    MainScreenScaffold(topBar = {
         TopAppBar(title = { Text(stringResource(R.string.equalizer_title)) }, navigationIcon = {
             IconButton(onClick = { navController.popBackStack() }) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))

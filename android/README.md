@@ -203,13 +203,16 @@ CI can clone it. Separate builds are required because the projects use different
 
 ### Equalizer
 
-Phone and TV Settings expose a device-local five-band equalizer (60 Hz, 230 Hz,
-910 Hz, 3.6 kHz, 14 kHz; ±12 dB in 0.5 dB steps). It defaults off. The current
+Phone and TV Settings expose a device-local ten-band equalizer (31, 62, 125, 250,
+500 Hz, 1, 2, 4, 8, 16 kHz; ±12 dB in 0.5 dB steps). It defaults off. The current
 curve, enabled state, and named profiles survive process restarts. Profiles can
 be loaded, saved, updated, renamed, and deleted. Editing a loaded profile changes
 the current sound but never overwrites the saved curve without explicit Save.
 Reset produces a flat custom curve; deleting a profile retains the current sound.
 Profiles do not sync to the server or switch automatically with output devices.
+Existing five-band curves and saved profiles migrate using logarithmic-frequency
+interpolation, retaining names, selection, and enabled state. This approximates
+the old settings; the response is not identical with the new band spacing.
 
 PlaybackService inserts a PCM audio processor into Media3's sink. It uses peaking
 biquads ([RBJ cookbook](https://www.w3.org/TR/audio-eq-cookbook/)), independent
