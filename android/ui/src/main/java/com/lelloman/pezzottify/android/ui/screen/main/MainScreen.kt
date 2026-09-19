@@ -276,6 +276,9 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                 composable<Screen.Main.Home.StyleSettings> {
                     StyleSettingsScreen(navController)
                 }
+                composable<Screen.Main.Home.Equalizer> {
+                    com.lelloman.pezzottify.android.ui.screen.main.settings.EqualizerScreen(navController)
+                }
                 composable<Screen.Main.Home.LogViewer> {
                     LogViewerScreen(navController)
                 }

@@ -49,6 +49,7 @@ import com.lelloman.pezzottify.android.ui.theme.ThemeMode
 import com.lelloman.pezzottify.android.ui.toBugReport
 import com.lelloman.pezzottify.android.ui.toLogViewer
 import com.lelloman.pezzottify.android.ui.toStyleSettings
+import com.lelloman.pezzottify.android.ui.toEqualizer
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -172,6 +173,17 @@ private fun SettingsScreenInternal(
                 onProxyModeChanged = actions::setProxyModeEnabled,
             )
 
+            HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+
+            Row(modifier = Modifier.fillMaxWidth().clickable { navController.toEqualizer() }.padding(vertical = 12.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.equalizer_title), style = MaterialTheme.typography.bodyLarge)
+                    Text(stringResource(R.string.equalizer_settings_description), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+            }
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
             // Background Sync Section

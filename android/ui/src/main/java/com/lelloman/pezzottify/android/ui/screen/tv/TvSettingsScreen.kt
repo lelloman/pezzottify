@@ -157,6 +157,9 @@ fun TvSettingsScreen(navController: NavController) {
                         value = state.gitCommit,
                     )
                     DiagnosticSessionButton()
+                    Button(onClick = { navController.navigate(com.lelloman.pezzottify.android.ui.tv.TvScreen.Equalizer) }) {
+                        Text(stringResource(R.string.equalizer_title))
+                    }
                 }
             }
 

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="equalizer_title">Equalizzatore</string>
+    <string name="equalizer_on">Attivo · Applicato alla riproduzione su questo dispositivo</string>
+    <string name="equalizer_off">Disattivato · Suono originale</string>
+    <string name="equalizer_description">Regola il suono mentre ascolti o prepara un profilo con l’equalizzatore disattivato.</string>
+    <string name="equalizer_settings_description">Regola il suono e salva profili per cuffie o altoparlanti</string>
+    <string name="equalizer_headroom">Aumentando le bande, il guadagno complessivo viene ridotto automaticamente per limitare la distorsione.</string>
+    <string name="equalizer_custom">Personalizzato</string>
+    <string name="equalizer_modified">%1$s · Modificato</string>
+    <string name="equalizer_gain">%1$+.1f dB</string>
+    <string name="equalizer_flat">Azzera le bande</string>
+    <string name="equalizer_update">Salva modifiche in %1$s</string>
+    <string name="equalizer_save_as">Salva come nuovo profilo</string>
+    <string name="equalizer_profiles">I tuoi profili</string>
+    <string name="equalizer_no_profiles">Salva il primo profilo per le tue cuffie preferite o un altoparlante.</string>
+    <string name="equalizer_local_profiles">I profili restano su questo dispositivo. Selezionane uno quando cambi uscita audio. Caricare un profilo sostituisce le regolazioni attuali; i profili salvati cambiano solo quando salvi.</string>
+    <string name="equalizer_profile_name">Nome del profilo</string>
+    <string name="equalizer_profile_example">Cuffie Sony, Altoparlante…</string>
+    <string name="equalizer_duplicate">Esiste già un profilo con questo nome.</string>
+    <string name="equalizer_save">Salva</string>
+    <string name="equalizer_rename">Rinomina</string>
+    <string name="equalizer_delete">Elimina profilo</string>
+    <string name="equalizer_delete_confirmation">Eliminare “%1$s”? Le regolazioni attuali verranno mantenute.</string>
+</resources>

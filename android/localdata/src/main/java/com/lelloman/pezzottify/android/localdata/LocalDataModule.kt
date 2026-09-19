@@ -5,6 +5,7 @@ import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.catalogsync.CatalogSyncStore
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
+import com.lelloman.pezzottify.android.domain.equalizer.EqualizerStore
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
 import com.lelloman.pezzottify.android.domain.skeleton.SkeletonStore
 import com.lelloman.pezzottify.android.domain.sync.SyncStateStore
@@ -29,6 +30,7 @@ import com.lelloman.pezzottify.android.localdata.internal.notifications.Notifica
 import com.lelloman.pezzottify.android.localdata.internal.player.PlaybackStateStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.config.ConfigStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.settings.UserSettingsStoreImpl
+import com.lelloman.pezzottify.android.localdata.internal.settings.EqualizerStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.skeleton.SkeletonStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.sync.SyncStateStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.statics.StaticsDb
@@ -53,6 +55,10 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 @Module
 class LocalDataModule {
+
+    @Provides
+    @Singleton
+    fun provideEqualizerStore(@ApplicationContext context: Context): EqualizerStore = EqualizerStoreImpl(context)
 
     @Provides
     @Singleton

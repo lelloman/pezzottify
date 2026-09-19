@@ -30,6 +30,8 @@ import com.lelloman.pezzottify.android.domain.auth.SessionExpiredHandler
 import com.lelloman.pezzottify.android.domain.auth.TokenRefresher
 import com.lelloman.pezzottify.android.domain.auth.bearerAuthorization
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
+import com.lelloman.pezzottify.android.domain.equalizer.EqualizerStore
+import com.lelloman.pezzottify.android.player.equalizer.EqualizerRenderersFactory
 import com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider
 import com.lelloman.pezzottify.android.domain.player.TrackMetadata
 import com.lelloman.pezzottify.android.logger.LoggerFactory
@@ -47,6 +49,9 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class PlaybackService : MediaSessionService() {
+
+    @Inject
+    lateinit var equalizerStore: EqualizerStore
 
     @Inject
     lateinit var authStore: AuthStore
@@ -146,7 +151,7 @@ class PlaybackService : MediaSessionService() {
 
     @OptIn(UnstableApi::class)
     private fun makePlayer(): ExoPlayer = ExoPlayer
-        .Builder(this).setMediaSourceFactory(
+        .Builder(this, EqualizerRenderersFactory(this, equalizerStore)).setMediaSourceFactory(
             DefaultMediaSourceFactory(this).setDataSourceFactory(
                 DefaultDataSource.Factory(
                     this,

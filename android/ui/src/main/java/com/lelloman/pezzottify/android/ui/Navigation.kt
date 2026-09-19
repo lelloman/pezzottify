@@ -31,6 +31,8 @@ fun NavController.toSettings() = navigate(Main.Home.Settings)
 
 fun NavController.toStyleSettings() = navigate(Main.Home.StyleSettings)
 
+fun NavController.toEqualizer() = navigate(Main.Home.Equalizer)
+
 fun NavController.toLogViewer() = navigate(Main.Home.LogViewer)
 
 fun NavController.toBugReport(messageId:String?=null) = navigate(Main.Home.BugReport(messageId))
@@ -71,6 +73,9 @@ sealed interface Screen {
 
             @Serializable
             data object StyleSettings : Main
+
+            @Serializable
+            data object Equalizer : Main
 
             @Serializable
             data object LogViewer : Main
