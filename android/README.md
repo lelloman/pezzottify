@@ -190,7 +190,7 @@ bash scripts/prepare-androidoscopy.sh
 ```
 
 This verifies the sibling `../androidoscopy` checkout against `androidoscopy.rev`
-and publishes SDK/UI 2.0.1 to Maven Local. It never overwrites a dirty or different
+and publishes SDK/UI 2.0.2 to Maven Local. It never overwrites a dirty or different
 checkout. Set `ANDROIDOSCOPY_CHECKOUT` to use another checkout. CI runs the same
 preparation; the pinned commit must be available in Androidoscopy's remote before
 CI can clone it. Separate builds are required because the projects use different AGP versions.
@@ -210,6 +210,13 @@ inactivity deadline. Both variants register the app-specific tools below; releas
 does not register legacy dashboard database/preferences/token actions. No session
 activation is persisted in settings. Session expiry and process death are owned by
 the SDK, and the SDK's non-exported UI handles pairing and notification permissions.
+
+The card distinguishes off, waiting, pairing, connected and interrupted states
+with icons, colors and text. The SDK session screen offers **Accept all**, off by
+default and reset on session end. Enabling it requires a local confirmation:
+any PC that can reach the session can then pair and use all tools without code
+approval. Only one PC connects at a time; disabling the switch does not revoke an
+already approved PC (Stop does). Automatically approved PCs are not remembered.
 
 All names below have the `pezzottify_` prefix. Tools call the app's actual injected
 managers/stores, not a separate diagnostic copy. Access requires an active, paired
