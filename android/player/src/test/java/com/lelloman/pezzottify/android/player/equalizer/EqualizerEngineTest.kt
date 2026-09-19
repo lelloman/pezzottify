@@ -9,7 +9,7 @@ class EqualizerEngineTest {
     @Test fun `disabled and flat are exact bypass`() {
         for (enabled in listOf(false, true)) {
             val engine = EqualizerEngine(48000, 2)
-            engine.configure(enabled, if (enabled) EqualizerBands.flat else List(5) { 12f })
+            engine.configure(enabled, if (enabled) EqualizerBands.flat else List(EqualizerBands.frequencies.size) { 12f })
             listOf(-32768.0, -1.0, 0.0, 1.0, 32767.0).forEach { assertEquals(it, engine.process(it), 0.0) }
         }
     }
@@ -25,8 +25,8 @@ class EqualizerEngineTest {
     }
 
     @Test fun `boost has headroom but still changes relative frequency balance`() {
-        val gains = listOf(12f, 0f, 0f, 0f, 0f)
-        val center = response(48000, 60, gains)
+        val gains = EqualizerBands.flat.toMutableList().also { it[0] = 12f }
+        val center = response(48000, EqualizerBands.frequencies.first(), gains)
         val elsewhere = response(48000, 3600, gains)
         assertTrue(center in 0.9..1.0)
         assertTrue(center / elsewhere > 3.8)
@@ -34,7 +34,7 @@ class EqualizerEngineTest {
 
     @Test fun `stereo history never leaks between channels`() {
         val engine = EqualizerEngine(48000, 2)
-        engine.configure(true, listOf(-8f, 3f, 0f, -4f, 1f))
+        engine.configure(true, List(EqualizerBands.frequencies.size) { if (it % 2 == 0) -8f else 3f })
         repeat(10000) { i ->
             engine.process(if (i == 0) 20000.0 else 0.0)
             assertEquals(0.0, engine.process(0.0), 0.0)
@@ -43,9 +43,9 @@ class EqualizerEngineTest {
 
     @Test fun `turning off returns to exact bypass after transition`() {
         val engine = EqualizerEngine(48000, 1)
-        engine.configure(true, List(5) { -12f })
+        engine.configure(true, List(EqualizerBands.frequencies.size) { -12f })
         repeat(2000) { engine.process(5000.0) }
-        engine.configure(false, List(5) { -12f })
+        engine.configure(false, List(EqualizerBands.frequencies.size) { -12f })
         repeat(2000) { engine.process(5000.0) }
         assertEquals(5000.0, engine.process(5000.0), 0.0)
     }
@@ -53,14 +53,14 @@ class EqualizerEngineTest {
     @Test fun `low sample rates and extreme gains remain finite`() {
         for (rate in listOf(8000, 16000, 22050, 48000)) {
             val engine = EqualizerEngine(rate, 1)
-            engine.configure(true, List(5) { if (it % 2 == 0) 12f else -12f })
+            engine.configure(true, List(EqualizerBands.frequencies.size) { if (it % 2 == 0) 12f else -12f })
             repeat(rate) { assertTrue(engine.process(sin(it.toDouble()) * 30000).isFinite()) }
         }
     }
 
     @Test fun `invalid gains are rejected`() {
         assertThrows(IllegalArgumentException::class.java) { EqualizerEngine(48000, 1).configure(true, listOf(1f)) }
-        assertThrows(IllegalArgumentException::class.java) { EqualizerEngine(48000, 1).configure(true, List(5) { Float.NaN }) }
+        assertThrows(IllegalArgumentException::class.java) { EqualizerEngine(48000, 1).configure(true, List(EqualizerBands.frequencies.size) { Float.NaN }) }
     }
 
     private fun response(rate: Int, frequency: Int, gains: List<Float>): Double {

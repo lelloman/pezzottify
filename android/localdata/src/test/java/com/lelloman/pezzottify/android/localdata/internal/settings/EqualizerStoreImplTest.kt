@@ -18,6 +18,44 @@ class EqualizerStoreImplTest {
         assertEquals(EqualizerSettings(), EqualizerStoreImpl(context).state.value)
     }
 
+    @Test fun `legacy profiles migrate without losing names selection or unsaved changes`() {
+        context.getSharedPreferences("Equalizer", Context.MODE_PRIVATE).edit().putString("settings", """
+            {"enabled":true,"gains":[12,6,0,-6,-12],"selectedProfileId":"sony",
+             "profiles":[{"id":"sony","name":"Sony Headphones","gains":[6,6,6,6,6]},
+                         {"id":"speaker","name":"Speaker","gains":[0,0,0,0,0]}]}
+        """.trimIndent()).commit()
+        val store = EqualizerStoreImpl(context)
+        val migrated = store.state.value
+        assertTrue(migrated.enabled)
+        assertTrue(migrated.isModified)
+        assertEquals("sony", migrated.selectedProfileId)
+        assertEquals("Sony Headphones", migrated.selectedProfile!!.name)
+        assertEquals(10, migrated.gains.size)
+        assertEquals(12f, migrated.gains.first())
+        assertEquals(-12f, migrated.gains.last())
+        assertTrue(migrated.gains.zipWithNext().all { (left, right) -> left >= right })
+        assertEquals(List(10) { 6f }, migrated.selectedProfile!!.gains)
+        assertEquals(EqualizerBands.flat, migrated.profiles.last().gains)
+        assertEquals(migrated, EqualizerStoreImpl(context).state.value)
+        store.setBand(9, 2f) // Persist in the new format; no repeated interpolation on reload.
+        assertEquals(store.state.value, EqualizerStoreImpl(context).state.value)
+    }
+
+    @Test fun `migration uses logarithmic frequency spacing and keeps an unmodified selection`() {
+        val oldGains = listOf(0f, 12f, 0f, 0f, 0f)
+        val migrated = EqualizerBands.migrateLegacyGains(oldGains)
+        val expected = (12 * kotlin.math.ln(125.0 / 60) / kotlin.math.ln(230.0 / 60)).toFloat()
+        assertEquals(expected, migrated[2], 0.0001f)
+        context.getSharedPreferences("Equalizer", Context.MODE_PRIVATE).edit().putString("settings", """
+            {"gains":[0,12,0,0,0],"selectedProfileId":"p",
+             "profiles":[{"id":"p","name":"Profile","gains":[0,12,0,0,0]}]}
+        """.trimIndent()).commit()
+        val state = EqualizerStoreImpl(context).state.value
+        assertFalse(state.isModified)
+        assertEquals(migrated, state.gains)
+        assertEquals(migrated, EqualizerBands.migrateLegacyGains(migrated))
+    }
+
     @Test fun `settings and profiles survive recreation including unsaved adjustments`() {
         val store = EqualizerStoreImpl(context)
         store.setEnabled(true)

@@ -16,6 +16,10 @@ internal class EqualizerStoreImpl(context: Context) : EqualizerStore {
 
     private fun load(): EqualizerSettings = runCatching {
         json.decodeFromString<EqualizerSettings>(prefs.getString("settings", null) ?: return EqualizerSettings())
+            .let { settings ->
+                settings.copy(gains = EqualizerBands.migrateLegacyGains(settings.gains),
+                    profiles = settings.profiles.map { it.copy(gains = EqualizerBands.migrateLegacyGains(it.gains)) })
+            }
             .also { settings ->
                 EqualizerBands.validate(settings.gains)
                 require(settings.profiles.size <= 50)

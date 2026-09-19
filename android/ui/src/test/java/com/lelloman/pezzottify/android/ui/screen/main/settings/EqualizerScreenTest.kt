@@ -22,8 +22,10 @@ class EqualizerScreenTest {
         show(EqualizerSettings())
         compose.onNodeWithContentDescription("Equalizer").assertIsOff().performClick()
         verify { actions.setEnabled(true) }
-        compose.onNodeWithContentDescription("60 Hz").assertExists()
-        compose.onNodeWithContentDescription("14.0 kHz").performScrollTo().assertExists()
+        EqualizerBands.frequencies.forEach { hz ->
+            val label = if (hz < 1000) "$hz Hz" else "${hz / 1000f} kHz"
+            compose.onNodeWithContentDescription(label).performScrollTo().assertExists()
+        }
         compose.onNodeWithText("Reset to flat").performScrollTo().performClick()
         verify { actions.reset() }
     }
@@ -42,7 +44,8 @@ class EqualizerScreenTest {
 
     @Test fun `modified profile is explicit and deletion requires confirmation`() {
         val profile = EqualizerProfile("sony", "Sony Headphones", EqualizerBands.flat)
-        show(EqualizerSettings(gains = listOf(3f, 0f, 0f, 0f, 0f), profiles = listOf(profile), selectedProfileId = profile.id))
+        show(EqualizerSettings(gains = EqualizerBands.flat.toMutableList().also { it[0] = 3f },
+            profiles = listOf(profile), selectedProfileId = profile.id))
         compose.onNodeWithText("Sony Headphones · Modified").assertExists()
         compose.onNodeWithText("Save changes to Sony Headphones").performScrollTo().performClick()
         verify { actions.updateProfile() }
