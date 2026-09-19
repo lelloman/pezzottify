@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.lelloman.pezzottify.android.ui.R
+import com.lelloman.pezzottify.android.ui.component.DiagnosticSessionButton
 import com.lelloman.pezzottify.android.ui.tv.fromTvSettingsToLogin
 import com.lelloman.pezzottify.android.ui.tv.fromTvSettingsToNowPlaying
 
@@ -155,6 +156,7 @@ fun TvSettingsScreen(navController: NavController) {
                         label = stringResource(R.string.git_commit),
                         value = state.gitCommit,
                     )
+                    DiagnosticSessionButton()
                 }
             }
 

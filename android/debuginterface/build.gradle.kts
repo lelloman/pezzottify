@@ -40,6 +40,9 @@ android {
 
 dependencies {
     implementation(project(":domain"))
+    implementation(project(":logger"))
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.android.coroutines)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
@@ -59,6 +62,8 @@ dependencies {
     kapt(libs.hilt.compiler)
 
     testImplementation(libs.junit)
+    testImplementation(libs.mockk)
+    testImplementation(libs.kotlinx.coroutines.test)
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

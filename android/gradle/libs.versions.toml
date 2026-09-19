@@ -32,7 +32,7 @@ exoplayer = "1.8.0"
 robolectric = "4.14.1"
 mockk = "1.13.13"
 nanohttpd = "2.3.1"
-androidoscopy = "master-SNAPSHOT"
+androidoscopy = "2.0.0"
 appauth = "0.11.1"
 work = "2.10.1"
 simpleAndroidAssistant = "6338ddebc84807c0743d5c73392a084e3ad1ab33"
@@ -92,7 +92,8 @@ robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "
 androidx-test-core = { group = "androidx.test", name = "core", version = "1.6.1" }
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
 nanohttpd = { group = "org.nanohttpd", name = "nanohttpd", version.ref = "nanohttpd" }
-androidoscopy-sdk = { group = "com.github.lelloman", name = "androidoscopy", version.ref = "androidoscopy" }
+androidoscopy-sdk = { group = "com.github.lelloman.androidoscopy", name = "sdk", version.ref = "androidoscopy" }
+androidoscopy-ui = { group = "com.github.lelloman.androidoscopy", name = "sdk-ui", version.ref = "androidoscopy" }
 appauth = { group = "net.openid", name = "appauth", version.ref = "appauth" }
 androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 simple-android-assistant-core = { group = "com.github.lelloman.simple-android-assistant", name = "assistant-core", version.ref = "simpleAndroidAssistant" }

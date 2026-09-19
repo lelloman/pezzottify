@@ -60,6 +60,8 @@ dependencies {
     implementation(project(":domain"))
     implementation(project(":logger"))
     implementation(libs.simple.android.assistant.compose)
+    implementation(libs.androidoscopy.sdk)
+    implementation(libs.androidoscopy.ui)
 
     implementation(libs.hilt)
     implementation(libs.hilt.navigation.compose)

@@ -37,6 +37,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.lelloman.pezzottify.android.domain.settings.BackgroundSyncInterval
 import com.lelloman.pezzottify.android.ui.R
+import com.lelloman.pezzottify.android.ui.component.DiagnosticSessionButton
 import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.ui.model.StorageInfo
 import com.lelloman.pezzottify.android.ui.model.StoragePressureLevel
@@ -200,6 +201,9 @@ private fun SettingsScreenInternal(
                 onShareLogs = actions::shareLogs,
                 onClearLogs = actions::clearLogs,
             )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+            DiagnosticSessionButton()
 
             // Bug Report Section - only shown if user has ReportBug permission
             if (currentState.canReportBug) {

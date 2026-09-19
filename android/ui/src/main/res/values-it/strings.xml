@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="diagnostic_session">Sessione diagnostica</string>
+    <string name="manage_diagnostic_session">Gestisci sessione diagnostica</string>
+    <string name="diagnostic_session_description">Un PC fidato può leggere log integrali e dati, ritentare la riproduzione, sincronizzare e svuotare le cache. Nelle versioni release, le sessioni scadono dopo 15 minuti di inattività.</string>
     <string name="ai_confirm_action">Conferma azione IA</string>
     <string name="ai_allow_action">Consenti</string>
 

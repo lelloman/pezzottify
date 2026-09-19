@@ -182,11 +182,80 @@ The app implements a robust offline-first synchronization system:
 
 ### Building
 
+Before building, prepare the pinned Androidoscopy SDK and session UI artifacts:
+
+```bash
+# From the repository root (requires the Android SDK/JDK):
+bash scripts/prepare-androidoscopy.sh
+```
+
+This verifies the sibling `../androidoscopy` checkout against `androidoscopy.rev`
+and publishes SDK/UI 2.0.0 to Maven Local. It never overwrites a dirty or different
+checkout. Set `ANDROIDOSCOPY_CHECKOUT` to use another checkout. CI runs the same
+preparation; the pinned commit must be available in Androidoscopy's remote before
+CI can clone it. Separate builds are required because the projects use different AGP versions.
+
 ```bash
 ./gradlew build               # Build all modules
 ./gradlew assembleDebug       # Build debug APK
 ./gradlew assembleRelease     # Build release APK
 ```
+
+### Diagnostic tools
+
+Phone and TV Settings include a **Diagnostic session** button opening Androidoscopy's
+pairing/start/stop screen. Debug builds retain the existing automatic dashboard;
+release builds initialize inactive and require explicit activation, with a 15-minute
+inactivity deadline. Both variants register the app-specific tools below; release
+does not register legacy dashboard database/preferences/token actions. No session
+activation is persisted in settings. Session expiry and process death are owned by
+the SDK, and the SDK's non-exported UI handles pairing and notification permissions.
+
+All names below have the `pezzottify_` prefix. Tools call the app's actual injected
+managers/stores, not a separate diagnostic copy. Access requires an active, paired
+Androidoscopy session. Stopping/expiring the session cancels SDK calls; actions
+already completed are not rolled back. Calls have a 60-second timeout. Mutating
+diagnostic calls are serialized with each other (not with ordinary app operations).
+
+| Tool | Access |
+| --- | --- |
+| `playback` | Local player state, remote/local mode, error and paginated queue |
+| `saved_playback` | Persisted playback and queue; **may delete expired/corrupt saved state**, matching the store's normal load behavior |
+| `cache_status` | Database, memory and image sizes; memory hit/miss/eviction metrics |
+| `sync_status` | Sync state, user/catalog cursors and full-sync requirement |
+| `connectivity` | Network availability and WebSocket state/version/error |
+| `catalog_item` | Local track/album/artist by `type` and `id`, with fetch state |
+| `download_status` | Known download status/progress by content `id` |
+| `playlist` | Local playlist by `id`, with paginated track IDs |
+| `sync_backlog` | Pending playlists/listening events and loading catalog count |
+| `logs` | Unredacted session logs, with cursor, level and exact-tag filters |
+| `retry_playback` | **Mutating:** request player retry on the main thread |
+| `sync_catch_up` | **Mutating:** run `user` or `catalog` catch-up; can update local data and user sync may fall back to full sync |
+| `reconnect` | **Mutating:** disconnect/reconnect the server WebSocket |
+| `cache_action` | **Mutating:** `trim`/`clear` the `statics` or `images` cache |
+
+List tools accept `offset` (default 0) and `limit` (default/max 100). Pages return
+`total`, `nextOffset` and `items`; these are live snapshots, not transactional
+snapshots across calls. Backlog stores currently load pending collections before
+the adapter paginates the response. Catalog reads do not fetch missing content.
+
+`logs` captures calls through `LoggerFactory`, including Debug messages regardless
+of ordinary log-level/file-logging settings. It does not capture arbitrary Android
+logcat or read historical log files. Capture starts with the diagnostic session;
+the in-memory buffer is cleared on stop/expiry/session replacement. It retains at
+most 1000 entries, 4096 characters per message (including stack traces), marking
+truncated entries. `after` defaults to 0, `limit` defaults to 100 (max 100),
+`minimumLevel` accepts `Debug`, `Info`, `Warn`, `Error`, and `tag` is an exact match.
+Responses also have a character budget to fit the transport frame, so a page can
+contain fewer entries than requested. Poll with the returned `nextCursor`;
+`oldestAvailableId` identifies the oldest retained entry and `hasMore` indicates
+another page. Reading logs is session
+activity, but log production itself does not extend the inactivity deadline.
+
+Logs are deliberately **not sanitized**: URLs, bodies, credentials and personal
+data already written by app code may be visible to the paired PC. There is no
+arbitrary reflection, raw SQL write tool, auth-store dump or token-refresh tool in
+the release tool set. Use only with a trusted PC.
 
 ### Testing
 

@@ -15,6 +15,7 @@ class LoggerFactory(
     private val fileLoggingEnabled: StateFlow<Boolean> = MutableStateFlow(false),
     private val logDir: File? = null,
 ) {
+    val diagnosticLogs = DiagnosticLogBuffer()
 
     fun getLogger(clazz: KClass<*>): Logger {
         val tag = clazz.simpleName ?: "Unknown"
@@ -31,7 +32,8 @@ class LoggerFactory(
                 )
             )
         }
-        return PezzottifyLogger(loggers, logLevelProvider)
+        // Session capture includes Debug even when ordinary log destinations filter it out.
+        return diagnosticLogs.logger(customTag, PezzottifyLogger(loggers, logLevelProvider))
     }
 
     /**
@@ -46,5 +48,4 @@ class LoggerFactory(
         return this.getLogger(thisRef::class)
     }
 }
-
 
