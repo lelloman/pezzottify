@@ -190,7 +190,7 @@ bash scripts/prepare-androidoscopy.sh
 ```
 
 This verifies the sibling `../androidoscopy` checkout against `androidoscopy.rev`
-and publishes SDK/UI 2.0.0 to Maven Local. It never overwrites a dirty or different
+and publishes SDK/UI 2.0.1 to Maven Local. It never overwrites a dirty or different
 checkout. Set `ANDROIDOSCOPY_CHECKOUT` to use another checkout. CI runs the same
 preparation; the pinned commit must be available in Androidoscopy's remote before
 CI can clone it. Separate builds are required because the projects use different AGP versions.
