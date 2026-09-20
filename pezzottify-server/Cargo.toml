@@ -15,6 +15,7 @@ mock = ["mockall"] # dev feature, enables mockall for trait mocking in tests
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+tracing-log = "0.2"
 mime_guess = "2"
 anyhow = "1.0.75"
 base64 = "0.22"
@@ -23,7 +24,7 @@ libc = "0.2"
 ctrlc = "3.4"
 argon2 = "0.5.3"
 async-trait = "0.1.85"
-simple-server = { path = "../../simple-server", features = ["ws", "multipart", "lifecycle"] }
+simple-server = { path = "../../simple-server", features = ["ws", "multipart", "lifecycle", "logging"] }
 axum-extra = { version = "0.10.0", features = ["cookie"] }
 byte-unit = "5.1.6"
 chrono = "0.4.39"
@@ -74,6 +75,7 @@ mockall = { version = "0.13", optional = true }
 # rustentia = "0.1"
 
 [dev-dependencies]
+log = "0.4"
 reqwest = { version = "0.12", features = ["json", "cookies"] }
 tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
 http = "1.0"

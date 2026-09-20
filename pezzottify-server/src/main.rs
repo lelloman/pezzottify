@@ -1,3 +1,4 @@
+mod logging;
 use anyhow::Result;
 use chrono::{Duration as ChronoDuration, Utc};
 use clap::Parser;
@@ -6,7 +7,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{fmt::Debug, path::PathBuf};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, level_filters::LevelFilter};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::EnvFilter;
 
 // Import modules from the library crate
 use pezzottify_server::background_jobs::jobs::{
@@ -141,16 +142,13 @@ async fn main() {
 async fn run() -> Result<()> {
     let cli_args = CliArgs::parse();
 
-    tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer())
-        .with(
-            EnvFilter::builder()
-                .with_default_directive(LevelFilter::INFO.into())
-                .with_env_var("LOG_LEVEL")
-                .from_env_lossy(),
-        )
-        .try_init()
-        .unwrap();
+    logging::init(
+        EnvFilter::builder()
+            .with_default_directive(LevelFilter::INFO.into())
+            .with_env_var("LOG_LEVEL")
+            .from_env_lossy(),
+    )
+    .expect("failed to initialize logging");
 
     let signals = simple_server::lifecycle::Signals::install()?;
     let mut lifecycle =
