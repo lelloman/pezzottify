@@ -45,9 +45,11 @@ data class EqualizerOutputAssociation(val outputKey: String, val outputName: Str
 data class EqualizerOutput(val key: String?, val name: String, val bluetooth: Boolean = false,
     val needsBluetoothPermission: Boolean = false)
 
-/** Only reports the route used by our playing AudioTrack, never merely connected devices. */
+/** Reports the actual playback route, or Android's anticipated media route while idle (API 33+). */
 interface EqualizerOutputController {
     val output: StateFlow<EqualizerOutput?>
+    /** Idempotent, process-lifetime observation independent of player and screen lifecycles. */
+    fun start()
     fun refresh()
     /** Rechecks the live route before associating, to avoid a stale UI binding the wrong output. */
     fun associateCurrentOutput(profileId: String, expectedKey: String): Boolean

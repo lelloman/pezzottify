@@ -41,11 +41,36 @@ class EqualizerStoreImplTest {
         assertEquals(EqualizerBands.flat, store.state.value.gains)
     }
 
-    @Test fun `manual-only users keep their curve on route changes`() {
+    @Test fun `unassigned output resets manual curve even without any configured associations`() {
         val store = EqualizerStoreImpl(context)
+        store.setEnabled(true)
         store.setBand(2, -5f)
+        store.saveProfile("Manual")
+        val saved = store.state.value.profiles
+        store.setBand(2, 7f)
         store.applyOutput("builtin:speaker")
-        assertEquals(-5f, store.state.value.gains[2])
+        assertEquals(EqualizerBands.flat, store.state.value.gains)
+        assertNull(store.state.value.selectedProfileId)
+        assertEquals(saved, store.state.value.profiles)
+        assertTrue(store.state.value.enabled)
+    }
+
+    @Test fun `output changes discard unsaved adjustments without modifying saved profiles`() {
+        val store = EqualizerStoreImpl(context)
+        store.setBand(0, 6f)
+        store.saveProfile("Sony")
+        val sony = store.state.value.selectedProfileId!!
+        store.associateOutput("sony", "Sony", sony)
+        store.setBand(0, -8f)
+        store.applyOutput("builtin:speaker")
+        assertEquals(EqualizerBands.flat, store.state.value.gains)
+        assertNull(store.state.value.selectedProfileId)
+        store.setBand(0, 10f)
+        store.applyOutput("sony")
+        assertEquals(sony, store.state.value.selectedProfileId)
+        assertEquals(6f, store.state.value.gains[0])
+        assertEquals(6f, store.state.value.profiles.single().gains[0])
+        assertFalse(store.state.value.isModified)
     }
 
     @Test fun `association replacement removal and profile deletion leave no dangling bindings`() {
