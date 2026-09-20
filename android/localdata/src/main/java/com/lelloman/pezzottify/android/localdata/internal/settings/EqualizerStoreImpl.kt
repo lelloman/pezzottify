@@ -98,7 +98,6 @@ internal class EqualizerStoreImpl(context: Context) : EqualizerStore {
     }
 
     override fun applyOutput(outputKey: String?) = change {
-        if (it.outputAssociations.isEmpty()) return@change it // Preserve existing manual-only behavior.
         val id = it.outputAssociations.find { a -> a.outputKey == outputKey }?.profileId
         val profile = it.profiles.find { p -> p.id == id }
         it.copy(gains = profile?.gains?.toList() ?: EqualizerBands.flat, selectedProfileId = profile?.id)

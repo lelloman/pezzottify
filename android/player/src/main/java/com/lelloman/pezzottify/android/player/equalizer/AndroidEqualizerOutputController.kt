@@ -6,6 +6,9 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioDeviceInfo
+import android.media.AudioDeviceCallback
+import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.AudioRouting
 import android.media.AudioTrack
 import android.os.Build
@@ -20,13 +23,19 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import java.util.Locale
 
-/** Main-thread routing observer. Sink callbacks are marshalled from ExoPlayer's playback thread. */
+/** Process-lifetime media route observer; sink callbacks are marshalled to the main thread. */
 @Singleton
 class AndroidEqualizerOutputController @Inject constructor(
     @ApplicationContext private val context: Context,
     private val store: EqualizerStore,
 ) : EqualizerOutputController {
     private val handler = Handler(Looper.getMainLooper())
+    private val audioManager = context.getSystemService(AudioManager::class.java)
+    private val mediaAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_MEDIA)
+        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+        .build()
+    private var started = false
     private var owner: Any? = null
     private var track: AudioTrack? = null
     private var playing = false
@@ -34,11 +43,25 @@ class AndroidEqualizerOutputController @Inject constructor(
     private val mutableOutput = MutableStateFlow<EqualizerOutput?>(null)
     override val output = mutableOutput.asStateFlow()
     private val listener = AudioRouting.OnRoutingChangedListener { refresh() }
+    private val deviceCallback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) = refresh()
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) = refresh()
+    }
     private val poll = object : Runnable {
         override fun run() {
             refresh()
-            if (playing && track != null) handler.postDelayed(this, 1000)
+            // Device callbacks report connection changes, not selection changes between devices
+            // already connected. Query policy as well, including while paused or without a track.
+            if (started) handler.postDelayed(this, 1000)
         }
+    }
+
+    override fun start() = onMain {
+        if (started) return@onMain
+        started = true
+        audioManager?.registerAudioDeviceCallback(deviceCallback, handler)
+        refresh()
+        handler.postDelayed(poll, 1000)
     }
 
     fun attach(owner: Any, audioTrack: AudioTrack) = onMain {
@@ -54,9 +77,7 @@ class AndroidEqualizerOutputController @Inject constructor(
         if (this.owner != null && this.owner !== owner) return@onMain
         this.owner = owner
         playing = value
-        handler.removeCallbacks(poll)
         refresh()
-        if (value) handler.post(poll)
     }
 
     fun detach(owner: Any) = onMain {
@@ -65,17 +86,23 @@ class AndroidEqualizerOutputController @Inject constructor(
         track = null
         this.owner = null
         playing = false
-        mutableOutput.value = null
-        handler.removeCallbacks(poll)
-        // Keep lastRoute across track recreation/pause so manual edits are not repeatedly reset.
+        refresh()
+        // Observation outlives AudioTracks. Repeated reports of the same route retain manual edits.
     }
 
     override fun refresh() {
         if (Looper.myLooper() != Looper.getMainLooper()) { handler.post { refresh() }; return }
         val active = track
-        val devices = if (playing && active != null) runCatching {
+        val routedDevices = if (playing && active != null) runCatching {
             if (Build.VERSION.SDK_INT >= 36) active.routedDevices else listOfNotNull(active.routedDevice)
         }.getOrDefault(emptyList()) else emptyList()
+        // A paused AudioTrack has no authoritative route. Ask Android where MEDIA would play;
+        // never choose an output from the list of merely connected devices.
+        val devices = routedDevices.ifEmpty {
+            if (Build.VERSION.SDK_INT >= 33) runCatching {
+                audioManager?.getAudioDevicesForAttributes(mediaAttributes).orEmpty()
+            }.getOrDefault(emptyList()) else emptyList()
+        }
         val result = when (devices.size) {
             0 -> null
             1 -> identify(devices.single())

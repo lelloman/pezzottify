@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android
 
 import android.app.Application
+import com.lelloman.pezzottify.android.domain.equalizer.EqualizerOutputController
 import com.lelloman.pezzottify.android.domain.usecase.InitializeApp
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import dagger.hilt.android.HiltAndroidApp
@@ -15,10 +16,14 @@ class PezzottifyApplication : Application() {
     @Inject
     lateinit var loggerFactory: LoggerFactory
 
+    @Inject
+    lateinit var equalizerOutputs: EqualizerOutputController
+
     override fun onCreate() {
         super.onCreate()
         setupUncaughtExceptionHandler()
         initializeApp()
+        equalizerOutputs.start()
     }
 
     private fun setupUncaughtExceptionHandler() {

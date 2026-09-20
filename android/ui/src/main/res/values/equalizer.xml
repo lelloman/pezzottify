@@ -17,8 +17,8 @@
     <string name="equalizer_local_profiles">Profiles and output associations stay on this device. Loading a profile replaces current adjustments; saved profiles change only when you save.</string>
     <string name="equalizer_manage_profiles">Profiles and audio outputs</string>
     <string name="equalizer_current_output">Current audio output</string>
-    <string name="equalizer_start_playback">Start playback in Pezzottify to identify the current output.</string>
-    <string name="equalizer_auto_description">Associate a saved profile to load it when this output is used. Unassigned outputs use a flat curve once associations are configured. The EQ on/off switch stays under your control.</string>
+    <string name="equalizer_start_playback">Android has not reported a media output. Try starting playback; older Android versions need it to identify the output.</string>
+    <string name="equalizer_auto_description">Changing outputs loads the associated saved profile, or resets to the default flat curve if none is assigned. Unsaved adjustments are discarded. On Android 13 and newer, this also works while paused. The EQ on/off switch stays under your control.</string>
     <string name="equalizer_bluetooth_permission">Allow Nearby devices to identify Bluetooth outputs. If permission was denied permanently, enable it in Android app settings.</string>
     <string name="equalizer_allow_bluetooth">Allow Bluetooth device access</string>
     <string name="equalizer_unidentified_output">This output has no usable device identifier, or audio is playing on multiple outputs. Association is unavailable.</string>

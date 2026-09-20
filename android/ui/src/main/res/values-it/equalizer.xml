@@ -17,8 +17,8 @@
     <string name="equalizer_local_profiles">Profili e associazioni restano su questo dispositivo. Caricare un profilo sostituisce le regolazioni attuali; i profili salvati cambiano solo quando salvi.</string>
     <string name="equalizer_manage_profiles">Profili e uscite audio</string>
     <string name="equalizer_current_output">Uscita audio attuale</string>
-    <string name="equalizer_start_playback">Avvia la riproduzione in Pezzottify per identificare l’uscita attuale.</string>
-    <string name="equalizer_auto_description">Associa un profilo salvato per caricarlo quando viene usata questa uscita. Dopo aver configurato le associazioni, le uscite non associate usano una curva piatta. L’interruttore EQ resta sotto il tuo controllo.</string>
+    <string name="equalizer_start_playback">Android non ha segnalato un’uscita multimediale. Prova ad avviare la riproduzione: sulle versioni Android meno recenti è necessaria per identificare l’uscita.</string>
+    <string name="equalizer_auto_description">Cambiare uscita carica il profilo salvato associato o ripristina la curva piatta predefinita se non ci sono associazioni. Le regolazioni non salvate vengono scartate. Da Android 13 funziona anche in pausa. L’interruttore EQ resta sotto il tuo controllo.</string>
     <string name="equalizer_bluetooth_permission">Consenti l’accesso ai dispositivi nelle vicinanze per identificare le uscite Bluetooth. Se il permesso è stato negato definitivamente, abilitalo nelle impostazioni Android dell’app.</string>
     <string name="equalizer_allow_bluetooth">Consenti accesso ai dispositivi Bluetooth</string>
     <string name="equalizer_unidentified_output">Questa uscita non ha un identificatore utilizzabile, oppure sono attive più uscite. L’associazione non è disponibile.</string>
