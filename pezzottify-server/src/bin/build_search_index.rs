@@ -9,6 +9,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
+#[path = "../logging.rs"]
+mod logging;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
@@ -48,10 +50,7 @@ struct Args {
 }
 
 fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init()
-        .ok();
+    logging::init(EnvFilter::from_default_env()).ok();
 
     let args = Args::parse();
     if !args.catalog_db.is_file() {
