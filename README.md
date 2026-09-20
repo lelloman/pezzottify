@@ -48,8 +48,8 @@ Run the development stack:
 
 ```bash
 git clone https://github.com/lelloman/pezzottify
-git clone https://github.com/lelloman/simple-server
 cd pezzottify
+bash scripts/checkout-simple-server.sh
 mkdir -p dev-data
 cp pezzottify-server/config.example.toml pezzottify-server/config.toml
 # Edit pezzottify-server/config.toml for your paths and optional services.
