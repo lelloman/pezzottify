@@ -19,6 +19,13 @@ val localProperties = Properties().apply {
     }
 }
 
+// Optional external server/OIDC settings for isolated worktrees; never copied into Git.
+val connectionProperties = Properties().apply {
+    providers.gradleProperty("connectionPropertiesFile").orNull?.let { path ->
+        rootProject.file(path).inputStream().use { load(it) }
+    }
+}
+
 // Load signing.properties for release signing config
 val signingProperties = Properties().apply {
     val signingPropsFile = rootProject.file("signing.properties")
@@ -152,6 +159,13 @@ android {
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
         }
+        create("paravoidTestRelease") {
+            initWith(getByName("release"))
+            isMinifyEnabled = false
+            isDebuggable = false
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -166,11 +180,14 @@ android {
     }
 }
 
-// Initial integration gate: phone/debug only. TV uses LEANBACK and releases use R8,
-// neither of which is supported by the current shell packaging plugin.
+// Phone-only experiment. The ordinary release variants still use R8 and remain
+// disabled for shell packaging; the explicit test release is unshrunk/debug-signed.
 androidComponents.beforeVariants {
-    if (it.productFlavors.any { flavor -> flavor.second == "paravoidAndroid" }) {
-        it.enable = it.buildType == "debug" && it.productFlavors.any { flavor -> flavor.second == "phone" }
+    val shell = it.productFlavors.any { flavor -> flavor.second == "paravoidAndroid" }
+    if (shell) {
+        it.enable = it.buildType in listOf("debug", "paravoidTestRelease") && it.productFlavors.any { flavor -> flavor.second == "phone" }
+    } else if (it.buildType == "paravoidTestRelease") {
+        it.enable = false
     }
 }
 
@@ -196,13 +213,16 @@ android.defaultConfig {
     buildConfigField("String", "GIT_COMMIT", "\"${getGitCommit()}\"")
 
     // OIDC config from local.properties
-    val oidcIssuerUrl = localProperties.getProperty("oidc.issuerUrl", "")
-    val oidcClientId = localProperties.getProperty("oidc.clientId", "")
+    val oidcIssuerUrl = connectionProperties.getProperty("oidc.issuerUrl", localProperties.getProperty("oidc.issuerUrl", ""))
+    val oidcClientId = connectionProperties.getProperty("oidc.clientId", localProperties.getProperty("oidc.clientId", ""))
+    if (providers.gradleProperty("connectionPropertiesFile").isPresent) {
+        require(oidcIssuerUrl.isNotBlank() && oidcClientId.isNotBlank()) { "External connection configuration must provide OIDC issuer and client ID" }
+    }
     buildConfigField("String", "OIDC_ISSUER_URL", "\"$oidcIssuerUrl\"")
     buildConfigField("String", "OIDC_CLIENT_ID", "\"$oidcClientId\"")
 
     // Server config from local.properties
-    val defaultBaseUrl = localProperties.getProperty("server.baseUrl", "http://10.0.2.2:3001")
+    val defaultBaseUrl = connectionProperties.getProperty("server.baseUrl", localProperties.getProperty("server.baseUrl", "http://10.0.2.2:3001"))
     buildConfigField("String", "DEFAULT_BASE_URL", "\"$defaultBaseUrl\"")
 
     // Assistant provider policy. "user" keeps provider selection in runtime settings;
