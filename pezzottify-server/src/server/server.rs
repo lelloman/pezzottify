@@ -40,7 +40,7 @@ use tower_http::services::{ServeDir, ServeFile};
 use serde::{Deserialize, Serialize};
 use simple_server::axum::{
     body::Body,
-    extract::{DefaultBodyLimit, Path, Query, State},
+    extract::{Path, Query, State},
     http::{header, response, HeaderMap, HeaderValue, StatusCode},
     middleware,
     response::{IntoResponse, Response},

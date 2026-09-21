@@ -8,12 +8,13 @@
 
 use serde::{Deserialize, Serialize};
 use simple_server::axum::{
-    extract::{DefaultBodyLimit, Multipart, Path, Query, State},
+    extract::{Multipart, Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
+use simple_server::body_limit::BodyLimit;
 use tracing::{debug, info, warn};
 
 use crate::db_executor::{DbHandle, DbPriority, DbRunError};
@@ -848,7 +849,7 @@ pub fn ingestion_routes() -> Router<ServerState> {
     // Actual limit is enforced by IngestionManager config (max_upload_size_mb)
     let upload_route = Router::new()
         .route("/upload", post(upload_file))
-        .layer(DefaultBodyLimit::max(5 * 1024 * 1024 * 1024)); // 5GB
+        .layer(BodyLimit::max(5 * 1024 * 1024 * 1024)); // 5GB
 
     // User routes
     let user_routes = Router::new()
