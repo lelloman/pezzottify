@@ -53,3 +53,7 @@ include(":debuginterface")
 include(":player")
 include(":logger")
 include(":domain")
+
+include(":player-app")
+include(":theme")
+include(":equalizer")

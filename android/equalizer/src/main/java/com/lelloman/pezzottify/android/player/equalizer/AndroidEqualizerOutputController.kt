@@ -106,7 +106,7 @@ class AndroidEqualizerOutputController @Inject constructor(
         val result = when (devices.size) {
             0 -> null
             1 -> identify(devices.single())
-            else -> EqualizerOutput(null, context.getString(com.lelloman.pezzottify.android.player.R.string.eq_multiple_outputs))
+            else -> EqualizerOutput(null, context.getString(com.lelloman.pezzottify.android.equalizer.R.string.eq_multiple_outputs))
         }
         mutableOutput.value = result
         if (result != null) {
@@ -138,7 +138,7 @@ class AndroidEqualizerOutputController @Inject constructor(
             Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
         val address = if (Build.VERSION.SDK_INT >= 28) runCatching { device.address }.getOrDefault("") else ""
         var name = device.productName.toString().ifBlank {
-            context.getString(com.lelloman.pezzottify.android.player.R.string.eq_unknown_output)
+            context.getString(com.lelloman.pezzottify.android.equalizer.R.string.eq_unknown_output)
         }
         if (bluetooth && permission && validBluetoothAddress(address)) {
             runCatching {
@@ -147,7 +147,7 @@ class AndroidEqualizerOutputController @Inject constructor(
             }.getOrNull()?.takeIf { it.isNotBlank() }?.let { name = it }
         }
         if (device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER || device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER_SAFE) {
-            name = context.getString(com.lelloman.pezzottify.android.player.R.string.eq_device_speaker)
+            name = context.getString(com.lelloman.pezzottify.android.equalizer.R.string.eq_device_speaker)
         }
         val key = outputKey(device.type, address, bluetooth && !permission)
         return EqualizerOutput(key, name, bluetooth, bluetooth && !permission)

@@ -56,4 +56,4 @@ jobs:
         working-directory: .
 
       - name: Lint and test
-        run: ./gradlew lintDebug testDebugUnitTest :app:lintPhoneDebug :app:testPhoneDebugUnitTest :app:compilePhoneReleaseKotlin
+        run: ./gradlew lintDebug testDebugUnitTest :app:lintPhoneDebug :app:testPhoneDebugUnitTest :app:compilePhoneReleaseKotlin :player-app:assembleDebug :player-app:assembleRelease
