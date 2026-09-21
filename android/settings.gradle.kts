@@ -1,4 +1,8 @@
 pluginManagement {
+    val paravoidCheckout = providers.gradleProperty("paravoidCheckout").orNull
+        ?: file("../../paravoid-android").absolutePath
+    includeBuild("$paravoidCheckout/paravoid-gradle-plugin")
+    includeBuild("$paravoidCheckout/paravoid-hilt")
     repositories {
         google {
             content {
@@ -57,3 +61,10 @@ include(":domain")
 include(":player-app")
 include(":theme")
 include(":equalizer")
+
+val paravoidCheckout = providers.gradleProperty("paravoidCheckout").orNull
+    ?: file("../../paravoid-android").absolutePath
+listOf("paravoid-api", "paravoid-runtime").forEach { module ->
+    include(":$module")
+    project(":$module").projectDir = file("$paravoidCheckout/$module")
+}

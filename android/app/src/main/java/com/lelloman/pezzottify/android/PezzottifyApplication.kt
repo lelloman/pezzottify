@@ -1,6 +1,6 @@
 package com.lelloman.pezzottify.android
 
-import android.app.Application
+import com.lelloman.paravoidandroid.runtime.ParavoidAndroidApplication
 import com.lelloman.pezzottify.android.domain.equalizer.EqualizerOutputController
 import com.lelloman.pezzottify.android.domain.usecase.InitializeApp
 import com.lelloman.pezzottify.android.logger.LoggerFactory
@@ -8,7 +8,7 @@ import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
 @HiltAndroidApp
-class PezzottifyApplication : Application() {
+class PezzottifyApplication : ParavoidAndroidApplication() {
 
     @Inject
     lateinit var initializeApp: InitializeApp
