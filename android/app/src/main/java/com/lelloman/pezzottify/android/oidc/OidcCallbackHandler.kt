@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.oidc
 
 import android.content.Intent
+import com.lelloman.pezzottify.android.BuildConfig
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -62,7 +63,7 @@ class OidcCallbackHandler @Inject constructor() {
     }
 
     companion object {
-        const val OIDC_REDIRECT_SCHEME = "com.lelloman.pezzottify.android"
+        const val OIDC_REDIRECT_SCHEME = BuildConfig.OIDC_REDIRECT_SCHEME
         const val OIDC_REDIRECT_HOST = "oauth"
         const val OIDC_REDIRECT_PATH = "/callback"
     }
