@@ -1,6 +1,22 @@
 # Pezzottify Android
 
-Android client for the Pezzottify music streaming platform.
+Two independently installable Android apps:
+
+| App | Gradle module | Application ID |
+| --- | --- | --- |
+| Pezzottify | `:app` (phone) | `com.lelloman.pezzottify.android` |
+| Pezzottify-player | `:player-app` | `com.lelloman.pezzottify.android.player` |
+
+Pezzottify streams from the server; Pezzottify-player opens and shares local audio
+files and maintains local playlists without a server or login. The existing TV
+variant remains `com.lelloman.pezzottify.android.tv`. Each APK has one launcher entry.
+The `:player` module remains the streaming playback library; `:equalizer` and
+`:theme` contain code shared by both apps.
+
+The player has its own application, preferences, database, and URI grants. Local
+playlists, playback state, and equalizer settings from the former bundled player
+are not automatically migrated: reselect audio files and recreate playlists in
+the new app. Updating Pezzottify preserves its existing package and streaming data.
 
 ## Overview
 
@@ -197,9 +213,15 @@ CI can clone it. Separate builds are required because the projects use different
 
 ```bash
 ./gradlew build               # Build all modules
-./gradlew assembleDebug       # Build debug APK
-./gradlew assembleRelease     # Build release APK
+./gradlew :app:assemblePhoneDebug :player-app:assembleDebug
+./gradlew :app:assemblePhoneRelease :player-app:assembleRelease
+./gradlew :app:assembleTvDebug # Build the existing TV app
 ```
+
+Debug APKs are written to `app/build/outputs/apk/phone/debug/app-phone-debug.apk`
+and `player-app/build/outputs/apk/debug/player-app-debug.apk`. Both application
+modules use the repository version and optional `signing.properties` release key.
+
 
 ### Equalizer
 
@@ -231,7 +253,8 @@ Saved profiles are never modified by route changes. A temporarily unavailable ro
 does not reset the curve; the next known route is compared with the last known output.
 The master EQ switch is never changed automatically. Duplicate route events, pauses,
 and AudioTrack recreation on the same output do not overwrite manual adjustments.
-Both catalog playback and the separate local-file playback service use this integration.
+Both catalog playback and the standalone player use this integration, with separate
+preferences. The standalone player currently has no equalizer settings screen.
 
 Bluetooth associations use a normalized device address, with name/alias for display;
 on Android 12+ the UI requests Nearby devices (`BLUETOOTH_CONNECT`) permission.
@@ -341,7 +364,8 @@ Integration tests require Docker to be installed and running.
 ### Running
 
 ```bash
-./gradlew installDebug        # Install debug APK on connected device/emulator
+./gradlew :app:installPhoneDebug
+./gradlew :player-app:installDebug
 ```
 
 The app can be launched from the device or via:
@@ -351,7 +375,7 @@ adb shell am start -n com.lelloman.pezzottify.android/.MainActivity
 
 ## Backend
 
-The Android app requires the Pezzottify server to be running. See the main project README for instructions on setting up the backend server.
+The streaming app requires the Pezzottify server to be running. See the main project README for instructions on setting up the backend server.
 
 Default server URL can be configured in the app's settings or debug interface.
 

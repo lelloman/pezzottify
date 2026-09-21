@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Geometry from docs/brand/pezzottify-player.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <group android:scaleX="0.8" android:scaleY="0.8" android:translateX="14" android:translateY="14">
+    <path android:fillColor="#000000" android:pathData="M21 39 Q26 39 26 44 L26 56 Q26 61 21 61 Q16 61 16 56 L16 44 Q16 39 21 39 Z" />
+    <path android:fillColor="#000000" android:pathData="M37 29 Q42 29 42 34 L42 66 Q42 71 37 71 Q32 71 32 66 L32 34 Q32 29 37 29 Z" />
+    <path android:fillColor="#000000" android:pathData="M53 25 L84 46 Q90 50 84 54 L53 75 Q48 78 48 72 L48 28 Q48 22 53 25 Z" />
+    </group>
+</vector>
