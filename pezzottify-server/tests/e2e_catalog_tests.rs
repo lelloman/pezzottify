@@ -450,7 +450,13 @@ async fn test_get_track_returns_correct_data() {
 
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response.headers()["cache-control"], "private, max-age=0");
-    let vary = response.headers()["vary"].to_str().unwrap();
+    let vary = response
+        .headers()
+        .get_all("vary")
+        .iter()
+        .map(|v| v.to_str().unwrap())
+        .collect::<Vec<_>>()
+        .join(", ");
     assert!(vary.contains("Cookie"));
     assert!(vary.contains("Authorization"));
 
