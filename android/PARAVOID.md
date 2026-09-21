@@ -56,3 +56,30 @@ in the installed APK. It is not an external updater or complete resource packagi
 Build and emulator results must be recorded separately from authenticated server,
 playback and background-sync coverage. Do not install the normal APK on a personal
 device as part of this experiment: its identity is the everyday app's identity.
+
+## Repeatable checks
+
+After the x86_64 build, from this directory:
+
+```sh
+python3 check-paravoid.py
+python3 smoke-paravoid.py --serial emulator-5584
+```
+
+The first command reads APKs and generated manifests. The second refuses physical
+device serials and requires an emulator; use a disposable emulator without logged-in
+accounts. It installs **both** APKs, force-stops/restarts them, temporarily rotates
+the display (restoring its settings), sends a callback without an auth code, and
+checks copies of their Room databases. It does not clear app data or use a server.
+
+The API-30 and API-36.1/x86_64 runs passed for both modes: login Compose UI, cold start,
+restart, Androidoscopy initialization, rotation, isolated callback resolution and
+SQLite integrity/Room identity for `StaticsDb` and `user_content`. APK inspection
+found five payload DEX files totaling 70,789,516 bytes, requiring Paravoid's updated
+32 MiB/file and 128 MiB total bounds (older shells reject this payload).
+
+Not yet proved: real OIDC login/token exchange; Androidoscopy Dashboard/Session
+screens; AppAuth's browser Activity lifecycle; authenticated background sync,
+playback or assistant JNI execution. ADB cannot directly launch these non-exported
+library Activities as the shell UID; do not weaken their exported flags for a test.
+Startup and packaged native libraries are not evidence that all those flows work.
