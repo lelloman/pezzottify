@@ -32,7 +32,10 @@ the shell runtime is a `paravoidAndroidImplementation` dependency.
 | Normal phone | `com.lelloman.pezzottify.android` | `com.lelloman.pezzottify.android://oauth/callback` |
 | Paravoid phone | `com.lelloman.pezzottify.android.paravoid` | `com.lelloman.pezzottify.android.paravoid://oauth/callback` |
 
-The apps coexist with separate data. Provider authorities use `${applicationId}`.
+The apps coexist with separate data. The Paravoid launcher icon has a small V badge
+(including round and themed icons); the normal icon is unchanged. The badge is a
+flavor resource overlay, not a plugin-wide change to downstream branding.
+Provider authorities use `${applicationId}`.
 The callback manifest, request URI and callback handler share the flavor's
 redirect scheme. **Register the Paravoid URI with the OIDC provider before trying
 real login.** Keeping the original scheme would make the two installs compete
