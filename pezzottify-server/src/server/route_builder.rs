@@ -5,6 +5,7 @@
 
 use super::*;
 use governor::middleware::NoOpMiddleware;
+use simple_server::body_limit::BodyLimit;
 use tower_governor::governor::GovernorConfig;
 
 type UserRateLimit = Arc<GovernorConfig<UserOrIpKeyExtractor, NoOpMiddleware>>;
@@ -225,7 +226,7 @@ pub(super) fn user_support_routes(state: &ServerState, limits: &RouteLimits) -> 
 
     let bug_reports: Router = Router::new()
         .route("/bug-report", post(submit_bug_report))
-        .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
+        .layer(BodyLimit::max(2 * 1024 * 1024))
         .layer(GovernorLayer::new(limits.write.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),

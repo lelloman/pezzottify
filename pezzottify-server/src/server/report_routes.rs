@@ -7,12 +7,13 @@ use crate::{db_executor::DbPriority, server_store::reports::*, user::Permission}
 use serde::Serialize;
 use simple_server::axum::{
     self,
-    extract::{DefaultBodyLimit, Path, Query, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
+use simple_server::body_limit::BodyLimit;
 
 impl IntoResponse for ReportError {
     fn into_response(self) -> Response {
@@ -284,6 +285,6 @@ pub fn routes(state: ServerState) -> Router {
             "/v1/admin/reports/{id}/attachments/{attachment}",
             get(admin_attachment).delete(admin_delete_attachment),
         )
-        .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
+        .layer(BodyLimit::max(MAX_BODY_BYTES))
         .with_state(state)
 }
