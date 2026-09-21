@@ -2,8 +2,9 @@
 
 This worktree uses the source checkout of Paravoid, not a published release.
 It adds the `paravoidPackaging` dimension: `normal` and `paravoidAndroid`.
-Only **Paravoid phone/debug** is enabled. Normal phone/TV build types remain
-available. Shell TV (LEANBACK) and shrinking are not supported yet.
+Only **Paravoid phone/debug and phone/paravoidTestRelease** are enabled. Normal
+phone/TV build types remain available. Shell TV (LEANBACK) and shrinking are not
+supported yet.
 
 ## Build
 
@@ -24,6 +25,24 @@ The ABI override above is for an x86_64 emulator. Omit it to build all supported
 assistant ABIs for a phone. The normal app keeps minSdk 24; the experiment uses
 minSdk 30. The normal app depends only on Paravoid's API/base Application class;
 the shell runtime is a `paravoidAndroidImplementation` dependency.
+
+For live phone testing, `paravoidTestRelease` is non-debuggable, unshrunk, and
+signed with the debug key. It uses release dependency variants; it is **not** a
+production-signed release. Normal builds do not expose this test build type.
+
+```sh
+ANDROID_HOME=/path/to/sdk ./gradlew \
+  :app:assembleParavoidAndroidPhoneParavoidTestRelease \
+  -PparavoidCheckout=/path/to/paravoid-android \
+  -PassistantCheckout=/path/to/pinned/simple-android-assistant \
+  -PassistantAbis=arm64-v8a \
+  -PconnectionPropertiesFile=/path/to/original/android/local.properties
+```
+
+The external file supplies only the OIDC issuer/client and server URL; it is not
+copied into this worktree. OIDC settings must be nonempty when this option is used.
+Do not commit local configuration or signing material. The `.paravoid` identity
+and callback registration remain the same as the debug experiment.
 
 ## Identity and authentication
 
