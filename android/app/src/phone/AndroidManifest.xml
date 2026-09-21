@@ -20,7 +20,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
-                    android:scheme="com.lelloman.pezzottify.android"
+                    android:scheme="${appAuthRedirectScheme}"
                     android:host="oauth"
                     android:path="/callback" />
             </intent-filter>

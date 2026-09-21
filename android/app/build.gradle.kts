@@ -7,6 +7,8 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.kotlin.kapt)
     alias(libs.plugins.google.ksp)
+    id("com.lelloman.paravoid")
+    id("com.lelloman.paravoid.hilt")
 }
 
 // Load local.properties for OIDC config
@@ -88,10 +90,16 @@ android {
 
         // AppAuth redirect scheme for OIDC callback
         manifestPlaceholders["appAuthRedirectScheme"] = "com.lelloman.pezzottify.android"
+        buildConfigField("String", "OIDC_REDIRECT_SCHEME", "\"com.lelloman.pezzottify.android\"")
     }
 
     flavorDimensions += "formFactor"
     productFlavors {
+        getByName("paravoidAndroid") {
+            minSdk = 30
+            manifestPlaceholders["appAuthRedirectScheme"] = "com.lelloman.pezzottify.android.paravoid"
+            buildConfigField("String", "OIDC_REDIRECT_SCHEME", "\"com.lelloman.pezzottify.android.paravoid\"")
+        }
         create("phone") {
             dimension = "formFactor"
             buildConfigField("boolean", "IS_TV", "false")
@@ -158,6 +166,14 @@ android {
     }
 }
 
+// Initial integration gate: phone/debug only. TV uses LEANBACK and releases use R8,
+// neither of which is supported by the current shell packaging plugin.
+androidComponents.beforeVariants {
+    if (it.productFlavors.any { flavor -> flavor.second == "paravoidAndroid" }) {
+        it.enable = it.buildType == "debug" && it.productFlavors.any { flavor -> flavor.second == "phone" }
+    }
+}
+
 fun getGitCommit(): String {
     return try {
         val commitProcess = ProcessBuilder("git", "rev-parse", "--short", "HEAD")
@@ -203,6 +219,8 @@ android.defaultConfig {
 }
 
 dependencies {
+    implementation(project(":paravoid-api"))
+    "paravoidAndroidImplementation"(project(":paravoid-runtime"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.process)

@@ -63,7 +63,7 @@ abstract class DomainModule {
         fun provideOidcConfig(): OidcConfig = OidcConfig(
             issuerUrl = BuildConfig.OIDC_ISSUER_URL,
             clientId = BuildConfig.OIDC_CLIENT_ID,
-            redirectUri = "com.lelloman.pezzottify.android://oauth/callback",
+            redirectUri = "${BuildConfig.OIDC_REDIRECT_SCHEME}://oauth/callback",
         )
     }
 }
