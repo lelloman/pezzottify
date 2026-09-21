@@ -26,12 +26,31 @@ class DiagnosticLogBufferTest {
     @Test fun `raw secrets and throwable text are retained without sanitizing`() {
         val buffer = DiagnosticLogBuffer()
         buffer.configure { "session" }
-        buffer.record(LogLevel.Error, "auth", "Authorization: Bearer raw-token", IllegalStateException("password=secret"))
+        val throwable = IllegalStateException("password=secret").apply {
+            // Runner/JDK stack depth must not decide whether this fixture is truncated.
+            stackTrace = arrayOf(StackTraceElement("AuthClient", "login", "AuthClient.kt", 42))
+        }
+        buffer.record(LogLevel.Error, "auth", "Authorization: Bearer raw-token", throwable)
         val entry = buffer.read().entries.single()
         assertTrue(entry.message.contains("Bearer raw-token"))
         assertTrue(entry.message.contains("password=secret"))
         assertTrue(entry.message.contains("IllegalStateException"))
+        assertTrue(entry.message.contains("AuthClient.login(AuthClient.kt:42)"))
         assertFalse(entry.truncated)
+    }
+
+    @Test fun `long throwable stack traces are bounded and marked truncated`() {
+        val buffer = DiagnosticLogBuffer()
+        buffer.configure { "session" }
+        val throwable = IllegalStateException("password=secret").apply {
+            stackTrace = Array(200) { StackTraceElement("AuthClient", "login", "AuthClient.kt", it + 1) }
+        }
+        buffer.record(LogLevel.Error, "auth", "Authorization: Bearer raw-token", throwable)
+        val entry = buffer.read().entries.single()
+        assertEquals(4096, entry.message.length)
+        assertTrue(entry.message.startsWith("Authorization: Bearer raw-token\njava.lang.IllegalStateException: password=secret"))
+        assertTrue(entry.message.contains("AuthClient.login(AuthClient.kt:1)"))
+        assertTrue(entry.truncated)
     }
 
     @Test fun `capacity message size filters and cursor pagination are bounded`() {
