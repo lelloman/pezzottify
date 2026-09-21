@@ -24,7 +24,7 @@ libc = "0.2"
 ctrlc = "3.4"
 argon2 = "0.5.3"
 async-trait = "0.1.85"
-simple-server = { path = "../../simple-server", features = ["ws", "multipart", "lifecycle", "logging"] }
+simple-server = { path = "../../simple-server", features = ["ws", "multipart", "lifecycle", "logging", "http-tracing"] }
 axum-extra = { version = "0.10.0", features = ["cookie"] }
 byte-unit = "5.1.6"
 chrono = "0.4.39"

@@ -1,0 +1,60 @@
+# Step 03c: HTTP tracing
+
+Production `route_builder::build_app` already installs `log_requests` outside
+session/auth/CSRF middleware. It now calls shared `http_tracing::trace_with_observer` when
+`RequestsLoggingLevel` is Path, Headers or Body. None bypasses tracing completely
+and retains existing metrics/bandwidth accounting. The separate metrics listener
+and offline CLI tools did not have HTTP request logging and remain unchanged.
+The reviewed library pin is `adc1640bde4ac8f934ed454c8d6c5e264a6a2790` in
+`simple-server.rev`; CI/build checkout scripts consume that pin.
+
+## Behavior and telemetry schema
+
+The old `>>> METHOD path` and `<<< status (milliseconds)` lifecycle lines are
+replaced by the shared safe `http.request` span and `http.response_headers` /
+`http.finished` events. Request paths become matched route templates (unmatched
+routes use the shared placeholder); query strings, credentials and opaque
+incident IDs are not added to spans. Header timing measures response creation;
+terminal timing covers body polling/completion/error/drop or upgrade handoff,
+not client acknowledgement or WebSocket session lifetime. A small application observer preserves the existing INFO response-header
+event severity for every status, including immediate visibility for long-lived
+streams; terminal events delegate to the shared default observer.
+User-specified LOG_LEVEL filters are preserved and can select the shared
+`simple_server::http_tracing` event target.
+
+Opt-in allowlisted header and redacted JSON-body diagnostics remain local,
+including authentication/report exclusions and the existing small-body buffering
+policy. The shared wrapper encloses that processing, including body-read failure
+responses, so it observes the final returned body. The existing Prometheus header
+latency/counts, endpoint bandwidth counters, authenticated usage accounting,
+response status/headers/body, authentication boundaries and per-error incident
+ID policy are retained. Correlation is intentionally not enabled by this change.
+
+## Verification
+
+The isolated migration worktree was created from active `dev` at
+`b82e17d410fd35b048f54993e686bd2651fa8d26`; the original checkout was clean.
+
+Baseline library tests: 1103 passed, two existing live-model/API tests ignored.
+Final library tests: the same 1103 passed/two ignored, including the new
+configured-mode/safe-route/unchanged-response contract replacing the legacy
+path-only test. The loopback production-router integration test passes for all
+four logging modes, preserving empty auth rejection responses and authenticated
+404 behavior while checking safe route fields, INFO header events and absence
+of raw path/query/credential values or duplicate legacy lifecycle lines.
+Three existing route contract tests and all four production-binary lifecycle
+tests pass (SIGINT, SIGTERM, admin reboot, occupied listener), including active
+WebSocket/listener drain. Changed-file rustfmt and `git diff --check` pass.
+Strict Clippy remains blocked by the unchanged `items_after_test_module` finding
+in `src/enrichment_store/works.rs:247`, also documented during Step 03a.
+Clippy for the library and all test targets passes with that single existing
+lint explicitly exempted and all other warnings denied. All 11 existing HTTP
+streaming/range tests pass. Total executed final checks: 1122 passed, two
+existing ignored tests. Other integration suites, browser/Android builds,
+release/container builds and external services were not rerun. Nothing was
+pushed or deployed.
+
+The migration is committed in its dedicated worktree, then the original `dev`
+branch is rebased onto it with ancestry/tree verification before removal of the
+temporary worktree and branch. Exact final commit and integration evidence are
+recorded in the central simple-server migration trackers.

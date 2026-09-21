@@ -19,6 +19,7 @@ use tokio::net::TcpListener;
 
 #[derive(Clone, Default)]
 pub struct TestServerBuilder {
+    requests_logging_level: Option<RequestsLoggingLevel>,
     download_manager_enabled: bool,
     ingestion_enabled: bool,
     disable_password_auth: bool,
@@ -30,6 +31,11 @@ pub struct TestServerBuilder {
 
 #[allow(dead_code)] // Each integration-test crate uses a different subset of builder options.
 impl TestServerBuilder {
+    pub fn with_request_logging(mut self, level: RequestsLoggingLevel) -> Self {
+        self.requests_logging_level = Some(level);
+        self
+    }
+
     pub fn with_download_manager(mut self) -> Self {
         self.download_manager_enabled = true;
         self
@@ -256,7 +262,9 @@ impl TestServer {
 
         let config = ServerConfig {
             port,
-            requests_logging_level: RequestsLoggingLevel::None,
+            requests_logging_level: options
+                .requests_logging_level
+                .unwrap_or(RequestsLoggingLevel::None),
             content_cache_age_sec: 0, // Disable caching in tests
             frontend_dir_path: None,
             disable_password_auth: options.disable_password_auth,

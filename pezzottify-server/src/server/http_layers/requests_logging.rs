@@ -10,9 +10,8 @@ use serde_json::Value;
 use simple_server::axum::extract::State;
 use simple_server::axum::{
     body::Body,
-    http::{header::HeaderMap, Request, Response, Uri},
+    http::{header::HeaderMap, Request, Response},
     middleware::Next,
-    response::IntoResponse,
 };
 use std::time::Instant;
 use tracing::{debug, error, info};
@@ -204,15 +203,69 @@ fn report_bodies_are_never_loggable() {
     }
 }
 
-fn safe_request_target(uri: &Uri) -> &str {
-    uri.path()
-}
-
 pub async fn log_requests(
     State(state): State<ServerState>,
+    request: Request<Body>,
+    next: Next,
+) -> Response<Body> {
+    with_request_trace(&state.config.requests_logging_level, request, |request| {
+        log_request_details(state.clone(), request, next)
+    })
+    .await
+}
+
+async fn with_request_trace<F, Fut>(
+    level: &RequestsLoggingLevel,
+    request: Request<Body>,
+    next: F,
+) -> Response<Body>
+where
+    F: FnOnce(Request<Body>) -> Fut,
+    Fut: std::future::Future<Output = Response<Body>>,
+{
+    if *level == RequestsLoggingLevel::None {
+        next(request).await
+    } else {
+        simple_server::http_tracing::trace_with_observer(request, RequestObserver, next).await
+    }
+}
+
+// Preserve immediate INFO response visibility, including long-lived streams.
+struct RequestObserver;
+impl simple_server::http_tracing::Observer for RequestObserver {
+    fn on_response(
+        &mut self,
+        span: &tracing::Span,
+        response: &Response<Body>,
+        latency: std::time::Duration,
+    ) {
+        info!(target: "simple_server::http_tracing", parent: span,
+            status = response.status().as_u16(),
+            header_latency_ms = latency.as_secs_f64() * 1000.0,
+            "http.response_headers");
+    }
+    fn on_finish(
+        &mut self,
+        span: &tracing::Span,
+        outcome: simple_server::http_tracing::Outcome,
+        phase: simple_server::http_tracing::Phase,
+        duration: std::time::Duration,
+    ) {
+        simple_server::http_tracing::Observer::on_finish(
+            &mut simple_server::http_tracing::TracingObserver,
+            span,
+            outcome,
+            phase,
+            duration,
+        );
+    }
+}
+
+async fn log_request_details(
+    state: ServerState,
     mut request: Request<Body>,
     next: Next,
-) -> impl IntoResponse {
+) -> Response<Body> {
     let level = state.config.requests_logging_level.clone();
 
     // Extract user_id from request extensions (set by earlier middleware like extract_user_id_for_rate_limit)
@@ -225,11 +278,6 @@ pub async fn log_requests(
     // MatchedPath contains the bounded route template (for example
     // `/v1/content/track/{id}`), never path parameters or a query string.
     let metric_route = request_route_label(request.extensions()).to_string();
-
-    if level > RequestsLoggingLevel::None {
-        // Query parameters may contain OAuth authorization codes and other credentials.
-        info!(">>> {} {}", method, safe_request_target(request.uri()));
-    }
 
     if level >= RequestsLoggingLevel::Headers {
         let headers = format_safe_headers(request.headers(), SAFE_REQUEST_HEADERS);
@@ -320,10 +368,6 @@ pub async fn log_requests(
     let status = response.status().as_u16();
     let duration: std::time::Duration = start.elapsed();
 
-    if level > RequestsLoggingLevel::None {
-        info!("<<< {} ({}ms)", status, duration.as_millis());
-    }
-
     // Record HTTP request metrics for Prometheus
     record_http_request(&method, &metric_route, status, duration);
 
@@ -362,10 +406,10 @@ pub async fn log_requests(
 #[cfg(test)]
 mod tests {
     use super::{
-        format_loggable_body, format_safe_headers, is_authentication_path, safe_request_target,
+        format_loggable_body, format_safe_headers, is_authentication_path, with_request_trace,
         RequestsLoggingLevel, SAFE_REQUEST_HEADERS, SAFE_RESPONSE_HEADERS,
     };
-    use simple_server::axum::http::{HeaderMap, HeaderValue, Uri};
+    use simple_server::axum::http::{HeaderMap, HeaderValue};
 
     #[test]
     fn level_ordering() {
@@ -468,16 +512,102 @@ mod tests {
         assert!(!rendered.contains("sentinel-plain-secret"));
     }
 
-    #[test]
-    fn query_parameters_are_not_in_the_logged_request_target() {
-        let uri: Uri = "/v1/auth/oidc/callback?code=sentinel-code&state=sentinel-state"
-            .parse()
-            .unwrap();
+    #[tokio::test(flavor = "current_thread")]
+    async fn configured_modes_trace_safe_routes_and_preserve_response() {
+        use simple_server::axum::{
+            body::{to_bytes, Body},
+            http::{Request, Response},
+            middleware::{self, Next},
+            routing::get,
+            Router,
+        };
+        use std::sync::{Arc, Mutex};
+        use tower::ServiceExt;
+        use tracing::instrument::WithSubscriber;
 
-        let rendered = safe_request_target(&uri);
-
-        assert_eq!(rendered, "/v1/auth/oidc/callback");
-        assert!(!rendered.contains("sentinel-code"));
-        assert!(!rendered.contains("sentinel-state"));
+        #[derive(Clone)]
+        struct Buffer(Arc<Mutex<Vec<u8>>>);
+        impl std::io::Write for Buffer {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Buffer {
+            type Writer = Self;
+            fn make_writer(&'a self) -> Self {
+                self.clone()
+            }
+        }
+        for level in [
+            RequestsLoggingLevel::None,
+            RequestsLoggingLevel::Path,
+            RequestsLoggingLevel::Headers,
+            RequestsLoggingLevel::Body,
+        ] {
+            let bytes = Arc::new(Mutex::new(Vec::new()));
+            let subscriber = tracing_subscriber::fmt()
+                .with_ansi(false)
+                .without_time()
+                .with_max_level(tracing::Level::INFO)
+                .with_writer(Buffer(bytes.clone()))
+                .finish();
+            let enabled = level != RequestsLoggingLevel::None;
+            async move {
+                let app = Router::new()
+                    .route(
+                        "/probe/{id}",
+                        get(|| async {
+                            Response::builder()
+                                .status(201)
+                                .header("x-preserved", "yes")
+                                .body(Body::from("unchanged"))
+                                .unwrap()
+                        }),
+                    )
+                    .layer(middleware::from_fn(
+                        move |request: Request<Body>, next: Next| {
+                            let level = level.clone();
+                            async move {
+                                with_request_trace(&level, request, |request| next.run(request))
+                                    .await
+                            }
+                        },
+                    ));
+                let response = app
+                    .oneshot(
+                        Request::builder()
+                            .uri("/probe/private-id?token=secret")
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(response.status(), 201);
+                assert_eq!(response.headers()["x-preserved"], "yes");
+                assert_eq!(
+                    to_bytes(response.into_body(), 100).await.unwrap(),
+                    "unchanged"
+                );
+            }
+            .with_subscriber(subscriber)
+            .await;
+            let output = String::from_utf8(bytes.lock().unwrap().clone()).unwrap();
+            if enabled {
+                assert!(output.contains("http.response_headers"), "{output}");
+                assert!(output.contains("http.finished"), "{output}");
+                assert!(output.contains("/probe/{id}"), "{output}");
+                assert!(output.contains("status=201"), "{output}");
+            } else {
+                assert!(output.is_empty(), "{output}");
+            }
+            assert!(!output.contains("private-id"));
+            assert!(!output.contains("secret"));
+            assert!(!output.contains(">>>"));
+            assert!(!output.contains("<<<"));
+        }
     }
 }
