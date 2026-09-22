@@ -1,0 +1,13 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <!-- Complete Paravoid payloads are available only after unlock. Pezzottify
+             does not enable Room multi-instance invalidation; retain the service
+             declaration but do not advertise unsupported pre-unlock execution.
+             This overlay does not affect normal APKs. -->
+        <service
+            android:name="androidx.room.MultiInstanceInvalidationService"
+            android:directBootAware="false"
+            tools:replace="android:directBootAware" />
+    </application>
+</manifest>
