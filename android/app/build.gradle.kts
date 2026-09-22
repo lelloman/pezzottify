@@ -11,6 +11,24 @@ plugins {
     id("com.lelloman.paravoid.hilt")
 }
 
+// Opt-in complete-package experiment. Test signing material lives outside source control.
+if (providers.gradleProperty("paravoidComplete").orNull == "true") {
+    paravoid {
+        packaging.set("complete")
+        bootstrap.set("embedded")
+        payloadVersion.set(providers.gradleProperty("paravoidPayloadVersion").map(String::toLong).orElse(1L))
+        updates {
+            enabled.set(false)
+            trustPolicyFile.set(rootProject.file(providers.gradleProperty("paravoidTrustPolicy").get()))
+        }
+        signing {
+            keyId.set("release")
+            privateKeyFile.set(rootProject.file(providers.gradleProperty("paravoidReleaseKey").get()))
+        }
+        providers.gradleProperty("paravoidBaseline").orNull?.let { baselineDirectory.set(rootProject.file(it)) }
+    }
+}
+
 // Load local.properties for OIDC config
 val localProperties = Properties().apply {
     val localPropsFile = rootProject.file("local.properties")
