@@ -10,7 +10,7 @@ use simple_server::axum::{
         ws::{Message, WebSocket},
         State, WebSocketUpgrade,
     },
-    response::Response,
+    response::{IntoResponse, Response},
 };
 use tokio::sync::mpsc;
 use tracing::{debug, error, warn};
@@ -71,7 +71,12 @@ pub async fn ws_handler(
         session.user_id, device_id, device_type
     );
 
-    let token = runtime_tasks.tasks.token();
+    let token = match runtime_tasks.tasks.token() {
+        Ok(token) => token,
+        Err(_) => {
+            return simple_server::axum::http::StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
+    };
     ws.on_upgrade(move |socket| async move {
         let _token = token;
         handle_socket(

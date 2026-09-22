@@ -16,9 +16,16 @@ pub struct JobPauseState {
 
 impl JobPauseState {
     pub(crate) fn is_paused(&self, job_id: &str, resource_class: JobResourceClass) -> bool {
-        self.global_paused
-            || self.paused_resource_classes.contains(&resource_class)
-            || self.paused_jobs.contains(job_id)
+        simple_server::task_policies::PauseState {
+            global: self.global_paused,
+            pools: self
+                .paused_resource_classes
+                .iter()
+                .map(|class| class.as_str().to_string())
+                .collect(),
+            jobs: self.paused_jobs.clone(),
+        }
+        .is_paused(job_id, Some(resource_class.as_str()))
     }
 }
 

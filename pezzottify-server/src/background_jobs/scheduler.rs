@@ -2,20 +2,55 @@ use super::circuit_breaker::{CircuitBreakerRegistry, CIRCUIT_BREAKER_STATE_KEY};
 use super::context::JobContext;
 use super::controls::{JobPauseScope, PAUSE_STATE_KEY};
 use super::handle::{SchedulerCommand, SharedJobState};
-use super::job::{
-    BackgroundJob, HookEvent, JobError, JobResourceClass, JobSchedule, ShutdownBehavior,
-};
+use super::job::{BackgroundJob, HookEvent, JobError, JobSchedule, ShutdownBehavior};
 use super::JobPauseState;
 use crate::server::metrics;
 use crate::server_store::{JobRunStatus, ServerStore};
 use rand::Rng;
+use simple_server::task_policies::{CircuitOutcome, CircuitPolicy, ExecutionBudget};
+use simple_server::task_scheduling::{ExecutionCapacity, FirstRun, Schedule};
+use simple_server::tasks::{ShutdownBehavior as TaskShutdown, TaskExit, TaskId, TaskSet};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, RwLock, Semaphore};
-use tokio::task::JoinHandle;
+use std::{convert::Infallible, num::NonZeroUsize};
+use tokio::sync::{mpsc, RwLock};
+
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
+
+/// One owned execution per registered job; results remain owned until consumed.
+struct OwnedJob {
+    tasks: TaskSet<Infallible>,
+    id: TaskId,
+}
+impl OwnedJob {
+    fn spawn(name: String, future: impl std::future::Future<Output = ()> + Send + 'static) -> Self {
+        let mut tasks = TaskSet::new(NonZeroUsize::new(1).unwrap());
+        // Domain cancellation tokens implement both admin cancellation and
+        // shutdown policy. Never abort the wrapper while its blocking job runs.
+        let id = tasks
+            .spawn(name, TaskShutdown::FinishOnShutdown, |_| async move {
+                future.await;
+                Ok(())
+            })
+            .expect("new single-job owner has capacity and a running Tokio runtime");
+        Self { tasks, id }
+    }
+    fn is_finished(&self) -> bool {
+        self.tasks
+            .timing(self.id)
+            .is_some_and(|timing| timing.finished.is_some())
+    }
+    async fn finish(mut self) {
+        self.tasks.close();
+        if let Some(completion) = self.tasks.join_next().await {
+            if let TaskExit::Panicked(error) = completion.exit {
+                error!(job_id = %completion.task.name, %error, "Job wrapper panicked");
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct JobSchedulerConfig {
@@ -38,54 +73,18 @@ impl Default for JobSchedulerConfig {
     }
 }
 
-#[derive(Clone)]
-struct JobExecutionLimits {
-    global: Arc<Semaphore>,
-    general: Arc<Semaphore>,
-    lightweight: Arc<Semaphore>,
-    io_bound: Arc<Semaphore>,
-    cpu_bound: Arc<Semaphore>,
-}
-
-impl JobExecutionLimits {
-    fn new(config: &JobSchedulerConfig) -> Self {
-        assert!(
-            config.max_concurrent_jobs > 0,
-            "job concurrency must be non-zero"
-        );
-        assert!(
-            config.max_general_jobs > 0,
-            "general job concurrency must be non-zero"
-        );
-        assert!(
-            config.max_lightweight_jobs > 0,
-            "lightweight job concurrency must be non-zero"
-        );
-        assert!(
-            config.max_io_bound_jobs > 0,
-            "I/O job concurrency must be non-zero"
-        );
-        assert!(
-            config.max_cpu_bound_jobs > 0,
-            "CPU job concurrency must be non-zero"
-        );
-        Self {
-            global: Arc::new(Semaphore::new(config.max_concurrent_jobs)),
-            general: Arc::new(Semaphore::new(config.max_general_jobs)),
-            lightweight: Arc::new(Semaphore::new(config.max_lightweight_jobs)),
-            io_bound: Arc::new(Semaphore::new(config.max_io_bound_jobs)),
-            cpu_bound: Arc::new(Semaphore::new(config.max_cpu_bound_jobs)),
-        }
-    }
-
-    fn class(&self, resource_class: JobResourceClass) -> Arc<Semaphore> {
-        match resource_class {
-            JobResourceClass::General => self.general.clone(),
-            JobResourceClass::Lightweight => self.lightweight.clone(),
-            JobResourceClass::IoBound => self.io_bound.clone(),
-            JobResourceClass::CpuBound => self.cpu_bound.clone(),
-        }
-    }
+fn execution_capacity(config: &JobSchedulerConfig) -> ExecutionCapacity {
+    let nonzero = |value| NonZeroUsize::new(value).expect("job concurrency must be non-zero");
+    ExecutionCapacity::new(
+        nonzero(config.max_concurrent_jobs),
+        std::collections::BTreeMap::from([
+            ("general".into(), nonzero(config.max_general_jobs)),
+            ("lightweight".into(), nonzero(config.max_lightweight_jobs)),
+            ("io_bound".into(), nonzero(config.max_io_bound_jobs)),
+            ("cpu_bound".into(), nonzero(config.max_cpu_bound_jobs)),
+        ]),
+    )
+    .expect("valid job execution capacity")
 }
 
 fn classify_job_result(
@@ -128,13 +127,31 @@ fn classify_job_result(
     }
 }
 
+async fn next_completed_job(handles: &mut HashMap<String, OwnedJob>) -> String {
+    if handles.is_empty() {
+        std::future::pending::<()>().await;
+    }
+    let futures = handles.iter_mut().map(|(name, job)| {
+        Box::pin(async move {
+            let completion = job.tasks.join_next().await;
+            if let Some(completion) = completion {
+                if let TaskExit::Panicked(error) = completion.exit {
+                    error!(job_id = %name, %error, "Job wrapper panicked");
+                }
+            }
+            name.clone()
+        })
+    });
+    futures::future::select_all(futures).await.0
+}
+
 /// Manages background job scheduling and execution.
 pub struct JobScheduler {
     /// Shared state accessible by SchedulerHandle
     shared_state: Arc<RwLock<SharedJobState>>,
 
     /// Currently running jobs with their task handles (not shared, managed by scheduler loop)
-    running_handles: HashMap<String, JoinHandle<()>>,
+    running_handles: HashMap<String, OwnedJob>,
 
     /// Cancellation tokens for each running job.
     job_cancel_tokens: HashMap<String, CancellationToken>,
@@ -154,7 +171,7 @@ pub struct JobScheduler {
     /// Shared context provided to jobs during execution.
     job_context: JobContext,
 
-    execution_limits: JobExecutionLimits,
+    execution_limits: ExecutionCapacity,
     pause_state: Arc<RwLock<JobPauseState>>,
     circuit_breakers: Arc<RwLock<CircuitBreakerRegistry>>,
 }
@@ -185,19 +202,35 @@ impl JobScheduler {
             command_receiver,
             shutdown_token,
             job_context,
-            execution_limits: JobExecutionLimits::new(&JobSchedulerConfig::default()),
+            execution_limits: execution_capacity(&JobSchedulerConfig::default()),
             pause_state: shared.pause,
             circuit_breakers: shared.circuit_breakers,
         }
     }
 
     pub fn with_execution_config(mut self, config: JobSchedulerConfig) -> Self {
-        self.execution_limits = JobExecutionLimits::new(&config);
+        self.execution_limits = execution_capacity(&config);
         self
     }
 
     /// Register a job with the scheduler.
     pub async fn register_job(&mut self, job: Arc<dyn BackgroundJob>) {
+        let policy = job.execution_policy();
+        ExecutionBudget {
+            queue_timeout: Some(policy.queue_timeout),
+            max_runtime: policy.max_runtime,
+        }
+        .validate()
+        .expect("valid job execution budgets");
+        if let Some(circuit) = policy.circuit_breaker {
+            CircuitPolicy {
+                failure_threshold: std::num::NonZeroU32::new(circuit.failure_threshold)
+                    .expect("nonzero circuit threshold"),
+                cooldown: circuit.cooldown,
+            }
+            .validate()
+            .expect("valid job circuit policy");
+        }
         let job_id = job.id().to_string();
         info!("Registering job: {} - {}", job_id, job.description());
         let mut state = self.shared_state.write().await;
@@ -209,25 +242,41 @@ impl JobScheduler {
         self.shared_state.read().await.jobs.len()
     }
 
-    fn scheduled_interval(schedule: JobSchedule) -> Option<Duration> {
-        match schedule {
-            JobSchedule::Manual => None,
-            JobSchedule::Interval(interval) => Some(interval),
+    fn next_interval_run(
+        schedule: JobSchedule,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Option<chrono::DateTime<chrono::Utc>> {
+        let (every, jitter) = match schedule {
+            JobSchedule::Interval(interval) => (interval, Duration::ZERO),
             JobSchedule::JitteredInterval { interval, jitter } => {
-                if jitter.is_zero() {
-                    Some(interval)
-                } else {
-                    let jitter_secs = rand::rng().random_range(0..=jitter.as_secs());
-                    Some(interval + Duration::from_secs(jitter_secs))
-                }
+                // Preserve inclusive whole-second jitter, including subsecond
+                // jitter rounding from the existing application configuration.
+                let sampled = rand::rng().random_range(0..=jitter.as_secs());
+                (interval, Duration::from_secs(sampled))
             }
-            JobSchedule::Combined { interval, .. } => interval,
-            _ => None,
+            JobSchedule::Combined {
+                interval: Some(interval),
+                ..
+            } => (interval, Duration::ZERO),
+            _ => return None,
+        };
+        Schedule::FixedDelay {
+            every,
+            jitter,
+            first: FirstRun::AfterInterval,
         }
+        .after_completion(now.into(), 1.0)
+        .map(Into::into)
     }
 
     /// Main scheduler loop.
     pub async fn run(&mut self) {
+        // A lifecycle deadline may interrupt a drain. Resuming it must retain
+        // live execution history, not rerun stale-job recovery or startup hooks.
+        if self.shutdown_token.is_cancelled() {
+            self.shutdown().await;
+            return;
+        }
         let job_count = self.job_count().await;
         info!("Starting job scheduler with {} registered jobs", job_count);
 
@@ -248,7 +297,9 @@ impl JobScheduler {
         self.initialize_missing_schedule_states().await;
 
         // Fire OnStartup hooks
-        self.trigger_jobs_for_hook(HookEvent::OnStartup).await;
+        if !self.shutdown_token.is_cancelled() {
+            self.trigger_jobs_for_hook(HookEvent::OnStartup).await;
+        }
 
         loop {
             // Clean up completed job handles
@@ -261,6 +312,17 @@ impl JobScheduler {
             );
 
             tokio::select! {
+                biased;
+                _ = self.shutdown_token.cancelled() => {
+                    info!("Scheduler received shutdown signal");
+                    self.shutdown().await;
+                    break;
+                }
+                job_id = next_completed_job(&mut self.running_handles) => {
+                    self.running_handles.remove(&job_id);
+                    self.job_cancel_tokens.remove(&job_id);
+                    self.update_schedule_after_run(&job_id).await;
+                }
                 _ = tokio::time::sleep(sleep_duration) => {
                     self.run_due_jobs().await;
                 }
@@ -270,11 +332,6 @@ impl JobScheduler {
                 }
                 Some(cmd) = self.command_receiver.recv() => {
                     self.handle_command(cmd).await;
-                }
-                _ = self.shutdown_token.cancelled() => {
-                    info!("Scheduler received shutdown signal");
-                    self.shutdown().await;
-                    break;
                 }
             }
         }
@@ -296,14 +353,10 @@ impl JobScheduler {
                 continue;
             }
 
-            let Some(interval) = Self::scheduled_interval(job.schedule()) else {
+            let Some(next_run) = Self::next_interval_run(job.schedule(), now) else {
                 continue;
             };
-            let next_run_at = if job.run_on_startup() {
-                now
-            } else {
-                now + chrono::Duration::from_std(interval).unwrap_or_default()
-            };
+            let next_run_at = if job.run_on_startup() { now } else { next_run };
             let schedule_state = crate::server_store::JobScheduleState {
                 job_id: job_id.clone(),
                 next_run_at,
@@ -326,6 +379,7 @@ impl JobScheduler {
                 params,
                 response,
             } => {
+                self.cleanup_completed_jobs().await;
                 let result = self.trigger_job(&job_id, params).await;
                 let _ = response.send(result);
             }
@@ -416,7 +470,7 @@ impl JobScheduler {
             return Err(JobError::NotFound);
         }
 
-        if state.running_jobs.contains(job_id) {
+        if state.running_jobs.contains(job_id) || self.running_handles.contains_key(job_id) {
             return Err(JobError::AlreadyRunning);
         }
         let policy = state.jobs[job_id].execution_policy();
@@ -591,7 +645,8 @@ impl JobScheduler {
             let now_millis = now.timestamp_millis();
             let state = self.shared_state.read().await;
             for (job_id, job) in &state.jobs {
-                if state.running_jobs.contains(job_id) {
+                if state.running_jobs.contains(job_id) || self.running_handles.contains_key(job_id)
+                {
                     continue;
                 }
                 if pause_state.is_paused(job_id, job.execution_policy().resource_class) {
@@ -626,7 +681,8 @@ impl JobScheduler {
             let now_millis = chrono::Utc::now().timestamp_millis();
             let state = self.shared_state.read().await;
             for (job_id, job) in &state.jobs {
-                if state.running_jobs.contains(job_id) {
+                if state.running_jobs.contains(job_id) || self.running_handles.contains_key(job_id)
+                {
                     debug!("Skipping hook trigger for already running job: {}", job_id);
                     continue;
                 }
@@ -700,10 +756,7 @@ impl JobScheduler {
 
         // Initialize schedule state for interval-based jobs to prevent tight loops
         // before the job completes. This sets next_run_at to now + interval.
-        let interval = Self::scheduled_interval(job.schedule());
-        if let Some(interval) = interval {
-            let next_run =
-                chrono::Utc::now() + chrono::Duration::from_std(interval).unwrap_or_default();
+        if let Some(next_run) = Self::next_interval_run(job.schedule(), chrono::Utc::now()) {
             let schedule_state = crate::server_store::JobScheduleState {
                 job_id: job_id.to_string(),
                 next_run_at: next_run,
@@ -734,30 +787,31 @@ impl JobScheduler {
         let job_id_owned = job_id.to_string();
         let shared_state = Arc::clone(&self.shared_state);
         let circuit_breakers = Arc::clone(&self.circuit_breakers);
+        let circuit_permit = if let Some(circuit_policy) = policy.circuit_breaker {
+            Some(
+                self.circuit_breakers
+                    .write()
+                    .await
+                    .begin(job_id, circuit_policy),
+            )
+        } else {
+            None
+        };
 
         // Queue asynchronously for global and resource-class capacity before
         // entering Tokio's blocking pool.
-        let handle = tokio::spawn(async move {
+        let handle = OwnedJob::spawn(job_id.to_string(), async move {
             let start_time = Instant::now();
-            let class_semaphore = execution_limits.class(policy.resource_class);
-            let acquire_capacity = async {
-                let class_permit = class_semaphore
-                    .acquire_owned()
-                    .await
-                    .map_err(|_| JobError::Cancelled)?;
-                let global_permit = execution_limits
-                    .global
-                    .clone()
-                    .acquire_owned()
-                    .await
-                    .map_err(|_| JobError::Cancelled)?;
-                Ok::<_, JobError>((class_permit, global_permit))
+            let budget = ExecutionBudget {
+                queue_timeout: Some(policy.queue_timeout),
+                max_runtime: policy.max_runtime,
             };
+            let acquire_capacity = execution_limits.acquire(Some(resource_class));
             let permits = tokio::select! {
                 _ = run_cancel_token.cancelled() => Err(JobError::Cancelled),
-                result = tokio::time::timeout(policy.queue_timeout, acquire_capacity) => {
+                result = tokio::time::timeout_at(budget.queue_deadline(start_time).expect("validated queue budget").into(), acquire_capacity) => {
                     match result {
-                        Ok(result) => result,
+                        Ok(result) => result.map_err(|_| JobError::Cancelled),
                         Err(_) => Err(JobError::Timeout),
                     }
                 }
@@ -787,15 +841,17 @@ impl JobScheduler {
                     let execution_started = Instant::now();
                     let mut blocking_task =
                         tokio::task::spawn_blocking(move || job.execute_with_params(&ctx, params));
-                    let completion = if let Some(max_runtime) = policy.max_runtime {
+                    let completion = if let Some(runtime_deadline) =
+                        budget.runtime_deadline(execution_started)
+                    {
                         tokio::select! {
                             result = &mut blocking_task => {
                                 classify_job_result(&job_id_owned, execution_started.elapsed(), result)
                             }
-                            _ = tokio::time::sleep(max_runtime) => {
+                            _ = tokio::time::sleep_until(runtime_deadline.into()) => {
                                 warn!(
                                     "Job {} exceeded its {:?} runtime budget; requesting cancellation",
-                                    job_id_owned, max_runtime
+                                    job_id_owned, policy.max_runtime
                                 );
                                 run_cancel_token.cancel();
                                 let _ = blocking_task.await;
@@ -824,22 +880,17 @@ impl JobScheduler {
                 error!("Failed to record job finish for {}: {}", job_id_owned, e);
             }
 
-            if let Some(breaker_policy) = policy.circuit_breaker {
+            if let Some(permit) = circuit_permit {
                 let mut registry = circuit_breakers.write().await;
-                let circuit_opened = match status_label {
-                    "success" => {
-                        registry.record_success(&job_id_owned);
-                        metrics::set_background_job_circuit_open(&job_id_owned, false);
-                        false
-                    }
-                    "failed" | "panic" | "timeout" => registry.record_failure(
-                        &job_id_owned,
-                        breaker_policy.failure_threshold,
-                        breaker_policy.cooldown.as_millis().min(i64::MAX as u128) as i64,
-                        chrono::Utc::now().timestamp_millis(),
-                    ),
-                    _ => false,
+                let outcome = match status_label {
+                    "success" => CircuitOutcome::Success,
+                    "failed" | "panic" | "timeout" => CircuitOutcome::Failure,
+                    _ => CircuitOutcome::Ignored,
                 };
+                let circuit_opened = registry.finish(&job_id_owned, permit, outcome);
+                if outcome == CircuitOutcome::Success {
+                    metrics::set_background_job_circuit_open(&job_id_owned, false);
+                }
                 if circuit_opened {
                     warn!("Job {} circuit breaker opened", job_id_owned);
                     metrics::record_background_job_circuit_trip(&job_id_owned);
@@ -883,15 +934,12 @@ impl JobScheduler {
             }
         };
 
-        let interval = Self::scheduled_interval(job.schedule());
-
-        if let Some(interval) = interval {
-            let next_run =
-                chrono::Utc::now() + chrono::Duration::from_std(interval).unwrap_or_default();
+        let completed_at = chrono::Utc::now();
+        if let Some(next_run) = Self::next_interval_run(job.schedule(), completed_at) {
             let state = crate::server_store::JobScheduleState {
                 job_id: job_id.to_string(),
                 next_run_at: next_run,
-                last_run_at: Some(chrono::Utc::now()),
+                last_run_at: Some(completed_at),
             };
 
             if let Err(e) = self.server_store.update_schedule_state(&state) {
@@ -912,7 +960,7 @@ impl JobScheduler {
 
         for job_id in completed {
             if let Some(handle) = self.running_handles.remove(&job_id) {
-                let _ = handle.await;
+                handle.finish().await;
             }
             self.job_cancel_tokens.remove(&job_id);
             self.update_schedule_after_run(&job_id).await;
@@ -938,27 +986,18 @@ impl JobScheduler {
             }
         }
 
-        // Wait for all jobs to complete
-        let mut wait_jobs = Vec::new();
-        for (job_id, handle) in self.running_handles.drain() {
-            let behavior = {
-                let state = self.shared_state.read().await;
-                state
-                    .jobs
-                    .get(&job_id)
-                    .map(|j| j.shutdown_behavior())
-                    .unwrap_or(ShutdownBehavior::Cancellable)
-            };
-            wait_jobs.push((job_id, handle, behavior));
-        }
-
-        for (job_id, handle, behavior) in wait_jobs {
-            if behavior == ShutdownBehavior::WaitForCompletion {
-                info!("Waiting for job {} to complete...", job_id);
+        // Keep each owner in self across await: cancelling the outer lifecycle
+        // drain must not abandon still-running blocking jobs or their outcomes.
+        while let Some(job_id) = self.running_handles.keys().next().cloned() {
+            if let Some(job) = self.running_handles.get_mut(&job_id) {
+                job.tasks.close();
+                if let Some(completion) = job.tasks.join_next().await {
+                    if let TaskExit::Panicked(error) = completion.exit {
+                        error!(%job_id, %error, "Job wrapper panicked during shutdown");
+                    }
+                }
             }
-            if let Err(error) = handle.await {
-                error!(%job_id, %error, "Job task failed during shutdown");
-            }
+            self.running_handles.remove(&job_id);
         }
 
         self.job_cancel_tokens.clear();
@@ -2495,5 +2534,44 @@ mod tests {
 
         shutdown_token.cancel();
         let _ = tokio::time::timeout(Duration::from_secs(3), sched_handle).await;
+    }
+    #[tokio::test]
+    async fn interrupted_shutdown_retains_owner_until_resumed_drain() {
+        let (mut scheduler, _, _dir, _hooks) = create_test_scheduler();
+        let (release, receive) = tokio::sync::oneshot::channel();
+        let run_id = scheduler
+            .server_store
+            .record_job_start("held", "manual")
+            .unwrap();
+        let store = scheduler.server_store.clone();
+        scheduler.running_handles.insert(
+            "held".into(),
+            OwnedJob::spawn("held".into(), async move {
+                receive.await.unwrap();
+                store
+                    .record_job_finish(run_id, JobRunStatus::Completed, None)
+                    .unwrap();
+            }),
+        );
+        scheduler.shutdown_token.cancel();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), scheduler.run())
+                .await
+                .is_err()
+        );
+        assert_eq!(scheduler.running_handles.len(), 1);
+        assert_eq!(
+            scheduler.server_store.get_job_history("held", 1).unwrap()[0].status,
+            JobRunStatus::Running
+        );
+        release.send(()).unwrap();
+        tokio::time::timeout(Duration::from_secs(1), scheduler.run())
+            .await
+            .unwrap();
+        assert_eq!(
+            scheduler.server_store.get_job_history("held", 1).unwrap()[0].status,
+            JobRunStatus::Completed
+        );
+        assert!(scheduler.running_handles.is_empty());
     }
 }

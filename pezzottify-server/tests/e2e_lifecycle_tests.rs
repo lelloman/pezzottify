@@ -196,3 +196,85 @@ async fn occupied_listener_fails_without_panicking() {
         assert!(!logs.contains("Ready to serve"), "{logs}");
     }
 }
+
+#[tokio::test]
+async fn production_restart_restores_persisted_pause_before_manual_admission() {
+    let (port, metrics_port) = ports();
+    let mut server = Process::start(port, metrics_port);
+    server.ready().await;
+    let client = TestClient::authenticated_admin(format!("http://127.0.0.1:{port}")).await;
+    assert_eq!(
+        client
+            .admin_set_global_job_pause(true, false)
+            .await
+            .status(),
+        200
+    );
+    let jobs = client
+        .admin_list_jobs()
+        .await
+        .json::<serde_json::Value>()
+        .await
+        .unwrap();
+    // Use deterministic local maintenance, never a randomly selected network job.
+    let job_id = "device_pruning";
+    assert!(jobs["jobs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|job| job["id"] == job_id));
+    assert_eq!(
+        unsafe { libc::kill(server.child.id() as i32, libc::SIGTERM) },
+        0
+    );
+    server.exited(true).await;
+    // Start the actual binary against the same on-disk databases and config.
+    let output = fs::File::create(server.dir.path().join("server.log")).unwrap();
+    server.child = Command::new(env!("CARGO_BIN_EXE_pezzottify-server"))
+        .arg("--db-dir")
+        .arg(server.dir.path())
+        .arg("--media-path")
+        .arg(server.dir.path().join("media"))
+        .arg("--port")
+        .arg(port.to_string())
+        .arg("--metrics-port")
+        .arg(metrics_port.to_string())
+        .arg("--config")
+        .arg(server.dir.path().join("config.toml"))
+        .env("LOG_LEVEL", "info")
+        .stdout(output.try_clone().unwrap())
+        .stderr(output)
+        .spawn()
+        .unwrap();
+    server.ready().await;
+    let client = TestClient::authenticated_admin(format!("http://127.0.0.1:{port}")).await;
+    assert_eq!(
+        client
+            .admin_get_job_controls()
+            .await
+            .json::<serde_json::Value>()
+            .await
+            .unwrap()["global_paused"],
+        true
+    );
+    let response = client.admin_trigger_job(job_id).await;
+    assert_eq!(response.status(), 409);
+    assert_eq!(
+        response.json::<serde_json::Value>().await.unwrap()["error"],
+        "Job execution is paused"
+    );
+    assert_eq!(
+        client
+            .admin_set_global_job_pause(false, false)
+            .await
+            .status(),
+        200
+    );
+    assert_eq!(client.admin_trigger_job(job_id).await.status(), 202);
+    assert_eq!(
+        unsafe { libc::kill(server.child.id() as i32, libc::SIGTERM) },
+        0
+    );
+    server.exited(true).await;
+    assert!(server.logs().contains("Scheduler shutdown complete"));
+}

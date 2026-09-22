@@ -2,19 +2,48 @@
 use std::future::Future;
 
 use simple_server::lifecycle::{Lifecycle, Shutdown};
-use tokio_util::task::TaskTracker;
+use simple_server::tasks::{AdmissionError, WorkGuard, WorkTracker};
+
+/// Shared ownership for tasks whose results are handled at their call sites.
+#[derive(Clone, Default)]
+pub struct RuntimeWork(WorkTracker);
+
+impl RuntimeWork {
+    pub fn token(&self) -> Result<WorkGuard, AdmissionError> {
+        self.0.try_acquire("HTTP upgrade")
+    }
+
+    pub fn spawn(&self, future: impl Future<Output = ()> + Send + 'static) {
+        match self.0.try_acquire("application task") {
+            Ok(guard) => {
+                tokio::spawn(async move {
+                    let _guard = guard;
+                    future.await;
+                });
+            }
+            Err(error) => tracing::warn!(%error, "Application task rejected during drain"),
+        }
+    }
+
+    fn close(&self) {
+        self.0.close();
+    }
+    async fn wait(&self) {
+        self.0.wait().await;
+    }
+}
 
 #[derive(Clone, Default)]
 pub struct RuntimeTasks {
     pub shutdown: Shutdown,
-    pub tasks: TaskTracker,
+    pub tasks: RuntimeWork,
 }
 
 impl RuntimeTasks {
     pub fn new(shutdown: Shutdown) -> Self {
         Self {
             shutdown,
-            tasks: TaskTracker::new(),
+            tasks: RuntimeWork::default(),
         }
     }
 
@@ -54,7 +83,7 @@ mod tests {
         });
         let tasks = RuntimeTasks::new(lifecycle.shutdown());
         // As in on_upgrade, reserve ownership before the callback starts.
-        let token = tasks.tasks.token();
+        let token = tasks.tasks.token().unwrap();
         let shutdown = lifecycle.shutdown();
         lifecycle
             .service("http", async move {
@@ -82,7 +111,7 @@ mod tests {
             grace_period: Duration::from_millis(20),
         });
         let tasks = RuntimeTasks::new(lifecycle.shutdown());
-        let _token = tasks.tasks.token();
+        let _token = tasks.tasks.token().unwrap();
         let shutdown = lifecycle.shutdown();
         lifecycle
             .service("http", async move {
@@ -98,5 +127,29 @@ mod tests {
             .await
             .unwrap_err();
         assert!(format!("{error:?}").contains("Cleanup"));
+    }
+    #[tokio::test]
+    async fn closed_runtime_work_rejects_late_upgrades_and_spawns() {
+        let tasks = RuntimeTasks::default();
+        tasks.tasks.close();
+        assert!(matches!(tasks.tasks.token(), Err(AdmissionError::Closed)));
+        let (sent, received) = tokio::sync::oneshot::channel();
+        tasks.tasks.spawn(async move {
+            let _ = sent.send(());
+        });
+        assert!(received.await.is_err(), "rejected task must never run");
+        tasks.drain().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn panicking_request_task_releases_its_shared_work_guard() {
+        let tasks = RuntimeTasks::default();
+        tasks.tasks.spawn(async {
+            panic!("request task panic");
+        });
+        tokio::time::timeout(Duration::from_secs(1), tasks.drain())
+            .await
+            .unwrap()
+            .unwrap();
     }
 }

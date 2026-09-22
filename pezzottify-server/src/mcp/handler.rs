@@ -10,7 +10,7 @@ use simple_server::axum::{
         ws::{Message, WebSocket},
         State, WebSocketUpgrade,
     },
-    response::Response,
+    response::{IntoResponse, Response},
 };
 use tracing::{debug, error, info};
 
@@ -46,7 +46,12 @@ pub async fn mcp_handler(
         session.permissions.len()
     );
 
-    let token = server_state.runtime_tasks.tasks.token();
+    let token = match server_state.runtime_tasks.tasks.token() {
+        Ok(token) => token,
+        Err(_) => {
+            return simple_server::axum::http::StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
+    };
     ws.on_upgrade(move |socket| async move {
         let _token = token;
         handle_mcp_socket(socket, session, server_state, mcp_state).await;
