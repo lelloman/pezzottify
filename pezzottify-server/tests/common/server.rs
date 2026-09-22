@@ -26,6 +26,8 @@ pub struct TestServerBuilder {
     available_catalog: bool,
     strict_authorization_header: bool,
     scheduler_enabled: bool,
+    scheduler_store: Option<Arc<dyn ServerStore>>,
+    scheduler_config: Option<pezzottify_server::background_jobs::JobSchedulerConfig>,
     scheduler_jobs: Vec<Arc<dyn pezzottify_server::background_jobs::BackgroundJob>>,
 }
 
@@ -75,6 +77,17 @@ impl TestServerBuilder {
         self
     }
 
+    pub fn with_scheduler_store(mut self, store: Arc<dyn ServerStore>) -> Self {
+        self.scheduler_store = Some(store);
+        self
+    }
+    pub fn with_scheduler_config(
+        mut self,
+        config: pezzottify_server::background_jobs::JobSchedulerConfig,
+    ) -> Self {
+        self.scheduler_config = Some(config);
+        self
+    }
     pub async fn spawn(self) -> TestServer {
         TestServer::spawn_with(self).await
     }
@@ -165,6 +178,7 @@ pub struct TestServer {
     _temp_db_dir: TempDir,
     _shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
     _scheduler_shutdown: Option<tokio_util::sync::CancellationToken>,
+    scheduler_join: Option<tokio::task::JoinHandle<()>>,
     _scheduler_hook_sender:
         Option<tokio::sync::mpsc::Sender<pezzottify_server::background_jobs::HookEvent>>,
 }
@@ -294,9 +308,10 @@ impl TestServer {
             SqliteServerStore::new(&server_db_path, &db_registry)
                 .expect("Failed to create server store"),
         );
+        let server_store = options.scheduler_store.unwrap_or(server_store);
         let server_store_for_test = server_store.clone();
 
-        let (scheduler_handle, scheduler_shutdown, scheduler_hook_sender) =
+        let (scheduler_handle, scheduler_shutdown, scheduler_hook_sender, scheduler_join) =
             if options.scheduler_enabled {
                 let scheduler_shutdown = tokio_util::sync::CancellationToken::new();
                 let (hook_sender, hook_receiver) = tokio::sync::mpsc::channel(16);
@@ -314,13 +329,21 @@ impl TestServer {
                     scheduler_shutdown.clone(),
                     context,
                 );
+                if let Some(config) = options.scheduler_config {
+                    scheduler = scheduler.with_execution_config(config);
+                }
                 for job in options.scheduler_jobs {
                     scheduler.register_job(job).await;
                 }
-                tokio::spawn(async move { scheduler.run().await });
-                (Some(handle), Some(scheduler_shutdown), Some(hook_sender))
+                let join = tokio::spawn(async move { scheduler.run().await });
+                (
+                    Some(handle),
+                    Some(scheduler_shutdown),
+                    Some(hook_sender),
+                    Some(join),
+                )
             } else {
-                (None, None, None)
+                (None, None, None, None)
             };
 
         let app = make_app(
@@ -361,12 +384,57 @@ impl TestServer {
             _temp_db_dir: temp_db_dir,
             _shutdown_tx: Some(shutdown_tx),
             _scheduler_shutdown: scheduler_shutdown,
+            scheduler_join,
             _scheduler_hook_sender: scheduler_hook_sender,
         };
 
         server.wait_for_ready().await;
 
         server
+    }
+
+    #[allow(dead_code)]
+    pub fn server_db_path(&self) -> std::path::PathBuf {
+        self._temp_db_dir.path().join("server.db")
+    }
+    #[allow(dead_code)]
+    pub fn reopen_server_store(&self) -> Arc<dyn ServerStore> {
+        Arc::new(
+            SqliteServerStore::new(
+                self.server_db_path(),
+                &pezzottify_server::backup::DbRegistry::new(),
+            )
+            .unwrap(),
+        )
+    }
+    #[allow(dead_code)]
+    pub fn request_scheduler_shutdown(&self) {
+        self._scheduler_shutdown.as_ref().unwrap().cancel();
+    }
+    #[allow(dead_code)]
+    pub fn scheduler_finished(&self) -> bool {
+        self.scheduler_join
+            .as_ref()
+            .is_none_or(|join| join.is_finished())
+    }
+    #[allow(dead_code)]
+    pub async fn drain_scheduler(&mut self) {
+        self.request_scheduler_shutdown();
+        if let Some(mut join) = self.scheduler_join.take() {
+            tokio::time::timeout(Duration::from_secs(15), &mut join)
+                .await
+                .expect("scheduler must finish all owned jobs")
+                .unwrap();
+        }
+    }
+    #[allow(dead_code)]
+    pub async fn emit_hook(&self, event: pezzottify_server::background_jobs::HookEvent) {
+        self._scheduler_hook_sender
+            .as_ref()
+            .unwrap()
+            .send(event)
+            .await
+            .unwrap();
     }
 
     /// Waits for the server to become ready by polling the /v1/statics endpoint
