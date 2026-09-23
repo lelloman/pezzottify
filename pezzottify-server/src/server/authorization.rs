@@ -1,5 +1,6 @@
 //! Named authorization policies used at HTTP route boundaries.
 
+use simple_server::auth::Access;
 use simple_server::axum::{
     body::Body,
     extract::Request,
@@ -28,7 +29,11 @@ async fn require_permission(
         "checking route permission"
     );
 
-    if !session.has_permission(permission) {
+    // The extractor has already verified this session and loaded its permission
+    // snapshot. Route policy operates on that same snapshot for this request.
+    let access = Access::new(|session: &Session| Ok::<_, ()>(session.user_id))
+        .with_check(move |_, session| session.has_permission(permission).then_some(()).ok_or(()));
+    if access.evaluate(&session).is_err() {
         debug!(
             policy,
             user_id = session.user_id,
