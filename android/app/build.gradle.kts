@@ -18,7 +18,9 @@ if (providers.gradleProperty("paravoidComplete").orNull == "true") {
         bootstrap.set("embedded")
         payloadVersion.set(providers.gradleProperty("paravoidPayloadVersion").map(String::toLong).orElse(1L))
         updates {
-            enabled.set(false)
+            enabled.set(providers.gradleProperty("paravoidAcceptance").orNull == "true")
+            baseUrl.set("http://127.0.0.1:19165/")
+            debugHttpAllowed.set(providers.gradleProperty("paravoidAcceptance").orNull == "true")
             trustPolicyFile.set(rootProject.file(providers.gradleProperty("paravoidTrustPolicy").get()))
         }
         signing {
@@ -105,6 +107,7 @@ android {
         targetSdk = 36
         versionCode = commitCount
         versionName = appVersion
+        buildConfigField("String", "PARAVOID_ACCEPTANCE_GENERATION", "\"${providers.gradleProperty("paravoidAcceptanceGeneration").orElse("none").get()}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

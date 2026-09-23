@@ -24,6 +24,10 @@ class PezzottifyApplication : ParavoidAndroidApplication() {
         setupUncaughtExceptionHandler()
         initializeApp()
         equalizerOutputs.start()
+        check(BuildConfig.PARAVOID_ACCEPTANCE_GENERATION != "broken") {
+            "Disposable Paravoid acceptance startup fault"
+        }
+        android.util.Log.i("ParavoidAcceptance", BuildConfig.PARAVOID_ACCEPTANCE_GENERATION)
     }
 
     private fun setupUncaughtExceptionHandler() {
