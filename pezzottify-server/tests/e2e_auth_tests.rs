@@ -193,6 +193,25 @@ async fn malformed_authorization_does_not_fall_back_to_valid_cookie() {
 }
 
 #[tokio::test]
+async fn duplicate_authorization_does_not_fall_back_to_valid_cookie() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::new(server.base_url.clone());
+    let login = client.login(TEST_USER, TEST_PASS).await;
+    let token = session_token_from(&login);
+
+    let response = client
+        .client
+        .get(format!("{}/v1/auth/session", server.base_url))
+        .header(reqwest::header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(reqwest::header::AUTHORIZATION, format!("Bearer {token}"))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
 async fn test_login_with_invalid_password() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());

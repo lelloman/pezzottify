@@ -6,6 +6,7 @@ use crate::user::device::{DeviceRegistration, DeviceType};
 use crate::user::{Permission, UserManager};
 
 use axum_extra::extract::cookie::{Cookie, CookieJar};
+use simple_server::auth::AsyncAccess;
 use simple_server::axum::{
     extract::FromRequestParts,
     http::{header::AUTHORIZATION, request::Parts, HeaderMap, StatusCode},
@@ -442,23 +443,46 @@ pub(crate) async fn validate_session_token(
     token: &str,
     ctx: &ServerState,
 ) -> Result<Option<Session>, DbRunError> {
-    // Try OIDC JWT validation first (if OIDC is configured)
-    if let Some(session) = try_oidc_session(token, ctx).await? {
-        debug!("Session validated via OIDC for user_id={}", session.user_id);
-        return Ok(Some(session));
+    struct SessionLookup<'a> {
+        token: &'a str,
+        state: &'a ServerState,
+    }
+    enum SessionValidationError {
+        Denied,
+        Database(DbRunError),
     }
 
-    // Fall back to legacy database token lookup
-    if let Some(session) = try_legacy_session(token, ctx).await? {
-        debug!(
-            "Session validated via legacy auth for user_id={}",
-            session.user_id
-        );
-        return Ok(Some(session));
-    }
+    let access = AsyncAccess::new(|lookup: &SessionLookup<'_>| {
+        Box::pin(async move {
+            // The application owns both verifiers and their established order.
+            if let Some(session) = try_oidc_session(lookup.token, lookup.state)
+                .await
+                .map_err(SessionValidationError::Database)?
+            {
+                debug!("Session validated via OIDC for user_id={}", session.user_id);
+                return Ok(session);
+            }
 
-    debug!("Token validation failed for both OIDC and legacy auth");
-    Ok(None)
+            if let Some(session) = try_legacy_session(lookup.token, lookup.state)
+                .await
+                .map_err(SessionValidationError::Database)?
+            {
+                debug!(
+                    "Session validated via legacy auth for user_id={}",
+                    session.user_id
+                );
+                return Ok(session);
+            }
+
+            debug!("Token validation failed for both OIDC and legacy auth");
+            Err(SessionValidationError::Denied)
+        })
+    });
+    match access.evaluate(&SessionLookup { token, state: ctx }).await {
+        Ok(session) => Ok(Some(session)),
+        Err(SessionValidationError::Denied) => Ok(None),
+        Err(SessionValidationError::Database(error)) => Err(error),
+    }
 }
 
 impl FromRequestParts<ServerState> for Session {
