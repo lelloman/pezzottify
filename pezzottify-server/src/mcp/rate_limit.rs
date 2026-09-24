@@ -6,6 +6,8 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use simple_server::rate_limit::{WindowBoundary, WindowCounters};
+
 use super::registry::ToolCategory;
 
 /// Rate limit configuration
@@ -29,28 +31,13 @@ impl Default for RateLimitConfig {
 /// Tracks rate limit state for a single user
 #[derive(Debug)]
 struct UserRateLimitState {
-    read_count: u32,
-    write_count: u32,
-    sql_count: u32,
-    window_start: Instant,
+    window: WindowCounters<3>,
 }
 
 impl UserRateLimitState {
-    fn new() -> Self {
+    fn new(anchor: Duration) -> Self {
         Self {
-            read_count: 0,
-            write_count: 0,
-            sql_count: 0,
-            window_start: Instant::now(),
-        }
-    }
-
-    fn reset_if_expired(&mut self) {
-        if self.window_start.elapsed() > Duration::from_secs(60) {
-            self.read_count = 0;
-            self.write_count = 0;
-            self.sql_count = 0;
-            self.window_start = Instant::now();
+            window: WindowCounters::new(Duration::from_secs(60), WindowBoundary::After, anchor),
         }
     }
 }
@@ -58,6 +45,7 @@ impl UserRateLimitState {
 /// Rate limiter for MCP requests
 pub struct McpRateLimiter {
     config: RateLimitConfig,
+    origin: Instant,
     states: Mutex<HashMap<usize, UserRateLimitState>>,
 }
 
@@ -65,6 +53,7 @@ impl McpRateLimiter {
     pub fn new(config: RateLimitConfig) -> Self {
         Self {
             config,
+            origin: Instant::now(),
             states: Mutex::new(HashMap::new()),
         }
     }
@@ -73,44 +62,45 @@ impl McpRateLimiter {
     /// Returns Ok(()) if allowed, Err(retry_after_secs) if rate limited
     pub fn check_and_record(&self, user_id: usize, category: ToolCategory) -> Result<(), u32> {
         let mut states = self.states.lock().unwrap();
+        let now = self.origin.elapsed();
         let state = states
             .entry(user_id)
-            .or_insert_with(UserRateLimitState::new);
+            .or_insert_with(|| UserRateLimitState::new(now));
 
-        // Reset window if expired
-        state.reset_if_expired();
-
-        // Check and increment based on category
-        let (current, limit) = match category {
-            ToolCategory::Read => (&mut state.read_count, self.config.read_per_minute),
-            ToolCategory::Write => (&mut state.write_count, self.config.write_per_minute),
-            ToolCategory::Sql => (&mut state.sql_count, self.config.sql_per_minute),
+        let (index, limit) = match category {
+            ToolCategory::Read => (0, self.config.read_per_minute),
+            ToolCategory::Write => (1, self.config.write_per_minute),
+            ToolCategory::Sql => (2, self.config.sql_per_minute),
         };
-
-        if *current >= limit {
-            // Calculate retry-after based on window expiry
-            let elapsed = state.window_start.elapsed().as_secs();
-            let retry_after = 60u64.saturating_sub(elapsed) as u32;
-            return Err(retry_after.max(1));
-        }
-
-        *current += 1;
-        Ok(())
+        state
+            .window
+            .admit_at(now, index, u64::from(limit), 1)
+            .map_err(|denial| {
+                // Legacy code subtracts the floored elapsed whole seconds,
+                // which rounds the remaining duration up before applying 1s.
+                let retry = denial.retry_after;
+                retry
+                    .as_secs()
+                    .saturating_add(u64::from(retry.subsec_nanos() != 0))
+                    .max(1) as u32
+            })
     }
 
     /// Get current usage for a user (for debugging/metrics)
     pub fn get_usage(&self, user_id: usize) -> Option<(u32, u32, u32)> {
         let states = self.states.lock().unwrap();
-        states
-            .get(&user_id)
-            .map(|s| (s.read_count, s.write_count, s.sql_count))
+        states.get(&user_id).map(|s| {
+            let counts = s.window.counts();
+            (counts[0] as u32, counts[1] as u32, counts[2] as u32)
+        })
     }
 
     /// Clean up old entries (call periodically)
     pub fn cleanup_stale_entries(&self) {
         let mut states = self.states.lock().unwrap();
         let threshold = Duration::from_secs(300); // 5 minutes
-        states.retain(|_, state| state.window_start.elapsed() < threshold);
+        let now = self.origin.elapsed();
+        states.retain(|_, state| now.saturating_sub(state.window.anchor()) < threshold);
     }
 }
 
@@ -213,5 +203,58 @@ mod tests {
 
         let usage = limiter.get_usage(1).unwrap();
         assert_eq!(usage, (2, 1, 0));
+    }
+
+    #[test]
+    fn zero_limit_rejects_without_recording_and_keeps_shared_anchor() {
+        let limiter = McpRateLimiter::new(RateLimitConfig {
+            read_per_minute: 0,
+            write_per_minute: 1,
+            sql_per_minute: 1,
+        });
+        assert_eq!(limiter.check_and_record(7, ToolCategory::Read), Err(60));
+        assert_eq!(limiter.get_usage(7), Some((0, 0, 0)));
+        assert_eq!(limiter.check_and_record(7, ToolCategory::Write), Ok(()));
+        assert_eq!(limiter.get_usage(7), Some((0, 1, 0)));
+    }
+
+    #[test]
+    fn retry_rounds_up_remaining_window_like_legacy_elapsed_seconds() {
+        let mut limiter = McpRateLimiter::new(RateLimitConfig {
+            read_per_minute: 0,
+            write_per_minute: 1,
+            sql_per_minute: 1,
+        });
+        assert_eq!(limiter.check_and_record(3, ToolCategory::Read), Err(60));
+        limiter.origin = Instant::now() - Duration::from_millis(500);
+        assert_eq!(limiter.check_and_record(3, ToolCategory::Read), Err(60));
+        limiter.origin = Instant::now() - Duration::from_millis(1500);
+        assert_eq!(limiter.check_and_record(3, ToolCategory::Read), Err(59));
+    }
+
+    #[test]
+    fn expired_window_resets_all_categories_together() {
+        let mut limiter = McpRateLimiter::new(RateLimitConfig {
+            read_per_minute: 1,
+            write_per_minute: 1,
+            sql_per_minute: 1,
+        });
+        limiter.check_and_record(9, ToolCategory::Read).unwrap();
+        limiter.check_and_record(9, ToolCategory::Write).unwrap();
+        limiter.origin = Instant::now() - Duration::from_secs(61);
+        assert_eq!(limiter.get_usage(9), Some((1, 1, 0)));
+        assert_eq!(limiter.check_and_record(9, ToolCategory::Sql), Ok(()));
+        assert_eq!(limiter.get_usage(9), Some((0, 0, 1)));
+    }
+
+    #[test]
+    fn cleanup_uses_window_anchor_without_touching_recent_user() {
+        let mut limiter = McpRateLimiter::default();
+        limiter.check_and_record(1, ToolCategory::Read).unwrap();
+        limiter.origin = Instant::now() - Duration::from_secs(301);
+        limiter.check_and_record(2, ToolCategory::Read).unwrap();
+        limiter.cleanup_stale_entries();
+        assert_eq!(limiter.get_usage(1), None);
+        assert_eq!(limiter.get_usage(2), Some((1, 0, 0)));
     }
 }
