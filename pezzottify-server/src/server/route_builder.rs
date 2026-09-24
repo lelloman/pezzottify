@@ -4,12 +4,11 @@
 //! boundaries reviewable without mixing them into application initialization.
 
 use super::*;
-use governor::middleware::NoOpMiddleware;
+use crate::server::RouteRateLimit;
 use simple_server::body_limit::BodyLimit;
-use tower_governor::governor::GovernorConfig;
 
-type UserRateLimit = Arc<GovernorConfig<UserOrIpKeyExtractor, NoOpMiddleware>>;
-type AnalyticsRateLimit = Arc<GovernorConfig<AnalyticsDeviceKeyExtractor, NoOpMiddleware>>;
+type UserRateLimit = Arc<RouteRateLimit<UserOrIpKeyExtractor>>;
+type AnalyticsRateLimit = Arc<RouteRateLimit<AnalyticsDeviceKeyExtractor>>;
 
 pub(super) struct RouteLimits {
     pub(super) stream: UserRateLimit,
@@ -28,29 +27,23 @@ impl RouteLimits {
             write: user_limit(WRITE_PER_MINUTE),
             user_content_read: user_limit(CONTENT_READ_PER_MINUTE),
             search: user_limit(SEARCH_PER_MINUTE),
-            analytics_device: Arc::new(
-                GovernorConfigBuilder::default()
-                    .per_millisecond(
-                        60000_u64.saturating_div(u64::from(ANALYTICS_PER_DEVICE_PER_MINUTE)),
-                    )
-                    .burst_size(ANALYTICS_PER_DEVICE_PER_MINUTE)
-                    .key_extractor(AnalyticsDeviceKeyExtractor)
-                    .finish()
-                    .expect("valid analytics rate limiter"),
-            ),
+            analytics_device: Arc::new(RouteRateLimit::new(
+                Duration::from_millis(
+                    60000_u64.saturating_div(u64::from(ANALYTICS_PER_DEVICE_PER_MINUTE)),
+                ),
+                ANALYTICS_PER_DEVICE_PER_MINUTE,
+                AnalyticsDeviceKeyExtractor,
+            )),
         }
     }
 }
 
 fn user_limit(requests_per_minute: u32) -> UserRateLimit {
-    Arc::new(
-        GovernorConfigBuilder::default()
-            .per_millisecond(60000_u64.saturating_div(u64::from(requests_per_minute)))
-            .burst_size(requests_per_minute)
-            .key_extractor(UserOrIpKeyExtractor)
-            .finish()
-            .expect("valid user rate limiter"),
-    )
+    Arc::new(RouteRateLimit::new(
+        Duration::from_millis(60000_u64.saturating_div(u64::from(requests_per_minute))),
+        requests_per_minute,
+        UserOrIpKeyExtractor,
+    ))
 }
 
 pub(super) fn content_read_routes(
@@ -60,7 +53,7 @@ pub(super) fn content_read_routes(
 ) -> Router {
     let stream_routes: Router = Router::new()
         .route("/stream/{id}", get(stream_track))
-        .layer(GovernorLayer::new(limits.stream.clone()))
+        .layer(limits.stream.layer())
         .with_state(state.clone());
 
     let cacheable_catalog_routes: Router<ServerState> = Router::new()
@@ -90,11 +83,10 @@ pub(super) fn content_read_routes(
         .merge(cacheable_catalog_routes)
         .merge(embeddings::read_routes())
         .merge(recommendation_routes())
-        .layer(GovernorLayer::new(limits.content_read.clone()))
+        .layer(limits.content_read.layer())
         .with_state(state.clone());
 
-    let search_routes =
-        make_search_routes(state.clone()).layer(GovernorLayer::new(limits.search.clone()));
+    let search_routes = make_search_routes(state.clone()).layer(limits.search.layer());
 
     let protected_content =
         stream_routes
@@ -110,7 +102,7 @@ pub(super) fn content_read_routes(
 pub(super) fn liked_content_routes(state: &ServerState, limits: &RouteLimits) -> Router {
     let read_routes: Router = Router::new()
         .route("/liked/{content_type}", get(get_user_liked_content))
-        .layer(GovernorLayer::new(limits.user_content_read.clone()))
+        .layer(limits.user_content_read.layer())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_like_content,
@@ -126,7 +118,7 @@ pub(super) fn liked_content_routes(state: &ServerState, limits: &RouteLimits) ->
             "/liked/{content_type}/{content_id}",
             delete(delete_user_liked_content),
         )
-        .layer(GovernorLayer::new(limits.write.clone()))
+        .layer(limits.write.layer())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_like_content,
@@ -140,7 +132,7 @@ pub(super) fn playlist_routes(state: &ServerState, limits: &RouteLimits) -> Rout
     let read_routes: Router = Router::new()
         .route("/playlist/{id}", get(get_playlist))
         .route("/playlists", get(get_user_playlists))
-        .layer(GovernorLayer::new(limits.user_content_read.clone()))
+        .layer(limits.user_content_read.layer())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_own_playlists,
@@ -153,7 +145,7 @@ pub(super) fn playlist_routes(state: &ServerState, limits: &RouteLimits) -> Rout
         .route("/playlist/{id}", delete(delete_playlist))
         .route("/playlist/{id}/add", put(add_playlist_tracks))
         .route("/playlist/{id}/remove", put(remove_tracks_from_playlist))
-        .layer(GovernorLayer::new(limits.write.clone()))
+        .layer(limits.write.layer())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_own_playlists,
@@ -167,8 +159,8 @@ pub(super) fn user_support_routes(state: &ServerState, limits: &RouteLimits) -> 
     let listening_write: Router = Router::new()
         .route("/listening", post(post_listening_event))
         .route("/impression", post(post_impression))
-        .layer(GovernorLayer::new(limits.analytics_device.clone()))
-        .layer(GovernorLayer::new(limits.write.clone()))
+        .layer(limits.analytics_device.layer())
+        .layer(limits.write.layer())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_access_catalog,
@@ -178,7 +170,7 @@ pub(super) fn user_support_routes(state: &ServerState, limits: &RouteLimits) -> 
         .route("/listening/summary", get(get_user_listening_summary))
         .route("/listening/history", get(get_user_listening_history))
         .route("/listening/events", get(get_user_listening_events))
-        .layer(GovernorLayer::new(limits.user_content_read.clone()))
+        .layer(limits.user_content_read.layer())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_access_catalog,
@@ -188,7 +180,7 @@ pub(super) fn user_support_routes(state: &ServerState, limits: &RouteLimits) -> 
     let settings: Router = Router::new()
         .route("/settings", get(get_user_settings))
         .route("/settings", put(update_user_settings))
-        .layer(GovernorLayer::new(limits.write.clone()))
+        .layer(limits.write.layer())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_access_catalog,
@@ -197,7 +189,7 @@ pub(super) fn user_support_routes(state: &ServerState, limits: &RouteLimits) -> 
 
     let device_read: Router = Router::new()
         .route("/devices", get(get_user_devices))
-        .layer(GovernorLayer::new(limits.user_content_read.clone()))
+        .layer(limits.user_content_read.layer())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_access_catalog,
@@ -208,7 +200,7 @@ pub(super) fn user_support_routes(state: &ServerState, limits: &RouteLimits) -> 
             "/devices/{device_id}/share_policy",
             put(put_device_share_policy),
         )
-        .layer(GovernorLayer::new(limits.write.clone()))
+        .layer(limits.write.layer())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_access_catalog,
@@ -217,7 +209,7 @@ pub(super) fn user_support_routes(state: &ServerState, limits: &RouteLimits) -> 
 
     let notifications: Router = Router::new()
         .route("/notifications/{id}/read", post(mark_notification_read))
-        .layer(GovernorLayer::new(limits.write.clone()))
+        .layer(limits.write.layer())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_access_catalog,
@@ -227,7 +219,7 @@ pub(super) fn user_support_routes(state: &ServerState, limits: &RouteLimits) -> 
     let bug_reports: Router = Router::new()
         .route("/bug-report", post(submit_bug_report))
         .layer(BodyLimit::max(2 * 1024 * 1024))
-        .layer(GovernorLayer::new(limits.write.clone()))
+        .layer(limits.write.layer())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_report_bug,
@@ -247,7 +239,7 @@ pub(super) fn sync_routes(state: &ServerState, limits: &RouteLimits) -> Router {
         .route("/state", get(get_sync_state))
         .route("/events", get(get_sync_events))
         .route("/catalog", get(get_catalog_sync))
-        .layer(GovernorLayer::new(limits.user_content_read.clone()))
+        .layer(limits.user_content_read.layer())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_access_catalog,
@@ -270,7 +262,7 @@ pub(super) fn catalog_write_routes(state: &ServerState, limits: &RouteLimits) ->
         .route("/image/{id}", put(update_image))
         .route("/image/{id}", delete(delete_image))
         .merge(embeddings::write_routes())
-        .layer(GovernorLayer::new(limits.write.clone()))
+        .layer(limits.write.layer())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_edit_catalog,
@@ -301,7 +293,7 @@ pub(super) fn admin_routes(state: &ServerState, limits: &RouteLimits) -> Router 
             "/embeddings/coverage",
             get(admin_get_audio_embedding_coverage),
         )
-        .layer(GovernorLayer::new(limits.write.clone()))
+        .layer(limits.write.layer())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_server_admin,
@@ -352,7 +344,7 @@ pub(super) fn admin_routes(state: &ServerState, limits: &RouteLimits) -> Router 
             "/bandwidth/users/{user_handle}/usage",
             get(admin_get_user_bandwidth_usage),
         )
-        .layer(GovernorLayer::new(limits.write.clone()))
+        .layer(limits.write.layer())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_manage_permissions,
@@ -372,7 +364,7 @@ pub(super) fn admin_routes(state: &ServerState, limits: &RouteLimits) -> Router 
         )
         .route("/online-users", get(admin_get_online_users))
         .route("/playback/sessions", get(admin_get_playback_sessions))
-        .layer(GovernorLayer::new(limits.write.clone()))
+        .layer(limits.write.layer())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_view_analytics,
@@ -402,7 +394,7 @@ pub(super) fn admin_routes(state: &ServerState, limits: &RouteLimits) -> Router 
             "/changelog/entity/{entity_type}/{entity_id}",
             get(admin_get_changelog_entity_history),
         )
-        .layer(GovernorLayer::new(limits.write.clone()))
+        .layer(limits.write.layer())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_edit_catalog,
@@ -493,7 +485,7 @@ pub(super) fn assemble_app(
     }
 
     let global_rate_limit = user_limit(GLOBAL_PER_MINUTE);
-    app = app.layer(GovernorLayer::new(global_rate_limit));
+    app = app.layer(global_rate_limit.layer());
     app = app.layer(middleware::from_fn_with_state(
         state.clone(),
         extract_user_id_for_rate_limit,
@@ -514,40 +506,28 @@ pub(super) fn auth_routes(state: &ServerState) -> Router {
     let per_minute = state.config.login_rate_limit_per_minute;
     let sustained_replenish_millis =
         3_600_000_u64.saturating_div(u64::from(state.config.login_rate_limit_per_hour));
-    let login_ip_burst_limit = Arc::new(
-        GovernorConfigBuilder::default()
-            .per_millisecond(60000_u64.saturating_div(u64::from(per_minute)))
-            .burst_size(per_minute)
-            .key_extractor(IpKeyExtractor)
-            .finish()
-            .expect("valid login IP burst limiter"),
-    );
-    let login_ip_sustained_limit = Arc::new(
-        GovernorConfigBuilder::default()
-            .per_millisecond(sustained_replenish_millis)
-            .burst_size(per_minute)
-            .key_extractor(IpKeyExtractor)
-            .finish()
-            .expect("valid login IP sustained limiter"),
-    );
-    let login_account_burst_limit = Arc::new(
-        GovernorConfigBuilder::default()
-            .per_millisecond(60000_u64.saturating_div(u64::from(per_minute)))
-            .burst_size(per_minute)
-            .key_extractor(LoginAccountKeyExtractor)
-            .finish()
-            .expect("valid login account burst limiter"),
-    );
-    let login_account_sustained_limit = Arc::new(
-        GovernorConfigBuilder::default()
-            .per_millisecond(sustained_replenish_millis)
-            .burst_size(per_minute)
-            .key_extractor(LoginAccountKeyExtractor)
-            .finish()
-            .expect("valid login account sustained limiter"),
-    );
+    let login_ip_burst_limit = Arc::new(RouteRateLimit::new(
+        Duration::from_millis(60000_u64.saturating_div(u64::from(per_minute))),
+        per_minute,
+        IpKeyExtractor,
+    ));
+    let login_ip_sustained_limit = Arc::new(RouteRateLimit::new(
+        Duration::from_millis(sustained_replenish_millis),
+        per_minute,
+        IpKeyExtractor,
+    ));
+    let login_account_burst_limit = Arc::new(RouteRateLimit::new(
+        Duration::from_millis(60000_u64.saturating_div(u64::from(per_minute))),
+        per_minute,
+        LoginAccountKeyExtractor,
+    ));
+    let login_account_sustained_limit = Arc::new(RouteRateLimit::new(
+        Duration::from_millis(sustained_replenish_millis),
+        per_minute,
+        LoginAccountKeyExtractor,
+    ));
 
-    // Governor's keyed state store needs periodic maintenance when clients can
+    // The keyed state store needs periodic maintenance when clients can
     // continuously introduce new IP/account keys.
     let ip_burst_limiter = login_ip_burst_limit.limiter().clone();
     let ip_sustained_limiter = login_ip_sustained_limit.limiter().clone();
@@ -563,28 +543,28 @@ pub(super) fn auth_routes(state: &ServerState) -> Router {
                 _ = shutdown.requested() => break,
                 _ = interval.tick() => {},
             }
-            ip_burst_limiter.retain_recent();
-            ip_sustained_limiter.retain_recent();
-            account_burst_limiter.retain_recent();
-            account_sustained_limiter.retain_recent();
+            ip_burst_limiter.prune();
+            ip_sustained_limiter.prune();
+            account_burst_limiter.prune();
+            account_sustained_limiter.prune();
         }
     });
 
     let password_login_routes: Router = Router::new()
         .route("/login", post(login))
-        .layer(GovernorLayer::new(login_account_burst_limit))
-        .layer(GovernorLayer::new(login_account_sustained_limit))
+        .layer(login_account_burst_limit.layer())
+        .layer(login_account_sustained_limit.layer())
         // Axum layers execute bottom-to-top: insert the account key before its limiters.
         .layer(middleware::from_fn(extract_login_account_for_rate_limit))
-        .layer(GovernorLayer::new(login_ip_burst_limit.clone()))
-        .layer(GovernorLayer::new(login_ip_sustained_limit.clone()))
+        .layer(login_ip_burst_limit.layer())
+        .layer(login_ip_sustained_limit.layer())
         .with_state(state.clone());
 
     let oidc_login_routes: Router = Router::new()
         .route("/oidc/login", get(oidc_login))
         .route("/oidc/callback", get(oidc_callback))
-        .layer(GovernorLayer::new(login_ip_burst_limit))
-        .layer(GovernorLayer::new(login_ip_sustained_limit))
+        .layer(login_ip_burst_limit.layer())
+        .layer(login_ip_sustained_limit.layer())
         .with_state(state.clone());
 
     let authenticated_routes: Router = Router::new()
