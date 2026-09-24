@@ -47,7 +47,6 @@ use simple_server::axum::{
     routing::{delete, get, post, put},
     Json, Router,
 };
-use tower_governor::GovernorLayer;
 
 use super::api_error::ApiError;
 use super::filesystem_work::FilesystemWorkPool;
@@ -69,7 +68,6 @@ use crate::server::session_cookie::{
     append_expired_session_cookies, append_session_cookies, require_csrf,
 };
 use crate::user::auth::AuthTokenValue;
-use tower_governor::governor::GovernorConfigBuilder;
 
 use super::authorization::{
     require_access_catalog, require_edit_catalog, require_like_content, require_manage_permissions,

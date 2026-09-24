@@ -1,4 +1,4 @@
-//! Rate limiting middleware using tower-governor
+//! Rate limiting middleware using simple-server
 //!
 //! Login endpoints have burst and sustained limits. Password login is limited by
 //! both peer IP and account handle; other route groups use user-based burst limits.
@@ -7,6 +7,7 @@
 use crate::server::metrics::{record_rate_limit_hit, request_route_label};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
+use simple_server::axum::http::{request::Parts, Extensions, HeaderMap};
 use simple_server::axum::{
     body::{to_bytes, Body},
     extract::{ConnectInfo, Request},
@@ -14,8 +15,90 @@ use simple_server::axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use simple_server::rate_limit::{
+    Admission, AsyncPolicy, KeyedLimiter, Policy, Quota, RateLimitLayer, StoreConfig,
+};
 use std::net::{IpAddr, SocketAddr};
-use tower_governor::{key_extractor::KeyExtractor, GovernorError};
+use std::{hash::Hash, num::NonZeroU32, time::Duration};
+
+#[derive(Debug)]
+pub enum RateLimitError {
+    UnableToExtractKey,
+    TooManyRequests {
+        wait_time: u64,
+        headers: Option<HeaderMap>,
+    },
+    Internal,
+}
+
+pub trait KeyExtractor: Clone + Send + Sync + 'static {
+    type Key: Clone + Eq + Hash + Send + Sync + 'static;
+    fn extract(&self, extensions: &Extensions) -> Result<Self::Key, RateLimitError>;
+}
+
+/// Service policy adapter: identities and wire format remain application-owned.
+/// Shared storage, admission and HTTP execution are provided by simple-server.
+pub struct RouteRateLimit<E: KeyExtractor> {
+    limiter: KeyedLimiter<E::Key>,
+    extractor: E,
+}
+impl<E: KeyExtractor> RouteRateLimit<E> {
+    pub fn new(interval: Duration, burst: u32, extractor: E) -> Self {
+        let quota = Quota::replenishing(interval, NonZeroU32::new(burst).expect("nonzero burst"))
+            .expect("valid rate quota");
+        Self {
+            limiter: KeyedLimiter::new(quota, StoreConfig::unbounded()),
+            extractor,
+        }
+    }
+    pub fn limiter(&self) -> &KeyedLimiter<E::Key> {
+        &self.limiter
+    }
+    pub fn layer(&self) -> RateLimitLayer<RateLimitError, fn(RateLimitError, &Parts) -> Response> {
+        let limiter = self.limiter.clone();
+        let extractor = self.extractor.clone();
+        let policy = Policy::new(move |parts: &Parts| {
+            let key = extractor.extract(&parts.extensions)?;
+            limiter
+                .check(key, NonZeroU32::new(1).unwrap())
+                .map_err(|rejection| match rejection.retry_after {
+                    Some(wait) => RateLimitError::TooManyRequests {
+                        wait_time: wait.as_secs(),
+                        headers: None,
+                    },
+                    None => RateLimitError::Internal,
+                })?;
+            Ok(Admission::unrestricted())
+        });
+        RateLimitLayer::new(
+            AsyncPolicy::from_sync(policy),
+            render_rate_limit_error as fn(_, &Parts) -> Response,
+        )
+    }
+}
+fn render_rate_limit_error(error: RateLimitError, _: &Parts) -> Response {
+    match error {
+        RateLimitError::TooManyRequests { wait_time, .. } => {
+            let mut response = Response::new(Body::from(format!(
+                "Too Many Requests! Wait for {wait_time}s"
+            )));
+            *response.status_mut() = StatusCode::TOO_MANY_REQUESTS;
+            response
+                .headers_mut()
+                .insert("retry-after", wait_time.into());
+            response
+                .headers_mut()
+                .insert("x-ratelimit-after", wait_time.into());
+            response
+        }
+        RateLimitError::UnableToExtractKey => {
+            let mut response = Response::new(Body::from("Unable To Extract Key!"));
+            *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+            response
+        }
+        RateLimitError::Internal => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
 use tracing::warn;
 
 // ============================================================================
@@ -69,11 +152,11 @@ pub struct IpKeyExtractor;
 impl KeyExtractor for IpKeyExtractor {
     type Key = IpAddr;
 
-    fn extract<T>(&self, req: &Request<T>) -> Result<Self::Key, GovernorError> {
-        req.extensions()
+    fn extract(&self, extensions: &Extensions) -> Result<Self::Key, RateLimitError> {
+        extensions
             .get::<ConnectInfo<SocketAddr>>()
             .map(|ConnectInfo(addr)| addr.ip())
-            .ok_or(GovernorError::UnableToExtractKey)
+            .ok_or(RateLimitError::UnableToExtractKey)
     }
 }
 
@@ -88,11 +171,11 @@ struct LoginAccountKey([u8; 32]);
 impl KeyExtractor for LoginAccountKeyExtractor {
     type Key = [u8; 32];
 
-    fn extract<T>(&self, req: &Request<T>) -> Result<Self::Key, GovernorError> {
-        req.extensions()
+    fn extract(&self, extensions: &Extensions) -> Result<Self::Key, RateLimitError> {
+        extensions
             .get::<LoginAccountKey>()
             .map(|key| key.0)
-            .ok_or(GovernorError::UnableToExtractKey)
+            .ok_or(RateLimitError::UnableToExtractKey)
     }
 }
 
@@ -135,19 +218,19 @@ pub struct UserOrIpKeyExtractor;
 impl KeyExtractor for UserOrIpKeyExtractor {
     type Key = String;
 
-    fn extract<T>(&self, req: &Request<T>) -> Result<Self::Key, GovernorError> {
+    fn extract(&self, extensions: &Extensions) -> Result<Self::Key, RateLimitError> {
         // Try to get user ID from session stored in extensions
         // The session middleware should have already extracted and validated the session
-        if let Some(user_id) = req.extensions().get::<usize>() {
+        if let Some(user_id) = extensions.get::<usize>() {
             return Ok(format!("user:{}", user_id));
         }
 
         // Fall back to IP address
-        if let Some(ConnectInfo(addr)) = req.extensions().get::<ConnectInfo<SocketAddr>>() {
+        if let Some(ConnectInfo(addr)) = extensions.get::<ConnectInfo<SocketAddr>>() {
             return Ok(format!("ip:{}", addr.ip()));
         }
 
-        Err(GovernorError::UnableToExtractKey)
+        Err(RateLimitError::UnableToExtractKey)
     }
 }
 
@@ -163,8 +246,8 @@ struct AnalyticsRateLimitIdentity {
 impl KeyExtractor for AnalyticsDeviceKeyExtractor {
     type Key = String;
 
-    fn extract<T>(&self, req: &Request<T>) -> Result<Self::Key, GovernorError> {
-        req.extensions()
+    fn extract(&self, extensions: &Extensions) -> Result<Self::Key, RateLimitError> {
+        extensions
             .get::<AnalyticsRateLimitIdentity>()
             .map(|identity| match identity.device_id {
                 Some(device_id) => {
@@ -172,7 +255,7 @@ impl KeyExtractor for AnalyticsDeviceKeyExtractor {
                 }
                 None => format!("user:{}:device:none", identity.user_id),
             })
-            .ok_or(GovernorError::UnableToExtractKey)
+            .ok_or(RateLimitError::UnableToExtractKey)
     }
 }
 
@@ -182,9 +265,9 @@ impl KeyExtractor for AnalyticsDeviceKeyExtractor {
 
 /// Custom error handler that logs rate limit violations and returns appropriate response
 #[allow(dead_code)]
-pub fn rate_limit_error_handler(err: GovernorError, req: Request<Body>) -> Response {
+pub fn rate_limit_error_handler(err: RateLimitError, req: Request<Body>) -> Response {
     match err {
-        GovernorError::TooManyRequests { .. } => {
+        RateLimitError::TooManyRequests { .. } => {
             // Extract context for logging
             let path = req.uri().path();
             let method = req.method().as_str();
@@ -251,7 +334,6 @@ mod tests {
         sync::Arc,
     };
     use tower::ServiceExt;
-    use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
 
     fn create_test_request() -> Request<Body> {
         Request::builder()
@@ -302,7 +384,7 @@ mod tests {
         let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
         request.extensions_mut().insert(ConnectInfo(socket_addr));
 
-        let result = extractor.extract(&request);
+        let result = extractor.extract(request.extensions());
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), socket_addr.ip());
     }
@@ -312,9 +394,9 @@ mod tests {
         let extractor = IpKeyExtractor;
         let request = create_test_request();
 
-        let result = extractor.extract(&request);
+        let result = extractor.extract(request.extensions());
         assert!(result.is_err());
-        assert!(matches!(result, Err(GovernorError::UnableToExtractKey)));
+        assert!(matches!(result, Err(RateLimitError::UnableToExtractKey)));
     }
 
     #[test]
@@ -331,8 +413,8 @@ mod tests {
         let addr2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)), 8080);
         request2.extensions_mut().insert(ConnectInfo(addr2));
 
-        let result1 = extractor.extract(&request1).unwrap();
-        let result2 = extractor.extract(&request2).unwrap();
+        let result1 = extractor.extract(request1.extensions()).unwrap();
+        let result2 = extractor.extract(request2.extensions()).unwrap();
 
         assert_ne!(result1, result2);
         assert_eq!(result1, IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)));
@@ -358,8 +440,8 @@ mod tests {
             )));
 
         assert_eq!(
-            extractor.extract(&request1).unwrap(),
-            extractor.extract(&request2).unwrap()
+            extractor.extract(request1.extensions()).unwrap(),
+            extractor.extract(request2.extensions()).unwrap()
         );
     }
 
@@ -375,7 +457,7 @@ mod tests {
             .headers_mut()
             .insert("x-forwarded-for", "203.0.113.99".parse().unwrap());
 
-        assert_eq!(extractor.extract(&request).unwrap(), peer_ip);
+        assert_eq!(extractor.extract(request.extensions()).unwrap(), peer_ip);
     }
 
     #[test]
@@ -391,17 +473,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_ip_limiter_cannot_be_bypassed_by_reconnecting_from_another_port() {
-        let config = Arc::new(
-            GovernorConfigBuilder::default()
-                .per_second(60)
-                .burst_size(1)
-                .key_extractor(IpKeyExtractor)
-                .finish()
-                .unwrap(),
-        );
+        let config = Arc::new(RouteRateLimit::new(
+            std::time::Duration::from_secs(60),
+            1,
+            IpKeyExtractor,
+        ));
         let app = Router::new()
             .route("/login", post(|| async { StatusCode::OK }))
-            .layer(GovernorLayer::new(config));
+            .layer(config.layer());
 
         let mut first = Request::post("/login").body(Body::empty()).unwrap();
         first.extensions_mut().insert(ConnectInfo(SocketAddr::new(
@@ -422,17 +501,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_account_limiter_applies_across_different_peer_ips() {
-        let config = Arc::new(
-            GovernorConfigBuilder::default()
-                .per_second(60)
-                .burst_size(1)
-                .key_extractor(LoginAccountKeyExtractor)
-                .finish()
-                .unwrap(),
-        );
+        let config = Arc::new(RouteRateLimit::new(
+            std::time::Duration::from_secs(60),
+            1,
+            LoginAccountKeyExtractor,
+        ));
         let app = Router::new()
             .route("/login", post(|| async { StatusCode::OK }))
-            .layer(GovernorLayer::new(config))
+            .layer(config.layer())
             .layer(middleware::from_fn(extract_login_account_for_rate_limit));
 
         let login_body = || Body::from(r#"{"user_handle":"alice","password":"sentinel-password"}"#);
@@ -499,7 +575,7 @@ mod tests {
         request.extensions_mut().insert(user_id);
         request.extensions_mut().insert(ConnectInfo(socket_addr));
 
-        let result = extractor.extract(&request);
+        let result = extractor.extract(request.extensions());
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "user:42");
     }
@@ -513,7 +589,10 @@ mod tests {
             device_id: Some(7),
         });
 
-        assert_eq!(extractor.extract(&request).unwrap(), "user:42:device:7");
+        assert_eq!(
+            extractor.extract(request.extensions()).unwrap(),
+            "user:42:device:7"
+        );
     }
 
     #[test]
@@ -525,7 +604,7 @@ mod tests {
         let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 100)), 8080);
         request.extensions_mut().insert(ConnectInfo(socket_addr));
 
-        let result = extractor.extract(&request);
+        let result = extractor.extract(request.extensions());
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "ip:192.168.1.100");
     }
@@ -535,9 +614,9 @@ mod tests {
         let extractor = UserOrIpKeyExtractor;
         let request = create_test_request();
 
-        let result = extractor.extract(&request);
+        let result = extractor.extract(request.extensions());
         assert!(result.is_err());
-        assert!(matches!(result, Err(GovernorError::UnableToExtractKey)));
+        assert!(matches!(result, Err(RateLimitError::UnableToExtractKey)));
     }
 
     #[test]
@@ -550,8 +629,8 @@ mod tests {
         let mut request2 = create_test_request();
         request2.extensions_mut().insert(2usize);
 
-        let result1 = extractor.extract(&request1).unwrap();
-        let result2 = extractor.extract(&request2).unwrap();
+        let result1 = extractor.extract(request1.extensions()).unwrap();
+        let result2 = extractor.extract(request2.extensions()).unwrap();
 
         assert_ne!(result1, result2);
         assert_eq!(result1, "user:1");
@@ -570,8 +649,8 @@ mod tests {
         let addr2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090);
         request2.extensions_mut().insert(ConnectInfo(addr2));
 
-        let result1 = extractor.extract(&request1).unwrap();
-        let result2 = extractor.extract(&request2).unwrap();
+        let result1 = extractor.extract(request1.extensions()).unwrap();
+        let result2 = extractor.extract(request2.extensions()).unwrap();
 
         // Should be the same because we only use IP, not port
         assert_eq!(result1, result2);
@@ -580,7 +659,7 @@ mod tests {
 
     #[test]
     fn test_rate_limit_error_handler_too_many_requests() {
-        let err = GovernorError::TooManyRequests {
+        let err = RateLimitError::TooManyRequests {
             wait_time: 30,
             headers: Default::default(),
         };
@@ -593,7 +672,7 @@ mod tests {
 
     #[test]
     fn test_rate_limit_error_handler_other_errors() {
-        let err = GovernorError::UnableToExtractKey;
+        let err = RateLimitError::UnableToExtractKey;
         let request = create_test_request();
 
         let response = rate_limit_error_handler(err, request);
@@ -603,7 +682,7 @@ mod tests {
 
     #[test]
     fn test_rate_limit_error_handler_with_user_id() {
-        let err = GovernorError::TooManyRequests {
+        let err = RateLimitError::TooManyRequests {
             wait_time: 30,
             headers: Default::default(),
         };
@@ -617,7 +696,7 @@ mod tests {
 
     #[test]
     fn test_rate_limit_error_handler_with_ip() {
-        let err = GovernorError::TooManyRequests {
+        let err = RateLimitError::TooManyRequests {
             wait_time: 30,
             headers: Default::default(),
         };
@@ -642,5 +721,96 @@ mod tests {
         let extractor = UserOrIpKeyExtractor;
         let _cloned = extractor.clone();
         // Test passes if it compiles
+    }
+}
+
+#[cfg(test)]
+mod wire_contract {
+    use super::*;
+    use simple_server::axum::{routing::post, Router};
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn real_http_default_wire_response_and_public_route() {
+        let config = Arc::new(RouteRateLimit::new(
+            std::time::Duration::from_secs(60),
+            1,
+            IpKeyExtractor,
+        ));
+        let app = Router::new()
+            .route("/limited", post(|body: String| async move { body }))
+            .layer(config.layer())
+            .route("/public", post(|| async { "public" }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move {
+            simple_server::axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .unwrap()
+        });
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        let url = format!("http://{addr}/limited");
+        let ok = client
+            .post(&url)
+            .body("original-body")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(ok.status(), 200);
+        assert_eq!(ok.text().await.unwrap(), "original-body");
+        let denied = client.post(&url).send().await.unwrap();
+        assert_eq!(denied.status(), 429);
+        let retry = denied.headers()["retry-after"]
+            .to_str()
+            .unwrap()
+            .parse::<u64>()
+            .unwrap();
+        assert!((58..=60).contains(&retry));
+        assert_eq!(denied.headers()["x-ratelimit-after"], retry.to_string());
+        assert_eq!(
+            denied.text().await.unwrap(),
+            format!("Too Many Requests! Wait for {retry}s")
+        );
+        assert_eq!(
+            client
+                .post(format!("http://{addr}/public"))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            200
+        );
+        task.abort();
+        let _ = task.await;
+    }
+
+    #[tokio::test]
+    async fn missing_identity_retains_500_text_response() {
+        use tower::ServiceExt;
+        let config = Arc::new(RouteRateLimit::new(
+            std::time::Duration::from_secs(60),
+            1,
+            IpKeyExtractor,
+        ));
+        let app = Router::new()
+            .route("/limited", post(|| async { "must-not-run" }))
+            .layer(config.layer());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/limited")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 500);
+        assert!(!response.headers().contains_key("retry-after"));
+        let bytes = to_bytes(response.into_body(), 1024).await.unwrap();
+        assert_eq!(bytes.as_ref(), b"Unable To Extract Key!");
     }
 }

@@ -10,7 +10,8 @@ pub use http_cache::{http_api_no_store, http_cache, http_no_store};
 pub use random_slowdown::slowdown_request;
 pub use rate_limit::{
     extract_login_account_for_rate_limit, extract_user_id_for_rate_limit,
-    AnalyticsDeviceKeyExtractor, IpKeyExtractor, LoginAccountKeyExtractor, UserOrIpKeyExtractor,
+    AnalyticsDeviceKeyExtractor, IpKeyExtractor, LoginAccountKeyExtractor, RouteRateLimit,
+    UserOrIpKeyExtractor,
 };
 pub use rate_limit::{
     ANALYTICS_PER_DEVICE_PER_MINUTE, CONTENT_READ_PER_MINUTE, GLOBAL_PER_MINUTE, LOGIN_PER_HOUR,
