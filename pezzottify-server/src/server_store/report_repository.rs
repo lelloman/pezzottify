@@ -516,6 +516,51 @@ mod tests {
         assert_eq!(s.stats().unwrap().reports, 1);
         assert_eq!(s.stats().unwrap().diagnostic_bytes, 5);
     }
+
+    #[test]
+    fn user_quota_precedes_global_capacity_and_rejection_does_not_insert() {
+        let (_dir, s) = setup();
+        let mut settings = s.settings().unwrap();
+        settings.hourly_reports = 1;
+        settings.total_reports = 1;
+        s.save_settings(2, settings).unwrap();
+        s.create(1, "a", input()).unwrap();
+
+        assert!(matches!(s.create(1, "a", input()), Err(ReportError::Quota)));
+        assert!(matches!(
+            s.create(2, "b", input()),
+            Err(ReportError::Capacity)
+        ));
+        assert_eq!(s.stats().unwrap().reports, 1);
+    }
+
+    #[test]
+    fn report_hour_window_excludes_exact_cutoff_and_includes_next_second() {
+        let (_dir, s) = setup();
+        let id = s.create(1, "a", input()).unwrap().id;
+        let mut settings = s.settings().unwrap();
+        settings.hourly_reports = 1;
+        s.save_settings(2, settings).unwrap();
+        let probe_now = now();
+        for (seconds_after_cutoff, expected_quota) in [(0, false), (1, true)] {
+            let created =
+                chrono::DateTime::from_timestamp(probe_now - 3600 + seconds_after_cutoff, 0)
+                    .unwrap()
+                    .to_rfc3339();
+            let mut conn = s.conn.lock().unwrap();
+            conn.execute(
+                "UPDATE bug_reports SET created_at=?1 WHERE id=?2",
+                params![created, id],
+            )
+            .unwrap();
+            let tx = conn
+                .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+                .unwrap();
+            let result = crate::server_store::report_limits::reserve(&tx, 1, 0, 0, probe_now);
+            assert_eq!(matches!(result, Err(ReportError::Quota)), expected_quota);
+            tx.rollback().unwrap();
+        }
+    }
     #[test]
     fn retention_preserves_metadata_and_accounting_uses_bytes() {
         let (_dir, s) = setup();

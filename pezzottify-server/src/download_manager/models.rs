@@ -647,7 +647,19 @@ impl UserLimitStatus {
             max_per_day,
             in_queue,
             max_queue,
-            can_request: requests_today < max_per_day && in_queue < max_queue,
+            can_request: simple_server::rate_limit::evaluate_limits(&[
+                simple_server::rate_limit::LimitCheck::below(
+                    (),
+                    requests_today as i128,
+                    max_per_day as i128,
+                ),
+                simple_server::rate_limit::LimitCheck::below(
+                    (),
+                    in_queue as i128,
+                    max_queue as i128,
+                ),
+            ])
+            .is_ok(),
         }
     }
 
@@ -691,7 +703,19 @@ impl CapacityStatus {
             max_per_hour,
             albums_today,
             max_per_day,
-            at_capacity: albums_this_hour >= max_per_hour || albums_today >= max_per_day,
+            at_capacity: simple_server::rate_limit::evaluate_limits(&[
+                simple_server::rate_limit::LimitCheck::below(
+                    (),
+                    albums_this_hour as i128,
+                    max_per_hour as i128,
+                ),
+                simple_server::rate_limit::LimitCheck::below(
+                    (),
+                    albums_today as i128,
+                    max_per_day as i128,
+                ),
+            ])
+            .is_err(),
         }
     }
 }
@@ -1541,6 +1565,14 @@ mod tests {
         // At daily limit
         let status = CapacityStatus::new(5, 10, 60, 60);
         assert!(status.at_capacity);
+    }
+
+    #[test]
+    fn signed_status_comparisons_preserve_zero_and_negative_values() {
+        assert!(UserLimitStatus::available(-1, 0, -1, 0).can_request);
+        assert!(!UserLimitStatus::available(0, 0, -1, 0).can_request);
+        assert!(!CapacityStatus::new(-1, 0, -1, 0).at_capacity);
+        assert!(CapacityStatus::new(0, 0, -1, 0).at_capacity);
     }
 
     #[test]

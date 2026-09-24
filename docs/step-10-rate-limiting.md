@@ -1,4 +1,4 @@
-# Step 10 HTTP rate-limit canary
+# Step 10 rate-limit adoption
 
 The server now uses `simple_server::rate_limit::KeyedLimiter` and
 `RateLimitLayer` for all previously tower-governor-backed HTTP routes.
@@ -32,19 +32,44 @@ Direct governor and tower_governor dependencies have been removed. The local
 adapter only selects identity and formats the legacy response; budget accounting,
 shared storage and HTTP admission execution belong to simple-server.
 
-## Deliberately incomplete scope
+## Completion of the remaining service scopes
 
-Overall Step 10 remains **Partial**. MCP has three category counters with one
-shared per-user window anchor, a strictly `elapsed > 60s` reset, accepted zero
-limits, and an existing usage-inspection contract. The shared fixed-window budget
-uses independent anchors and `elapsed >= window`; substituting it would change
-behavior. A grouped-window API or an application-owned policy callback needs
-separate review before migrating MCP.
+The later migration completes Pezzottify's Step 10 scopes against shared
+revision `799e94b47ddab1c04ce908c2afa6ea1c28e6e5d4`, recorded in
+`simple-server.rev`. Production MCP tool and resource calls now use shared
+grouped-window counters under the existing per-user
+mutex and map. The three categories keep one anchor, a reset strictly after 60
+seconds, accepted zero limits, legacy whole-second retry rounding with a one-second
+minimum, non-resetting usage inspection, and the existing five-minute cleanup
+rule.
 
-Database-backed download/report quotas and outbound enrichment pacing remain
-application-owned. This HTTP canary does not replace durable decisions with
-in-memory counters or claim their adoption. It also does not claim completed
-consumer Axum removal.
+Download request status still reads the calendar-day count and active queue size
+from SQLite. Shared ordered limit checks make the signed comparisons used by
+both request paths; admin exemption and the existing enqueue/count sequence stay
+in the service. That sequence does not reserve admission atomically and retains
+its pre-existing concurrency behavior. The system-capacity status type also uses
+the shared comparison, although it has no production caller.
+
+Report admission still uses an immediate SQLite transaction with idempotent
+replay before quota evaluation. The shared rolling-window evaluator computes the
+strict hour, day, and daily attachment-byte cutoffs from the one timestamp
+sampled by the service; SQLite remains authoritative for counts. Shared ordered
+checks apply user quota before global capacity, with saturating projected byte
+and audit-reservation arithmetic. Rejections do not insert a partial report.
+Report settings reductions use the same projected-capacity policy.
+
+The active MusicBrainz and Last.fm enrichment clients now pace outbound calls
+with a shared one-unit replenishing budget, retaining their 1100 ms and 200 ms
+intervals. Each client holds its local mutex across waiting, charges immediately
+before the request, and counts failed requests. The first request remains
+immediate. The budgets are process-local, as the earlier pacing was.
+
+OIDC provider metadata/JWKS refresh retains its separate auth cache policy:
+15-minute freshness and a 30-second retry interval after discovery attempts.
+It is a key-refresh recovery control rather than an enrichment request quota,
+and remains owned by the OIDC client.
+
+This migration does not claim completed consumer Axum removal.
 
 ## Verification
 
@@ -62,3 +87,17 @@ with warnings in untouched enrichment/background-task tests and an existing tran
 num-bigint-dig future-compatibility notice. No lint findings occur in the migration.
 `cargo fmt --all --check` and `git diff --check` pass. Docker/release builds were
 not rerun for this canary.
+
+For the follow-up migration, baseline focused tests before source changes passed:
+MCP **5**, report repository **11**, and download manager **189**. Three MCP
+legacy-oracle tests also passed before replacing its local counters. Against
+the frozen shared revision, focused tests passed: MCP **9**, report repository
+**13**, and download manager **190**. The full `cargo test --offline` server
+suite passed **1,440** tests with zero failures and 36 existing ignored cases,
+including the production MCP, download and report HTTP contracts. The outbound
+pacer test was then made
+deterministic; both final pacing tests passed. `cargo clippy --all-targets
+--offline` passed with warnings only in unchanged enrichment and background-task
+test files, plus the existing transitive `num-bigint-dig` future-compatibility
+notice. `cargo fmt --all --check` and `git diff --check` passed. Docker/release
+builds were not rerun for this follow-up.

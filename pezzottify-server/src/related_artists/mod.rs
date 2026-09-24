@@ -6,3 +6,4 @@
 
 pub mod lastfm;
 pub mod musicbrainz;
+mod pacing;

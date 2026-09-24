@@ -5,8 +5,9 @@
 use anyhow::Result;
 use reqwest::blocking::Client;
 use serde::Deserialize;
-use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use super::pacing::RequestPacer;
 
 const LASTFM_API_BASE: &str = "https://ws.audioscrobbler.com/2.0/";
 const RATE_LIMIT_INTERVAL: Duration = Duration::from_millis(200); // 5 req/sec
@@ -22,7 +23,7 @@ pub struct SimilarArtist {
 pub struct LastFmClient {
     client: Client,
     api_key: String,
-    last_request: Mutex<Instant>,
+    pacer: RequestPacer,
 }
 
 #[derive(Deserialize)]
@@ -50,17 +51,12 @@ impl LastFmClient {
         Ok(Self {
             client,
             api_key: api_key.to_string(),
-            last_request: Mutex::new(Instant::now() - RATE_LIMIT_INTERVAL),
+            pacer: RequestPacer::new(RATE_LIMIT_INTERVAL),
         })
     }
 
     fn rate_limit(&self) {
-        let mut last = self.last_request.lock().unwrap();
-        let elapsed = last.elapsed();
-        if elapsed < RATE_LIMIT_INTERVAL {
-            std::thread::sleep(RATE_LIMIT_INTERVAL - elapsed);
-        }
-        *last = Instant::now();
+        self.pacer.wait();
     }
 
     /// Get similar artists for an artist identified by MusicBrainz ID.
