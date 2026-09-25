@@ -129,7 +129,7 @@ async fn login(
 async fn logout(
     State(database): State<DatabaseHandles>,
     State(config): State<ServerConfig>,
-    session: Session,
+    Extract(session): Extract<Session>,
 ) -> Response {
     let user_id = session.user_id;
     let token = AuthTokenValue(session.token);
@@ -393,7 +393,7 @@ async fn get_session(
     State(database): State<DatabaseHandles>,
     State(config): State<ServerConfig>,
     headers: HeaderMap,
-    session: Session,
+    Extract(session): Extract<Session>,
 ) -> Response {
     // Get the user handle from user_id
     let user_id = session.user_id;

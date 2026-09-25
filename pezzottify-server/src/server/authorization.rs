@@ -8,6 +8,7 @@ use simple_server::axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use simple_server::extract::Extract;
 use tracing::debug;
 
 use crate::user::Permission;
@@ -49,7 +50,7 @@ async fn require_permission(
 macro_rules! permission_policy {
     ($name:ident, $permission:ident) => {
         pub(super) async fn $name(
-            session: Session,
+            Extract(session): Extract<Session>,
             request: Request<Body>,
             next: Next,
         ) -> Response {

@@ -6,6 +6,7 @@ use crate::search::streaming::{SearchSection, StreamingSearchPipeline};
 use crate::search::{
     HashedItemType, RelevanceFilterConfig, ResolvedSearchResult, SearchResult, SearchVault,
 };
+use simple_server::extract::Extract;
 
 use futures::stream;
 use serde::{Deserialize, Serialize};
@@ -253,7 +254,7 @@ fn filter_sections_by_availability(sections: Vec<SearchSection>) -> Vec<SearchSe
 }
 
 async fn search(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(server_state): State<ServerState>,
     Json(payload): Json<SearchBody>,
 ) -> Response {
@@ -378,7 +379,7 @@ struct StreamingSearchQuery {
 }
 
 async fn streaming_search(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(server_state): State<ServerState>,
     Query(params): Query<StreamingSearchQuery>,
 ) -> Response {
@@ -530,7 +531,7 @@ struct RelevanceFilterResponse {
 
 /// GET /admin/search/relevance-filter - Get current relevance filter configuration
 async fn admin_get_relevance_filter(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(server_state): State<ServerState>,
 ) -> Response {
     let config = match get_relevance_filter(&server_state).await {
@@ -547,7 +548,7 @@ async fn admin_get_relevance_filter(
 
 /// PUT /admin/search/relevance-filter - Update relevance filter configuration
 async fn admin_set_relevance_filter(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(server_state): State<ServerState>,
     Json(new_config): Json<RelevanceFilterConfig>,
 ) -> Response {

@@ -16,6 +16,7 @@ use simple_server::axum::{
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
+use simple_server::extract::Extract;
 use tracing::debug;
 
 /// A single byte-range specification. Multiple ranges are deliberately unsupported.
@@ -161,7 +162,7 @@ fn range_not_satisfiable(file_length: u64) -> Response {
 }
 
 pub async fn stream_track(
-    session: Session,
+    Extract(session): Extract<Session>,
     byte_range: ByteRangeRequest,
     State(database): State<DatabaseHandles>,
     State(organic_indexer): State<OptionalOrganicIndexer>,

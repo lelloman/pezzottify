@@ -239,7 +239,7 @@ fn idempotency_key(headers: &HeaderMap) -> Result<Option<String>, StatusCode> {
 
 /// GET /v1/sync/state - Returns full user state for initial sync
 async fn get_sync_state(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     State(config): State<ServerConfig>,
     State(media): State<GuardedMediaManager>,
@@ -286,7 +286,7 @@ async fn get_sync_state(
 
 /// GET /v1/sync/events - Returns events since a given sequence number
 async fn get_sync_events(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Query(query): Query<SyncEventsQuery>,
 ) -> Response {
@@ -327,7 +327,7 @@ async fn get_sync_events(
 /// This endpoint allows clients to catch up on catalog changes they may have missed.
 /// Use `since=0` to get all events (up to a reasonable limit).
 async fn get_catalog_sync(
-    _session: Session, // Authentication required but not user-specific
+    Extract(_session): Extract<Session>, // Authentication required but not user-specific
     State(database): State<DatabaseHandles>,
     Query(query): Query<CatalogSyncQuery>,
 ) -> Response {
@@ -358,7 +358,7 @@ use crate::server_store::{
 
 /// POST /v1/user/bug-report - Submit a bug report
 async fn submit_bug_report(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Json(body): Json<SubmitBugReportBody>,
 ) -> Response {
@@ -544,7 +544,7 @@ async fn admin_delete_bug_report(
 
 /// POST /v1/user/notifications/{id}/read - Mark notification as read
 async fn mark_notification_read(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
     Path(notification_id): Path<String>,

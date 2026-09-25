@@ -1,4 +1,7 @@
-async fn home(session: Option<Session>, State(state): State<ServerState>) -> impl IntoResponse {
+async fn home(
+    Extract(session): Extract<Option<Session>>,
+    State(state): State<ServerState>,
+) -> impl IntoResponse {
     let stats = ServerStats {
         uptime: format_uptime(state.start_time.elapsed()),
         hash: state.hash.clone(),
@@ -89,7 +92,7 @@ async fn with_track_enrichment(
 }
 
 async fn get_artist(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     Path(id): Path<String>,
@@ -121,7 +124,7 @@ async fn get_artist(
 }
 
 async fn get_album(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     Path(id): Path<String>,
@@ -151,7 +154,7 @@ async fn get_album(
 }
 
 async fn get_resolved_album(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     Path(id): Path<String>,
@@ -181,7 +184,7 @@ async fn get_resolved_album(
 }
 
 async fn get_artist_discography(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     Path(id): Path<String>,
@@ -222,7 +225,7 @@ async fn get_artist_discography(
 // =========================================================================
 
 async fn get_genres(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
 ) -> Response {
     match database
@@ -238,7 +241,7 @@ async fn get_genres(
 }
 
 async fn get_genre_tracks(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(genre_name): Path<String>,
     Query(query): Query<GenreTracksQuery>,
@@ -259,7 +262,7 @@ async fn get_genre_tracks(
 }
 
 async fn get_genre_radio(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(genre_name): Path<String>,
     Query(query): Query<GenreRadioQuery>,
@@ -289,7 +292,7 @@ struct WorkQuery {
 }
 
 async fn search_works(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Query(query): Query<WorkQuery>,
 ) -> Response {
@@ -326,7 +329,7 @@ async fn search_works(
 }
 
 async fn get_work(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(id): Path<String>,
     Query(query): Query<WorkQuery>,
@@ -381,7 +384,7 @@ async fn get_work(
 }
 
 pub async fn get_track(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     Path(id): Path<String>,
@@ -411,7 +414,7 @@ pub async fn get_track(
 }
 
 pub async fn get_resolved_track(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     Path(id): Path<String>,
@@ -443,7 +446,7 @@ pub async fn get_resolved_track(
 /// Batch fetch multiple artists, albums, and tracks in a single request.
 /// Returns per-item results with `{"ok": ...}` or `{"error": "..."}` wrapper.
 async fn post_batch_content(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     State(organic_indexer): State<super::state::OptionalOrganicIndexer>,
     Json(request): Json<BatchContentRequest>,
@@ -759,7 +762,7 @@ fn default_track() -> i32 {
 }
 
 async fn create_artist(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Json(data): Json<CreateArtistRequest>,
 ) -> Response {
@@ -794,7 +797,7 @@ async fn create_artist(
 }
 
 async fn update_artist(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(id): Path<String>,
     Json(data): Json<UpdateArtistMetadataRequest>,
@@ -830,7 +833,7 @@ async fn update_artist(
 }
 
 async fn delete_artist(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(id): Path<String>,
 ) -> Response {
@@ -853,7 +856,7 @@ async fn delete_artist(
 }
 
 async fn create_album(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Json(data): Json<CreateAlbumRequest>,
 ) -> Response {
@@ -892,7 +895,7 @@ async fn create_album(
 }
 
 async fn update_album(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(id): Path<String>,
     Json(data): Json<UpdateAlbumMetadataRequest>,
@@ -930,7 +933,7 @@ async fn update_album(
 }
 
 async fn delete_album(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(id): Path<String>,
 ) -> Response {
@@ -953,7 +956,7 @@ async fn delete_album(
 }
 
 async fn create_track(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Json(data): Json<CreateTrackRequest>,
 ) -> Response {
@@ -995,7 +998,7 @@ async fn create_track(
 }
 
 async fn update_track(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(id): Path<String>,
     Json(data): Json<UpdateTrackMetadataRequest>,
@@ -1035,7 +1038,7 @@ async fn update_track(
 }
 
 async fn delete_track(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(id): Path<String>,
 ) -> Response {
@@ -1059,7 +1062,7 @@ async fn delete_track(
 
 // Image CRUD not yet implemented
 async fn create_image(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(_catalog_store): State<GuardedCatalogStore>,
     Json(_data): Json<serde_json::Value>,
 ) -> Response {
@@ -1071,7 +1074,7 @@ async fn create_image(
 }
 
 async fn update_image(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(_catalog_store): State<GuardedCatalogStore>,
     Path(_id): Path<String>,
     Json(_data): Json<serde_json::Value>,
@@ -1084,7 +1087,7 @@ async fn update_image(
 }
 
 async fn delete_image(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(_catalog_store): State<GuardedCatalogStore>,
     Path(_id): Path<String>,
 ) -> Response {
@@ -1155,7 +1158,7 @@ struct TrackSummary {
 
 /// GET /v1/content/whatsnew - List recent catalog updates
 async fn get_whats_new(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Query(query): Query<WhatsNewQuery>,
 ) -> Response {
@@ -1238,7 +1241,7 @@ async fn get_whats_new(
 /// Uses a large window so that low-traffic instances still return meaningful results.
 /// Results are cached for 24 hours in UserManager.
 async fn get_popular_content(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(catalog_store): State<GuardedCatalogStore>,
     State(database): State<DatabaseHandles>,
     Query(query): Query<PopularContentQuery>,
@@ -1313,7 +1316,7 @@ async fn get_popular_content(
 
 /// Get the current weekly featured album discovery snapshot.
 async fn get_featured_albums(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Query(query): Query<FeaturedAlbumsQuery>,
 ) -> Response {
@@ -1366,7 +1369,7 @@ async fn get_featured_albums(
 
 /// Get latest persisted catalog availability statistics snapshot.
 async fn get_catalog_stats_snapshot(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
 ) -> Response {
     let key = CatalogAvailabilityStatsJob::snapshot_state_key();

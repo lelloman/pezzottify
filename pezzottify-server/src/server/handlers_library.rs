@@ -8,7 +8,7 @@ fn parse_content_type(content_type_str: &str) -> Option<LikedContentType> {
 }
 
 async fn add_user_liked_content(
-    session: Session,
+    Extract(session): Extract<Session>,
     headers: HeaderMap,
     State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
@@ -58,7 +58,7 @@ async fn add_user_liked_content(
 }
 
 async fn delete_user_liked_content(
-    session: Session,
+    Extract(session): Extract<Session>,
     headers: HeaderMap,
     State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
@@ -108,7 +108,7 @@ async fn delete_user_liked_content(
 }
 
 async fn get_user_liked_content(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(content_type_str): Path<String>,
 ) -> Response {
@@ -130,7 +130,7 @@ async fn get_user_liked_content(
 }
 
 async fn post_playlist(
-    session: Session,
+    Extract(session): Extract<Session>,
     headers: HeaderMap,
     State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
@@ -177,7 +177,7 @@ async fn post_playlist(
 }
 
 async fn put_playlist(
-    session: Session,
+    Extract(session): Extract<Session>,
     headers: HeaderMap,
     State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
@@ -228,7 +228,7 @@ async fn put_playlist(
 }
 
 async fn delete_playlist(
-    session: Session,
+    Extract(session): Extract<Session>,
     headers: HeaderMap,
     State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
@@ -269,7 +269,7 @@ async fn delete_playlist(
 }
 
 async fn get_playlist(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(id): Path<String>,
 ) -> Response {
@@ -289,7 +289,7 @@ async fn get_playlist(
 }
 
 async fn add_playlist_tracks(
-    session: Session,
+    Extract(session): Extract<Session>,
     headers: HeaderMap,
     State(catalog_store): State<GuardedCatalogStore>,
     State(database): State<DatabaseHandles>,
@@ -340,7 +340,7 @@ async fn add_playlist_tracks(
 }
 
 async fn remove_tracks_from_playlist(
-    session: Session,
+    Extract(session): Extract<Session>,
     headers: HeaderMap,
     State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
@@ -389,7 +389,7 @@ async fn remove_tracks_from_playlist(
 }
 
 async fn get_user_playlists(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
 ) -> Response {
     let user_id = session.user_id;

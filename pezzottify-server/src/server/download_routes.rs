@@ -13,6 +13,7 @@ use simple_server::axum::{
     routing::{delete, get, post},
     Json, Router,
 };
+use simple_server::extract::Extract;
 use tracing::{debug, warn};
 
 use crate::db_executor::{DbHandle, DbPriority, DbRunError};
@@ -133,7 +134,7 @@ fn get_download_manager(
 
 /// GET /limits - Get user's rate limit status
 async fn get_user_limits(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
 ) -> impl IntoResponse {
     let manager = match get_download_manager(&database) {
@@ -166,7 +167,7 @@ pub struct MyRequestsResponse {
 
 /// GET /my-requests - Get user's queued download requests
 async fn get_my_requests(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Query(pagination): Query<PaginationQuery>,
 ) -> impl IntoResponse {
@@ -199,7 +200,7 @@ async fn get_my_requests(
 
 /// POST /request/track - Request a single track download
 async fn request_track(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Json(body): Json<RequestTrackBody>,
 ) -> impl IntoResponse {
@@ -244,7 +245,7 @@ async fn request_track(
 
 /// POST /request/album - Request all tracks in an album
 async fn request_album(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Json(body): Json<RequestAlbumBody>,
 ) -> impl IntoResponse {
@@ -312,7 +313,7 @@ async fn get_status(State(database): State<DatabaseHandles>) -> impl IntoRespons
 
 /// GET /admin/stats - Get queue statistics
 async fn get_admin_stats(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
 ) -> impl IntoResponse {
     if !session.has_permission(Permission::ViewAnalytics) {
@@ -338,7 +339,7 @@ async fn get_admin_stats(
 
 /// GET /admin/proxy - Get active and recent on-demand track materializations.
 async fn get_admin_proxy_status(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(media): State<GuardedMediaManager>,
 ) -> impl IntoResponse {
     if !session.has_permission(Permission::DownloadManagerAdmin) {
@@ -361,7 +362,7 @@ async fn get_admin_proxy_status(
 
 /// GET /admin/failed - Get failed download items
 async fn get_admin_failed(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Query(pagination): Query<PaginationQuery>,
 ) -> impl IntoResponse {
@@ -390,7 +391,7 @@ async fn get_admin_failed(
 
 /// GET /admin/requests - Get all queued requests
 async fn get_admin_requests(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Query(query): Query<AdminRequestsQuery>,
 ) -> impl IntoResponse {
@@ -441,7 +442,7 @@ enum ExternalAttemptBody {
 
 /// External cron worker status reporting. Completion is owned by ingestion.
 async fn report_external_attempt(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(item_id): Path<String>,
     Json(body): Json<ExternalAttemptBody>,
@@ -484,7 +485,7 @@ async fn report_external_attempt(
 
 /// POST /admin/retry/:id - Retry a failed download
 async fn retry_failed(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(item_id): Path<String>,
 ) -> impl IntoResponse {
@@ -521,7 +522,7 @@ async fn retry_failed(
 
 /// DELETE /admin/request/:id - Delete a download request
 async fn delete_request(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(item_id): Path<String>,
 ) -> impl IntoResponse {
@@ -559,7 +560,7 @@ async fn delete_request(
 
 /// GET /admin/audit - Query audit log
 async fn get_audit_log(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Query(query): Query<AuditLogQuery>,
 ) -> impl IntoResponse {
@@ -610,7 +611,7 @@ async fn get_audit_log(
 
 /// GET /admin/audit/item/:id - Get audit log for a specific queue item
 async fn get_audit_for_item(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(item_id): Path<String>,
     Query(pagination): Query<PaginationQuery>,
@@ -662,7 +663,7 @@ async fn get_audit_for_item(
 
 /// GET /admin/audit/user/:user_id - Get audit log for a specific user
 async fn get_audit_for_user(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(user_id): Path<String>,
     Query(pagination): Query<PaginationQuery>,

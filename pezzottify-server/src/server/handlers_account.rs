@@ -1,5 +1,5 @@
 async fn post_listening_event(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Json(body): Json<ListeningEventRequest>,
 ) -> Response {
@@ -102,7 +102,7 @@ async fn post_listening_event(
 }
 
 async fn get_user_listening_summary(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Query(query): Query<DateRangeQuery>,
 ) -> Response {
@@ -122,7 +122,7 @@ async fn get_user_listening_summary(
 }
 
 async fn get_user_listening_history(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Query(query): Query<ListeningHistoryQuery>,
 ) -> Response {
@@ -142,7 +142,7 @@ async fn get_user_listening_history(
 }
 
 async fn get_user_listening_events(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Query(query): Query<ListeningEventsQuery>,
 ) -> Response {
@@ -185,7 +185,7 @@ struct ImpressionBody {
 /// Records that a user viewed an artist, album, or track page.
 /// This data is used for popularity scoring.
 async fn post_impression(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Json(body): Json<ImpressionBody>,
 ) -> Response {
@@ -295,7 +295,7 @@ struct UserSettingsResponse {
 }
 
 async fn get_user_settings(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
 ) -> Response {
     let user_id = session.user_id;
@@ -312,7 +312,7 @@ async fn get_user_settings(
 }
 
 async fn update_user_settings(
-    session: Session,
+    Extract(session): Extract<Session>,
     headers: HeaderMap,
     State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
@@ -426,7 +426,7 @@ fn policy_to_response(policy: DeviceSharePolicy) -> DeviceSharePolicyResponse {
 }
 
 async fn get_user_devices(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
 ) -> Response {
     let user_id = session.user_id;
@@ -470,7 +470,7 @@ async fn get_user_devices(
 }
 
 async fn put_device_share_policy(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     State(playback_session_manager): State<GuardedPlaybackSessionManager>,
     Path(device_id): Path<usize>,

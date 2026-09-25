@@ -1,5 +1,6 @@
 //! Recommendation routes for smart continuation and radio playback.
 
+use simple_server::extract::Extract;
 use std::collections::{HashMap, HashSet};
 
 use rand::Rng;
@@ -216,7 +217,7 @@ pub fn recommendation_routes() -> Router<ServerState> {
 }
 
 async fn get_artist_greatest_hits(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(state): State<ServerState>,
     Path(id): Path<String>,
 ) -> Response {
@@ -240,7 +241,7 @@ async fn get_artist_greatest_hits(
 }
 
 async fn post_radio_continuation(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(state): State<ServerState>,
     Json(body): Json<RadioContinuationRequest>,
 ) -> Response {
@@ -350,7 +351,7 @@ fn initialize_radio_history(
 }
 
 async fn post_continuation_recommendations(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(state): State<ServerState>,
     Json(body): Json<ContinuationRequest>,
 ) -> Response {
@@ -389,7 +390,7 @@ async fn post_continuation_recommendations(
 }
 
 async fn get_radio(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(state): State<ServerState>,
     Path((entity_type, entity_id)): Path<(String, String)>,
     Query(query): Query<RadioQuery>,
@@ -435,14 +436,17 @@ async fn get_radio(
     }
 }
 
-async fn get_radio_options(_session: Session, State(state): State<ServerState>) -> Response {
+async fn get_radio_options(
+    Extract(_session): Extract<Session>,
+    State(state): State<ServerState>,
+) -> Response {
     no_store_json(radio_options_response(
         state.config.audio_embeddings.as_ref(),
     ))
 }
 
 async fn post_radio_build(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(state): State<ServerState>,
     Json(body): Json<RadioBuildRequest>,
 ) -> Response {

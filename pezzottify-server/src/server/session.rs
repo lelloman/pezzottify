@@ -10,11 +10,10 @@ use simple_server::auth::{
     CredentialSource, CredentialSources, HeaderCredential, Identity, SelectedCredential,
 };
 #[cfg(test)]
-use simple_server::axum::http::HeaderMap;
-use simple_server::axum::{
-    extract::FromRequestParts,
-    http::{header::AUTHORIZATION, request::Parts, StatusCode},
-    response::IntoResponse,
+use simple_server::extract::HeaderMap;
+use simple_server::extract::{
+    header::AUTHORIZATION, FromRequestParts, IntoRejectionResponse, Parts, RejectionResponse,
+    StatusCode,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
@@ -46,14 +45,18 @@ pub enum SessionExtractionError {
     Database(DbRunError),
 }
 
-impl IntoResponse for SessionExtractionError {
-    fn into_response(self) -> simple_server::axum::response::Response {
+impl IntoRejectionResponse for SessionExtractionError {
+    fn into_rejection_response(self) -> RejectionResponse {
         match self {
-            SessionExtractionError::AccessDenied => StatusCode::UNAUTHORIZED.into_response(),
-            SessionExtractionError::InternalError => {
-                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            SessionExtractionError::AccessDenied => {
+                StatusCode::UNAUTHORIZED.into_rejection_response()
             }
-            SessionExtractionError::Database(error) => ApiError::from(error).into_response(),
+            SessionExtractionError::InternalError => {
+                StatusCode::INTERNAL_SERVER_ERROR.into_rejection_response()
+            }
+            SessionExtractionError::Database(error) => {
+                ApiError::from(error).into_rejection_response()
+            }
         }
     }
 }
@@ -449,9 +452,9 @@ async fn extract_session_from_request_parts(
         access,
         |error: CredentialAuthError<SessionExtractionError>| match error {
             CredentialAuthError::Selection(_) => {
-                SessionExtractionError::AccessDenied.into_response()
+                SessionExtractionError::AccessDenied.into_rejection_response()
             }
-            CredentialAuthError::Access(error) => error.into_response(),
+            CredentialAuthError::Access(error) => error.into_rejection_response(),
         },
     );
     match layer.authenticate(parts).await {
@@ -545,7 +548,8 @@ impl FromRequestParts<ServerState> for Option<Session> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use simple_server::axum::http::{HeaderMap, HeaderValue, Method};
+    use http::Method;
+    use simple_server::extract::{HeaderMap, HeaderValue};
 
     #[test]
     fn session_has_permission_returns_true_when_permission_exists() {
@@ -726,7 +730,7 @@ mod tests {
     #[test]
     fn session_extraction_error_access_denied_status_code() {
         let error = SessionExtractionError::AccessDenied;
-        let response = error.into_response();
+        let response = error.into_rejection_response();
         // 401 Unauthorized - not authenticated
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
@@ -734,16 +738,17 @@ mod tests {
     #[test]
     fn session_extraction_error_internal_error_status_code() {
         let error = SessionExtractionError::InternalError;
-        let response = error.into_response();
+        let response = error.into_rejection_response();
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 
     #[test]
     fn session_executor_saturation_is_retryable() {
-        let response = SessionExtractionError::Database(DbRunError::QueueTimeout).into_response();
+        let response =
+            SessionExtractionError::Database(DbRunError::QueueTimeout).into_rejection_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(
-            response.headers()[simple_server::axum::http::header::RETRY_AFTER],
+            response.headers()[simple_server::extract::header::RETRY_AFTER],
             "1"
         );
     }

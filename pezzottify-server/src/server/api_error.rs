@@ -2,8 +2,8 @@ use serde::Serialize;
 use simple_server::axum::{
     http::{header::HeaderName, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
-    Json,
 };
+use simple_server::extract::{IntoRejectionResponse, RejectionResponse};
 use tracing::error;
 
 use crate::{catalog_store::CatalogMutationError, db_executor::DbRunError, user::UserServiceError};
@@ -176,18 +176,21 @@ impl From<DbRunError> for ApiError {
     }
 }
 
-impl IntoResponse for ApiError {
-    fn into_response(self) -> Response {
+impl IntoRejectionResponse for ApiError {
+    fn into_rejection_response(self) -> RejectionResponse {
         let request_id = self.request_id.clone();
-        let mut response = (
-            self.status,
-            Json(ApiErrorBody {
-                code: self.code,
-                message: self.message,
-                request_id: self.request_id,
-            }),
-        )
-            .into_response();
+        let body = serde_json::to_vec(&ApiErrorBody {
+            code: self.code,
+            message: self.message,
+            request_id: self.request_id,
+        })
+        .expect("ApiErrorBody contains only strings");
+        let mut response = RejectionResponse::new(body);
+        *response.status_mut() = self.status;
+        response.headers_mut().insert(
+            simple_server::extract::header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        );
         response.headers_mut().insert(
             REQUEST_ID_HEADER,
             HeaderValue::from_str(&request_id).expect("UUID is a valid header value"),
@@ -201,9 +204,59 @@ impl IntoResponse for ApiError {
     }
 }
 
+// Existing response handlers keep their transitional framework adapter; both
+// paths render the same application error contract above.
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        self.into_rejection_response().into_response()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn buffered_rejections_match_previous_json_renderer() {
+        for error in [
+            ApiError::from(DbRunError::QueueTimeout),
+            ApiError::from(DbRunError::ExecutionTimeout),
+            ApiError::from(DbRunError::ShuttingDown),
+            ApiError::from(DbRunError::Store(anyhow::anyhow!(
+                "private database detail"
+            ))),
+            ApiError::bad_request("invalid_request", "quotes: \" / newline: \n / café"),
+        ] {
+            // Reconstruct the previous renderer, with the identical request ID.
+            let mut previous = (
+                error.status,
+                simple_server::axum::Json(ApiErrorBody {
+                    code: error.code,
+                    message: error.message.clone(),
+                    request_id: error.request_id.clone(),
+                }),
+            )
+                .into_response();
+            previous
+                .headers_mut()
+                .insert(REQUEST_ID_HEADER, error.request_id.parse().unwrap());
+            if let Some(retry_after) = error.retry_after.clone() {
+                previous
+                    .headers_mut()
+                    .insert(http::header::RETRY_AFTER, retry_after);
+            }
+            let current = error.into_rejection_response().into_response();
+            assert_eq!(current.status(), previous.status());
+            assert_eq!(current.headers(), previous.headers());
+            let previous = simple_server::axum::body::to_bytes(previous.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            let current = simple_server::axum::body::to_bytes(current.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            assert_eq!(current, previous);
+        }
+    }
 
     #[test]
     fn user_service_errors_have_stable_status_and_code() {

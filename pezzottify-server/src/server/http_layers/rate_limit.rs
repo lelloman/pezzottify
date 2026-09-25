@@ -15,6 +15,7 @@ use simple_server::axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use simple_server::extract::Extract;
 use simple_server::rate_limit::{
     Admission, AsyncPolicy, KeyedLimiter, Policy, Quota, RateLimitLayer, StoreConfig,
 };
@@ -308,7 +309,7 @@ pub fn rate_limit_error_handler(err: RateLimitError, req: Request<Body>) -> Resp
 /// Middleware to extract user_id from Session and add it to request extensions
 /// This allows the rate limiter to use user_id as the key
 pub async fn extract_user_id_for_rate_limit(
-    session: Option<crate::server::session::Session>,
+    Extract(session): Extract<Option<crate::server::session::Session>>,
     mut request: Request<Body>,
     next: Next,
 ) -> impl IntoResponse {
