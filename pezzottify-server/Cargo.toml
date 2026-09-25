@@ -24,7 +24,7 @@ libc = "0.2"
 ctrlc = "3.4"
 argon2 = "0.5.3"
 async-trait = "0.1.85"
-simple-server = { path = "../../simple-server", features = ["ws", "multipart", "lifecycle", "logging", "http-tracing", "body-limit", "response-headers", "tasks", "task-scheduling", "task-policies", "auth", "auth-cookies", "extract", "rate-limit"] }
+simple-server = { path = "../../simple-server", features = ["ws", "multipart", "lifecycle", "logging", "http-tracing", "body-limit", "response-headers", "tasks", "task-scheduling", "task-policies", "auth", "auth-cookies", "extract", "web-compat", "rate-limit"] }
 byte-unit = "5.1.6"
 chrono = "0.4.39"
 clap = { version = "4.4.11", features = ["derive"] }

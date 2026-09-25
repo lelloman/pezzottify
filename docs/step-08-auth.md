@@ -101,7 +101,7 @@ external OIDC-provider deployments were not exercised; this is local integration
 
 ## Shared session extraction — 2026-09-25
 
-Active shared revision: `ce37b3dc80e2c7bd334898e79c0f2e6eceacf38c` (`extract`
+Shared revision at this checkpoint: `ce37b3dc80e2c7bd334898e79c0f2e6eceacf38c` (`extract`
 feature). `Session` and `Option<Session>` now implement
 `simple_server::extract::FromRequestParts<ServerState>`. The Axum adapter is
 inside simple-server. All session handler arguments, permission middleware,
@@ -136,3 +136,6 @@ enrichment/background-task test warnings and num-bigint-dig compatibility notice
 Changed standalone modules pass formatting; existing included-handler formatting
 is preserved. Diff checks pass. Shared validation: **211 tests/doctests** and
 strict all-target Clippy, plus the standalone extraction feature check.
+
+The subsequent [shared HTTP canary](shared-http-canary.md) updates the active
+shared revision and migrates embedding routes; session behavior is unchanged.

@@ -204,6 +204,12 @@ impl IntoRejectionResponse for ApiError {
     }
 }
 
+impl simple_server::web::IntoResponse for ApiError {
+    fn into_response(self) -> simple_server::web::Response {
+        simple_server::web::IntoResponse::into_response(self.into_rejection_response())
+    }
+}
+
 // Existing response handlers keep their transitional framework adapter; both
 // paths render the same application error contract above.
 impl IntoResponse for ApiError {
