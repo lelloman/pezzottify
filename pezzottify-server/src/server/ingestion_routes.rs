@@ -15,6 +15,7 @@ use simple_server::axum::{
     Json, Router,
 };
 use simple_server::body_limit::BodyLimit;
+use simple_server::extract::Extract;
 use tracing::{debug, info, warn};
 
 use crate::db_executor::{DbHandle, DbPriority, DbRunError};
@@ -210,7 +211,7 @@ fn executor_status(error: &DbRunError) -> StatusCode {
 /// POST /upload - Upload a file for ingestion (multipart/form-data)
 async fn upload_file(
     State(runtime_tasks): State<super::lifecycle::RuntimeTasks>,
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
@@ -387,7 +388,7 @@ async fn upload_file(
 
 /// GET /job/:id - Get job status
 async fn get_job(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(job_id): Path<String>,
 ) -> impl IntoResponse {
@@ -404,7 +405,7 @@ async fn get_job(
 
 /// GET /job/:id/details - Get detailed job information including files, candidates, and review
 async fn get_job_details(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(job_id): Path<String>,
 ) -> impl IntoResponse {
@@ -475,7 +476,7 @@ async fn get_job_details(
 
 /// GET /my-jobs - Get user's jobs
 async fn get_my_jobs(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Query(pagination): Query<PaginationQuery>,
 ) -> impl IntoResponse {
@@ -511,7 +512,7 @@ async fn get_my_jobs(
 
 /// POST /job/:id/process - Trigger processing of a pending job
 async fn process_job(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(job_id): Path<String>,
 ) -> impl IntoResponse {
@@ -568,7 +569,7 @@ async fn process_job(
 
 /// POST /job/:id/convert - Trigger conversion of a matched job
 async fn convert_job(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(job_id): Path<String>,
 ) -> impl IntoResponse {
@@ -629,7 +630,7 @@ async fn convert_job(
 
 /// GET /reviews - Get pending review items
 async fn get_pending_reviews(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Query(pagination): Query<PaginationQuery>,
 ) -> impl IntoResponse {
@@ -673,7 +674,7 @@ async fn get_pending_reviews(
 
 /// POST /review/:job_id/resolve - Resolve a review
 async fn resolve_review(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(job_id): Path<String>,
     Json(body): Json<ResolveReviewBody>,
@@ -752,7 +753,7 @@ async fn resolve_review(
 
 /// GET /admin/jobs - List all ingestion jobs
 async fn admin_list_jobs(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Query(pagination): Query<PaginationQuery>,
 ) -> impl IntoResponse {
@@ -783,7 +784,7 @@ async fn admin_list_jobs(
 
 /// DELETE /job/:id - Delete a job (user can delete their own jobs)
 async fn delete_job(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(job_id): Path<String>,
 ) -> impl IntoResponse {

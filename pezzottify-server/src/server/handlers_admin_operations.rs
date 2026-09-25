@@ -1,5 +1,5 @@
 async fn reboot_server(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(runtime_tasks): State<super::lifecycle::RuntimeTasks>,
 ) -> Response {
     info!(
@@ -14,7 +14,7 @@ async fn reboot_server(
 }
 
 async fn admin_prepare_backup(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
 ) -> Response {
     info!("Backup prepare requested by user_id={}", session.user_id);
@@ -40,7 +40,7 @@ async fn admin_prepare_backup(
 }
 
 async fn admin_get_storage_report(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(config): State<ServerConfig>,
     State(db_registry): State<super::state::GuardedDbRegistry>,
     State(filesystem_work): State<FilesystemWorkPool>,
@@ -88,7 +88,7 @@ async fn admin_get_job_controls(
 }
 
 async fn admin_set_global_job_pause(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
     Json(request): Json<JobPauseRequest>,
 ) -> Response {
@@ -117,7 +117,7 @@ async fn admin_set_global_job_pause(
 }
 
 async fn admin_set_resource_class_job_pause(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
     Path(resource_class): Path<String>,
     Json(request): Json<JobPauseRequest>,
@@ -154,7 +154,7 @@ async fn admin_set_resource_class_job_pause(
 }
 
 async fn admin_set_job_pause(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
     Path(job_id): Path<String>,
     Json(request): Json<JobPauseRequest>,
@@ -219,7 +219,7 @@ struct AdminAlbumEmbeddingCoverageResponse {
 }
 
 async fn admin_list_jobs(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
 ) -> Response {
     let handle = match scheduler_handle {
@@ -250,7 +250,7 @@ async fn admin_list_jobs(
 }
 
 async fn admin_get_audio_embedding_coverage(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(config): State<ServerConfig>,
     State(database): State<DatabaseHandles>,
 ) -> Response {
@@ -329,7 +329,7 @@ async fn admin_get_audio_embedding_coverage(
 }
 
 async fn admin_get_job(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
     Path(job_id): Path<String>,
 ) -> Response {
@@ -374,7 +374,7 @@ struct TriggerJobRequest {
 }
 
 async fn admin_trigger_job(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
     Path(job_id): Path<String>,
     body: Result<Json<TriggerJobRequest>, simple_server::axum::extract::rejection::JsonRejection>,
@@ -445,7 +445,7 @@ async fn admin_trigger_job(
 }
 
 async fn admin_cancel_job(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
     Path(job_id): Path<String>,
 ) -> Response {
@@ -490,7 +490,7 @@ async fn admin_cancel_job(
 }
 
 async fn admin_get_job_history(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
     Path(job_id): Path<String>,
     Query(params): Query<std::collections::HashMap<String, String>>,
@@ -546,7 +546,7 @@ async fn post_challenge(State(_state): State<ServerState>) -> Response {
 
 /// Get job audit log entries (all jobs).
 async fn admin_get_job_audit_log(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Response {
@@ -596,7 +596,7 @@ async fn admin_get_job_audit_log(
 
 /// Get job audit log entries for a specific job.
 async fn admin_get_job_audit_log_by_job(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
     Path(job_id): Path<String>,
     Query(params): Query<std::collections::HashMap<String, String>>,

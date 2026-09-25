@@ -67,6 +67,7 @@ use crate::server::session_cookie::{
     append_expired_session_cookies, append_session_cookies, require_csrf,
 };
 use crate::user::auth::AuthTokenValue;
+use simple_server::extract::Extract;
 
 use super::authorization::{
     require_access_catalog, require_edit_catalog, require_like_content, require_manage_permissions,

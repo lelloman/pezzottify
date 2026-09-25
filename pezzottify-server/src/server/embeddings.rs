@@ -9,6 +9,7 @@ use simple_server::axum::{
     routing::{get, post, put},
     Json, Router,
 };
+use simple_server::extract::Extract;
 
 use crate::catalog_store::{EntityEmbedding, EntityEmbeddingSearchResult, EntityEmbeddingUpsert};
 
@@ -77,7 +78,7 @@ fn validate_namespace(namespace: &str) -> Result<(), ApiError> {
 }
 
 async fn list_embeddings(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(state): State<ServerState>,
     Path((entity_type, entity_id)): Path<(String, String)>,
     Query(query): Query<EmbeddingQuery>,
@@ -91,7 +92,7 @@ async fn list_embeddings(
 }
 
 async fn get_embedding(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(state): State<ServerState>,
     Path((entity_type, entity_id, namespace)): Path<(String, String, String)>,
     Query(query): Query<EmbeddingQuery>,
@@ -112,7 +113,7 @@ async fn get_embedding(
 }
 
 async fn put_embedding(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(state): State<ServerState>,
     Path((entity_type, entity_id, namespace)): Path<(String, String, String)>,
     Json(body): Json<UpsertEmbeddingBody>,
@@ -149,7 +150,7 @@ async fn put_embedding(
 }
 
 async fn delete_embedding(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(state): State<ServerState>,
     Path((entity_type, entity_id, namespace)): Path<(String, String, String)>,
 ) -> Result<StatusCode, ApiError> {
@@ -170,7 +171,7 @@ async fn delete_embedding(
 }
 
 async fn search_embeddings(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(state): State<ServerState>,
     Json(body): Json<SearchEmbeddingsBody>,
 ) -> Result<Json<SearchEmbeddingsResponse>, ApiError> {

@@ -13,7 +13,7 @@ devices, and maps invalid tokens to 401 and executor errors through the existing
 response policy. The shared flow does not cache a session or change revocation.
 
 Every named HTTP route policy in `server::authorization` now evaluates `Access`.
-The Axum `Session` extractor authenticates first; the access check uses its
+The shared `Session` extractor authenticates first; the access check uses its
 permission snapshot and returns the established 403 on denial. Public routes,
 handler-specific resource policy, 404 concealment, mutation-sensitive checks,
 and CSRF stay in the application.
@@ -54,12 +54,14 @@ were not rerun.
 
 ## Cookie/header selection follow-up — 2026-09-25
 
-The active shared revision is `d7e8d133bfc67b62b93d2679fe27610de0dfda99`.
+The shared revision for this cookie checkpoint was
+`d7e8d133bfc67b62b93d2679fe27610de0dfda99`; the extraction follow-up below
+records the newer active revision.
 Production session extraction now invokes `AuthLayer::credentials` through its
 lazy `authenticate` API. This preserves existing extraction points, public
 routes, fresh permission snapshots and database side effects. Required and
-optional Session adapters remain thin Axum bridges until the shared handler API
-exists; the optional adapter continues treating invalid credentials as anonymous,
+optional Session adapters were thin Axum bridges at this checkpoint; these are
+replaced in the extraction follow-up below. The optional policy treats invalid credentials as anonymous,
 while database failures retain existing error responses.
 
 The shared selector gives Authorization precedence and rejects duplicate/invalid
@@ -95,3 +97,42 @@ Source/manifests/lockfile contain no remaining axum-extra or CookieJar usage.
 Shared extension: 208 tests/doctests and all-target strict Clippy passed; the base
 auth-only dependency graph still excludes Axum/Tokio. Docker/browser/Android and
 external OIDC-provider deployments were not exercised; this is local integration.
+
+
+## Shared session extraction — 2026-09-25
+
+Active shared revision: `ce37b3dc80e2c7bd334898e79c0f2e6eceacf38c` (`extract`
+feature). `Session` and `Option<Session>` now implement
+`simple_server::extract::FromRequestParts<ServerState>`. The Axum adapter is
+inside simple-server. All session handler arguments, permission middleware,
+optional rate-limit identity middleware, and MCP/sync WebSocket upgrades use
+`Extract<Session>` or `Extract<Option<Session>>`. Report admission invokes the
+same shared trait directly. `session.rs`, including tests, has no Axum imports.
+
+Authentication still runs at the same extraction points; it does not reuse an
+identity cache. Required sessions return 401 for missing/invalid credentials;
+optional sessions treat those cases as anonymous, while database failures retain
+the existing 503/500 response contract. Credential priority, CSRF, fresh permission
+lookups and long-lived transport revalidation are unchanged.
+
+`IntoRejectionResponse` and the shared buffered `RejectionResponse` remove Axum
+from the session error contract. ApiError has one renderer used by both extraction
+rejections and its remaining transitional response adapter. JSON bytes, content
+type, request IDs, Retry-After, status and opaque internal errors are preserved.
+This does not migrate general routers, state/path/query/body extractors,
+streaming, multipart, SSE, WebSockets or general response/middleware APIs.
+
+Baseline: clean `dev` at `5a1db7c9`, shared `2c63c61` (documentation descendant of
+its previous pin). Session-focused library tests: **32 passed**. Existing real
+HTTP suites: auth **22**, MCP **5**, permissions **22**, all passed before edits.
+Final full `cargo test --offline --locked --features fast`: **1,443 passed,
+36 existing ignored**, including those same HTTP suites, CSRF, streaming,
+WebSockets, lifecycle/restarts and mixed workloads. Private build target, two
+jobs, `CARGO_PROFILE_DEV_DEBUG=0`. Docker/browser/Android/external OIDC providers
+were not exercised. After the full run, the error-renderer suite passed **7**
+tests, including the new byte-for-byte comparison with the previous JSON renderer.
+Production-target strict Clippy passed; all-target Clippy passed with the existing
+enrichment/background-task test warnings and num-bigint-dig compatibility notice.
+Changed standalone modules pass formatting; existing included-handler formatting
+is preserved. Diff checks pass. Shared validation: **211 tests/doctests** and
+strict all-target Clippy, plus the standalone extraction feature check.

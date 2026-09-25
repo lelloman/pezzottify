@@ -26,6 +26,7 @@ use super::registry::McpRegistry;
 use crate::db_executor::DbPriority;
 use crate::server::session::Session;
 use crate::server::state::{GuardedMcpState, ServerState};
+use simple_server::extract::Extract;
 
 /// State shared across MCP connections
 pub struct McpState {
@@ -36,7 +37,7 @@ pub struct McpState {
 /// WebSocket upgrade handler for MCP
 pub async fn mcp_handler(
     ws: WebSocketUpgrade,
-    session: Session,
+    Extract(session): Extract<Session>,
     State(server_state): State<ServerState>,
     State(mcp_state): State<GuardedMcpState>,
 ) -> Response {

@@ -14,6 +14,7 @@ use simple_server::axum::{
     Json, Router,
 };
 use simple_server::body_limit::BodyLimit;
+use simple_server::extract::Extract;
 
 impl IntoResponse for ReportError {
     fn into_response(self) -> Response {
@@ -77,7 +78,7 @@ fn output<T: Serialize>(result: ReportResult<T>) -> Response {
 }
 
 async fn submit(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(db): State<DatabaseHandles>,
     Json(input): Json<NewReport>,
 ) -> Response {
@@ -107,7 +108,7 @@ async fn submit(
     }
 }
 async fn owner_list(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(db): State<DatabaseHandles>,
     Query(filter): Query<ReportFilter>,
 ) -> Response {
@@ -117,7 +118,7 @@ async fn owner_list(
     output(run(db, move |s| s.list(Some(session.user_id), filter)).await)
 }
 async fn admin_list(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(db): State<DatabaseHandles>,
     Query(filter): Query<ReportFilter>,
 ) -> Response {
@@ -127,7 +128,7 @@ async fn admin_list(
     output(run(db, move |s| s.list(None, filter)).await)
 }
 async fn owner_get(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(db): State<DatabaseHandles>,
     Path(id): Path<String>,
 ) -> Response {
@@ -137,7 +138,7 @@ async fn owner_get(
     output(run(db, move |s| s.get(&id, Some(session.user_id))).await)
 }
 async fn admin_get(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(db): State<DatabaseHandles>,
     Path(id): Path<String>,
 ) -> Response {
@@ -147,7 +148,7 @@ async fn admin_get(
     output(run(db, move |s| s.get(&id, None)).await)
 }
 async fn update(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(db): State<DatabaseHandles>,
     Path(id): Path<String>,
     Json(input): Json<ReportUpdate>,
@@ -158,7 +159,7 @@ async fn update(
     output(run(db, move |s| s.update(&id, session.user_id, input)).await)
 }
 async fn events(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(db): State<DatabaseHandles>,
     Path(id): Path<String>,
     Query(query): Query<ReportFilter>,
@@ -174,7 +175,7 @@ async fn events(
     )
 }
 async fn owner_attachment(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(db): State<DatabaseHandles>,
     Path((id, attachment)): Path<(String, String)>,
 ) -> Response {
@@ -189,7 +190,7 @@ async fn owner_attachment(
     )
 }
 async fn admin_attachment(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(db): State<DatabaseHandles>,
     Path((id, attachment)): Path<(String, String)>,
 ) -> Response {
@@ -204,7 +205,7 @@ async fn admin_attachment(
     )
 }
 async fn owner_delete_attachment(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(db): State<DatabaseHandles>,
     Path((id, attachment)): Path<(String, String)>,
 ) -> Response {
@@ -219,7 +220,7 @@ async fn owner_delete_attachment(
     )
 }
 async fn admin_delete_attachment(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(db): State<DatabaseHandles>,
     Path((id, attachment)): Path<(String, String)>,
 ) -> Response {
@@ -234,14 +235,17 @@ async fn admin_delete_attachment(
     )
 }
 
-async fn settings(session: Session, State(db): State<DatabaseHandles>) -> Response {
+async fn settings(
+    Extract(session): Extract<Session>,
+    State(db): State<DatabaseHandles>,
+) -> Response {
     if !session.has_permission(Permission::ManageReportIntegrations) {
         return super::report_admission::error(StatusCode::FORBIDDEN);
     }
     output(run(db, |s| s.settings()).await)
 }
 async fn save_settings(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(db): State<DatabaseHandles>,
     Json(input): Json<ReportSettings>,
 ) -> Response {
@@ -251,7 +255,7 @@ async fn save_settings(
     output(run(db, move |s| s.save_settings(session.user_id, input)).await)
 }
 async fn stats(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(db): State<DatabaseHandles>,
     axum::Extension(admission): axum::Extension<std::sync::Arc<super::report_admission::Admission>>,
 ) -> Response {

@@ -2,6 +2,7 @@
 //!
 //! Handles WebSocket upgrade, message loop, and cleanup.
 
+use simple_server::extract::Extract;
 use std::sync::Arc;
 
 use futures::{SinkExt, StreamExt};
@@ -36,7 +37,7 @@ struct WsState {
 /// and upgrades the connection to WebSocket.
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
-    session: Session,
+    Extract(session): Extract<Session>,
     State(connection_manager): State<GuardedConnectionManager>,
     State(playback_session_manager): State<GuardedPlaybackSessionManager>,
     State(runtime_tasks): State<crate::server::lifecycle::RuntimeTasks>,

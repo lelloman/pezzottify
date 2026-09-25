@@ -266,7 +266,7 @@ enum DeleteUserOutcome {
 }
 
 async fn admin_get_users(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
 ) -> Response {
     match database
@@ -300,7 +300,7 @@ struct CreateUserResponse {
 }
 
 async fn admin_create_user(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Json(body): Json<CreateUserBody>,
 ) -> Response {
@@ -332,7 +332,7 @@ async fn admin_create_user(
 }
 
 async fn admin_delete_user(
-    session: Session,
+    Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(user_handle): Path<String>,
 ) -> Response {
@@ -368,7 +368,7 @@ struct UserCredentialsStatusResponse {
 }
 
 async fn admin_get_user_credentials_status(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(user_handle): Path<String>,
 ) -> Response {
@@ -396,7 +396,7 @@ struct SetPasswordBody {
 }
 
 async fn admin_set_user_password(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     State(password_work): State<PasswordWorkPool>,
     Path(user_handle): Path<String>,
@@ -437,7 +437,7 @@ async fn admin_set_user_password(
 }
 
 async fn admin_delete_user_password(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(user_handle): Path<String>,
 ) -> Response {
@@ -459,7 +459,7 @@ async fn admin_delete_user_password(
 }
 
 async fn admin_get_user_roles(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(user_handle): Path<String>,
 ) -> Response {
@@ -488,7 +488,7 @@ async fn admin_get_user_roles(
 }
 
 async fn admin_add_user_role(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
     Path(user_handle): Path<String>,
@@ -528,7 +528,7 @@ async fn admin_add_user_role(
 }
 
 async fn admin_remove_user_role(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
     Path((user_handle, role_name)): Path<(String, String)>,
@@ -567,7 +567,7 @@ async fn admin_remove_user_role(
 }
 
 async fn admin_get_user_permissions(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(user_handle): Path<String>,
 ) -> Response {
@@ -597,7 +597,7 @@ async fn admin_get_user_permissions(
 }
 
 async fn admin_add_user_extra_permission(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
     Path(user_handle): Path<String>,
@@ -669,7 +669,7 @@ async fn admin_add_user_extra_permission(
 }
 
 async fn admin_remove_extra_permission(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
     Path(permission_id): Path<usize>,
@@ -710,7 +710,7 @@ struct BandwidthQueryParams {
 
 /// Get bandwidth summary for all users (admin only)
 async fn admin_get_bandwidth_summary(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Query(params): Query<BandwidthQueryParams>,
 ) -> Response {
@@ -728,7 +728,7 @@ async fn admin_get_bandwidth_summary(
 
 /// Get detailed bandwidth usage for all users (admin only)
 async fn admin_get_bandwidth_usage(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Query(params): Query<BandwidthQueryParams>,
 ) -> Response {
@@ -746,7 +746,7 @@ async fn admin_get_bandwidth_usage(
 
 /// Get bandwidth summary for a specific user (admin only)
 async fn admin_get_user_bandwidth_summary(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(user_handle): Path<String>,
     Query(params): Query<BandwidthQueryParams>,
@@ -773,7 +773,7 @@ async fn admin_get_user_bandwidth_summary(
 
 /// Get detailed bandwidth usage for a specific user (admin only)
 async fn admin_get_user_bandwidth_usage(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(user_handle): Path<String>,
     Query(params): Query<BandwidthQueryParams>,
@@ -802,7 +802,7 @@ async fn admin_get_user_bandwidth_usage(
 
 /// Get daily listening stats for the platform (admin only)
 async fn admin_get_daily_listening_stats(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Query(query): Query<DateRangeQuery>,
 ) -> Response {
@@ -822,7 +822,7 @@ async fn admin_get_daily_listening_stats(
 
 /// Get top tracks by play count (admin only)
 async fn admin_get_top_tracks(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Query(query): Query<TopTracksQuery>,
 ) -> Response {
@@ -843,7 +843,7 @@ async fn admin_get_top_tracks(
 
 /// Get listening stats for a specific track (admin only)
 async fn admin_get_track_listening_stats(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(track_id): Path<String>,
     Query(query): Query<DateRangeQuery>,
@@ -864,7 +864,7 @@ async fn admin_get_track_listening_stats(
 
 /// Get listening summary for a specific user (admin only)
 async fn admin_get_user_listening_summary(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     Path(user_handle): Path<String>,
     Query(query): Query<DateRangeQuery>,
@@ -899,7 +899,7 @@ struct OnlineUsersResponse {
 
 /// Get count and handles of currently connected users
 async fn admin_get_online_users(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(database): State<DatabaseHandles>,
     State(connection_manager): State<GuardedConnectionManager>,
 ) -> Response {
@@ -926,7 +926,7 @@ async fn admin_get_online_users(
 
 /// Get active playback sessions across all users.
 async fn admin_get_playback_sessions(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(playback_session_manager): State<GuardedPlaybackSessionManager>,
     State(database): State<DatabaseHandles>,
 ) -> Response {
@@ -973,7 +973,7 @@ struct ListBatchesQuery {
 /// Create a new changelog batch
 /// TODO: Re-enable after implementing changelog for Spotify schema
 async fn admin_create_changelog_batch(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(_catalog_store): State<GuardedCatalogStore>,
     Json(_body): Json<CreateBatchBody>,
 ) -> Response {
@@ -988,7 +988,7 @@ async fn admin_create_changelog_batch(
 /// List changelog batches with optional filter
 /// TODO: Re-enable after implementing changelog for Spotify schema
 async fn admin_list_changelog_batches(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(_catalog_store): State<GuardedCatalogStore>,
     Query(_query): Query<ListBatchesQuery>,
 ) -> Response {
@@ -1003,7 +1003,7 @@ async fn admin_list_changelog_batches(
 /// Get a specific changelog batch by ID
 /// TODO: Re-enable after implementing changelog for Spotify schema
 async fn admin_get_changelog_batch(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(_catalog_store): State<GuardedCatalogStore>,
     Path(_batch_id): Path<String>,
 ) -> Response {
@@ -1018,7 +1018,7 @@ async fn admin_get_changelog_batch(
 /// Close a changelog batch
 /// TODO: Re-enable after implementing changelog for Spotify schema
 async fn admin_close_changelog_batch(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(_catalog_store): State<GuardedCatalogStore>,
     Path(_batch_id): Path<String>,
 ) -> Response {
@@ -1033,7 +1033,7 @@ async fn admin_close_changelog_batch(
 /// Delete a changelog batch (only if empty)
 /// TODO: Re-enable after implementing changelog for Spotify schema
 async fn admin_delete_changelog_batch(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(_catalog_store): State<GuardedCatalogStore>,
     Path(_batch_id): Path<String>,
 ) -> Response {
@@ -1048,7 +1048,7 @@ async fn admin_delete_changelog_batch(
 /// Get all changes in a changelog batch
 /// TODO: Re-enable after implementing changelog for Spotify schema
 async fn admin_get_changelog_batch_changes(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(_catalog_store): State<GuardedCatalogStore>,
     Path(_batch_id): Path<String>,
 ) -> Response {
@@ -1063,7 +1063,7 @@ async fn admin_get_changelog_batch_changes(
 /// Get change history for a specific entity
 /// TODO: Re-enable after implementing changelog for Spotify schema
 async fn admin_get_changelog_entity_history(
-    _session: Session,
+    Extract(_session): Extract<Session>,
     State(_catalog_store): State<GuardedCatalogStore>,
     Path((_entity_type, _entity_id)): Path<(String, String)>,
 ) -> Response {

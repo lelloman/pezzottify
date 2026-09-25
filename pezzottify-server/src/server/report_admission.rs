@@ -4,12 +4,13 @@ use crate::{db_executor::DbPriority, server_store::reports::MAX_BODY_BYTES, user
 use simple_server::axum::{
     self,
     body::{to_bytes, Body},
-    extract::{FromRequestParts, Request, State},
+    extract::{Request, State},
     http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
     Json,
 };
+use simple_server::extract::{FromRequestParts, IntoRejectionResponse};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -211,7 +212,7 @@ async fn admit(state: Arc<Admission>, request: Request, next: Next) -> Response 
     let (mut parts, body) = request.into_parts();
     let session = match Session::from_request_parts(&mut parts, &state.server).await {
         Ok(s) => s,
-        Err(e) => return e.into_response(),
+        Err(e) => return e.into_rejection_response().into_response(),
     };
     let path = parts.uri.path();
     let required = if path.starts_with("/v1/admin/") {
