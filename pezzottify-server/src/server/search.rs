@@ -6,17 +6,15 @@ use crate::search::streaming::{SearchSection, StreamingSearchPipeline};
 use crate::search::{
     HashedItemType, RelevanceFilterConfig, ResolvedSearchResult, SearchResult, SearchVault,
 };
+use simple_server::axum::response::sse::{Event, KeepAlive, Sse};
 use simple_server::extract::Extract;
 
 use futures::stream;
 use serde::{Deserialize, Serialize};
-use simple_server::axum::{
+use simple_server::web::{
     extract::{Query, State},
     http::StatusCode,
-    response::{
-        sse::{Event, KeepAlive, Sse},
-        IntoResponse, Response,
-    },
+    response::{IntoResponse, Response},
     routing::{get, post, put},
     Json, Router,
 };
@@ -74,7 +72,7 @@ enum SearchResponse {
 }
 
 impl IntoResponse for SearchResponse {
-    fn into_response(self) -> simple_server::axum::response::Response {
+    fn into_response(self) -> simple_server::web::response::Response {
         match self {
             SearchResponse::Raw(t) => t.into_response(),
             SearchResponse::Resolved(t) => t.into_response(),
@@ -507,9 +505,9 @@ async fn streaming_search(
         receiver.recv().await.map(|event| (event, receiver))
     });
 
-    Sse::new(stream)
-        .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
-        .into_response()
+    simple_server::web::compat::response(
+        Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15))),
+    )
 }
 
 pub fn make_search_routes(state: ServerState) -> Router {

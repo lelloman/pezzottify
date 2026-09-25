@@ -363,15 +363,15 @@ impl TestServer {
 
         // Spawn server in background task with graceful shutdown
         tokio::spawn(async move {
-            simple_server::axum::serve(
-                listener,
-                app.into_make_service_with_connect_info::<SocketAddr>(),
-            )
-            .with_graceful_shutdown(async {
+            let shutdown = simple_server::lifecycle::Shutdown::new();
+            let signal = shutdown.clone();
+            let server = simple_server::web::serve_with_connect_info(listener, app, shutdown);
+            let stop = async move {
                 shutdown_rx.await.ok();
-            })
-            .await
-            .expect("Server failed");
+                signal.request();
+            };
+            let (result, ()) = tokio::join!(server, stop);
+            result.expect("Server failed");
         });
 
         // Wait for server to be ready

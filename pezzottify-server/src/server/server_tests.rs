@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use std::net::SocketAddr;
     use super::*;
     use crate::catalog_store::NullCatalogStore;
     use crate::search::{HashedItemType, SearchResult, SearchVault};
@@ -12,8 +13,8 @@ mod tests {
     use crate::user::{
         UserAuthCredentialsStore, UserAuthTokenStore, UserBandwidthStore, UserStore,
     };
-    use simple_server::axum::extract::ConnectInfo;
-    use simple_server::axum::{body::Body, http::Request};
+    use simple_server::web::extract::ConnectInfo;
+    use simple_server::web::{body::Body, http::Request};
     use std::collections::HashMap;
     use std::sync::RwLock;
     use tower::ServiceExt; // for `call`, `oneshot`, and `ready

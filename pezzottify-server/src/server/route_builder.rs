@@ -81,9 +81,7 @@ pub(super) fn content_read_routes(
         .route("/batch", post(post_batch_content))
         .route("/genre/{name}/radio", get(get_genre_radio))
         .merge(cacheable_catalog_routes)
-        .merge(simple_server::web::compat::into_axum_router(
-            embeddings::read_routes(),
-        ))
+        .merge(embeddings::read_routes())
         .merge(recommendation_routes())
         .layer(limits.content_read.layer())
         .with_state(state.clone());
@@ -263,9 +261,7 @@ pub(super) fn catalog_write_routes(state: &ServerState, limits: &RouteLimits) ->
         .route("/image", post(create_image))
         .route("/image/{id}", put(update_image))
         .route("/image/{id}", delete(delete_image))
-        .merge(simple_server::web::compat::into_axum_router(
-            embeddings::write_routes(),
-        ))
+        .merge(embeddings::write_routes())
         .layer(limits.write.layer())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
@@ -558,7 +554,7 @@ pub(super) fn auth_routes(state: &ServerState) -> Router {
         .route("/login", post(login))
         .layer(login_account_burst_limit.layer())
         .layer(login_account_sustained_limit.layer())
-        // Axum layers execute bottom-to-top: insert the account key before its limiters.
+        // Router layers execute bottom-to-top: insert the account key before its limiters.
         .layer(middleware::from_fn(extract_login_account_for_rate_limit))
         .layer(login_ip_burst_limit.layer())
         .layer(login_ip_sustained_limit.layer())

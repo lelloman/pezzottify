@@ -2,15 +2,14 @@
 //!
 //! Handles WebSocket upgrade, message loop, and cleanup.
 
+use simple_server::axum::extract::ws::{Message, WebSocket};
 use simple_server::extract::Extract;
+use simple_server::web::compat::WebSocketUpgrade;
 use std::sync::Arc;
 
 use futures::{SinkExt, StreamExt};
-use simple_server::axum::{
-    extract::{
-        ws::{Message, WebSocket},
-        State, WebSocketUpgrade,
-    },
+use simple_server::web::{
+    extract::State,
     response::{IntoResponse, Response},
 };
 use tokio::sync::mpsc;
@@ -74,9 +73,7 @@ pub async fn ws_handler(
 
     let token = match runtime_tasks.tasks.token() {
         Ok(token) => token,
-        Err(_) => {
-            return simple_server::axum::http::StatusCode::SERVICE_UNAVAILABLE.into_response()
-        }
+        Err(_) => return simple_server::web::http::StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
     ws.on_upgrade(move |socket| async move {
         let _token = token;

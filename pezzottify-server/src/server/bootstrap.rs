@@ -450,15 +450,15 @@ pub async fn prepare_server(
     let main_listener = simple_server::http::bind(format!("0.0.0.0:{}", port)).await?;
     lifecycle.service(
         "http",
-        simple_server::http::serve(
+        simple_server::web::serve_with_connect_info(
             main_listener,
-            app.into_make_service_with_connect_info::<SocketAddr>(),
+            app,
             lifecycle.shutdown(),
         ),
     )?;
     lifecycle.service(
         "metrics",
-        simple_server::http::serve(metrics_listener, metrics_app, lifecycle.shutdown()),
+        simple_server::web::serve(metrics_listener, metrics_app, lifecycle.shutdown()),
     )?;
     Ok(())
 }

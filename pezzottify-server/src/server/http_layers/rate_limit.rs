@@ -7,17 +7,17 @@
 use crate::server::metrics::{record_rate_limit_hit, request_route_label};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use simple_server::axum::http::{request::Parts, Extensions, HeaderMap};
-use simple_server::axum::{
+use simple_server::extract::Extract;
+use simple_server::rate_limit::{
+    Admission, AsyncPolicy, KeyedLimiter, Policy, Quota, RateLimitLayer, StoreConfig,
+};
+use simple_server::web::http::{request::Parts, Extensions, HeaderMap};
+use simple_server::web::{
     body::{to_bytes, Body},
     extract::{ConnectInfo, Request},
     http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
-};
-use simple_server::extract::Extract;
-use simple_server::rate_limit::{
-    Admission, AsyncPolicy, KeyedLimiter, Policy, Quota, RateLimitLayer, StoreConfig,
 };
 use std::net::{IpAddr, SocketAddr};
 use std::{hash::Hash, num::NonZeroU32, time::Duration};
@@ -329,7 +329,7 @@ pub async fn extract_user_id_for_rate_limit(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use simple_server::axum::{http::Method, middleware, routing::post, Router};
+    use simple_server::web::{http::Method, middleware, routing::post, Router};
     use std::{
         net::{IpAddr, Ipv4Addr},
         sync::Arc,
@@ -533,7 +533,7 @@ mod tests {
     #[tokio::test]
     async fn test_account_extraction_restores_body_for_login_handler() {
         async fn handler(
-            simple_server::axum::Json(body): simple_server::axum::Json<LoginAccountBody>,
+            simple_server::web::Json(body): simple_server::web::Json<LoginAccountBody>,
         ) -> String {
             body.user_handle
         }
@@ -728,7 +728,7 @@ mod tests {
 #[cfg(test)]
 mod wire_contract {
     use super::*;
-    use simple_server::axum::{routing::post, Router};
+    use simple_server::web::{routing::post, Router};
     use std::sync::Arc;
 
     #[tokio::test]
@@ -745,9 +745,10 @@ mod wire_contract {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let task = tokio::spawn(async move {
-            simple_server::axum::serve(
+            simple_server::web::serve_with_connect_info(
                 listener,
-                app.into_make_service_with_connect_info::<SocketAddr>(),
+                app,
+                simple_server::lifecycle::Shutdown::new(),
             )
             .await
             .unwrap()

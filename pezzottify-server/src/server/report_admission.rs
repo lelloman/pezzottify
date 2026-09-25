@@ -1,7 +1,8 @@
 //! Shared admission for modern and legacy reports, before any body buffering.
 use super::{http_layers::requests_logging::is_report_path, session::Session, state::ServerState};
 use crate::{db_executor::DbPriority, server_store::reports::MAX_BODY_BYTES, user::Permission};
-use simple_server::axum::{
+use simple_server::extract::{FromRequestParts, IntoRejectionResponse};
+use simple_server::web::{
     self,
     body::{to_bytes, Body},
     extract::{Request, State},
@@ -10,7 +11,6 @@ use simple_server::axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use simple_server::extract::{FromRequestParts, IntoRejectionResponse};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -235,17 +235,17 @@ async fn admit(state: Arc<Admission>, request: Request, next: Next) -> Response 
     if !session.has_permission(required) {
         return error(StatusCode::FORBIDDEN);
     }
-    let submit = parts.method == axum::http::Method::POST
+    let submit = parts.method == web::http::Method::POST
         && (path == "/v1/reports" || path == "/v1/user/bug-report");
     let _slot = match state.acquire(session.user_id, submit) {
         Ok(s) => s,
         Err(s) => return error(s),
     };
     if let Some(id) = path.strip_prefix("/v1/admin/bug-report/") {
-        if parts.method == axum::http::Method::GET || parts.method == axum::http::Method::DELETE {
+        if parts.method == web::http::Method::GET || parts.method == web::http::Method::DELETE {
             let id = id.to_string();
             let actor = session.user_id;
-            let delete = parts.method == axum::http::Method::DELETE;
+            let delete = parts.method == web::http::Method::DELETE;
             match state
                 .server
                 .database
@@ -291,7 +291,7 @@ async fn read_body(
     body: Body,
     max: usize,
     deadline: Duration,
-) -> Result<axum::body::Bytes, StatusCode> {
+) -> Result<web::body::Bytes, StatusCode> {
     match tokio::time::timeout(deadline, to_bytes(body, max)).await {
         Ok(Ok(bytes)) => Ok(bytes),
         Ok(Err(_)) => Err(StatusCode::PAYLOAD_TOO_LARGE),
@@ -346,7 +346,7 @@ mod tests {
     }
     #[tokio::test]
     async fn report_body_size_is_incremental_and_reads_have_deadlines() {
-        let bytes = axum::body::Bytes::from_static(b"12345678");
+        let bytes = web::body::Bytes::from_static(b"12345678");
         let stream = futures::stream::iter(vec![
             Ok::<_, std::io::Error>(bytes.clone()),
             Ok(bytes.clone()),
@@ -365,7 +365,7 @@ mod tests {
                 .len(),
             16
         );
-        let pending = futures::stream::pending::<Result<axum::body::Bytes, std::io::Error>>();
+        let pending = futures::stream::pending::<Result<web::body::Bytes, std::io::Error>>();
         assert_eq!(
             read_body(Body::from_stream(pending), 16, Duration::from_millis(10))
                 .await

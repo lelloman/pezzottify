@@ -33,7 +33,7 @@ async fn admin_prepare_backup(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            (status, simple_server::axum::Json(backup_result)).into_response()
+            (status, simple_server::web::Json(backup_result)).into_response()
         }
         Err(e) => ApiError::from(e).into_response(),
     }
@@ -377,7 +377,7 @@ async fn admin_trigger_job(
     Extract(session): Extract<Session>,
     State(scheduler_handle): State<super::state::OptionalSchedulerHandle>,
     Path(job_id): Path<String>,
-    body: Result<Json<TriggerJobRequest>, simple_server::axum::extract::rejection::JsonRejection>,
+    body: Result<Json<TriggerJobRequest>, simple_server::web::RejectionResponse>,
 ) -> Response {
     let handle = match scheduler_handle {
         Some(h) => h,

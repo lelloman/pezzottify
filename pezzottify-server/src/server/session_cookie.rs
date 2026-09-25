@@ -1,5 +1,5 @@
 use simple_server::auth::{Cookie, CookieCredential, SameSite};
-use simple_server::axum::{
+use simple_server::web::{
     extract::{Request, State},
     http::{header, HeaderMap, HeaderValue, Method, StatusCode},
     middleware::Next,

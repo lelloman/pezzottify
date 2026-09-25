@@ -10,13 +10,13 @@ use crate::downloader::DownloadPriority;
 #[cfg(test)]
 use crate::media::audio_content_type;
 use crate::user::{Permission, UserSetting};
-use simple_server::axum::{
+use simple_server::extract::Extract;
+use simple_server::web::{
     body::Body,
     extract::{FromRequestParts, Path, State},
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
-use simple_server::extract::Extract;
 use tracing::debug;
 
 /// A single byte-range specification. Multiple ranges are deliberately unsupported.
@@ -131,7 +131,7 @@ impl FromRequestParts<ServerState> for ByteRangeRequest {
     type Rejection = std::convert::Infallible;
 
     async fn from_request_parts(
-        parts: &mut simple_server::axum::http::request::Parts,
+        parts: &mut simple_server::web::http::request::Parts,
         _state: &ServerState,
     ) -> Result<Self, Self::Rejection> {
         Ok(Self(parse_range_headers(&parts.headers)))
@@ -296,7 +296,7 @@ pub async fn stream_track(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use simple_server::axum::http::HeaderValue;
+    use simple_server::web::http::HeaderValue;
     use std::path::PathBuf;
 
     fn inclusive(start: u64, end: u64) -> ByteRange {

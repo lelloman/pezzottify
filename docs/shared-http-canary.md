@@ -1,4 +1,46 @@
-# Shared HTTP core: embedding canary
+# Shared HTTP core: complete routing adoption
+
+Reviewed simple-server source: `d3b559ad7a3597a29c4a5be77c82531f2e1e8c25`, recorded in
+`simple-server.rev`. The server enables `web-compat`, which includes shared `web`.
+
+All route groups now use shared Router/method routing, ordinary extraction and
+response contracts. Application state implements `FromState`; byte-range parsing
+uses shared `FromRequestParts`. ApiError has one shared response implementation.
+The two legacy embedding-router conversions have been removed.
+
+Permissions, CSRF, report admission, rate limits, cache policy and logging compose
+with shared middleware and Tower layers in their existing order. Static files
+use `fallback_service`. Main HTTP and test servers use shared serving with direct
+TCP peer metadata; metrics uses shared serving without connection metadata.
+Rate-limit identity continues to ignore forwarded headers. Audio ranges and body
+streams preserve their existing behavior through the shared Body type.
+
+Explicit remaining backend contracts: multipart fields/errors, SSE event streams,
+MCP/sync WebSocket sockets/messages, the tracing observer, independent mock HTTP
+servers and the error-renderer differential test. Protocol adapters live under
+`web::compat`; Step 11 completion does not claim complete Axum removal.
+
+## Routing completion verification
+
+Baseline `dev`: `bf825a5d`; existing full suite: **1,447 passed, 36 ignored**.
+Two added HTTP tests passed before production edits (commit `370f25c4`): multipart
+auth/parser/field errors, HEAD response stripping, 405/Allow and unmatched 404.
+
+After migration: **1,449 passed, 36 existing ignored**, including all protocol,
+authentication, permissions, reports, body limits, rate limits, tracing and route
+suites. Strict production Clippy passes with `fast,slowdown`. Formatting and diff
+checks pass. Shared library: **231 tests/doctests**, strict all-target Clippy,
+**14 minimal-web tests** and **1 extract-only test**. The nine new shared tests
+cover layer order/rejection, metadata, readiness, fallback services, standard body
+adapters, cancellation, trailers/errors and direct-peer serving/shutdown.
+
+Builds used offline/locked dependencies, two jobs, isolated targets and disabled
+dev debug information. Existing num-bigint-dig future-compatibility notice remains.
+Docker, browser, Android and external OIDC-provider tests were not run. The central
+trackers record base-branch integration and removal of the owned worktrees,
+branches and temporary build/log files. No push or deployment.
+
+## Historical embedding canary
 
 Reviewed simple-server source: `64f31b41f36617f0269d14248f284c34c7dffe17`, recorded
 in `simple-server.rev` for the existing checkout/CI script. The server enables
