@@ -1,9 +1,9 @@
 use serde::Serialize;
-use simple_server::axum::{
+use simple_server::extract::{IntoRejectionResponse, RejectionResponse};
+use simple_server::web::{
     http::{header::HeaderName, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
-use simple_server::extract::{IntoRejectionResponse, RejectionResponse};
 use tracing::error;
 
 use crate::{catalog_store::CatalogMutationError, db_executor::DbRunError, user::UserServiceError};
@@ -198,20 +198,12 @@ impl IntoRejectionResponse for ApiError {
         if let Some(retry_after) = self.retry_after {
             response
                 .headers_mut()
-                .insert(simple_server::axum::http::header::RETRY_AFTER, retry_after);
+                .insert(simple_server::web::http::header::RETRY_AFTER, retry_after);
         }
         response
     }
 }
 
-impl simple_server::web::IntoResponse for ApiError {
-    fn into_response(self) -> simple_server::web::Response {
-        simple_server::web::IntoResponse::into_response(self.into_rejection_response())
-    }
-}
-
-// Existing response handlers keep their transitional framework adapter; both
-// paths render the same application error contract above.
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         self.into_rejection_response().into_response()
@@ -234,15 +226,14 @@ mod tests {
             ApiError::bad_request("invalid_request", "quotes: \" / newline: \n / café"),
         ] {
             // Reconstruct the previous renderer, with the identical request ID.
-            let mut previous = (
+            let mut previous = simple_server::axum::response::IntoResponse::into_response((
                 error.status,
                 simple_server::axum::Json(ApiErrorBody {
                     code: error.code,
                     message: error.message.clone(),
                     request_id: error.request_id.clone(),
                 }),
-            )
-                .into_response();
+            ));
             previous
                 .headers_mut()
                 .insert(REQUEST_ID_HEADER, error.request_id.parse().unwrap());
@@ -257,7 +248,7 @@ mod tests {
             let previous = simple_server::axum::body::to_bytes(previous.into_body(), usize::MAX)
                 .await
                 .unwrap();
-            let current = simple_server::axum::body::to_bytes(current.into_body(), usize::MAX)
+            let current = simple_server::web::body::to_bytes(current.into_body(), usize::MAX)
                 .await
                 .unwrap();
             assert_eq!(current, previous);
@@ -286,7 +277,7 @@ mod tests {
         let response = ApiError::user_database(DbRunError::QueueTimeout).into_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(
-            response.headers()[simple_server::axum::http::header::RETRY_AFTER],
+            response.headers()[simple_server::web::http::header::RETRY_AFTER],
             RETRY_AFTER_SECONDS
         );
     }
@@ -302,7 +293,7 @@ mod tests {
             .to_str()
             .unwrap()
             .to_owned();
-        let body = simple_server::axum::body::to_bytes(response.into_body(), usize::MAX)
+        let body = simple_server::web::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -323,12 +314,12 @@ mod tests {
             let response = ApiError::from(error).into_response();
             assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
             assert_eq!(
-                response.headers()[simple_server::axum::http::header::RETRY_AFTER],
+                response.headers()[simple_server::web::http::header::RETRY_AFTER],
                 RETRY_AFTER_SECONDS
             );
             assert!(response.headers().contains_key(REQUEST_ID_HEADER));
 
-            let body = simple_server::axum::body::to_bytes(response.into_body(), usize::MAX)
+            let body = simple_server::web::body::to_bytes(response.into_body(), usize::MAX)
                 .await
                 .unwrap();
             let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -345,12 +336,12 @@ mod tests {
         let response = ApiError::password_work_unavailable().into_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(
-            response.headers()[simple_server::axum::http::header::RETRY_AFTER],
+            response.headers()[simple_server::web::http::header::RETRY_AFTER],
             RETRY_AFTER_SECONDS
         );
         assert!(response.headers().contains_key(REQUEST_ID_HEADER));
 
-        let body = simple_server::axum::body::to_bytes(response.into_body(), usize::MAX)
+        let body = simple_server::web::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -370,9 +361,9 @@ mod tests {
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
         assert!(!response
             .headers()
-            .contains_key(simple_server::axum::http::header::RETRY_AFTER));
+            .contains_key(simple_server::web::http::header::RETRY_AFTER));
 
-        let body = simple_server::axum::body::to_bytes(response.into_body(), usize::MAX)
+        let body = simple_server::web::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();

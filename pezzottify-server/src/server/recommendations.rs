@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use simple_server::axum::{
+use simple_server::web::{
     extract::{Path, Query, State},
     http::{header, HeaderValue, StatusCode},
     response::{IntoResponse, Response},

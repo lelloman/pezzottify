@@ -7,8 +7,8 @@ use crate::server::metrics::{
 };
 use chrono::Datelike;
 use serde_json::Value;
-use simple_server::axum::extract::State;
-use simple_server::axum::{
+use simple_server::web::extract::State;
+use simple_server::web::{
     body::Body,
     http::{header::HeaderMap, Request, Response},
     middleware::Next,
@@ -226,7 +226,7 @@ where
     if *level == RequestsLoggingLevel::None {
         next(request).await
     } else {
-        simple_server::http_tracing::trace_with_observer(request, RequestObserver, next).await
+        simple_server::web::compat::trace_with_observer(request, RequestObserver, next).await
     }
 }
 
@@ -236,7 +236,7 @@ impl simple_server::http_tracing::Observer for RequestObserver {
     fn on_response(
         &mut self,
         span: &tracing::Span,
-        response: &Response<Body>,
+        response: &simple_server::axum::response::Response,
         latency: std::time::Duration,
     ) {
         info!(target: "simple_server::http_tracing", parent: span,
@@ -294,13 +294,13 @@ async fn log_request_details(
             ContentLengthParseResult::Ok(size) => {
                 if size < MAX_LOGGABLE_BODY_LENGTH {
                     let (parts, body) = request.into_parts();
-                    let bytes = match simple_server::axum::body::to_bytes(body, size).await {
+                    let bytes = match simple_server::web::body::to_bytes(body, size).await {
                         Ok(bytes) => bytes,
                         Err(err) => {
                             error!("Failed to read request body: {:?}", err);
                             return Response::builder()
                                 .status(500)
-                                .body(simple_server::axum::body::Body::from(
+                                .body(simple_server::web::body::Body::from(
                                     "Internal Server Error",
                                 ))
                                 .unwrap();
@@ -338,13 +338,13 @@ async fn log_request_details(
             ContentLengthParseResult::Ok(size) => {
                 if size < MAX_LOGGABLE_BODY_LENGTH {
                     let (parts, body) = response.into_parts();
-                    let bytes = match simple_server::axum::body::to_bytes(body, size).await {
+                    let bytes = match simple_server::web::body::to_bytes(body, size).await {
                         Ok(bytes) => bytes,
                         Err(err) => {
                             error!("Failed to read response body: {:?}", err);
                             return Response::builder()
                                 .status(500)
-                                .body(simple_server::axum::body::Body::from(
+                                .body(simple_server::web::body::Body::from(
                                     "Internal Server Error",
                                 ))
                                 .unwrap();
@@ -409,7 +409,7 @@ mod tests {
         format_loggable_body, format_safe_headers, is_authentication_path, with_request_trace,
         RequestsLoggingLevel, SAFE_REQUEST_HEADERS, SAFE_RESPONSE_HEADERS,
     };
-    use simple_server::axum::http::{HeaderMap, HeaderValue};
+    use simple_server::web::http::{HeaderMap, HeaderValue};
 
     #[test]
     fn level_ordering() {
@@ -514,7 +514,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn configured_modes_trace_safe_routes_and_preserve_response() {
-        use simple_server::axum::{
+        use simple_server::web::{
             body::{to_bytes, Body},
             http::{Request, Response},
             middleware::{self, Next},

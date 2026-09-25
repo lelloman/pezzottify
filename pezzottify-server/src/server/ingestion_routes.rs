@@ -7,15 +7,16 @@
 //! - Admin job management
 
 use serde::{Deserialize, Serialize};
-use simple_server::axum::{
-    extract::{Multipart, Path, Query, State},
+use simple_server::body_limit::BodyLimit;
+use simple_server::extract::Extract;
+use simple_server::web::compat::Multipart;
+use simple_server::web::{
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
-use simple_server::body_limit::BodyLimit;
-use simple_server::extract::Extract;
 use tracing::{debug, info, warn};
 
 use crate::db_executor::{DbHandle, DbPriority, DbRunError};

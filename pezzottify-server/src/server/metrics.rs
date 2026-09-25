@@ -5,7 +5,7 @@ use prometheus::{
     Counter, CounterVec, Encoder, Gauge, GaugeVec, Histogram, HistogramOpts, HistogramVec, Opts,
     Registry, TextEncoder,
 };
-use simple_server::axum::{
+use simple_server::web::{
     extract::{MatchedPath, State},
     http::{Extensions, StatusCode},
     response::IntoResponse,
@@ -1064,7 +1064,7 @@ mod tests {
         started_rx.await.unwrap();
 
         let started = Instant::now();
-        let response = metrics_handler(simple_server::axum::extract::State(pool))
+        let response = metrics_handler(simple_server::web::extract::State(pool))
             .await
             .into_response();
         assert_eq!(response.status(), StatusCode::OK);
