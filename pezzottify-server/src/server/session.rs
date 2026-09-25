@@ -5,11 +5,15 @@ use crate::user::auth::AuthTokenValue;
 use crate::user::device::{DeviceRegistration, DeviceType};
 use crate::user::{Permission, UserManager};
 
-use axum_extra::extract::cookie::{Cookie, CookieJar};
-use simple_server::auth::AsyncAccess;
+use simple_server::auth::{
+    AsyncAccess, AuthLayer, Authentication, CookieCredential, CredentialAuthError,
+    CredentialSource, CredentialSources, HeaderCredential, Identity, SelectedCredential,
+};
+#[cfg(test)]
+use simple_server::axum::http::HeaderMap;
 use simple_server::axum::{
     extract::FromRequestParts,
-    http::{header::AUTHORIZATION, request::Parts, HeaderMap, StatusCode},
+    http::{header::AUTHORIZATION, request::Parts, StatusCode},
     response::IntoResponse,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -54,21 +58,11 @@ impl IntoResponse for SessionExtractionError {
     }
 }
 
-async fn extract_session_token_from_cookies(
-    parts: &mut Parts,
-    ctx: &ServerState,
-) -> Option<String> {
-    CookieJar::from_request_parts(parts, &ctx)
-        .await
-        .expect("Could not read cookies into CookieJar.")
-        .get(session_cookie_name(ctx.config.secure_session_cookies))
-        .map(Cookie::value)
-        .map(|s| s.to_string())
-}
-
 #[derive(Debug)]
 enum AuthorizationHeaderError {
+    #[cfg(test)]
     Duplicate,
+    #[cfg(test)]
     InvalidEncoding,
     MalformedBearer,
     UnsupportedScheme,
@@ -92,21 +86,32 @@ fn valid_token68(value: &str) -> bool {
         })
 }
 
+fn authorization_credential() -> HeaderCredential {
+    // Parsing token68, legacy raw tokens and extra Bearer spaces stays below.
+    HeaderCredential::new(AUTHORIZATION).allow_empty(true)
+}
+
+#[cfg(test)]
 fn parse_authorization_header(
     headers: &HeaderMap,
     allow_legacy_raw: bool,
 ) -> Result<Option<String>, AuthorizationHeaderError> {
-    let mut values = headers.get_all(AUTHORIZATION).iter();
-    let Some(value) = values.next() else {
-        return Ok(None);
+    use simple_server::auth::CredentialError;
+    let credential = match authorization_credential().extract(headers) {
+        Ok(value) => value,
+        Err(CredentialError::Missing) => return Ok(None),
+        Err(CredentialError::Repeated) => return Err(AuthorizationHeaderError::Duplicate),
+        Err(CredentialError::InvalidText) => return Err(AuthorizationHeaderError::InvalidEncoding),
+        Err(_) => return Err(AuthorizationHeaderError::MalformedBearer),
     };
-    if values.next().is_some() {
-        return Err(AuthorizationHeaderError::Duplicate);
-    }
+    let value = credential.expose();
+    parse_authorization_value(value, allow_legacy_raw)
+}
 
-    let value = value
-        .to_str()
-        .map_err(|_| AuthorizationHeaderError::InvalidEncoding)?;
+fn parse_authorization_value(
+    value: &str,
+    allow_legacy_raw: bool,
+) -> Result<Option<String>, AuthorizationHeaderError> {
     let value_bytes = value.as_bytes();
     let starts_with_bearer = value_bytes
         .get(.."Bearer".len())
@@ -411,31 +416,56 @@ async fn extract_session_from_request_parts(
     parts: &mut Parts,
     ctx: &ServerState,
 ) -> Result<Option<Session>, DbRunError> {
-    debug!("extracting session from request parts...");
-    // Prefer Authorization header over cookies - the header is set fresh on each
-    // request by the client, while cookies may contain stale tokens from before
-    // a token refresh. Cookies are only used as fallback for WebSocket connections
-    // which cannot send custom headers.
-    let header_token =
-        match parse_authorization_header(&parts.headers, ctx.config.allow_legacy_raw_authorization)
-        {
-            Ok(token) => token,
-            Err(error) => {
-                debug!(?error, "Rejecting malformed Authorization header");
-                return Ok(None);
+    let state = ctx.clone();
+    let sources = CredentialSources::header(authorization_credential()).or_cookie(
+        CookieCredential::decoded_compatibility(session_cookie_name(
+            ctx.config.secure_session_cookies,
+        ))
+        .expect("static session cookie name"),
+    );
+    let access = AsyncAccess::new(move |selected: &SelectedCredential| {
+        let state = state.clone();
+        Box::pin(async move {
+            let token = match selected.source() {
+                CredentialSource::Header(_) => parse_authorization_value(
+                    selected.expose(),
+                    state.config.allow_legacy_raw_authorization,
+                )
+                .map_err(|_| SessionExtractionError::AccessDenied)?
+                .ok_or(SessionExtractionError::AccessDenied)?,
+                CredentialSource::Cookie(_) => selected.expose().to_owned(),
+            };
+            validate_session_token(&token, &state)
+                .await
+                .map_err(SessionExtractionError::Database)?
+                .ok_or(SessionExtractionError::AccessDenied)
+        })
+    });
+    // Authenticate only where a Session is requested, preserving public routes,
+    // current database side effects and fresh validation on repeated extraction.
+    let layer = AuthLayer::credentials(
+        sources,
+        Authentication::Optional,
+        access,
+        |error: CredentialAuthError<SessionExtractionError>| match error {
+            CredentialAuthError::Selection(_) => {
+                SessionExtractionError::AccessDenied.into_response()
             }
-        };
-    let token = match header_token.or(extract_session_token_from_cookies(parts, ctx).await) {
-        None => {
-            debug!("No token in headers nor cookies.");
-            return Ok(None);
+            CredentialAuthError::Access(error) => error.into_response(),
+        },
+    );
+    match layer.authenticate(parts).await {
+        Ok(Some(identity)) => {
+            let session = identity.principal().clone();
+            parts.extensions.insert::<Identity<Session>>(identity);
+            Ok(Some(session))
         }
-        Some(x) => x,
-    };
-
-    debug!("Got session token (length={})", token.len());
-
-    validate_session_token(&token, ctx).await
+        Ok(None) => Ok(None),
+        Err(CredentialAuthError::Access(SessionExtractionError::Database(error))) => Err(error),
+        // Optional Session historically treats invalid credentials as anonymous;
+        // required Session maps this None to the existing 401 response below.
+        Err(_) => Ok(None),
+    }
 }
 
 /// Revalidate long-lived transports using the same policy as HTTP requests.
