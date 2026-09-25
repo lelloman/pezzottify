@@ -81,7 +81,9 @@ pub(super) fn content_read_routes(
         .route("/batch", post(post_batch_content))
         .route("/genre/{name}/radio", get(get_genre_radio))
         .merge(cacheable_catalog_routes)
-        .merge(embeddings::read_routes())
+        .merge(simple_server::web::compat::into_axum_router(
+            embeddings::read_routes(),
+        ))
         .merge(recommendation_routes())
         .layer(limits.content_read.layer())
         .with_state(state.clone());
@@ -261,7 +263,9 @@ pub(super) fn catalog_write_routes(state: &ServerState, limits: &RouteLimits) ->
         .route("/image", post(create_image))
         .route("/image/{id}", put(update_image))
         .route("/image/{id}", delete(delete_image))
-        .merge(embeddings::write_routes())
+        .merge(simple_server::web::compat::into_axum_router(
+            embeddings::write_routes(),
+        ))
         .layer(limits.write.layer())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
