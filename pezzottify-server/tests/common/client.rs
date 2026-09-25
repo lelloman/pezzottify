@@ -56,6 +56,11 @@ impl TestHttpClient {
         self.inner.get(url)
     }
 
+    #[allow(dead_code)]
+    pub fn head(&self, url: impl reqwest::IntoUrl) -> reqwest::RequestBuilder {
+        self.inner.head(url)
+    }
+
     pub fn post(&self, url: impl reqwest::IntoUrl) -> reqwest::RequestBuilder {
         self.protect(self.inner.post(url))
     }
