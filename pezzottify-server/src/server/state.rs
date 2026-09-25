@@ -1,4 +1,4 @@
-use simple_server::axum::extract::FromRef;
+use simple_server::web::extract::FromState;
 
 use crate::background_jobs::SchedulerHandle;
 use crate::backup::DbRegistry;
@@ -153,8 +153,8 @@ pub struct ServerState {
     pub db_registry: GuardedDbRegistry,
 }
 
-impl FromRef<ServerState> for super::lifecycle::RuntimeTasks {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for super::lifecycle::RuntimeTasks {
+    fn from_state(input: &ServerState) -> Self {
         input.runtime_tasks.clone()
     }
 }
@@ -164,122 +164,122 @@ const _: () = assert_send_sync::<ServerState>();
 
 const fn assert_send_sync<T: Send + Sync>() {}
 
-impl FromRef<ServerState> for GuardedCatalogStore {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for GuardedCatalogStore {
+    fn from_state(input: &ServerState) -> Self {
         input.catalog_store.clone()
     }
 }
 
-impl FromRef<ServerState> for GuardedSearchVault {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for GuardedSearchVault {
+    fn from_state(input: &ServerState) -> Self {
         input.search_vault.clone()
     }
 }
 
-impl FromRef<ServerState> for GuardedUserManager {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for GuardedUserManager {
+    fn from_state(input: &ServerState) -> Self {
         input.user_manager.clone()
     }
 }
 
-impl FromRef<ServerState> for DatabaseHandles {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for DatabaseHandles {
+    fn from_state(input: &ServerState) -> Self {
         input.database.clone()
     }
 }
 
-impl FromRef<ServerState> for PasswordWorkPool {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for PasswordWorkPool {
+    fn from_state(input: &ServerState) -> Self {
         input.password_work.clone()
     }
 }
 
-impl FromRef<ServerState> for FilesystemWorkPool {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for FilesystemWorkPool {
+    fn from_state(input: &ServerState) -> Self {
         input.filesystem_work.clone()
     }
 }
 
-impl FromRef<ServerState> for ServerConfig {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for ServerConfig {
+    fn from_state(input: &ServerState) -> Self {
         input.config.clone()
     }
 }
 
-impl FromRef<ServerState> for GuardedConnectionManager {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for GuardedConnectionManager {
+    fn from_state(input: &ServerState) -> Self {
         input.ws_connection_manager.clone()
     }
 }
 
-impl FromRef<ServerState> for OptionalSchedulerHandle {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for OptionalSchedulerHandle {
+    fn from_state(input: &ServerState) -> Self {
         input.scheduler_handle.clone()
     }
 }
 
-impl FromRef<ServerState> for GuardedServerStore {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for GuardedServerStore {
+    fn from_state(input: &ServerState) -> Self {
         input.server_store.clone()
     }
 }
 
-impl FromRef<ServerState> for OptionalOidcClient {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for OptionalOidcClient {
+    fn from_state(input: &ServerState) -> Self {
         input.oidc_client.clone()
     }
 }
 
-impl FromRef<ServerState> for GuardedAuthStateStore {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for GuardedAuthStateStore {
+    fn from_state(input: &ServerState) -> Self {
         input.auth_state_store.clone()
     }
 }
 
-impl FromRef<ServerState> for GuardedMcpState {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for GuardedMcpState {
+    fn from_state(input: &ServerState) -> Self {
         input.mcp_state.clone()
     }
 }
 
-impl FromRef<ServerState> for OptionalOrganicIndexer {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for OptionalOrganicIndexer {
+    fn from_state(input: &ServerState) -> Self {
         input.organic_indexer.clone()
     }
 }
 
-impl FromRef<ServerState> for OptionalDownloadManager {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for OptionalDownloadManager {
+    fn from_state(input: &ServerState) -> Self {
         input.download_manager.clone()
     }
 }
 
-impl FromRef<ServerState> for GuardedMediaManager {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for GuardedMediaManager {
+    fn from_state(input: &ServerState) -> Self {
         input.media.clone()
     }
 }
 
-impl FromRef<ServerState> for OptionalIngestionManager {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for OptionalIngestionManager {
+    fn from_state(input: &ServerState) -> Self {
         input.ingestion_manager.clone()
     }
 }
 
-impl FromRef<ServerState> for GuardedPlaybackSessionManager {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for GuardedPlaybackSessionManager {
+    fn from_state(input: &ServerState) -> Self {
         input.playback_session_manager.clone()
     }
 }
 
-impl FromRef<ServerState> for GuardedDbRegistry {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for GuardedDbRegistry {
+    fn from_state(input: &ServerState) -> Self {
         input.db_registry.clone()
     }
 }
 
-impl FromRef<ServerState> for OptionalEnrichmentStore {
-    fn from_ref(input: &ServerState) -> Self {
+impl FromState<ServerState> for OptionalEnrichmentStore {
+    fn from_state(input: &ServerState) -> Self {
         input.enrichment_store.clone()
     }
 }

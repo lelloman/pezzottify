@@ -8,7 +8,6 @@ mod route_builder;
 
 use anyhow::Result;
 use std::{
-    net::SocketAddr,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -37,7 +36,7 @@ use crate::{
 use tower_http::services::{ServeDir, ServeFile};
 
 use serde::{Deserialize, Serialize};
-use simple_server::axum::{
+use simple_server::web::{
     body::Body,
     extract::{Path, Query, State},
     http::{header, response, HeaderMap, HeaderValue, StatusCode},

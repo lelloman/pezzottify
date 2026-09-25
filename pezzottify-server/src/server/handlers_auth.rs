@@ -300,7 +300,7 @@ async fn oidc_callback(
     // Redirect to the app after successful authentication
     let mut response = response::Builder::new()
         .status(StatusCode::FOUND)
-        .header(simple_server::axum::http::header::LOCATION, "/")
+        .header(simple_server::web::http::header::LOCATION, "/")
         .body(Body::empty())
         .unwrap();
     append_session_cookies(&mut response, session_token, None, &config);

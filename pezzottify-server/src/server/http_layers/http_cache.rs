@@ -1,6 +1,6 @@
 //! Route-level HTTP cache policy middleware.
 
-use simple_server::axum::{
+use simple_server::web::{
     body::Body,
     extract::State,
     http::{
@@ -93,7 +93,7 @@ fn is_private_cacheable(method: &Method, response: &Response) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use simple_server::axum::{
+    use simple_server::web::{
         body::Body,
         http::{
             header::{AUTHORIZATION, VARY},
@@ -238,7 +238,7 @@ mod tests {
 
     #[tokio::test]
     async fn cache_contract_covers_head_partial_sse_and_existing_repeated_headers() {
-        use simple_server::axum::body::to_bytes;
+        use simple_server::web::body::to_bytes;
         for (method, status, content_type, range, explicit, cacheable) in [
             (Method::GET, 200, "application/json", false, false, true),
             (Method::HEAD, 200, "application/json", false, false, true),
@@ -254,7 +254,7 @@ mod tests {
             let app = Router::new()
                 .route(
                     "/v1/check",
-                    simple_server::axum::routing::any(move || async move {
+                    simple_server::web::routing::any(move || async move {
                         let mut response = HttpResponse::builder()
                             .status(status)
                             .header(CONTENT_TYPE, content_type)

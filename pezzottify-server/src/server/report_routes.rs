@@ -5,7 +5,9 @@ use super::{
 };
 use crate::{db_executor::DbPriority, server_store::reports::*, user::Permission};
 use serde::Serialize;
-use simple_server::axum::{
+use simple_server::body_limit::BodyLimit;
+use simple_server::extract::Extract;
+use simple_server::web::{
     self,
     extract::{Path, Query, State},
     http::StatusCode,
@@ -13,8 +15,6 @@ use simple_server::axum::{
     routing::{get, post},
     Json, Router,
 };
-use simple_server::body_limit::BodyLimit;
-use simple_server::extract::Extract;
 
 impl IntoResponse for ReportError {
     fn into_response(self) -> Response {
@@ -35,7 +35,7 @@ impl IntoResponse for ReportError {
         if status == StatusCode::TOO_MANY_REQUESTS || status == StatusCode::SERVICE_UNAVAILABLE {
             response
                 .headers_mut()
-                .insert("retry-after", axum::http::HeaderValue::from_static("3600"));
+                .insert("retry-after", web::http::HeaderValue::from_static("3600"));
         }
         response
     }
@@ -257,7 +257,7 @@ async fn save_settings(
 async fn stats(
     Extract(session): Extract<Session>,
     State(db): State<DatabaseHandles>,
-    axum::Extension(admission): axum::Extension<std::sync::Arc<super::report_admission::Admission>>,
+    web::Extension(admission): web::Extension<std::sync::Arc<super::report_admission::Admission>>,
 ) -> Response {
     if let Err(r) = permission(&session, true) {
         return r.into_response();
