@@ -34,7 +34,6 @@ use crate::{
         FullUserStore, Permission, UserRole,
     },
 };
-use axum_extra::extract::cookie::CookieJar;
 use tower_http::services::{ServeDir, ServeFile};
 
 use serde::{Deserialize, Serialize};

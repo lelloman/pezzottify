@@ -392,7 +392,7 @@ fn complete_oidc_login(
 async fn get_session(
     State(database): State<DatabaseHandles>,
     State(config): State<ServerConfig>,
-    cookie_jar: CookieJar,
+    headers: HeaderMap,
     session: Session,
 ) -> Response {
     // Get the user handle from user_id
@@ -426,11 +426,10 @@ async fn get_session(
     let mut response = Json(response_body).into_response();
     // Refresh the browser cookie and issue a CSRF token. This also converts an
     // Authorization-authenticated OIDC session into an HttpOnly cookie for WebSockets.
-    let csrf_token = cookie_jar
-        .get(crate::server::session_cookie::csrf_cookie_name(
-            config.secure_session_cookies,
-        ))
-        .map(|cookie| cookie.value().to_owned());
+    let csrf_token = crate::server::session_cookie::cookie_value(
+        &headers,
+        crate::server::session_cookie::csrf_cookie_name(config.secure_session_cookies),
+    );
     append_session_cookies(&mut response, session.token, csrf_token, &config);
     response
 }

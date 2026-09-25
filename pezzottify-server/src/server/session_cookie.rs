@@ -1,4 +1,4 @@
-use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
+use simple_server::auth::{Cookie, CookieCredential, SameSite};
 use simple_server::axum::{
     extract::{Request, State},
     http::{header, HeaderMap, HeaderValue, Method, StatusCode},
@@ -30,6 +30,15 @@ pub fn csrf_cookie_name(secure: bool) -> &'static str {
     } else {
         CSRF_COOKIE_NAME
     }
+}
+
+/// Preserve the existing decoded cookie-jar behavior through shared extraction.
+pub fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
+    CookieCredential::decoded_compatibility(name)
+        .expect("configured cookie name")
+        .extract(headers)
+        .ok()
+        .map(|credential| credential.expose().to_owned())
 }
 
 pub fn new_csrf_token() -> String {
@@ -129,17 +138,18 @@ pub async fn require_csrf(
         return next.run(request).await;
     }
 
-    let jar = CookieJar::from_headers(request.headers());
-    if jar
-        .get(session_cookie_name(config.secure_session_cookies))
-        .is_none()
+    if cookie_value(
+        request.headers(),
+        session_cookie_name(config.secure_session_cookies),
+    )
+    .is_none()
     {
         return next.run(request).await;
     }
-
-    let cookie_token = jar
-        .get(csrf_cookie_name(config.secure_session_cookies))
-        .map(Cookie::value);
+    let cookie_token = cookie_value(
+        request.headers(),
+        csrf_cookie_name(config.secure_session_cookies),
+    );
     let header_token = request
         .headers()
         .get(CSRF_HEADER_NAME)

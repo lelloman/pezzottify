@@ -470,3 +470,88 @@ async fn concurrent_logins_create_independent_revocable_sessions() {
         assert_eq!(client.get_session().await.status(), StatusCode::OK);
     }
 }
+
+#[tokio::test]
+async fn cookie_credential_compatibility_preserves_decoding_and_duplicate_order() {
+    let server = TestServer::spawn().await;
+    let login_client = TestClient::new(server.base_url.clone());
+    let token = session_token_from(&login_client.login(TEST_USER, TEST_PASS).await);
+    let encoded: String = token.bytes().map(|b| format!("%{b:02X}")).collect();
+    for (cookie, expected) in [
+        (format!("session_token={encoded}"), StatusCode::OK),
+        (
+            format!("session_token=invalid; session_token={token}"),
+            StatusCode::OK,
+        ),
+        (
+            format!("session_token={token}; session_token=invalid"),
+            StatusCode::UNAUTHORIZED,
+        ),
+        (
+            format!("malformed; session_token = {token} ; other=x"),
+            StatusCode::OK,
+        ),
+        (
+            format!("session_token={token}; session_token="),
+            StatusCode::UNAUTHORIZED,
+        ),
+    ] {
+        let response = reqwest::Client::new()
+            .get(format!("{}/v1/auth/session", server.base_url))
+            .header(reqwest::header::COOKIE, cookie)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected);
+    }
+    let response = reqwest::Client::new()
+        .get(format!("{}/v1/auth/session", server.base_url))
+        .header(reqwest::header::COOKIE, "session_token=invalid")
+        .header(reqwest::header::COOKIE, format!("session_token={token}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn optional_home_session_preserves_anonymous_invalid_credentials() {
+    let server = TestServer::spawn().await;
+    let login_client = TestClient::new(server.base_url.clone());
+    let token = session_token_from(&login_client.login(TEST_USER, TEST_PASS).await);
+    for (authorization, cookie, authenticated) in [
+        (None, None, false),
+        (None, Some("session_token=invalid".to_owned()), false),
+        (
+            Some("Basic bad".to_owned()),
+            Some(format!("session_token={token}")),
+            false,
+        ),
+        (
+            Some("Bearer invalid".to_owned()),
+            Some(format!("session_token={token}")),
+            false,
+        ),
+        (None, Some(format!("session_token={token}")), true),
+        (
+            Some(format!("bEaReR   {token}")),
+            Some("session_token=invalid".to_owned()),
+            true,
+        ),
+    ] {
+        let mut request = reqwest::Client::new().get(format!("{}/", server.base_url));
+        if let Some(value) = authorization {
+            request = request.header(reqwest::header::AUTHORIZATION, value);
+        }
+        if let Some(value) = cookie {
+            request = request.header(reqwest::header::COOKIE, value);
+        }
+        let response = request.send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(
+            body["session_token"].as_str(),
+            authenticated.then_some(token.as_str())
+        );
+    }
+}
