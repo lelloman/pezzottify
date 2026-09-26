@@ -70,3 +70,32 @@ requests, playlists, recommendations, browser synchronization, and mixed load.
   dependency; its stated remediation is rustls >=0.23.45. Additional allowed
   warnings concern existing dependencies. This migration does not suppress the
   advisory or upgrade unrelated TLS dependencies.
+
+## Owned WebSocket transport — 2026-09-26
+
+The production sync endpoint (`/v1/ws`) and MCP endpoint (`/v1/mcp`) now use
+`simple_server::web::ws::{WebSocketUpgrade, WebSocket, Message}`. Both split
+read/write loops use shared socket types. The reviewed library revision is
+`46c724315a3ed35e35cb086b2328bb4040cd0531`, recorded in `simple-server.rev`
+for the existing checkout script, CI and Docker workflows.
+
+Session/device authentication, MCP permission refresh and revocation, JSON
+schemas, sync broadcasts, control-message handling, connection registration,
+tracked task ownership and shutdown remain the application's responsibility.
+No transport defaults or endpoint settings change. The independent
+Tungstenite test client remains at its existing version.
+
+Baseline: 1,449 tests passed and 36 existing tests were ignored using the old
+library pin. Two additional TCP protocol tests passed before the migration;
+they check Ping/Pong payloads, ignored binary frames, malformed-JSON errors and
+successful application requests after those errors for both endpoints.
+
+Final verification: `cargo test --locked --features fast` passes **1,451 tests**
+with **36 existing ignores**, including sync broadcasts/reconnection/auth,
+MCP session revocation/permission refresh, and real-process SIGINT, SIGTERM and
+admin-reboot shutdown with both WebSocket endpoints open. `cargo fmt --all --
+--check`, `cargo clippy --locked -- -D warnings`, and database-boundary checks
+pass. Default-feature `cargo build --locked` also passes (the existing
+num-bigint-dig future-compatibility notice remains). The test suite retains its
+pre-existing unused-import warnings. Docker
+and Android suites were not rerun for this transport-type migration.

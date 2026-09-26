@@ -492,3 +492,54 @@ async fn test_websocket_connect_with_authorization_header() {
 
     ws.close(None).await.ok();
 }
+
+#[tokio::test]
+async fn test_websocket_control_frames_and_invalid_messages_preserve_connection() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::new(server.base_url.clone());
+    let response = client
+        .login_with_device(TEST_USER, TEST_PASS, "ws-protocol-contract")
+        .await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let token = extract_session_token(response).await;
+    let mut socket = connect_ws(&server.base_url, &token).await;
+    assert!(
+        wait_for_message(&mut socket, "connected", Duration::from_secs(5))
+            .await
+            .is_some()
+    );
+
+    socket
+        .send(Message::Ping(b"sync-heartbeat".to_vec().into()))
+        .await
+        .unwrap();
+    timeout(Duration::from_secs(5), async {
+        loop {
+            if let Message::Pong(payload) = socket.next().await.unwrap().unwrap() {
+                assert_eq!(payload.as_ref(), b"sync-heartbeat");
+                break;
+            }
+        }
+    })
+    .await
+    .unwrap();
+    socket
+        .send(Message::Binary(vec![0, 255, 1].into()))
+        .await
+        .unwrap();
+    socket.send(Message::Text("not JSON".into())).await.unwrap();
+    let error = wait_for_message(&mut socket, "error", Duration::from_secs(5))
+        .await
+        .unwrap();
+    assert_eq!(error["payload"]["code"], "parse_error");
+    socket
+        .send(Message::Text(r#"{"type":"ping"}"#.into()))
+        .await
+        .unwrap();
+    assert!(
+        wait_for_message(&mut socket, "pong", Duration::from_secs(5))
+            .await
+            .is_some()
+    );
+    socket.close(None).await.unwrap();
+}

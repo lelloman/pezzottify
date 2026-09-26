@@ -2,8 +2,7 @@
 //!
 //! Handles WebSocket connections for MCP protocol.
 
-use simple_server::axum::extract::ws::{Message, WebSocket};
-use simple_server::web::compat::WebSocketUpgrade;
+use simple_server::web::ws::{Message, WebSocket, WebSocketUpgrade};
 use std::sync::Arc;
 
 use futures::{SinkExt, StreamExt};
@@ -124,7 +123,7 @@ async fn handle_mcp_socket(
                 debug!("Received binary message, ignoring");
             }
             Ok(Message::Ping(_)) => {
-                // Axum/tungstenite handles pong automatically
+                // The shared WebSocket transport handles pong automatically
             }
             Ok(Message::Pong(_)) => {}
             Ok(Message::Close(_)) => {

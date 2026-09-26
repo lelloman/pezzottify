@@ -205,3 +205,41 @@ async fn mcp_regular_user_can_search_but_cannot_query_server_stats() {
     // Tools outside the caller's permission set are intentionally hidden.
     assert_eq!(denied["error"]["code"], -32601);
 }
+
+#[tokio::test]
+async fn mcp_control_frames_and_invalid_messages_preserve_connection() {
+    let server = TestServer::spawn().await;
+    let token = login_token(&server, ADMIN_USER, ADMIN_PASS, "mcp-protocol-contract").await;
+    let mut socket = connect_mcp(&server, &token).await;
+    initialize(&mut socket).await;
+    socket
+        .send(Message::Ping(b"mcp-heartbeat".to_vec().into()))
+        .await
+        .unwrap();
+    let pong = tokio::time::timeout(std::time::Duration::from_secs(5), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(pong, Message::Pong(b"mcp-heartbeat".to_vec().into()));
+    socket
+        .send(Message::Binary(vec![0, 255, 1].into()))
+        .await
+        .unwrap();
+    socket.send(Message::Text("not JSON".into())).await.unwrap();
+    let message = tokio::time::timeout(std::time::Duration::from_secs(5), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let error: Value = serde_json::from_str(message.to_text().unwrap()).unwrap();
+    assert_eq!(error["error"]["code"], -32700);
+    let pong = request(
+        &mut socket,
+        json!({"jsonrpc":"2.0", "id":42, "method":"ping"}),
+    )
+    .await;
+    assert_eq!(pong["id"], 42);
+    assert_eq!(pong["result"], json!({}));
+    socket.close(None).await.unwrap();
+}
