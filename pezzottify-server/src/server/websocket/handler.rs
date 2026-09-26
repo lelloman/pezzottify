@@ -2,9 +2,8 @@
 //!
 //! Handles WebSocket upgrade, message loop, and cleanup.
 
-use simple_server::axum::extract::ws::{Message, WebSocket};
 use simple_server::extract::Extract;
-use simple_server::web::compat::WebSocketUpgrade;
+use simple_server::web::ws::{Message, WebSocket, WebSocketUpgrade};
 use std::sync::Arc;
 
 use futures::{SinkExt, StreamExt};
