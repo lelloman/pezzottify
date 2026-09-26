@@ -1,11 +1,11 @@
 # Step 03c: HTTP tracing
 
 Production `route_builder::build_app` already installs `log_requests` outside
-session/auth/CSRF middleware. It now calls shared `http_tracing::trace_with_observer` when
+session/auth/CSRF middleware. It now calls shared `web::tracing::trace_with_observer` when
 `RequestsLoggingLevel` is Path, Headers or Body. None bypasses tracing completely
 and retains existing metrics/bandwidth accounting. The separate metrics listener
 and offline CLI tools did not have HTTP request logging and remain unchanged.
-The reviewed library pin is `adc1640bde4ac8f934ed454c8d6c5e264a6a2790` in
+The reviewed library pin is `ca98a4159e1cb0dd7b9db2faa9a076d198b7973b` in
 `simple-server.rev`; CI/build checkout scripts consume that pin.
 
 ## Behavior and telemetry schema
@@ -58,3 +58,31 @@ The migration is committed in its dedicated worktree, then the original `dev`
 branch is rebased onto it with ancestry/tree verification before removal of the
 temporary worktree and branch. Exact final commit and integration evidence are
 recorded in the central simple-server migration trackers.
+
+## Backend-independent observer canary — 2026-09-26
+
+The production middleware now implements `web::tracing::Observer` and receives
+`ResponseInfo` instead of an Axum response. Completion delegates to the owned
+`TracingObserver`; response headers retain Pezzottify's INFO severity and
+`simple_server::http_tracing` target. The shared implementation uses the same
+streaming lifecycle engine. Logging modes, metrics, diagnostics and routing
+placement are unchanged. `web-compat` remains required for other protocols.
+
+The strengthened real-HTTP regression checks exactly one header and completion
+event per rejected request when logging is enabled, no such events in None mode,
+the INFO severity and stable target, plus existing safe-route, secret exclusion,
+response-body and authenticated-404 contracts. It passes against the original
+library pin before the production migration.
+
+Baseline and final `cargo test --locked --features fast -j 2` each pass
+**1,451 tests**, with **36 existing ignores**. The strengthened real-HTTP
+contract also passed separately before migration. Formatting, database execution
+boundary checks, strict production `cargo clippy --locked -- -D warnings` and
+default-feature `cargo build --locked` pass. Existing test unused-import warnings
+and the num-bigint-dig future-compatibility notice remain. Docker, Android,
+browser and release builds were not rerun for this observer-type migration.
+
+Work was isolated from active `dev` at `9115a8a4`. The exact shared library pin
+is recorded above and in `simple-server.rev`; CI and build checkout scripts
+consume that file. Integration and cleanup evidence are recorded in the central
+migration trackers. Nothing pushed or deployed.

@@ -67,6 +67,25 @@ async fn actual_router_preserves_disabled_mode_and_traces_auth_rejections_safely
         }
         let output = String::from_utf8(bytes.lock().unwrap().clone()).unwrap();
         assert_eq!(output.contains("http.finished"), enabled, "{output}");
+        assert_eq!(
+            output.matches("http.response_headers").count(),
+            usize::from(enabled),
+            "{output}"
+        );
+        assert_eq!(
+            output.matches("http.finished").count(),
+            usize::from(enabled),
+            "{output}"
+        );
+        if enabled {
+            let headers = output
+                .lines()
+                .find(|line| line.contains("http.response_headers"))
+                .unwrap();
+            assert!(headers.contains("INFO"), "{headers}");
+            assert!(headers.contains("simple_server::http_tracing"), "{headers}");
+        }
+
         if enabled {
             assert!(output.contains("http.request"), "{output}");
             assert!(output.contains("http.response_headers"), "{output}");
