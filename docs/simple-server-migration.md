@@ -99,3 +99,17 @@ pass. Default-feature `cargo build --locked` also passes (the existing
 num-bigint-dig future-compatibility notice remains). The test suite retains its
 pre-existing unused-import warnings. Docker
 and Android suites were not rerun for this transport-type migration.
+
+## Owned HTTP tracing observer — 2026-09-26
+
+Production request logging uses `simple_server::web::tracing`, including the
+metadata-only `ResponseInfo` callback. The source pin is
+`ca98a4159e1cb0dd7b9db2faa9a076d198b7973b`. Existing INFO response events,
+default completion events, disabled mode and metrics behavior are preserved.
+
+Baseline/final: **1,451 passed, 36 ignored**. The strengthened real-HTTP tracing
+contract passes before and after. Strict production Clippy, formatting,
+database-boundary checks and the default debug build pass. See
+[tracing evidence](step-03c-http-tracing.md#backend-independent-observer-canary--2026-09-26)
+for coverage and limitations. Remaining backend boundaries: multipart, SSE,
+independent HTTP mocks and the error-renderer differential test.

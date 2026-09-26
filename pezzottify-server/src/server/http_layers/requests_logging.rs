@@ -226,17 +226,17 @@ where
     if *level == RequestsLoggingLevel::None {
         next(request).await
     } else {
-        simple_server::web::compat::trace_with_observer(request, RequestObserver, next).await
+        simple_server::web::tracing::trace_with_observer(request, RequestObserver, next).await
     }
 }
 
 // Preserve immediate INFO response visibility, including long-lived streams.
 struct RequestObserver;
-impl simple_server::http_tracing::Observer for RequestObserver {
+impl simple_server::web::tracing::Observer for RequestObserver {
     fn on_response(
         &mut self,
         span: &tracing::Span,
-        response: &simple_server::axum::response::Response,
+        response: &simple_server::web::tracing::ResponseInfo<'_>,
         latency: std::time::Duration,
     ) {
         info!(target: "simple_server::http_tracing", parent: span,
@@ -247,12 +247,12 @@ impl simple_server::http_tracing::Observer for RequestObserver {
     fn on_finish(
         &mut self,
         span: &tracing::Span,
-        outcome: simple_server::http_tracing::Outcome,
-        phase: simple_server::http_tracing::Phase,
+        outcome: simple_server::web::tracing::Outcome,
+        phase: simple_server::web::tracing::Phase,
         duration: std::time::Duration,
     ) {
-        simple_server::http_tracing::Observer::on_finish(
-            &mut simple_server::http_tracing::TracingObserver,
+        simple_server::web::tracing::Observer::on_finish(
+            &mut simple_server::web::tracing::TracingObserver,
             span,
             outcome,
             phase,
