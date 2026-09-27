@@ -113,3 +113,13 @@ database-boundary checks and the default debug build pass. See
 [tracing evidence](step-03c-http-tracing.md#backend-independent-observer-canary--2026-09-26)
 for coverage and limitations. Remaining backend boundaries: multipart, SSE,
 independent HTTP mocks and the error-renderer differential test.
+
+## Owned SSE search canary — 2026-09-27
+
+Search events/keepalive/response conversion now use the shared `web::sse` API.
+Reviewed source is pinned in `simple-server.rev`. Final: **1,452 passed, 36
+existing ignores**; eight production SSE contracts pass before/after, with
+formatting, DB-boundary, strict production Clippy and default build passing.
+See [the SSE migration record](step-11-sse.md) for scope and verification.
+Remaining exposure: multipart fields/errors, independent HTTP mocks and the
+error-renderer differential test.
