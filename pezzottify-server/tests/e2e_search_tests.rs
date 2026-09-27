@@ -521,12 +521,6 @@ async fn test_streaming_search_returns_sse_response() {
 
     let response = client.search_stream("Test").await;
 
-    // Skip if search is disabled
-    if response.status() == StatusCode::NOT_FOUND {
-        eprintln!("Streaming search endpoint not available (no_search feature enabled)");
-        return;
-    }
-
     assert_eq!(response.status(), StatusCode::OK);
 
     // Check content type is SSE
@@ -549,13 +543,10 @@ async fn test_streaming_search_requires_authentication() {
 
     let response = client.search_stream("Test").await;
 
-    // Should be unauthorized/forbidden (or not found if search disabled)
-    assert!(
-        response.status() == StatusCode::UNAUTHORIZED
-            || response.status() == StatusCode::FORBIDDEN
-            || response.status() == StatusCode::NOT_FOUND,
-        "Streaming search should require authentication or be disabled, got: {}",
-        response.status()
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_ne!(
+        response.headers().get("content-type").map(|v| v.as_bytes()),
+        Some(b"text/event-stream".as_slice())
     );
 }
 
@@ -565,12 +556,6 @@ async fn test_streaming_search_returns_done_section() {
     let client = TestClient::authenticated(server.base_url.clone()).await;
 
     let response = client.search_stream("Test").await;
-
-    // Skip if search is disabled
-    if response.status() == StatusCode::NOT_FOUND {
-        eprintln!("Streaming search endpoint not available (no_search feature enabled)");
-        return;
-    }
 
     assert_eq!(response.status(), StatusCode::OK);
 
@@ -605,12 +590,6 @@ async fn test_streaming_search_with_no_results() {
 
     let response = client.search_stream("xyznonexistent123456").await;
 
-    // Skip if search is disabled
-    if response.status() == StatusCode::NOT_FOUND {
-        eprintln!("Streaming search endpoint not available (no_search feature enabled)");
-        return;
-    }
-
     assert_eq!(response.status(), StatusCode::OK);
 
     let text = response.text().await.unwrap();
@@ -637,12 +616,6 @@ async fn test_streaming_search_returns_valid_sections() {
 
     // Search for something that might exist in test data
     let response = client.search_stream(ARTIST_1_NAME).await;
-
-    // Skip if search is disabled
-    if response.status() == StatusCode::NOT_FOUND {
-        eprintln!("Streaming search endpoint not available (no_search feature enabled)");
-        return;
-    }
 
     assert_eq!(response.status(), StatusCode::OK);
 
@@ -682,12 +655,6 @@ async fn test_streaming_search_special_characters() {
     // Search with special characters that need URL encoding
     let response = client.search_stream("Test & Band").await;
 
-    // Skip if search is disabled
-    if response.status() == StatusCode::NOT_FOUND {
-        eprintln!("Streaming search endpoint not available (no_search feature enabled)");
-        return;
-    }
-
     // Should handle gracefully (OK or BAD_REQUEST, not 500)
     assert!(
         response.status() == StatusCode::OK || response.status() == StatusCode::BAD_REQUEST,
@@ -703,12 +670,6 @@ async fn test_streaming_search_empty_query() {
 
     let response = client.search_stream("").await;
 
-    // Skip if search is disabled
-    if response.status() == StatusCode::NOT_FOUND {
-        eprintln!("Streaming search endpoint not available (no_search feature enabled)");
-        return;
-    }
-
     // Empty query should return OK with results (TopResults + Done)
     assert_eq!(response.status(), StatusCode::OK);
 
@@ -720,4 +681,52 @@ async fn test_streaming_search_empty_query() {
         .iter()
         .any(|e| e.get("section").and_then(|s| s.as_str()) == Some("done"));
     assert!(has_done, "Empty query should still return Done section");
+}
+
+#[tokio::test]
+async fn test_streaming_search_wire_contract_and_reconnect_header() {
+    let server = TestServer::spawn().await;
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+    // Search has no replay cursor or event IDs; reconnect headers must not
+    // change its existing data-only protocol, including Unicode queries.
+    for query in ["Test", "雪 & Band\n"] {
+        let mut response = client
+            .client
+            .get(format!("{}/v1/content/search/stream", server.base_url))
+            .query(&[("q", query)])
+            .header("Last-Event-ID", "ignored-search-cursor")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()["content-type"], "text/event-stream");
+        assert_eq!(response.headers()["cache-control"], "no-cache");
+        let bytes = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let mut bytes = Vec::new();
+            while let Some(chunk) = response.chunk().await.unwrap() {
+                bytes.extend_from_slice(&chunk);
+            }
+            bytes
+        })
+        .await
+        .expect("search SSE must complete");
+        let text = std::str::from_utf8(&bytes).unwrap();
+        assert!(text.ends_with("\n\n"));
+        let mut sections = Vec::new();
+        for frame in text.split("\n\n").filter(|frame| !frame.is_empty()) {
+            let data = frame
+                .strip_prefix("data: ")
+                .expect("data-only search event");
+            assert!(!data.contains('\n'), "one JSON data line per section");
+            sections.push(serde_json::from_str::<serde_json::Value>(data).unwrap());
+        }
+        assert!(!sections.is_empty());
+        assert_eq!(
+            sections.iter().filter(|e| e["section"] == "done").count(),
+            1
+        );
+        let done = sections.last().unwrap();
+        assert_eq!(done["section"], "done");
+        assert!(done["total_time_ms"].is_u64());
+    }
 }
