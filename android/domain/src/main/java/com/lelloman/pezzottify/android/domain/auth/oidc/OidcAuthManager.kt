@@ -80,9 +80,13 @@ interface OidcAuthManager {
         ) : RefreshResult
 
         /**
-         * Token refresh failed - user needs to re-authenticate.
+         * Token refresh failed. Preserve the session unless requiresReauthentication is true.
          */
-        data class Failed(val message: String) : RefreshResult
+        data class Failed(
+            val message: String,
+            // Only an explicit rejection of the refresh credential warrants logout.
+            val requiresReauthentication: Boolean = false,
+        ) : RefreshResult
 
         /**
          * Token refresh was rate limited by the OIDC provider.

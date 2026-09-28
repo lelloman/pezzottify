@@ -105,7 +105,7 @@ class OidcTokenRefresherTest {
         val result = tokenRefresher.refreshTokens()
 
         assertThat(result).isEqualTo(TokenRefresher.RefreshResult.Failed("No fresh ID token received"))
-        coVerify(exactly = 0) { authStore.storeAuthState(any()) }
+        coVerify { authStore.storeAuthState(createLoggedInState(refreshToken = "rotated-refresh")) }
     }
 
     @Test
@@ -118,6 +118,56 @@ class OidcTokenRefresherTest {
 
         assertThat(result).isInstanceOf(TokenRefresher.RefreshResult.RateLimited::class.java)
         assertThat((result as TokenRefresher.RefreshResult.RateLimited).retryAfterMs).isEqualTo(60_000L)
+    }
+
+    @Test
+    fun `propagates explicit credential rejection`() = runTest {
+        authStateFlow.value = createLoggedInState()
+        coEvery { oidcAuthManager.refreshTokens(any()) } returns
+            OidcAuthManager.RefreshResult.Failed("Revoked", requiresReauthentication = true)
+
+        assertThat(tokenRefresher.refreshTokens()).isEqualTo(
+            TokenRefresher.RefreshResult.Failed("Revoked", requiresReauthentication = true)
+        )
+        coVerify(exactly = 0) { authStore.storeAuthState(any()) }
+    }
+
+    @Test
+    fun `network exception preserves credentials and permits a later refresh`() = runTest {
+        authStateFlow.value = createLoggedInState()
+        coEvery { oidcAuthManager.refreshTokens(any()) } throws java.io.IOException("Offline")
+
+        val failed = tokenRefresher.refreshTokens() as TokenRefresher.RefreshResult.Failed
+        assertThat(failed.requiresReauthentication).isFalse()
+        coVerify(exactly = 0) { authStore.storeAuthState(any()) }
+
+        coEvery { oidcAuthManager.refreshTokens(any()) } returns
+            OidcAuthManager.RefreshResult.Success("new-token", "new-refresh")
+        assertThat(tokenRefresher.refreshTokens()).isEqualTo(TokenRefresher.RefreshResult.Success("new-token"))
+    }
+
+    @Test
+    fun `cancelled refresh does not force waiting callers to log out or prevent retry`() = runTest {
+        authStateFlow.value = createLoggedInState()
+        val entered = kotlinx.coroutines.CompletableDeferred<Unit>()
+        coEvery { oidcAuthManager.refreshTokens(any()) } coAnswers {
+            entered.complete(Unit)
+            kotlinx.coroutines.awaitCancellation()
+        }
+        val owner = async { tokenRefresher.refreshTokens() }
+        entered.await()
+        val waiter = async(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+            tokenRefresher.refreshTokens()
+        }
+        owner.cancel()
+        owner.join()
+        val result = waiter.await() as TokenRefresher.RefreshResult.Failed
+        assertThat(result.requiresReauthentication).isFalse()
+        coVerify(exactly = 0) { authStore.storeAuthState(any()) }
+
+        coEvery { oidcAuthManager.refreshTokens(any()) } returns
+            OidcAuthManager.RefreshResult.Success("new-token", "new-refresh")
+        assertThat(tokenRefresher.refreshTokens()).isEqualTo(TokenRefresher.RefreshResult.Success("new-token"))
     }
 
     // --- Request Coalescing Tests ---

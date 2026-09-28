@@ -87,8 +87,12 @@ class SessionExpiredInterceptor(
                 }
 
                 is TokenRefresher.RefreshResult.Failed -> {
-                    logger.warn("Token refresh failed: ${refreshResult.reason}, triggering logout")
-                    sessionExpiredHandler.onSessionExpired()
+                    if (refreshResult.requiresReauthentication) {
+                        logger.warn("Refresh credential rejected, triggering logout")
+                        sessionExpiredHandler.onSessionExpired()
+                    } else {
+                        logger.warn("Token refresh temporarily failed; preserving session")
+                    }
                 }
 
                 is TokenRefresher.RefreshResult.NotAvailable -> {
