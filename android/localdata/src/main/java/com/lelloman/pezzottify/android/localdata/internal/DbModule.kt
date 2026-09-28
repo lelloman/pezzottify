@@ -20,6 +20,7 @@ internal class DbModule {
     @Singleton
     internal fun provideStaticsDb(@ApplicationContext context: Context): StaticsDb = Room
         .databaseBuilder(context, StaticsDb::class.java, StaticsDb.NAME)
+        .addMigrations(StaticsDb.MIGRATION_12_13)
         .fallbackToDestructiveMigration(dropAllTables = true)
         .build()
 

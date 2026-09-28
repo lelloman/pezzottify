@@ -63,6 +63,9 @@ interface RemoteApiClient {
 
     suspend fun getAlbum(albumId: String): RemoteApiResponse<AlbumResponse>
 
+    suspend fun searchWorks(query: String, limit: Int = 25): RemoteApiResponse<List<com.lelloman.pezzottify.android.domain.statics.Work>>
+    suspend fun getWork(id: String, limit: Int = 50, offset: Int = 0, scope: String = "all"): RemoteApiResponse<com.lelloman.pezzottify.android.domain.statics.WorkPage>
+
     suspend fun getTrack(trackId: String): RemoteApiResponse<TrackResponse>
 
     suspend fun getImage(imageId: String): RemoteApiResponse<ImageResponse>

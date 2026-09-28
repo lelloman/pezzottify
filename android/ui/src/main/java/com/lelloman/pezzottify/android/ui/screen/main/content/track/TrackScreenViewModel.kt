@@ -29,6 +29,7 @@ class TrackScreenViewModel @AssistedInject constructor(
     @Assisted private val navController: NavController,
 ) : ViewModel(), TrackScreenActions {
 
+    val workVersionsStatus get() = interactor.workVersionsStatus
     private var hasLoggedView = false
 
     val state = contentResolver.resolveTrack(trackId)
@@ -68,6 +69,16 @@ class TrackScreenViewModel @AssistedInject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, TrackScreenState())
 
+    override fun clickOnWork() {
+        state.value.track?.workResolution?.work?.let {
+            navController.navigate(com.lelloman.pezzottify.android.ui.Screen.Main.Work(it.id))
+        }
+    }
+
+    override fun clickOnPlayWorkVersions() {
+        state.value.track?.workResolution?.work?.let { interactor.playWorkVersions(it.id, trackId, it.title) }
+    }
+
     override fun clickOnPlayTrack() {
         state.value.track?.let { track ->
             interactor.playTrack(track.albumId, trackId)
@@ -99,6 +110,8 @@ class TrackScreenViewModel @AssistedInject constructor(
     }
 
     interface Interactor {
+        fun playWorkVersions(workId: String, trackId: String, title: String)
+        val workVersionsStatus: kotlinx.coroutines.flow.StateFlow<com.lelloman.pezzottify.android.domain.player.RadioCreationStatus>
         fun playTrack(albumId: String, trackId: String)
         fun playSingleTrack(trackId: String)
         fun addToQueue(trackId: String)

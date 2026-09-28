@@ -225,6 +225,12 @@ internal class RemoteApiClientImpl(
                 .returnFromRetrofitResponse()
         }
 
+    override suspend fun searchWorks(query: String, limit: Int): RemoteApiResponse<List<com.lelloman.pezzottify.android.domain.statics.Work>> =
+        catchingNetworkError { getRetrofit().searchWorks(authToken, query, limit).returnFromRetrofitResponse() }
+
+    override suspend fun getWork(id: String, limit: Int, offset: Int, scope: String): RemoteApiResponse<com.lelloman.pezzottify.android.domain.statics.WorkPage> =
+        catchingNetworkError { getRetrofit().getWork(authToken, id, limit, offset, scope).returnFromRetrofitResponse() }
+
     override suspend fun getTrack(trackId: String): RemoteApiResponse<TrackResponse> =
         catchingNetworkError {
             getRetrofit()

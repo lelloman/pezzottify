@@ -402,6 +402,25 @@ class PlaybackSessionHandlerTest {
         assertThat(handler.otherDeviceQueueContexts.value[42]).isInstanceOf(PlaybackPlaylistContext.Radio::class.java)
     }
 
+    @Test
+    fun `web work versions command preserves work settings track seed and exhausted snapshot`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+        capturedMessageHandler.onMessage("playback.command", """{
+            "command":"loadTrackIds", "payload": {
+                "trackIds":["one","two"],
+                "context":{"type":"radio","source":"work_versions","seed":{"entity_type":"track","entity_id":"one","label":"Composition"},"count":2,"settings":{"work_id":"work"},"edited":false,
+                    "continuation":{"session_id":"versions","strategy":"ranked_snapshot","status":"exhausted","seen_track_ids":["one","two"],"ordered_track_ids":["one","two"],"next_index":2}}
+            }
+        }""")
+        testScheduler.runCurrent()
+        verify { player.loadRadio(listOf("one", "two"), match {
+            it.source == "work_versions" && it.seedEntityType == "track" && it.seedEntityId == "one" &&
+                it.settings?.get("work_id").toString() == "\"work\""
+        }, match { it.sessionId == "versions" && it.status == "exhausted" }) }
+    }
+
     // ========== Command Tests ==========
 
     @Test

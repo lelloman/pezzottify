@@ -126,6 +126,22 @@ internal interface RetrofitApiClient {
         @Query("limit") limit: Int,
     ): Response<WhatsNewResponse>
 
+    @GET("/v1/content/works")
+    suspend fun searchWorks(
+        @Header("Authorization") authToken: String,
+        @Query("query") query: String,
+        @Query("limit") limit: Int,
+    ): Response<List<com.lelloman.pezzottify.android.domain.statics.Work>>
+
+    @GET("/v1/content/work/{id}")
+    suspend fun getWork(
+        @Header("Authorization") authToken: String,
+        @Path("id") id: String,
+        @Query("limit") limit: Int,
+        @Query("offset") offset: Int,
+        @Query("scope") scope: String,
+    ): Response<com.lelloman.pezzottify.android.domain.statics.WorkPage>
+
     @GET("/v1/content/genres")
     suspend fun getGenres(
         @Header("Authorization") authToken: String,

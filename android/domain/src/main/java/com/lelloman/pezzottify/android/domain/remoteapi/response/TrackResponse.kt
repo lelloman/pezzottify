@@ -37,9 +37,15 @@ data class TrackResponse(
     @SerialName("enrichment_status")
     val enrichmentStatus: EntityEnrichmentStatus? = null,
     val enrichment: TrackEnrichment? = null,
+    @SerialName("work_resolution") val workResolution: com.lelloman.pezzottify.android.domain.statics.WorkResolution? = null,
+    @SerialName("work_enrichment_status") val workEnrichmentStatus: EntityEnrichmentStatus? = null,
+    @SerialName("recording_work") val recordingWork: com.lelloman.pezzottify.android.domain.statics.RecordingWork? = null,
+    @SerialName("relationship_scope") val relationshipScope: String? = null,
 )
 
 fun TrackResponse.toDomain() = object : Track {
+    override val workResolution get() = this@toDomain.workResolution
+    override val workEnrichmentStatus get() = this@toDomain.workEnrichmentStatus
     override val id: String
         get() = this@toDomain.track.id
     override val name: String

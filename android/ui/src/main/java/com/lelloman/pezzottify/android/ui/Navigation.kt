@@ -102,6 +102,9 @@ sealed interface Screen {
         @Serializable
         data class Track(val trackId: String) : Main
 
+        @kotlinx.serialization.Serializable
+        data class Work(val workId: String) : Main
+
         @Serializable
         data class Album(val albumId: String) : Main
 
@@ -164,3 +167,5 @@ fun NavController.toGenre(genreName: String) = navigate(Screen.Main.Genre(genreN
 fun NavController.toDevices() = navigate(Screen.Main.Devices)
 
 fun NavController.toGenreList() = navigate(Screen.Main.GenreList)
+
+fun NavController.toWork(workId: String) = navigate(Screen.Main.Work(workId))

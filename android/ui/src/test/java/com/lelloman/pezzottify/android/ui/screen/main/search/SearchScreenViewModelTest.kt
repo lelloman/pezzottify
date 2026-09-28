@@ -380,7 +380,66 @@ class SearchScreenViewModelTest {
         assertThat(viewModel.state.value.isLoading).isFalse()
     }
 
+    @Test
+    fun `works load independently in classic and streaming search`() = runTest {
+        fakeInteractor.workSearch = { listOf(com.lelloman.pezzottify.android.domain.statics.Work("w", it)) }
+        fakeInteractor.searchResults = Result.failure(Exception("catalog failure"))
+        createViewModel()
+        viewModel.updateQuery("Composition")
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.works.single().title).isEqualTo("Composition")
+        assertThat(viewModel.state.value.searchErrorRes).isNotNull()
+        fakeInteractor.streamingSearchEnabledFlow.value = true
+        advanceUntilIdle()
+        viewModel.updateQuery("Composer")
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.works.single().title).isEqualTo("Composer")
+        assertThat(fakeInteractor.streamingSearchCallCount).isGreaterThan(0)
+    }
+
+    @Test
+    fun `works failure preserves catalog results and retries independently`() = runTest {
+        fakeInteractor.workSearch = { error("unavailable") }
+        fakeInteractor.searchResults = Result.success(listOf("a" to SearchScreenViewModel.SearchedItemType.Album))
+        createViewModel()
+        viewModel.updateQuery("query")
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.worksError).isTrue()
+        assertThat(viewModel.state.value.searchResults).hasSize(1)
+        val count = fakeInteractor.searchCallCount
+        fakeInteractor.workSearch = { listOf(com.lelloman.pezzottify.android.domain.statics.Work("w", "Work")) }
+        viewModel.retryWorks()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.worksError).isFalse()
+        assertThat(viewModel.state.value.works).hasSize(1)
+        assertThat(fakeInteractor.searchCallCount).isEqualTo(count)
+    }
+
+    @Test
+    fun `late work responses cannot replace newer query or repopulate cleared search`() = runTest {
+        fakeInteractor.workSearch = { query ->
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { kotlinx.coroutines.delay(1000) }
+            listOf(com.lelloman.pezzottify.android.domain.statics.Work(query, query))
+        }
+        createViewModel()
+        viewModel.updateQuery("old")
+        advanceTimeBy(500)
+        viewModel.updateQuery("new")
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.works.single().id).isEqualTo("new")
+        viewModel.toggleWorksExpanded()
+        viewModel.updateQuery("clear me")
+        advanceTimeBy(500)
+        viewModel.updateQuery("")
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.works).isEmpty()
+        assertThat(viewModel.state.value.worksLoading).isFalse()
+        assertThat(viewModel.state.value.worksExpanded).isFalse()
+    }
+
     private class FakeInteractor : SearchScreenViewModel.Interactor {
+        var workSearch: suspend (String) -> List<com.lelloman.pezzottify.android.domain.statics.Work> = { emptyList() }
+        override suspend fun searchWorks(query: String) = workSearch(query)
         val recentlyViewedFlow = MutableStateFlow<List<SearchScreenViewModel.RecentlyViewedContent>>(emptyList())
         val searchHistoryFlow = MutableStateFlow<List<SearchScreenViewModel.SearchHistoryEntry>>(emptyList())
         val streamingSearchEnabledFlow = MutableStateFlow(false)

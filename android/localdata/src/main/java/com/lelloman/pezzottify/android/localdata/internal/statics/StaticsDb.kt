@@ -39,7 +39,13 @@ internal abstract class StaticsDb : RoomDatabase() {
     abstract fun skeletonDao(): SkeletonDao
 
     companion object {
-        const val VERSION = 12
+        const val VERSION = 13
+        val MIGRATION_12_13 = object : androidx.room.migration.Migration(12, 13) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE Track ADD COLUMN work_resolution TEXT")
+                db.execSQL("ALTER TABLE Track ADD COLUMN work_enrichment_status TEXT")
+            }
+        }
         const val NAME = "StaticsDb"
     }
 }

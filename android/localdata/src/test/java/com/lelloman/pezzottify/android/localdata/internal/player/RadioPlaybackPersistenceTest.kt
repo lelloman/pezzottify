@@ -14,6 +14,20 @@ import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class RadioPlaybackPersistenceTest {
+    @Test fun `work versions context survives restoration and editing`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val tracks = listOf("one", "two")
+        val playlist = PlaybackPlaylist(
+            context = PlaybackPlaylistContext.Radio("work_versions", "track", "one", "Composition", 2,
+                settings = kotlinx.serialization.json.Json.parseToJsonElement("""{"work_id":"work"}""") as kotlinx.serialization.json.JsonObject, isEdited = true),
+            tracksIds = tracks,
+            continuation = RadioContinuation.create(tracks, tracks).edited(tracks, false),
+        )
+        PlaybackStateStoreImpl(context, dispatcher).saveState(playlist, 1, 0, false)
+        assertThat(PlaybackStateStoreImpl(context, dispatcher).loadState()!!.playlist).isEqualTo(playlist)
+    }
+
     @Test fun `restoration preserves snapshot position exclusions and stopped status`() = runTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val dispatcher = StandardTestDispatcher(testScheduler)
