@@ -215,7 +215,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn buffered_rejections_match_previous_json_renderer() {
+    async fn buffered_rejections_match_owned_json_renderer() {
         for error in [
             ApiError::from(DbRunError::QueueTimeout),
             ApiError::from(DbRunError::ExecutionTimeout),
@@ -225,33 +225,42 @@ mod tests {
             ))),
             ApiError::bad_request("invalid_request", "quotes: \" / newline: \n / café"),
         ] {
-            // Reconstruct the previous renderer, with the identical request ID.
-            let mut previous = simple_server::axum::response::IntoResponse::into_response((
+            let escaped_message = error.code == "invalid_request";
+            // Compare the buffered rejection against the owned JSON renderer,
+            // using the same request ID so headers and body bytes are comparable.
+            let mut rendered = (
                 error.status,
-                simple_server::axum::Json(ApiErrorBody {
+                simple_server::web::Json(ApiErrorBody {
                     code: error.code,
                     message: error.message.clone(),
                     request_id: error.request_id.clone(),
                 }),
-            ));
-            previous
+            )
+                .into_response();
+            rendered
                 .headers_mut()
                 .insert(REQUEST_ID_HEADER, error.request_id.parse().unwrap());
             if let Some(retry_after) = error.retry_after.clone() {
-                previous
+                rendered
                     .headers_mut()
                     .insert(http::header::RETRY_AFTER, retry_after);
             }
             let current = error.into_rejection_response().into_response();
-            assert_eq!(current.status(), previous.status());
-            assert_eq!(current.headers(), previous.headers());
-            let previous = simple_server::axum::body::to_bytes(previous.into_body(), usize::MAX)
+            assert_eq!(current.status(), rendered.status());
+            assert_eq!(current.headers(), rendered.headers());
+            let rendered = simple_server::web::body::to_bytes(rendered.into_body(), usize::MAX)
                 .await
                 .unwrap();
             let current = simple_server::web::body::to_bytes(current.into_body(), usize::MAX)
                 .await
                 .unwrap();
-            assert_eq!(current, previous);
+            assert_eq!(current, rendered);
+            if escaped_message {
+                assert!(current.windows(b"\\n".len()).any(|part| part == b"\\n"));
+                assert!(current
+                    .windows("café".len())
+                    .any(|part| part == "café".as_bytes()));
+            }
         }
     }
 

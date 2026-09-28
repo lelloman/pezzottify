@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 use simple_server::body_limit::BodyLimit;
 use simple_server::extract::Extract;
-use simple_server::web::compat::Multipart;
+use simple_server::web::multipart::Multipart;
 use simple_server::web::{
     extract::{Path, Query, State},
     http::StatusCode,
