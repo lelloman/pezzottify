@@ -1,4 +1,5 @@
 use rusqlite::Connection;
+use simple_server::database::sqlite::{ConnectionPolicy, Synchronous};
 use std::time::Duration;
 
 /// How long a connection may wait for another writer before returning
@@ -15,9 +16,13 @@ pub const CANCELLATION_PROGRESS_OPS: i32 = 10_000;
 /// they are properties of a persistent database rather than an individual
 /// connection.
 pub fn configure_connection(conn: &Connection) -> rusqlite::Result<()> {
-    conn.pragma_update(None, "foreign_keys", true)?;
-    conn.busy_timeout(BUSY_TIMEOUT)?;
-    conn.pragma_update(None, "synchronous", "NORMAL")?;
+    let policy = ConnectionPolicy::new()
+        .foreign_keys(true)
+        .busy_timeout(BUSY_TIMEOUT)
+        .synchronous(Synchronous::Normal);
+    for command in policy.commands().expect("fixed SQLite policy is valid") {
+        conn.execute_batch(&command)?;
+    }
     Ok(())
 }
 
