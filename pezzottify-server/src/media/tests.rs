@@ -37,14 +37,14 @@ impl Fixture {
 
 async fn upstream(
     bytes: &'static [u8],
-    status: simple_server::axum::http::StatusCode,
+    status: simple_server::web::StatusCode,
     block_cache_path: Option<PathBuf>,
-) -> (String, Arc<AtomicUsize>, tokio::task::JoinHandle<()>) {
+) -> (String, Arc<AtomicUsize>, simple_server::testing::TestServer) {
     let calls = Arc::new(AtomicUsize::new(0));
     let count = calls.clone();
-    let app = simple_server::axum::Router::new().route(
+    let app = simple_server::web::Router::new().route(
         "/image",
-        simple_server::axum::routing::get(move || {
+        simple_server::web::routing::get(move || {
             let count = count.clone();
             let block_cache_path = block_cache_path.clone();
             async move {
@@ -57,18 +57,16 @@ async fn upstream(
             }
         }),
     );
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let url = format!("http://{}/image", listener.local_addr().unwrap());
-    let task = tokio::spawn(async move {
-        simple_server::axum::serve(listener, app).await.unwrap();
-    });
-    (url, calls, task)
+    let server = simple_server::testing::TestServer::tcp(app).await.unwrap();
+    let url = format!("{}/image", server.base_url().unwrap());
+    (url, calls, server)
 }
 
 #[tokio::test]
 async fn image_cache_miss_fetches_validates_and_persists_then_hits_locally() {
     let fixture = Fixture::new();
-    let (url, calls, task) = upstream(JPEG, simple_server::axum::http::StatusCode::OK, None).await;
+    let (url, calls, upstream_server) =
+        upstream(JPEG, simple_server::web::StatusCode::OK, None).await;
     fixture.image_url(&url);
     for _ in 0..2 {
         let image = fixture.manager.read_image("album").await.unwrap();
@@ -88,13 +86,14 @@ async fn image_cache_miss_fetches_validates_and_persists_then_hits_locally() {
         std::fs::read(fixture.manager.image_path("album").unwrap()).unwrap(),
         JPEG
     );
-    task.abort();
+    drop(upstream_server);
 }
 
 #[tokio::test]
 async fn invalid_local_image_does_not_fall_back_to_origin() {
     let fixture = Fixture::new();
-    let (url, calls, task) = upstream(JPEG, simple_server::axum::http::StatusCode::OK, None).await;
+    let (url, calls, upstream_server) =
+        upstream(JPEG, simple_server::web::StatusCode::OK, None).await;
     fixture.image_url(&url);
     std::fs::create_dir(fixture.root.path().join("images")).unwrap();
     std::fs::write(
@@ -107,7 +106,7 @@ async fn invalid_local_image_does_not_fall_back_to_origin() {
         Err(MediaReadError::InvalidLocalImage)
     ));
     assert_eq!(calls.load(Ordering::SeqCst), 0);
-    task.abort();
+    drop(upstream_server);
 }
 
 #[tokio::test]
@@ -115,31 +114,28 @@ async fn upstream_errors_and_invalid_images_are_not_cached() {
     for (bytes, status) in [
         (
             b"not an image".as_slice(),
-            simple_server::axum::http::StatusCode::OK,
+            simple_server::web::StatusCode::OK,
         ),
-        (
-            JPEG,
-            simple_server::axum::http::StatusCode::SERVICE_UNAVAILABLE,
-        ),
+        (JPEG, simple_server::web::StatusCode::SERVICE_UNAVAILABLE),
     ] {
         let fixture = Fixture::new();
-        let (url, _, task) = upstream(bytes, status, None).await;
+        let (url, _, upstream_server) = upstream(bytes, status, None).await;
         fixture.image_url(&url);
         assert!(matches!(
             fixture.manager.read_image("album").await,
             Err(MediaReadError::Upstream)
         ));
         assert!(!fixture.root.path().join("images/album.jpg").exists());
-        task.abort();
+        drop(upstream_server);
     }
 }
 
 #[tokio::test]
 async fn image_persistence_failure_does_not_fail_valid_response() {
     let fixture = Fixture::new();
-    let (url, _, task) = upstream(
+    let (url, _, upstream_server) = upstream(
         JPEG,
-        simple_server::axum::http::StatusCode::OK,
+        simple_server::web::StatusCode::OK,
         Some(fixture.root.path().join(".media/images/album.json")),
     )
     .await;
@@ -148,7 +144,7 @@ async fn image_persistence_failure_does_not_fail_valid_response() {
         fixture.manager.read_image("album").await.unwrap().bytes,
         JPEG
     );
-    task.abort();
+    drop(upstream_server);
 }
 
 #[tokio::test]
@@ -222,9 +218,9 @@ async fn progressive_readers_share_download_and_publication_and_release_on_drop(
     let release = Arc::new(tokio::sync::Notify::new());
     let count = calls.clone();
     let gate = release.clone();
-    let app = simple_server::axum::Router::new().route(
+    let app = simple_server::web::Router::new().route(
         "/track/{id}/audio",
-        simple_server::axum::routing::get(move || {
+        simple_server::web::routing::get(move || {
             let count = count.clone();
             let gate = gate.clone();
             async move {
@@ -235,20 +231,17 @@ async fn progressive_readers_share_download_and_publication_and_release_on_drop(
                             gate.notified().await;
                             Ok::<_, io::Error>(Bytes::from_static(b"def"))
                         }));
-                simple_server::axum::http::Response::builder()
+                simple_server::web::Response::builder()
                     .header("content-length", "6")
                     .header("content-type", "audio/mpeg")
                     .header("X-Pezzottify-Audio-Extension", "mp3")
-                    .body(simple_server::axum::body::Body::from_stream(stream))
+                    .body(simple_server::web::Body::from_stream(stream))
                     .unwrap()
             }
         }),
     );
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let url = format!("http://{}", listener.local_addr().unwrap());
-    let task = tokio::spawn(async move {
-        simple_server::axum::serve(listener, app).await.unwrap();
-    });
+    let upstream_server = simple_server::testing::TestServer::tcp(app).await.unwrap();
+    let url = upstream_server.base_url().unwrap();
     let registry = DbRegistry::new();
     let search = Arc::new(
         crate::search::Fts5LevenshteinSearchVault::new_lazy(
@@ -346,5 +339,5 @@ async fn progressive_readers_share_download_and_publication_and_release_on_drop(
     .await
     .expect("completed remote audio should be published locally");
     assert_eq!(calls.load(Ordering::SeqCst), 1);
-    task.abort();
+    drop(upstream_server);
 }
