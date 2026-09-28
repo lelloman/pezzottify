@@ -31,6 +31,14 @@ the OIDC library against the discovered issuer, client audience, provider-advert
 algorithms, signing keys, and time claims. A nonce is required and checked at the authorization
 callback; it is not applicable when revalidating an already-issued bearer token.
 
+Android preserves its saved credentials when token renewal encounters network, discovery,
+server, malformed-response, or cancellation failures. API requests can retry renewal on a
+later request, and the WebSocket reconnects with backoff. Only an explicit OIDC token-endpoint
+`invalid_grant` response marks the refresh credential as rejected and requires signing in
+again. A rejected API request with no refresh credential still expires the local session.
+If an incomplete renewal response rotates the refresh token without returning an ID token,
+Android retains the rotated credential for the next attempt.
+
 ## Legacy authentication migration
 
 The password endpoint remains available by default for existing clients. Set

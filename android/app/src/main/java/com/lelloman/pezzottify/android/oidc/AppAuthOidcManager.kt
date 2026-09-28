@@ -203,14 +203,15 @@ class AppAuthOidcManager @Inject constructor(
                                 OidcAuthManager.RefreshResult.RateLimited(retryAfterMs = DEFAULT_RATE_LIMIT_BACKOFF_MS)
                             } else {
                                 OidcAuthManager.RefreshResult.Failed(
-                                    exception.errorDescription ?: "Token refresh failed"
+                                    exception.errorDescription ?: "Token refresh failed",
+                                    requiresReauthentication = exception.rejectsRefreshCredential(),
                                 )
                             }
                         }
 
                         tokenResponse != null -> {
                             // Return ID token if available, null otherwise
-                            // The caller should keep the old ID token if we don't get a new one
+                            // The caller preserves rotated refresh credentials even without a new ID token.
                             val newRefreshToken = tokenResponse.refreshToken
                             logger.info("OIDC operation completed")
                             OidcAuthManager.RefreshResult.Success(
@@ -280,3 +281,7 @@ class AppAuthOidcManager @Inject constructor(
         private const val DEFAULT_RATE_LIMIT_BACKOFF_MS = 60_000L // 1 minute default backoff
     }
 }
+
+/** Only a rejected refresh grant proves that signing in again is necessary. */
+internal fun AuthorizationException.rejectsRefreshCredential(): Boolean =
+    type == AuthorizationException.TYPE_OAUTH_TOKEN_ERROR && error == "invalid_grant"

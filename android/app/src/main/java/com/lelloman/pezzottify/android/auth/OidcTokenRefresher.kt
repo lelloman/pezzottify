@@ -7,8 +7,10 @@ import com.lelloman.pezzottify.android.domain.auth.oidc.OidcAuthManager
 import com.lelloman.pezzottify.android.logger.Logger
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
@@ -69,8 +71,10 @@ class OidcTokenRefresher @Inject constructor(
         } finally {
             // Always complete the deferred and clear state
             deferred.complete(result ?: TokenRefresher.RefreshResult.Failed("Unknown error"))
-            mutex.withLock {
-                inFlightRefresh = null
+            withContext(NonCancellable) {
+                mutex.withLock {
+                    inFlightRefresh = null
+                }
             }
         }
 
@@ -99,6 +103,11 @@ class OidcTokenRefresher @Inject constructor(
                 if (newAuthToken.isNullOrBlank()) {
                     // The API authenticates with the ID token. Retrying with the token that just
                     // received a 401 would report a false refresh success and leave the app stuck.
+                    // A provider may rotate the refresh token even in an incomplete response.
+                    // Keep it so the next attempt does not reuse a revoked credential.
+                    oidcResult.refreshToken?.let {
+                        authStore.storeAuthState(currentState.copy(refreshToken = it))
+                    }
                     logger.warn("refreshTokens() response did not include a fresh ID token")
                     return TokenRefresher.RefreshResult.Failed("No fresh ID token received")
                 }
@@ -113,7 +122,7 @@ class OidcTokenRefresher @Inject constructor(
 
             is OidcAuthManager.RefreshResult.Failed -> {
                 logger.warn("refreshTokens() failed: ${oidcResult.message}")
-                TokenRefresher.RefreshResult.Failed(oidcResult.message)
+                TokenRefresher.RefreshResult.Failed(oidcResult.message, oidcResult.requiresReauthentication)
             }
 
             is OidcAuthManager.RefreshResult.RateLimited -> {

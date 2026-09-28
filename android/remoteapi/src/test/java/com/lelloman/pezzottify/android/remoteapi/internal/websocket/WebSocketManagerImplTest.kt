@@ -427,6 +427,35 @@ class WebSocketManagerImplTest {
     }
 
     @Test
+    fun `temporary refresh failure after handshake rejection reconnects without logout`() = testScope.runTest {
+        authStateFlow.value = loggedInState().copy(refreshToken = "refresh-token")
+        coEvery { tokenRefresher.refreshTokens() } returns TokenRefresher.RefreshResult.Failed("Offline")
+        val listener = io.mockk.slot<WebSocketListener>()
+        every { mockOkHttpClient.newWebSocket(any(), capture(listener)) } returns mockWebSocket
+        webSocketManager.connect()
+        val response = okhttp3.Response.Builder()
+            .request(Request.Builder().url("http://localhost/v1/ws").build())
+            .protocol(okhttp3.Protocol.HTTP_1_1).code(401).message("Unauthorized").build()
+
+        listener.captured.onFailure(mockWebSocket, java.io.IOException("Unauthorized"), response)
+        advanceUntilIdle()
+
+        verify(exactly = 0) { sessionExpiredHandler.onSessionExpired() }
+        verify(exactly = 2) { mockOkHttpClient.newWebSocket(any(), any()) }
+    }
+
+    @Test
+    fun `rejected refresh credential triggers logout before connecting`() = testScope.runTest {
+        authStateFlow.value = loggedInState().copy(refreshToken = "refresh-token")
+        coEvery { tokenRefresher.refreshTokens() } returns
+            TokenRefresher.RefreshResult.Failed("Revoked", requiresReauthentication = true)
+        webSocketManager.connect()
+        advanceUntilIdle()
+        verify(exactly = 1) { sessionExpiredHandler.onSessionExpired() }
+        verify(exactly = 0) { mockOkHttpClient.newWebSocket(any(), any()) }
+    }
+
+    @Test
     fun `connect uses existing token when no refresh token available`() = testScope.runTest {
         authStateFlow.value = loggedInState() // No refresh token
         coEvery { tokenRefresher.refreshTokens() } returns TokenRefresher.RefreshResult.NotAvailable

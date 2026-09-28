@@ -132,7 +132,8 @@ internal class WebSocketManagerImpl(
                     return result.newAuthToken
                 }
                 is TokenRefresher.RefreshResult.Failed -> {
-                    logger.warn("Token refresh failed: ${result.reason}, trying with existing token")
+                    if (result.requiresReauthentication) return null
+                    logger.warn("Token refresh temporarily failed, trying with existing token")
                     // Fall through to use existing token
                 }
                 is TokenRefresher.RefreshResult.NotAvailable -> {
@@ -274,10 +275,10 @@ internal class WebSocketManagerImpl(
      */
     private fun handleAuthFailure() {
         if (hasAttemptedTokenRefresh) {
-            // Already tried refreshing, give up and trigger logout
-            logger.warn("Token refresh already attempted, triggering session expired")
+            // Repeated transport failures do not prove that the refresh credential is invalid.
+            logger.warn("Token refresh already attempted, scheduling reconnect")
             _connectionState.value = ConnectionState.Error("Authentication failed")
-            sessionExpiredHandler.onSessionExpired()
+            scheduleReconnect()
             return
         }
 
@@ -292,9 +293,14 @@ internal class WebSocketManagerImpl(
                     connect()
                 }
                 is TokenRefresher.RefreshResult.Failed -> {
-                    logger.warn("Token refresh failed: ${result.reason}, triggering session expired")
                     _connectionState.value = ConnectionState.Error("Authentication failed")
-                    sessionExpiredHandler.onSessionExpired()
+                    if (result.requiresReauthentication) {
+                        logger.warn("Refresh credential rejected, triggering session expired")
+                        sessionExpiredHandler.onSessionExpired()
+                    } else {
+                        logger.warn("Token refresh temporarily failed; preserving session and reconnecting")
+                        scheduleReconnect()
+                    }
                 }
                 is TokenRefresher.RefreshResult.NotAvailable -> {
                     logger.warn("No refresh token available, triggering session expired")

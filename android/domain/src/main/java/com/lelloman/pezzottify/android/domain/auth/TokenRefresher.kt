@@ -23,9 +23,13 @@ interface TokenRefresher {
         data class Success(val newAuthToken: String) : RefreshResult
 
         /**
-         * Token refresh failed. User needs to re-authenticate.
+         * Token refresh failed. Preserve the session unless requiresReauthentication is true.
          */
-        data class Failed(val reason: String) : RefreshResult
+        data class Failed(
+            val reason: String,
+            // Only an explicit rejection of the refresh credential warrants logout.
+            val requiresReauthentication: Boolean = false,
+        ) : RefreshResult
 
         /**
          * No refresh token available (legacy auth or not logged in).
