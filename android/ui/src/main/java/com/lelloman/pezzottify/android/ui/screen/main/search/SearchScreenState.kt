@@ -11,6 +11,10 @@ import kotlinx.coroutines.flow.Flow
 
 data class SearchScreenState(
     val query: String = "",
+    val works: List<com.lelloman.pezzottify.android.domain.statics.Work> = emptyList(),
+    val worksLoading: Boolean = false,
+    val worksError: Boolean = false,
+    val worksExpanded: Boolean = false,
     val isLoading: Boolean = false,
     val searchResults: List<Flow<Content<SearchResultContent>>>? = null,
     @StringRes val searchErrorRes: Int? = null,

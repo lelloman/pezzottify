@@ -126,6 +126,8 @@ class UiContentResolver(
                                 ),
                                 enrichmentStatus = trackItem.data.enrichmentStatus,
                                 enrichment = trackItem.data.enrichment,
+                                workResolution = trackItem.data.workResolution,
+                                workEnrichmentStatus = trackItem.data.workEnrichmentStatus,
                             )
                         )
                     }

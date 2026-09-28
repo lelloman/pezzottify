@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.localdata.internal.statics.model
 
+import com.lelloman.pezzottify.android.domain.statics.WorkResolution
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
@@ -31,6 +32,11 @@ internal data class Track(
     @ColumnInfo(name = COLUMN_ENRICHMENT)
     override val enrichment: TrackEnrichment? = null,
 
+    @ColumnInfo(name = "work_resolution")
+    override val workResolution: WorkResolution? = null,
+    @ColumnInfo(name = "work_enrichment_status")
+    override val workEnrichmentStatus: EntityEnrichmentStatus? = null,
+
     @ColumnInfo(name = COLUMN_CACHED_AT, defaultValue = "0")
     val cachedAt: Long = System.currentTimeMillis(),
 ) : com.lelloman.pezzottify.android.domain.statics.Track {
@@ -58,5 +64,7 @@ internal fun com.lelloman.pezzottify.android.domain.statics.Track.quack(): Track
     availabilityString = availability.name.lowercase(),
     enrichmentStatus = enrichmentStatus,
     enrichment = enrichment,
+    workResolution = workResolution,
+    workEnrichmentStatus = workEnrichmentStatus,
     cachedAt = System.currentTimeMillis(),
 )

@@ -121,6 +121,16 @@ cycles. It does not walk upwards through parent links or recursively expand an
 unbounded chain of related works. Imported writing dates support numeric and
 string years; Op. 10's imported `"1829"`–`"1832"` range is displayed correctly.
 
+Android phone support includes clickable resolved Work titles on tracks, a
+separate Works section in both catalog and streaming search, and Work pages
+with creator portraits, composition dates, directed relationships, scoped
+recordings, and cursor-based pagination. Track pages also offer **Play all
+versions**, using the same `scope=all` recordings and `work_versions` playback
+context as web, including queue persistence and remote playback. Track cache
+schema 13 preserves Work resolution; version 12 upgrades without discarding
+cached tracks. Work search history, Work likes, persistent offline Work pages,
+and dedicated Android TV layouts remain outside this delivery.
+
 Work content routes use the same catalog authentication and rate limits as
 tracks. Limits are capped at 100. Deleted catalog tracks are omitted from the
 response; pagination offsets count stored links so callers can still advance.
@@ -243,8 +253,8 @@ temporary evaluation settings do not change production enrichment.
 
 ## Deliberate v1 limits
 
-Each track links to at most one Work; composite tracks abstain. Work aliases,
-manual merge/correction tools, and Android Work screens are not implemented.
+Each track links to at most one Work; composite tracks abstain. Work aliases
+and manual merge/correction tools are not implemented.
 Imported parent/child and other Work relationships are browsable on the web.
 Existing links are immutable to
 automatic enrichment; a future correction flow must preserve attachment

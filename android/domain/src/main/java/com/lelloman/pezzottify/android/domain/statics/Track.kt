@@ -1,6 +1,8 @@
 package com.lelloman.pezzottify.android.domain.statics
 
 interface Track : StaticItem {
+    val workResolution: WorkResolution? get() = null
+    val workEnrichmentStatus: EntityEnrichmentStatus? get() = null
     val id: String
     val name: String
     val albumId: String

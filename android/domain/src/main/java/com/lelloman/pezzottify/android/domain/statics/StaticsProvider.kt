@@ -125,10 +125,14 @@ class StaticsProvider internal constructor(
             }
     }
 
+    // Refresh pre-Works cache entries once per session, without repeatedly fetching
+    // tracks whose server legitimately has no Work resolution yet.
+    private val workRefreshRequested = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     fun provideTrack(itemId: String): StaticsItemFlow<Track> {
         // Check in-memory cache first if enabled
         if (isCacheEnabled) {
-            staticsCache.trackCache.get(itemId)?.let { cached ->
+            staticsCache.trackCache.get(itemId)?.takeIf { it.workResolution != null || it.workEnrichmentStatus != null }?.let { cached ->
                 cacheMetricsCollector.recordCacheHit("track")
                 logger.debug("provideTrack($itemId) cache hit")
                 return flowOf(StaticsItem.Loaded(itemId, cached))
@@ -141,6 +145,11 @@ class StaticsProvider internal constructor(
             .combine(staticItemFetchStateStore.get(itemId)) { track, fetchState ->
                 val output = when {
                     track != null -> {
+                        if (track.workResolution == null && track.workEnrichmentStatus == null &&
+                            fetchState?.isLoading != true && (fetchState == null || fetchState.isBackoffExpired()) &&
+                            workRefreshRequested.add(itemId)) {
+                            scheduleItemFetch(itemId, StaticItemType.Track)
+                        }
                         // Cache successful loads if enabled
                         if (isCacheEnabled) {
                             staticsCache.trackCache.put(itemId, track)
@@ -267,6 +276,7 @@ class StaticsProvider internal constructor(
 
     fun clearCache() {
         staticsCache.clearAll()
+        workRefreshRequested.clear()
         logger.debug("Cache cleared")
     }
 

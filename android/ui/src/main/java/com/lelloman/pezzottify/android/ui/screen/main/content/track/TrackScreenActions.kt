@@ -5,5 +5,7 @@ interface TrackScreenActions {
     fun clickOnPlayTrack()
     fun clickOnPlaySingle()
     fun clickOnAddToQueue()
+    fun clickOnWork()
+    fun clickOnPlayWorkVersions()
     fun clickOnLike()
 }

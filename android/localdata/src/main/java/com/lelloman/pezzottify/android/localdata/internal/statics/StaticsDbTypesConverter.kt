@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.localdata.internal.statics
 
+import com.lelloman.pezzottify.android.domain.statics.WorkResolution
 import androidx.room.TypeConverter
 import com.lelloman.pezzottify.android.domain.statics.AlbumAvailability
 import com.lelloman.pezzottify.android.domain.statics.AlbumEnrichment
@@ -11,6 +12,14 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 internal object StaticsDbTypesConverter {
+
+    @TypeConverter
+    fun fromWorkResolution(value: WorkResolution?): String? =
+        value?.let { json.encodeToString(it) }
+
+    @TypeConverter
+    fun toWorkResolution(value: String?): WorkResolution? =
+        value?.let { json.decodeFromString(it) }
 
     private val json = Json {
         ignoreUnknownKeys = true

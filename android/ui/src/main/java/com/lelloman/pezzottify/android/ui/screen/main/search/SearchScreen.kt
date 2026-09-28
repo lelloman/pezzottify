@@ -88,6 +88,7 @@ fun SearchScreen(navController: NavController) {
     val viewModel = hiltViewModel<SearchScreenViewModel>()
     SearchScreenContent(
         state = viewModel.state.collectAsState().value,
+        contentResolver = viewModel.contentResolver,
         actions = viewModel,
         events = viewModel.events,
         navController = navController,
@@ -97,6 +98,7 @@ fun SearchScreen(navController: NavController) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreenContent(
+    contentResolver: com.lelloman.pezzottify.android.ui.content.ContentResolver? = null,
     state: SearchScreenState,
     actions: SearchScreenActions,
     events: Flow<SearchScreensEvents>,
@@ -206,6 +208,7 @@ fun SearchScreenContent(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
+                    worksHeader = { WorksSection(state, actions, contentResolver, navController) },
                     sections = state.streamingSections,
                     isLoading = state.isLoading,
                     query = state.query,
@@ -217,6 +220,7 @@ fun SearchScreenContent(
                         .weight(1f)
                         .fillMaxWidth()
                 ) {
+                    item(key = "works") { WorksSection(state, actions, contentResolver, navController) }
                     if (state.isLoading && state.searchResults == null) {
                         item {
                             SearchLoadingIndicator()
@@ -992,6 +996,7 @@ private fun formatTrackCount(count: Int): String {
 
 @Composable
 private fun StreamingSearchResults(
+    worksHeader: @Composable () -> Unit,
     modifier: Modifier = Modifier,
     sections: List<StreamingSearchSection>,
     isLoading: Boolean,
@@ -999,6 +1004,7 @@ private fun StreamingSearchResults(
     actions: SearchScreenActions,
 ) {
     LazyColumn(modifier = modifier) {
+        item(key = "works") { worksHeader() }
         // Show loading if no sections yet
         if (isLoading && sections.isEmpty()) {
             item {
@@ -1538,6 +1544,52 @@ private fun StreamingSearchResultRow(
                     durationSeconds = (result.durationMs / 1000).toInt(),
                     modifier = Modifier.padding(start = Spacing.Small)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorksSection(
+    state: SearchScreenState,
+    actions: SearchScreenActions,
+    resolver: com.lelloman.pezzottify.android.ui.content.ContentResolver?,
+    navController: NavController,
+) {
+    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.works), style = MaterialTheme.typography.titleLarge)
+        when {
+            state.worksLoading -> androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
+            state.worksError -> {
+                Text(stringResource(R.string.work_search_error))
+                androidx.compose.material3.TextButton(onClick = actions::retryWorks) { Text(stringResource(R.string.work_retry)) }
+            }
+            state.works.isEmpty() -> Text(stringResource(R.string.work_search_empty))
+            else -> {
+                (if (state.worksExpanded) state.works else state.works.take(6)).forEach { work ->
+                    Row(Modifier.fillMaxWidth().clickable { navController.navigate(com.lelloman.pezzottify.android.ui.Screen.Main.Work(work.id)) }
+                        .padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row {
+                            if (work.creatorArtistIds.isEmpty() || resolver == null) {
+                                NullablePezzottifyImage(url = null, shape = PezzottifyImageShape.SmallCircle)
+                            } else work.creatorArtistIds.take(4).forEach { id ->
+                                val artistFlow = remember(id, resolver) { resolver.resolveArtist(id) }
+                                val artist by artistFlow.collectAsState(initial = Content.Loading(id))
+                                NullablePezzottifyImage(url = (artist as? Content.Resolved)?.data?.imageUrl,
+                                    shape = PezzottifyImageShape.SmallCircle, modifier = Modifier.size(32.dp))
+                            }
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(work.title, style = MaterialTheme.typography.titleMedium)
+                            if (work.creators.isNotEmpty()) Text(work.creators.joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
+                            work.compositionYear?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                        }
+                    }
+                }
+                if (state.works.size > 6) androidx.compose.material3.TextButton(onClick = actions::toggleWorksExpanded) {
+                    Text(stringResource(if (state.worksExpanded) R.string.work_show_less else R.string.work_show_all))
+                }
             }
         }
     }

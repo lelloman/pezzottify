@@ -712,6 +712,7 @@ class InteractorsModule {
 
     @Provides
     fun provideSearchScreenInteractor(
+        searchWorks: com.lelloman.pezzottify.android.domain.statics.usecase.SearchWorks,
         performSearch: PerformSearch,
         performStreamingSearch: PerformStreamingSearch,
         loggerFactory: LoggerFactory,
@@ -724,6 +725,7 @@ class InteractorsModule {
         configStore: ConfigStore,
     ): SearchScreenViewModel.Interactor =
         object : SearchScreenViewModel.Interactor {
+            override suspend fun searchWorks(query: String) = searchWorks.invoke(query)
             private val logger = loggerFactory.getLogger("SearchScreenViewModel.Interactor")
 
             override suspend fun search(
@@ -1328,13 +1330,22 @@ class InteractorsModule {
     }
 
     @Provides
+    fun provideWorkScreenInteractor(player: PezzottifyPlayer): com.lelloman.pezzottify.android.ui.screen.main.content.work.WorkScreenViewModel.Interactor =
+        object : com.lelloman.pezzottify.android.ui.screen.main.content.work.WorkScreenViewModel.Interactor {
+            override fun playTrack(trackId: String) = player.loadSingleTrack(trackId)
+        }
+
+    @Provides
     fun provideTrackScreenInteractor(
+        playWorkVersions: com.lelloman.pezzottify.android.domain.player.PlayWorkVersions,
         player: PezzottifyPlayer,
         logViewedContentUseCase: LogViewedContentUseCase,
         recordImpressionUseCase: RecordImpressionUseCase,
         getLikedStateUseCase: GetLikedStateUseCase,
         toggleLikeUseCase: ToggleLikeUseCase,
     ): TrackScreenViewModel.Interactor = object : TrackScreenViewModel.Interactor {
+        override fun playWorkVersions(workId: String, trackId: String, title: String) = playWorkVersions(workId, trackId, title)
+        override val workVersionsStatus get() = playWorkVersions.status
         override fun playSingleTrack(trackId: String) = player.loadSingleTrack(trackId)
 
         override fun addToQueue(trackId: String) = player.addTracksToPlaylist(listOf(trackId))
@@ -1559,6 +1570,7 @@ class InteractorsModule {
 
     @Provides
     fun providePlayerScreenInteractor(
+        @dagger.hilt.android.qualifiers.ApplicationContext context: android.content.Context,
         radioCreation: com.lelloman.pezzottify.android.domain.player.RadioCreationController,
         player: PezzottifyPlayer,
         playbackMetadataProvider: com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider,
@@ -1672,7 +1684,7 @@ class InteractorsModule {
                             PlayerScreenViewModel.Interactor.PlaybackState.Loaded(
                                 isRadio = radioContext != null,
                                 radioLabel = radioContext?.let {
-                                    (if (it.source == "greatest_hits") "${it.seedLabel} · Greatest hits" else "Radio · ${it.seedLabel}") +
+                                    (if (it.source == "greatest_hits") "${it.seedLabel} · Greatest hits" else if (it.source == "work_versions") context.getString(com.lelloman.pezzottify.android.ui.R.string.work_queue_label, it.seedLabel) else "Radio · ${it.seedLabel}") +
                                         (if (it.isEdited) " (edited)" else "")
                                 },
                                 isPlaying = data.isPlaying,
@@ -1765,6 +1777,7 @@ class InteractorsModule {
 
     @Provides
     fun provideQueueScreenInteractor(
+        @dagger.hilt.android.qualifiers.ApplicationContext context: android.content.Context,
         player: PezzottifyPlayer,
         playbackMetadataProvider: com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider,
         playbackModeManager: com.lelloman.pezzottify.android.domain.player.PlaybackModeManager,
@@ -1810,7 +1823,7 @@ class InteractorsModule {
 
                                     is com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext.Radio -> Triple(
                                         com.lelloman.pezzottify.android.ui.screen.queue.QueueContextType.Radio,
-                                        (if (playlistContext.source == "greatest_hits") "${playlistContext.seedLabel} · Greatest hits" else playlistContext.seedLabel) +
+                                        (if (playlistContext.source == "greatest_hits") "${playlistContext.seedLabel} · Greatest hits" else if (playlistContext.source == "work_versions") context.getString(com.lelloman.pezzottify.android.ui.R.string.work_queue_label, playlistContext.seedLabel) else playlistContext.seedLabel) +
                                             (if (playlistContext.isEdited) " (edited)" else ""),
                                         true
                                     )

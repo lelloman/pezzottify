@@ -294,6 +294,9 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                 composable<Screen.Main.Album> {
                     AlbumScreen(it.toRoute<Screen.Main.Album>().albumId, navController)
                 }
+                composable<Screen.Main.Work> {
+                    com.lelloman.pezzottify.android.ui.screen.main.content.work.WorkScreen(it.toRoute<Screen.Main.Work>().workId, navController)
+                }
                 composable<Screen.Main.Track> {
                     TrackScreen(it.toRoute<Screen.Main.Track>().trackId, navController)
                 }
