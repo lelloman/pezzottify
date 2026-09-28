@@ -1,6 +1,7 @@
 use crate::sqlite_persistence::configure_connection;
 use anyhow::Result;
 use rusqlite::Connection;
+use simple_server::database::sqlite::{ConnectionPolicy, JournalMode};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tracing::info;
@@ -34,8 +35,12 @@ impl DbRegistry {
     /// making it safe to copy at any time between checkpoints.
     pub fn register(&self, path: PathBuf, conn: &Connection) -> Result<()> {
         configure_connection(conn)?;
-        conn.pragma_update(None, "journal_mode", "WAL")?;
-        conn.pragma_update(None, "wal_autocheckpoint", 0)?;
+        let backup_policy = ConnectionPolicy::new()
+            .journal_mode(JournalMode::Wal)
+            .wal_autocheckpoint(0);
+        for command in backup_policy.commands().expect("fixed WAL policy is valid") {
+            conn.execute_batch(&command)?;
+        }
         info!("Registered database for backup: {:?}", path);
         self.paths.lock().unwrap().push(path);
         Ok(())
