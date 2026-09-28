@@ -229,7 +229,7 @@ mod tests {
 
     #[tokio::test]
     async fn wikidata_work_http_lookup_searches_then_fetches_filtered_facts() {
-        use simple_server::axum::{extract::Query, routing::get, Json, Router};
+        use simple_server::web::{routing::get, Json, Query, Router};
         let app = Router::new()
             .route(
                 "/api",
@@ -254,18 +254,15 @@ mod tests {
                     },
                 ),
             );
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let task = tokio::spawn(async move {
-            simple_server::axum::serve(listener, app).await.unwrap();
-        });
+        let upstream_server = simple_server::testing::TestServer::tcp(app).await.unwrap();
+        let addr = upstream_server.address().unwrap();
         let result = lookup_at(
             "Song - Live",
             &format!("http://{addr}/api"),
             &format!("http://{addr}/sparql"),
         )
         .await;
-        task.abort();
+        drop(upstream_server);
         let result = result.unwrap();
         assert_eq!(result.candidates[0].qid, "Q1");
         assert_eq!(result.evidence.len(), 2);
@@ -273,7 +270,7 @@ mod tests {
 
     #[tokio::test]
     async fn wikidata_work_http_errors_are_not_treated_as_empty_searches() {
-        use simple_server::axum::{routing::get, Json, Router};
+        use simple_server::web::{routing::get, Json, Router};
         let app = Router::new()
             .route(
                 "/lag",
@@ -281,17 +278,14 @@ mod tests {
             )
             .route(
                 "/limited",
-                get(|| async { simple_server::axum::http::StatusCode::TOO_MANY_REQUESTS }),
+                get(|| async { simple_server::web::StatusCode::TOO_MANY_REQUESTS }),
             )
             .route(
                 "/empty",
                 get(|| async { Json(serde_json::json!({"search":[]})) }),
             );
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let task = tokio::spawn(async move {
-            simple_server::axum::serve(listener, app).await.unwrap();
-        });
+        let upstream_server = simple_server::testing::TestServer::tcp(app).await.unwrap();
+        let addr = upstream_server.address().unwrap();
         for path in ["lag", "limited"] {
             assert!(lookup_at(
                 "Song",
@@ -308,7 +302,7 @@ mod tests {
         )
         .await
         .unwrap();
-        task.abort();
+        drop(upstream_server);
         assert!(empty.candidates.is_empty());
         assert_eq!(empty.evidence.len(), 1);
     }

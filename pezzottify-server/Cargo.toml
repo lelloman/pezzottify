@@ -72,6 +72,7 @@ mockall = { version = "0.13", optional = true }
 # rustentia = "0.1"
 
 [dev-dependencies]
+simple-server = { path = "../../simple-server", features = ["test-harness"] }
 log = "0.4"
 reqwest = { version = "0.12", features = ["json", "cookies"] }
 tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
