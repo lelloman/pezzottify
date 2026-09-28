@@ -537,7 +537,7 @@ mod tests {
 
     #[tokio::test]
     async fn source_knowledge_http_resolves_ids_before_fetching_precise_facts() {
-        use simple_server::axum::{extract::Query, routing::get, Json, Router};
+        use simple_server::web::{routing::get, Json, Query, Router};
         let app = Router::new().route("/sparql",get(|Query(q):Query<std::collections::HashMap<String,String>>| async move {
             assert!(q["query"].contains("wdt:P1902"));
             let ids = if q["query"].contains("ambiguous") {vec!["Q1","Q2"]} else {vec!["Q1"]};
@@ -551,10 +551,8 @@ mod tests {
                 "P569":[{"rank":"normal","mainsnak":{"datavalue":{"value":{"time":"+1970-01-01T00:00:00Z","precision":9,"calendarmodel":"http://www.wikidata.org/entity/Q1985727"}}}}]
             }}}}))
         }));
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let task =
-            tokio::spawn(async move { simple_server::axum::serve(listener, app).await.unwrap() });
+        let upstream_server = simple_server::testing::TestServer::tcp(app).await.unwrap();
+        let addr = upstream_server.address().unwrap();
         let mut client = ReferenceClient::new().unwrap();
         client.sparql = format!("http://{addr}/sparql");
         client.wd = format!("http://{addr}/wd");
@@ -575,12 +573,12 @@ mod tests {
             "1970"
         );
         assert!(client.artist("wrong-id", None, Some("Q1")).await.is_err());
-        task.abort();
+        drop(upstream_server);
     }
 
     #[tokio::test]
     async fn source_knowledge_http_failures_are_not_empty_knowledge() {
-        use simple_server::axum::{routing::get, Json, Router};
+        use simple_server::web::{routing::get, Json, Router};
         let app = Router::new()
             .route(
                 "/lag",
@@ -588,12 +586,10 @@ mod tests {
             )
             .route(
                 "/limited",
-                get(|| async { simple_server::axum::http::StatusCode::TOO_MANY_REQUESTS }),
+                get(|| async { simple_server::web::StatusCode::TOO_MANY_REQUESTS }),
             );
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let task =
-            tokio::spawn(async move { simple_server::axum::serve(listener, app).await.unwrap() });
+        let upstream_server = simple_server::testing::TestServer::tcp(app).await.unwrap();
+        let addr = upstream_server.address().unwrap();
         let client = ReferenceClient::new().unwrap();
         assert!(client
             .get(&format!("http://{addr}/lag"), &[])
@@ -603,12 +599,12 @@ mod tests {
             .get(&format!("http://{addr}/limited"), &[])
             .await
             .is_err());
-        task.abort();
+        drop(upstream_server);
     }
 
     #[tokio::test]
     async fn source_knowledge_http_musicbrainz_corroborates_and_reuses_identity() {
-        use simple_server::axum::{extract::Query, routing::get, Json, Router};
+        use simple_server::web::{routing::get, Json, Query, Router};
         const ID: &str = "00000000-0000-0000-0000-000000000001";
         let record = || json!({"id":ID,"title":"Song","isrcs":["USAAA1200001"],"artist-credit":[{"artist":{"name":"Artist"}}]});
         let app = Router::new()
@@ -630,10 +626,8 @@ mod tests {
                     },
                 ),
             );
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let task =
-            tokio::spawn(async move { simple_server::axum::serve(listener, app).await.unwrap() });
+        let upstream_server = simple_server::testing::TestServer::tcp(app).await.unwrap();
+        let addr = upstream_server.address().unwrap();
         let mut client = ReferenceClient::new().unwrap();
         client.mb = format!("http://{addr}");
         let context = json!({"track":{"name":"Song","external_id_isrc":"USAAA1200001"},"artists":[{"artist":{"name":"Artist"}}]});
@@ -657,7 +651,7 @@ mod tests {
             .await
             .unwrap()
             .is_none());
-        task.abort();
+        drop(upstream_server);
     }
     #[test]
     fn source_knowledge_dates_preserve_precision() {
