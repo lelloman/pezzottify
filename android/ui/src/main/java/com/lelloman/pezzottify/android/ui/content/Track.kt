@@ -30,6 +30,8 @@ data class Track(
     val availability: TrackAvailability = TrackAvailability.Available,
     val enrichmentStatus: EntityEnrichmentStatus? = null,
     val enrichment: TrackEnrichment? = null,
+    val workResolution: com.lelloman.pezzottify.android.domain.statics.WorkResolution? = null,
+    val workEnrichmentStatus: EntityEnrichmentStatus? = null,
 ) {
     /** Whether the track can be played */
     val isPlayable: Boolean

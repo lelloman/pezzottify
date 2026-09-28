@@ -198,6 +198,8 @@ class TrackScreenViewModelTest {
     }
 
     private class FakeInteractor : TrackScreenViewModel.Interactor {
+        override val workVersionsStatus = MutableStateFlow(com.lelloman.pezzottify.android.domain.player.RadioCreationStatus.Idle)
+        override fun playWorkVersions(workId: String, trackId: String, title: String) = Unit
         val currentPlayingTrackIdFlow = MutableStateFlow<String?>(null)
         val likedContentIds = mutableSetOf<String>()
 

@@ -66,3 +66,6 @@ dependencies {
     androidTestImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.truth)
 }
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}

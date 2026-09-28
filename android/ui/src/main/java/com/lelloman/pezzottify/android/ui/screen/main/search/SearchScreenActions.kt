@@ -4,6 +4,8 @@ import com.lelloman.pezzottify.android.ui.screen.main.home.ViewedContentType
 
 interface SearchScreenActions {
 
+    fun retryWorks()
+    fun toggleWorksExpanded()
     fun updateQuery(query: String)
 
     fun toggleFilter(filter: SearchFilter)

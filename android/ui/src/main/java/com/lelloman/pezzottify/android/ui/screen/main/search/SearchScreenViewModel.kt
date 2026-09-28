@@ -1,5 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.search
 
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.ensureActive
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lelloman.pezzottify.android.ui.R
@@ -28,7 +30,7 @@ import kotlin.coroutines.CoroutineContext
 @HiltViewModel
 class SearchScreenViewModel(
     private val interactor: Interactor,
-    private val contentResolver: ContentResolver,
+    val contentResolver: ContentResolver,
     private val coroutineContext: CoroutineContext,
 ) : ViewModel(),
     SearchScreenActions {
@@ -49,7 +51,35 @@ class SearchScreenViewModel(
     private val mutableEvents = MutableSharedFlow<SearchScreensEvents>()
     val events = mutableEvents.asSharedFlow()
 
+    private var worksJob: Job? = null
+    private var worksGeneration = 0
     private var previousSearchJob: Job? = null
+
+    override fun toggleWorksExpanded() {
+        mutableState.update { it.copy(worksExpanded = !it.worksExpanded) }
+    }
+
+    override fun retryWorks() { searchWorks(debounce = false) }
+
+    private fun searchWorks(debounce: Boolean = true) {
+        worksJob?.cancel()
+        val generation = ++worksGeneration
+        val query = currentQuery
+        mutableState.update { it.copy(works = emptyList(), worksLoading = query.isNotBlank(), worksError = false, worksExpanded = false) }
+        if (query.isBlank()) return
+        worksJob = viewModelScope.launch {
+            try {
+                if (debounce) delay(400)
+                val works = interactor.searchWorks(query)
+                ensureActive()
+                if (generation == worksGeneration) mutableState.update { it.copy(works = works, worksLoading = false) }
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (generation == worksGeneration) mutableState.update { it.copy(worksLoading = false, worksError = true) }
+            }
+        }
+    }
     private var currentQuery: String = ""
 
     init {
@@ -178,6 +208,7 @@ class SearchScreenViewModel(
 
     private fun performSearch() {
         previousSearchJob?.cancel()
+        searchWorks()
         if (currentQuery.isNotEmpty()) {
             previousSearchJob = viewModelScope.launch {
                 delay(400)
@@ -419,6 +450,7 @@ class SearchScreenViewModel(
     )
 
     interface Interactor {
+        suspend fun searchWorks(query: String): List<com.lelloman.pezzottify.android.domain.statics.Work>
         suspend fun search(
             query: String,
             filters: List<InteractorSearchFilter>? = null

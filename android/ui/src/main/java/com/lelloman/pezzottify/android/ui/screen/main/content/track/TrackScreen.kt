@@ -71,6 +71,7 @@ fun TrackScreen(trackId: String, navController: NavController) {
     )
     TrackScreenContent(
         state = viewModel.state.collectAsState().value,
+        creatingVersions = viewModel.workVersionsStatus.collectAsState().value == com.lelloman.pezzottify.android.domain.player.RadioCreationStatus.Creating,
         contentResolver = viewModel.contentResolver,
         actions = viewModel,
         onAlbumClick = viewModel::clickOnAlbum,
@@ -82,6 +83,7 @@ fun TrackScreen(trackId: String, navController: NavController) {
 @Composable
 private fun TrackScreenContent(
     state: TrackScreenState,
+    creatingVersions: Boolean,
     contentResolver: ContentResolver,
     actions: TrackScreenActions,
     onAlbumClick: (String) -> Unit,
@@ -92,6 +94,7 @@ private fun TrackScreenContent(
         state.isLoading -> LoadingScreen()
         state.track != null -> TrackLoadedScreen(
             track = state.track,
+            creatingVersions = creatingVersions,
             album = state.album,
             currentPlayingTrackId = state.currentPlayingTrackId,
             isLiked = state.isLiked,
@@ -106,6 +109,7 @@ private fun TrackScreenContent(
 
 @Composable
 private fun TrackLoadedScreen(
+    creatingVersions: Boolean,
     track: Track,
     album: Album?,
     currentPlayingTrackId: String?,
@@ -170,6 +174,18 @@ private fun TrackLoadedScreen(
             }
 
             item {
+                track.workResolution?.work?.let { work ->
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        androidx.compose.material3.TextButton(onClick = actions::clickOnWork) {
+                            Text(stringResource(R.string.work_link, work.title))
+                        }
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = actions::clickOnPlayWorkVersions,
+                            enabled = !creatingVersions,
+                        ) { Text(stringResource(R.string.play_work_versions)) }
+                    }
+                }
+                EnrichmentStatusIndicator(status = track.workEnrichmentStatus, entityType = stringResource(R.string.work))
                 TrackEnrichmentSection(track = track)
             }
 
@@ -377,7 +393,7 @@ private fun TrackEnrichmentSection(track: Track) {
         profile?.movementTitle,
     )
     val facts = listOfNotNull(
-        profile?.workTitle?.let { "Work" to it },
+        profile?.workTitle?.takeIf { track.workResolution?.work == null }?.let { "Work" to it },
         movement?.let { "Movement" to it },
         titleCase(profile?.form)?.let { "Form" to it },
         profile?.keySignature?.let { "Key" to it },
