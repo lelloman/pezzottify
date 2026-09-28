@@ -61,8 +61,8 @@ class SessionExpiredInterceptorTest {
     }
 
     @Test
-    fun `triggers handler on 401 when refresh fails`() {
-        coEvery { tokenRefresher.refreshTokens() } returns TokenRefresher.RefreshResult.Failed("Token expired")
+    fun `triggers handler on 401 when refresh credential is rejected`() {
+        coEvery { tokenRefresher.refreshTokens() } returns TokenRefresher.RefreshResult.Failed("Token expired", requiresReauthentication = true)
         val chain = createChain(
             requestUrl = "http://localhost/v1/content/album/123",
             responseCode = 401
@@ -72,6 +72,19 @@ class SessionExpiredInterceptorTest {
 
         coVerify(exactly = 1) { tokenRefresher.refreshTokens() }
         verify(exactly = 1) { sessionExpiredHandler.onSessionExpired() }
+    }
+
+    @Test
+    fun `temporary refresh failure preserves login and later request recovers`() {
+        coEvery { tokenRefresher.refreshTokens() } returns TokenRefresher.RefreshResult.Failed("Offline")
+        val failed = interceptor.intercept(createChain("http://localhost/v1/content/album/123", 401))
+        assertThat(failed.code).isEqualTo(401)
+        verify(exactly = 0) { sessionExpiredHandler.onSessionExpired() }
+
+        coEvery { tokenRefresher.refreshTokens() } returns TokenRefresher.RefreshResult.Success("new-token")
+        val recovered = interceptor.intercept(createChainWithRetry("http://localhost/v1/content/album/123", 401, 200))
+        assertThat(recovered.code).isEqualTo(200)
+        verify(exactly = 0) { sessionExpiredHandler.onSessionExpired() }
     }
 
     @Test
