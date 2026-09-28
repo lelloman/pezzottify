@@ -168,10 +168,9 @@ Server:
 
 The server uses shared cookie/header authentication (`auth-cookies`) and session
 extraction (`extract`). All route groups now use [shared HTTP routing](docs/shared-http-canary.md),
-extractors, responses, middleware composition and serving (`web`). The explicit
-`web-compat` boundaries cover multipart, SSE, WebSocket upgrades and the existing
-tracing observer. Socket/message and event types plus independent test mocks
-still use the backend; routing no longer does. From this repository's root, run
+extractors, responses, middleware composition and serving (`web`). Multipart
+uploads, SSE, WebSocket upgrades, tracing and test fixtures use shared owned
+APIs. The server has no direct Axum API use. From this repository's root, run
 `bash scripts/checkout-simple-server.sh` to obtain the revision recorded in
 `simple-server.rev`. CI uses the same script. It verifies existing checkouts
 without overwriting local work; coordinated local development can use the path
