@@ -6,6 +6,108 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 const JPEG: &[u8] = include_bytes!("../../tests/fixtures/test-image.jpg");
 
+// Model the measured cold-disk stall without relying on host disk/cache state.
+// Channel deadlines ensure a failed assertion cannot strand blocking workers.
+async fn occupy_filesystem(
+    pool: FilesystemWorkPool,
+    workers: usize,
+) -> Vec<(std::sync::mpsc::Sender<()>, tokio::task::JoinHandle<()>)> {
+    let mut held = Vec::new();
+    for _ in 0..workers {
+        let pool = pool.clone();
+        let (release, wait) = std::sync::mpsc::channel();
+        let (started, ready) = tokio::sync::oneshot::channel();
+        let task = tokio::spawn(async move {
+            pool.run(move || {
+                let _ = started.send(());
+                let _ = wait.recv_timeout(std::time::Duration::from_secs(20));
+            })
+            .await
+            .unwrap();
+        });
+        ready.await.unwrap();
+        held.push((release, task));
+    }
+    held
+}
+
+#[tokio::test]
+async fn image_burst_survives_cold_disk_and_competing_filesystem_work() {
+    use std::time::{Duration, Instant};
+
+    // Control: the original shared pool rejects every queued image after 1s.
+    let mut control = Fixture::new();
+    let manager = Arc::get_mut(&mut control.manager).unwrap();
+    manager.image_reads = manager.filesystem.clone();
+    let held = occupy_filesystem(control.manager.filesystem.clone(), 4).await;
+    let old_timeouts = crate::server::metrics::BLOCKING_WORK_OPERATIONS_TOTAL
+        .with_label_values(&["filesystem", "queue_timeout"])
+        .get();
+    let results =
+        futures::future::join_all((0..64).map(|_| control.manager.read_image("album"))).await;
+    assert!(results
+        .iter()
+        .all(|result| matches!(result, Err(MediaReadError::Filesystem(_)))));
+    assert!(
+        crate::server::metrics::BLOCKING_WORK_OPERATIONS_TOTAL
+            .with_label_values(&["filesystem", "queue_timeout"])
+            .get()
+            >= old_timeouts + 64.0
+    );
+    for (release, task) in held {
+        release.send(()).unwrap();
+        task.await.unwrap();
+    }
+
+    let fixture = Fixture::new();
+    std::fs::create_dir(fixture.root.path().join("images")).unwrap();
+    for id in 0..64 {
+        std::fs::write(
+            fixture.root.path().join(format!("images/image-{id}.jpg")),
+            JPEG,
+        )
+        .unwrap();
+    }
+    let competing = occupy_filesystem(fixture.manager.filesystem.clone(), 4).await;
+    let cold_disk = occupy_filesystem(fixture.manager.image_reads.clone(), 4).await;
+    let timeouts = crate::server::metrics::BLOCKING_WORK_OPERATIONS_TOTAL
+        .with_label_values(&["image_read", "queue_timeout"])
+        .get();
+    let release_disk = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(7)).await;
+        for (release, task) in cold_disk {
+            release.send(()).unwrap();
+            task.await.unwrap();
+        }
+    });
+    let started = Instant::now();
+    let mut burst = tokio::task::JoinSet::new();
+    for id in 0..64 {
+        let manager = fixture.manager.clone();
+        burst.spawn(async move { manager.read_image(&format!("image-{id}")).await });
+    }
+    let mut successes = 0;
+    while let Some(result) = burst.join_next().await {
+        assert_eq!(result.unwrap().unwrap().bytes, JPEG);
+        successes += 1;
+    }
+    assert_eq!(successes, 64);
+    assert!(started.elapsed() >= Duration::from_secs(7));
+    assert!(started.elapsed() < Duration::from_secs(10));
+    assert_eq!(
+        crate::server::metrics::BLOCKING_WORK_OPERATIONS_TOTAL
+            .with_label_values(&["image_read", "queue_timeout"])
+            .get(),
+        timeouts
+    );
+    eprintln!("image burst: {successes}/64 succeeded in {:?}; image queue timeouts: 0 (control: 64/64 rejected)", started.elapsed());
+    release_disk.await.unwrap();
+    for (release, task) in competing {
+        release.send(()).unwrap();
+        task.await.unwrap();
+    }
+}
+
 pub(super) struct Fixture {
     pub(super) manager: Arc<MediaManager>,
     pub(super) root: tempfile::TempDir,

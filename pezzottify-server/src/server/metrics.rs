@@ -127,7 +127,7 @@ lazy_static! {
         HistogramOpts::new(
             format!("{PREFIX}_blocking_work_queue_wait_seconds"),
             "Time bounded blocking work spends waiting for capacity"
-        ).buckets(vec![0.0001, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0]),
+        ).buckets(vec![0.0001, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0]),
         &["pool"]
     ).expect("Failed to create blocking_work_queue_wait_seconds metric");
 
@@ -449,6 +449,7 @@ pub fn init_metrics() {
 pub(crate) enum ExecutorOutcome {
     Success,
     StoreError,
+    QueueFull,
     QueueTimeout,
     ExecutionTimeout,
     ShuttingDown,
@@ -460,6 +461,7 @@ impl ExecutorOutcome {
         match self {
             Self::Success => "success",
             Self::StoreError => "store_error",
+            Self::QueueFull => "queue_full",
             Self::QueueTimeout => "queue_timeout",
             Self::ExecutionTimeout => "execution_timeout",
             Self::ShuttingDown => "shutting_down",
