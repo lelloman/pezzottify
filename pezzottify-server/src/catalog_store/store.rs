@@ -13,7 +13,9 @@ use super::trait_def::{
     MAX_ALBUM_TRACKLIST_PAGE_SIZE,
 };
 use super::CatalogMutationError;
-use crate::sqlite_persistence::{configure_connection, BASE_DB_VERSION};
+use crate::sqlite_persistence::{
+    configure_connection, preflight_versioned_schema, BASE_DB_VERSION,
+};
 use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
 use rusqlite::{params, params_from_iter, types::Value, Connection, OptionalExtension};
@@ -55,6 +57,7 @@ fn migrate_if_needed(conn: &mut Connection) -> Result<()> {
 
     if table_count == 0 {
         // Brand new database - create the latest schema directly
+        preflight_versioned_schema("pezzottify/catalog", CATALOG_VERSIONED_SCHEMAS, None)?;
         info!("Creating catalog db schema at version {}", latest_version);
         latest_schema.create(conn)?;
         create_artist_enrichment_enqueue_trigger(conn)?;
@@ -84,6 +87,12 @@ fn migrate_if_needed(conn: &mut Connection) -> Result<()> {
     } else {
         (db_version - BASE_DB_VERSION as i64) as usize
     };
+
+    preflight_versioned_schema(
+        "pezzottify/catalog",
+        CATALOG_VERSIONED_SCHEMAS,
+        Some(current_version),
+    )?;
 
     if current_version >= latest_version {
         return Ok(());
