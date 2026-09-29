@@ -1685,6 +1685,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "lelloman-simple-server"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f3187c81c94701cd041df7ab17ce968b73c967db77c551170e3c24960b6c77a"
+dependencies = [
+ "axum",
+ "bytes",
+ "chrono",
+ "cookie",
+ "cron",
+ "futures-util",
+ "http",
+ "http-body",
+ "pin-project-lite",
+ "rand 0.8.5",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower",
+ "tower-layer",
+ "tower-service",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.177"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1997,7 +2024,7 @@ version = "5.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51e219e79014df21a225b1860a479e2dcd7cbd9130f4defd4bd0e191ea31d67d"
 dependencies = [
- "base64 0.21.7",
+ "base64 0.22.1",
  "chrono",
  "getrandom 0.2.15",
  "http",
@@ -2230,6 +2257,7 @@ dependencies = [
  "infer",
  "jsonwebtoken",
  "lazy_static",
+ "lelloman-simple-server",
  "libc",
  "log",
  "mime_guess",
@@ -2250,7 +2278,6 @@ dependencies = [
  "serde_json",
  "sha2",
  "shlex",
- "simple-server",
  "tempfile",
  "thiserror 1.0.69",
  "time",
@@ -3272,31 +3299,6 @@ name = "simdutf8"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
-
-[[package]]
-name = "simple-server"
-version = "0.1.0"
-dependencies = [
- "axum",
- "bytes",
- "chrono",
- "cookie",
- "cron",
- "futures-util",
- "http",
- "http-body",
- "pin-project-lite",
- "rand 0.8.5",
- "reqwest",
- "serde",
- "serde_json",
- "tokio",
- "tower",
- "tower-layer",
- "tower-service",
- "tracing",
- "tracing-subscriber",
-]
 
 [[package]]
 name = "simple_asn1"

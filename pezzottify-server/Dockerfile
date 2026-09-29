@@ -32,19 +32,13 @@ ARG COMMIT_COUNT=0
 
 WORKDIR /app
 
-# Cargo resolves ../../simple-server from /app/pezzottify-server to /simple-server.
-# Supply the sibling checkout as a named context without copying its build artifacts.
-COPY --from=simple-server-source Cargo.toml /simple-server/Cargo.toml
-COPY --from=simple-server-source src/ /simple-server/src/
-COPY --from=simple-server-source examples/ /simple-server/examples/
-
 COPY pezzottify-server/ pezzottify-server/
 COPY VERSION VERSION
 
 WORKDIR /app/pezzottify-server
 
 # Build with version info from build args
-RUN GIT_HASH="$GIT_HASH" GIT_DIRTY="$GIT_DIRTY" COMMIT_COUNT="$COMMIT_COUNT" cargo build --release
+RUN GIT_HASH="$GIT_HASH" GIT_DIRTY="$GIT_DIRTY" COMMIT_COUNT="$COMMIT_COUNT" cargo build --release --locked
 
 
 # ------------------------------------------
@@ -83,9 +77,7 @@ CMD ["pezzottify-server", "--db-dir", "/data/db", "--media-path", "/data/media",
 # NOTE: Build context must be the repository root (not pezzottify-server/)
 # Build with (from repo root):
 #   ./build-docker.sh pezzottify-server
-# The simple-server checkout defaults to ../simple-server. Override its location
-# with SIMPLE_SERVER_CONTEXT when using Compose. For a direct Docker build:
-#   docker build --build-context simple-server-source=../simple-server -f pezzottify-server/Dockerfile .
+# Direct build: docker build -f pezzottify-server/Dockerfile .
 # Or manually:
 #   GIT_HASH=$(git rev-parse --short HEAD) GIT_DIRTY=$(git status --porcelain | grep -q . && echo 1 || echo 0) \
 #   docker compose up --build pezzottify-server
