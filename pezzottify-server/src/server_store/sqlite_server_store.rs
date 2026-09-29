@@ -4,7 +4,9 @@ use super::models::{
 };
 use super::schema::SERVER_VERSIONED_SCHEMAS;
 use super::ServerStore;
-use crate::sqlite_persistence::{configure_connection, BASE_DB_VERSION};
+use crate::sqlite_persistence::{
+    configure_connection, preflight_versioned_schema, BASE_DB_VERSION,
+};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -29,6 +31,7 @@ impl SqliteServerStore {
 
         if is_new_db {
             // Fresh database - create with latest schema
+            preflight_versioned_schema("pezzottify/server", SERVER_VERSIONED_SCHEMAS, None)?;
             info!("Creating new server database at {:?}", path);
             SERVER_VERSIONED_SCHEMAS.last().unwrap().create(&conn)?;
         } else {
@@ -58,6 +61,11 @@ impl SqliteServerStore {
                         db_version
                     )
                 })?;
+            preflight_versioned_schema(
+                "pezzottify/server",
+                SERVER_VERSIONED_SCHEMAS,
+                Some(db_version as usize),
+            )?;
 
             if db_version < current_schema_version {
                 info!(

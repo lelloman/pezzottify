@@ -8,7 +8,9 @@ use super::models::{
 };
 use super::schema::{create_enrichment_v1_schema, ENRICHMENT_VERSIONED_SCHEMAS};
 use super::trait_def::EnrichmentStore;
-use crate::sqlite_persistence::{configure_connection, BASE_DB_VERSION};
+use crate::sqlite_persistence::{
+    configure_connection, preflight_versioned_schema, BASE_DB_VERSION,
+};
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
@@ -37,6 +39,7 @@ fn migrate_if_needed(conn: &mut Connection) -> Result<()> {
         .unwrap_or(0);
 
     if table_count == 0 {
+        preflight_versioned_schema("pezzottify/enrichment", ENRICHMENT_VERSIONED_SCHEMAS, None)?;
         info!(
             "Creating enrichment db schema at version {}",
             latest_version
@@ -51,6 +54,12 @@ fn migrate_if_needed(conn: &mut Connection) -> Result<()> {
     } else {
         (db_version - BASE_DB_VERSION as i64) as usize
     };
+
+    preflight_versioned_schema(
+        "pezzottify/enrichment",
+        ENRICHMENT_VERSIONED_SCHEMAS,
+        Some(current_version),
+    )?;
 
     if current_version >= latest_version {
         create_enrichment_v1_schema(conn)?;

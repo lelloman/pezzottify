@@ -18,6 +18,21 @@ mod tests {
     }
 
     #[test]
+    fn rejects_newer_catalog_version_without_changing_database() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        CATALOG_VERSIONED_SCHEMAS.last().unwrap().create(&conn).unwrap();
+        let newer = BASE_DB_VERSION + CATALOG_VERSIONED_SCHEMAS.len();
+        conn.pragma_update(None, "user_version", newer).unwrap();
+
+        let error = migrate_if_needed(&mut conn).unwrap_err();
+        assert!(error.to_string().contains("NewerDatabaseVersion"), "{error}");
+        let version: usize = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, newer);
+    }
+
+    #[test]
     fn work_creator_images_resolve_ids_not_names() {
         let (store, _dir) = create_test_store();
         store.write_conn.lock().unwrap().execute_batch(
