@@ -30,6 +30,20 @@ impl Default for FilesystemWorkPool {
 }
 
 impl FilesystemWorkPool {
+    /// Foreground image reads must not queue behind durable publication/recovery.
+    /// Allow the measured ~7s cold-disk stall without increasing read concurrency.
+    pub(crate) fn image_reads() -> Self {
+        Self {
+            inner: BoundedBlockingPool::new(
+                "image_read",
+                DEFAULT_MAX_CONCURRENT,
+                Duration::from_secs(10),
+                DEFAULT_EXECUTION_TIMEOUT,
+            )
+            .with_admission_limit(128),
+        }
+    }
+
     pub(crate) fn with_limits(
         max_concurrent: usize,
         queue_timeout: Duration,
