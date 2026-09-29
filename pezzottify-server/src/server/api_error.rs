@@ -129,7 +129,8 @@ impl ApiError {
 impl From<PasswordWorkError> for ApiError {
     fn from(error: PasswordWorkError) -> Self {
         match error {
-            PasswordWorkError::QueueTimeout
+            PasswordWorkError::QueueFull
+            | PasswordWorkError::QueueTimeout
             | PasswordWorkError::ExecutionTimeout
             | PasswordWorkError::ShuttingDown => Self::password_work_unavailable(),
             PasswordWorkError::WorkerPanicked => {
@@ -142,7 +143,8 @@ impl From<PasswordWorkError> for ApiError {
 impl From<FilesystemWorkError> for ApiError {
     fn from(error: FilesystemWorkError) -> Self {
         match error.0 {
-            BlockingWorkError::QueueTimeout
+            BlockingWorkError::QueueFull
+            | BlockingWorkError::QueueTimeout
             | BlockingWorkError::ExecutionTimeout
             | BlockingWorkError::ShuttingDown => Self::filesystem_unavailable(),
             BlockingWorkError::WorkerPanicked => {
@@ -213,6 +215,24 @@ impl IntoResponse for ApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn image_read_overload_is_a_retryable_filesystem_error() {
+        for failure in [
+            BlockingWorkError::QueueFull,
+            BlockingWorkError::QueueTimeout,
+            BlockingWorkError::ExecutionTimeout,
+        ] {
+            let response = ApiError::from(FilesystemWorkError(failure)).into_response();
+            assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+            assert_eq!(response.headers()[http::header::RETRY_AFTER], "1");
+            let bytes = simple_server::web::body::to_bytes(response.into_body(), 4096)
+                .await
+                .unwrap();
+            let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(body["code"], "filesystem_busy");
+        }
+    }
 
     #[tokio::test]
     async fn buffered_rejections_match_owned_json_renderer() {

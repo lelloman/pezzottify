@@ -38,6 +38,7 @@ pub struct MediaManager {
     catalog: Arc<dyn CatalogStore>,
     catalog_read: DbHandle<dyn CatalogStore>,
     filesystem: FilesystemWorkPool,
+    image_reads: FilesystemWorkPool,
     local_adapter: adapters::FilesystemAdapter,
     image_adapter: Arc<dyn vault::VaultAdapter>,
     vaults: std::sync::RwLock<std::collections::HashMap<vault::VaultId, copies::RegisteredVault>>,
@@ -142,6 +143,7 @@ impl MediaManager {
             catalog_read: DbHandle::new(catalog.clone(), executor, DbLane::CatalogRead),
             catalog,
             filesystem: FilesystemWorkPool::default(),
+            image_reads: FilesystemWorkPool::image_reads(),
             image_adapter,
             vaults,
             materializer: OnceLock::new(),
@@ -290,31 +292,29 @@ impl MediaManager {
     ) -> Result<ImageRead, MediaReadError> {
         let manager = self.clone();
         let image_id = id.to_owned();
-        let file_path = self
-            .filesystem
-            .run(move || manager.image_path(&image_id))
-            .await?
-            .map_err(|error| MediaReadError::Storage(io::Error::other(error)))?;
-
-        // First, check if we have the image cached locally.
-        let adapter = self.local_adapter.clone();
-        let locator = file_path
-            .strip_prefix(&self.root)
-            .map_err(|error| MediaReadError::Storage(io::Error::other(error)))?
-            .to_string_lossy()
-            .into_owned();
+        // Resolve the pointer and read under one admission. Both can block on a
+        // cold disk; neither should wait behind cache publication or recovery.
         match self
-            .filesystem
-            .run(move || adapter.read_bytes(&locator))
-            .await
+            .image_reads
+            .run(move || -> Result<_, MediaReadError> {
+                let file_path = manager
+                    .image_path(&image_id)
+                    .map_err(|error| MediaReadError::Storage(io::Error::other(error)))?;
+                let locator = file_path
+                    .strip_prefix(&manager.root)
+                    .map_err(|error| MediaReadError::Storage(io::Error::other(error)))?
+                    .to_string_lossy()
+                    .into_owned();
+                Ok(manager.local_adapter.read_bytes(&locator))
+            })
+            .await??
         {
-            Ok(Ok(buffer)) => return image_bytes(buffer, MediaReadError::InvalidLocalImage),
-            Ok(Err(error)) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Ok(Err(error)) => {
-                error!(%error, path = %file_path.display(), "Failed to read cached image");
+            Ok(buffer) => return image_bytes(buffer, MediaReadError::InvalidLocalImage),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                error!(%error, image_id = id, "Failed to read cached image");
                 return Err(MediaReadError::Storage(error));
             }
-            Err(error) => return Err(error.into()),
         }
 
         // Image not cached locally - try to fetch from external URL
