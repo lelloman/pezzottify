@@ -56,7 +56,10 @@ async function fetchWithAuth(request) {
   if (!headers.has("Authorization")) {
     headers.set("Authorization", token);
   }
-  const response = await fetch(new Request(request, { headers }));
+  // HTML media requests use no-cors, which silently strips Authorization.
+  // shouldAttachAuth limits this handler to our own origin, so use same-origin
+  // mode while preserving the original range, credentials, and other options.
+  const response = await fetch(new Request(request, { headers, mode: "same-origin" }));
   if (response.status !== 401) return response;
 
   // The cached token may be stale - ask the page for a refreshed one once.
@@ -66,7 +69,7 @@ async function fetchWithAuth(request) {
 
   const retryHeaders = new Headers(request.headers);
   retryHeaders.set("Authorization", freshToken);
-  return fetch(new Request(request, { headers: retryHeaders }));
+  return fetch(new Request(request, { headers: retryHeaders, mode: "same-origin" }));
 }
 
 self.addEventListener("fetch", (event) => {
