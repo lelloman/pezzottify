@@ -42,26 +42,24 @@ Requirements:
 
 - Docker with BuildKit and Docker Compose 2.17 or newer
 - Git
-- A sibling `simple-server` checkout (used by the Rust path dependency)
 
 Run the development stack:
 
 ```bash
 git clone https://github.com/lelloman/pezzottify
 cd pezzottify
-bash scripts/checkout-simple-server.sh
 mkdir -p dev-data
 cp pezzottify-server/config.example.toml pezzottify-server/config.toml
 # Edit pezzottify-server/config.toml for your paths and optional services.
 docker compose up --build
 ```
 
-If `simple-server` is checked out elsewhere, set `SIMPLE_SERVER_CONTEXT` to its
-absolute path. Direct image builds must also supply the named context:
+Cargo downloads `lelloman-simple-server` from crates.io at the version locked in
+`pezzottify-server/Cargo.lock`; no sibling checkout or private registry credentials
+are required. Direct image builds use the repository root:
 
 ```bash
-docker build --build-context simple-server-source=../simple-server \
-  -f pezzottify-server/Dockerfile .
+docker build -f pezzottify-server/Dockerfile .
 ```
 
 The server listens on `http://localhost:3001` by default. If the frontend is served by the server build, open that URL in a browser; otherwise run the web dev server from `web/`.
@@ -170,11 +168,9 @@ The server uses shared cookie/header authentication (`auth-cookies`) and session
 extraction (`extract`). All route groups now use [shared HTTP routing](docs/shared-http-canary.md),
 extractors, responses, middleware composition and serving (`web`). Multipart
 uploads, SSE, WebSocket upgrades, tracing and test fixtures use shared owned
-APIs. The server has no direct Axum API use. From this repository's root, run
-`bash scripts/checkout-simple-server.sh` to obtain the revision recorded in
-`simple-server.rev`. CI uses the same script. It verifies existing checkouts
-without overwriting local work; coordinated local development can use the path
-dependency directly. Update the revision after validating a shared-library change.
+APIs. The server has no direct Axum API use. The `simple-server` dependency name
+is an alias for the published `lelloman-simple-server =0.1.0` crate, preserving
+existing `simple_server` imports. Cargo.lock pins the registry artifact and checksum.
 
 ```bash
 cd pezzottify-server
