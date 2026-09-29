@@ -23,7 +23,7 @@ SQLite schema module can address reusable shape inspection without inventing
 history for them.
 
 Reviewed shared revision: `c1ff3d19d685cd267f5bc712b306f44ef4678d07`
-(`simple-server.rev`). Baseline library suite: 1,120 passed, two existing
+(active pin at rollout). Baseline library suite: 1,120 passed, two existing
 ignores. Final suite: 1,121 passed, two existing ignores. The new catalog test
 confirms a future version fails before writing. Package formatting and strict
 production lib/bin Clippy pass; all-target strict Clippy encounters existing
