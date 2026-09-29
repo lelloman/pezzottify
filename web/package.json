@@ -10,6 +10,7 @@
     "lint": "eslint . --fix",
     "format": "prettier --write src/",
     "test:unit": "node --preserve-symlinks --test src/**/*.test.js",
+    "test:worker": "node --test browser-tests/*.test.js",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug"
