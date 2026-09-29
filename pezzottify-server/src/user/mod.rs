@@ -31,3 +31,6 @@ pub use user_store::{
     DeviceStore, FullUserStore, UserAuthCredentialsStore, UserAuthTokenStore, UserBandwidthStore,
     UserEventStore, UserListeningStore, UserSettingsStore, UserStore,
 };
+
+#[cfg(test)]
+pub(crate) use sqlite_user_store::VERSIONED_SCHEMAS as USER_SCHEMA_CANARY_HISTORY;

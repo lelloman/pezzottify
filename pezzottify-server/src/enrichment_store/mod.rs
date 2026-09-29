@@ -16,3 +16,6 @@ pub use models::{
 };
 pub use store::SqliteEnrichmentStore;
 pub use trait_def::EnrichmentStore;
+
+#[cfg(test)]
+pub(crate) use schema::ENRICHMENT_VERSIONED_SCHEMAS as ENRICHMENT_SCHEMA_CANARY_HISTORY;
