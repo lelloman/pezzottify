@@ -30,5 +30,11 @@ jobs:
       - name: Run ESLint
         run: npm run lint -- --max-warnings 0
 
+      - name: Install Chromium for service worker regression tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Test service worker authentication
+        run: npm run test:worker
+
       - name: Build
         run: npm run build
