@@ -1,5 +1,6 @@
 use anyhow::{bail, Result};
 use rusqlite::{params, types::Type, Connection};
+use simple_server::database::migrations::{MigrationEntry, MigrationPlan, MigrationVersion};
 
 pub const DEFAULT_TIMESTAMP: &str = "(cast(strftime('%s','now') as int))";
 
@@ -144,6 +145,39 @@ pub struct VersionedSchema {
     pub version: usize,
     pub tables: &'static [Table],
     pub migration: Option<fn(&Connection) -> Result<()>>,
+}
+
+/// Check an application's ordered schema versions against its single SQLite
+/// version marker. SQLite records no historical names or checksums here, so
+/// this reports only the pending suffix. Callers retain their schema-shape and
+/// legacy-layout checks before executing application-owned migrations.
+pub fn preflight_versioned_schema(
+    namespace: &str,
+    schemas: &[VersionedSchema],
+    current_version: Option<usize>,
+) -> Result<()> {
+    let plan = MigrationPlan {
+        namespace: namespace.to_owned(),
+        entries: schemas
+            .iter()
+            .map(|schema| MigrationEntry {
+                version: MigrationVersion::Number(schema.version as u64),
+                name: format!("schema-v{}", schema.version),
+                digest: None,
+            })
+            .collect(),
+    };
+    let marker = current_version.map(|version| MigrationVersion::Number(version as u64));
+    let report = plan
+        .inspect_version_only(marker.as_ref())
+        .map_err(|error| anyhow::anyhow!("{namespace} migration preflight failed: {error}"))?;
+    tracing::debug!(
+        namespace,
+        applied = report.applied.len(),
+        pending = report.pending.len(),
+        "Migration preflight complete"
+    );
+    Ok(())
 }
 
 fn strip_leading_and_trailing_parentheses<S: AsRef<str>>(s: S) -> String {

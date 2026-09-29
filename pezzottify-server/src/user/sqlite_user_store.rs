@@ -3,8 +3,8 @@
 use crate::server::metrics::record_db_query;
 use crate::sqlite_column;
 use crate::sqlite_persistence::{
-    configure_connection, Column, ForeignKey, ForeignKeyOnChange, SqlType, Table, VersionedSchema,
-    BASE_DB_VERSION, DEFAULT_TIMESTAMP,
+    configure_connection, preflight_versioned_schema, Column, ForeignKey, ForeignKeyOnChange,
+    SqlType, Table, VersionedSchema, BASE_DB_VERSION, DEFAULT_TIMESTAMP,
 };
 use crate::user::device::{
     Device, DeviceRegistration, DeviceShareMode, DeviceSharePolicy, DeviceType,
@@ -1244,6 +1244,8 @@ impl SqliteUserStore {
                 .context("Failed to get schema")?
                 .validate(&conn)?;
         }
+
+        preflight_versioned_schema("pezzottify/user", VERSIONED_SCHEMAS, Some(version))?;
 
         Self::migrate_if_needed(&mut conn, version)?;
 

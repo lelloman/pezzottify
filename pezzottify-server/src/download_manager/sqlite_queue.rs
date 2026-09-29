@@ -60,6 +60,11 @@ impl SqliteDownloadQueueStore {
             .get(version)
             .context("Failed to get schema")?
             .validate(&conn)?;
+        crate::sqlite_persistence::preflight_versioned_schema(
+            "pezzottify/download-queue",
+            DOWNLOAD_QUEUE_VERSIONED_SCHEMAS,
+            Some(version),
+        )?;
 
         // Run migrations if needed
         Self::migrate_if_needed(&conn, version)?;
