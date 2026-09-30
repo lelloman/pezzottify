@@ -102,6 +102,7 @@ export function setupAxiosInterceptors() {
           failedQueue.push({ resolve, reject });
         })
           .then((token) => {
+            originalRequest._retry = true;
             originalRequest.headers.Authorization = authorizationHeaderValue(token);
             return axios(originalRequest);
           })
@@ -137,7 +138,6 @@ export function setupAxiosInterceptors() {
       } catch (refreshError) {
         console.error("[API] Token refresh error:", refreshError);
         processQueue(refreshError, null);
-        await handleAuthFailure();
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

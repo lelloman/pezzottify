@@ -168,7 +168,12 @@ router.beforeEach(async (to, from, next) => {
 
   // Wait for initial session check if not done yet
   if (!authStore.sessionChecked) {
-    await authStore.checkSession();
+    try {
+      await authStore.checkSession();
+    } catch {
+      next(false);
+      return;
+    }
   }
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
