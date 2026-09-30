@@ -38,6 +38,9 @@ function handleKeyDown(event) {
     playback.playPause();
   }
 }
+function retrySession() {
+  window.location.reload();
+}
 onMounted(() => {
   window.addEventListener("keydown", handleKeyDown);
 });
@@ -47,6 +50,10 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <div v-if="authStore.sessionError" role="alert" class="sessionError">
+    <p>Couldn't check your session. Please try again.</p>
+    <button @click="retrySession">Retry</button>
+  </div>
   <RouterView id="el_routo" />
   <template v-if="showChat">
     <ChatButton />
@@ -56,6 +63,11 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.sessionError {
+  padding: 2rem;
+  text-align: center;
+}
+
 #el_routo {
   width: 100vw;
   height: 100vh;

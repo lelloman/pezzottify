@@ -155,12 +155,12 @@ function getUserManager() {
 
     userManager.events.addAccessTokenExpiring(() => {
       console.debug("[OIDC] Access token expiring");
-      refreshTokens();
+      refreshTokens().catch((error) => console.debug("[OIDC] Renewal deferred:", error));
     });
 
     userManager.events.addAccessTokenExpired(() => {
       console.debug("[OIDC] Access token expired");
-      refreshTokens();
+      refreshTokens().catch((error) => console.debug("[OIDC] Renewal deferred:", error));
     });
   }
   return userManager;
@@ -308,7 +308,12 @@ export async function getIdToken() {
   // If token is expired or about to expire (within 30 seconds), refresh it
   if (user.expired || (user.expires_at && user.expires_at - Date.now() / 1000 < 30)) {
     console.debug("[OIDC] Token expired or expiring soon, refreshing...");
-    user = await refreshTokens();
+    try {
+      user = await refreshTokens();
+    } catch {
+      // A provider outage must not prevent trying the existing server cookie.
+      return null;
+    }
     if (!user) {
       console.debug("[OIDC] Token refresh failed, returning null");
       return null;
@@ -337,7 +342,8 @@ export async function isLoggedIn() {
 
 /**
  * Refresh tokens using the refresh token.
- * Returns the new user object if successful, null if refresh fails.
+ * Returns the new user on success, or null when credentials are absent/rejected.
+ * Throws on temporary failures so callers retain credentials and can retry.
  *
  * This function coalesces concurrent refresh requests - multiple callers
  * will share the same OIDC refresh call to prevent rate limiting.
@@ -349,7 +355,7 @@ export async function refreshTokens() {
   if (rateLimitedUntil > now) {
     const remainingMs = rateLimitedUntil - now;
     console.debug(`[OIDC] Rate limited, ${remainingMs}ms remaining`);
-    return null;
+    throw new Error("Token renewal is temporarily rate limited");
   }
 
   // If we just refreshed successfully, return current user instead of refreshing again
@@ -448,7 +454,11 @@ async function performRefresh() {
         errorDetails: String(error),
       });
     }
-    return null;
+    if (error?.error === "invalid_grant") {
+      return null;
+    }
+    // Preserve saved credentials unless the provider explicitly rejects them.
+    throw error;
   }
 }
 

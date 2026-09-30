@@ -6,7 +6,6 @@ import router from "./router";
 import { createPinia } from "pinia";
 import { useDebugStore } from "./store/debug";
 import { useRemoteStore } from "./store/remote";
-import { useAuthStore } from "./store/auth";
 import { setupAxiosInterceptors } from "./services/api";
 import { setupServiceWorkerBridge } from "./services/oidc";
 
@@ -24,11 +23,7 @@ app.use(router);
 
 window.config = useDebugStore();
 const remoteStore = useRemoteStore();
-const authStore = useAuthStore();
-
-// Initialize auth store (checks for existing OIDC session)
-// This is async but we don't need to wait - the router guard will handle it
-authStore.initialize();
+// The router owns the initial session check to avoid duplicate startup requests.
 
 app.mount("#app");
 
