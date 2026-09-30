@@ -9,6 +9,7 @@ export const useAuthStore = defineStore("auth", {
   state: () => ({
     user: null,
     sessionChecked: false,
+    sessionError: false,
   }),
   getters: {
     isAuthenticated: (state) => !!state.user,
@@ -47,6 +48,7 @@ export const useAuthStore = defineStore("auth", {
      * Supports both OIDC tokens and password-based cookie sessions.
      */
     async checkSession() {
+      this.sessionError = false;
       try {
         // If user is already set (e.g., from password login), just verify with backend
         // Also try session endpoint even without OIDC tokens (cookie-based auth)
@@ -87,6 +89,10 @@ export const useAuthStore = defineStore("auth", {
 
         return true;
       } catch (error) {
+        if (![401, 403].includes(error?.response?.status)) {
+          this.sessionError = true;
+          throw error;
+        }
         // 401/403 means no valid session
         console.debug("Session check failed:", error?.response?.status);
         const { useChatStore } = await import('./chat');

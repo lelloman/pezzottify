@@ -39,6 +39,12 @@ again. A rejected API request with no refresh credential still expires the local
 If an incomplete renewal response rotates the refresh token without returning an ID token,
 Android retains the rotated credential for the next attempt.
 
+The web client also retains saved OIDC credentials on temporary renewal failures, including
+provider rate limiting. It can still try the existing server cookie when renewal is unavailable.
+An explicit `invalid_grant` rejection (or a rejected session with no refresh credential) requires
+signing in again. Startup network and server failures leave the session check retryable and show
+a retry message instead of treating the user as signed out.
+
 ## Legacy authentication migration
 
 The password endpoint remains available by default for existing clients. Set
