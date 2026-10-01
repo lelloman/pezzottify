@@ -147,12 +147,18 @@ class OidcTokenRefresherTest {
     }
 
     @Test
-    fun `cancelled refresh does not force waiting callers to log out or prevent retry`() = runTest {
+    fun `cancelled owner saves rotated credential and shares success with waiters`() = runTest {
         authStateFlow.value = createLoggedInState()
         val entered = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+        coEvery { authStore.storeAuthState(any()) } coAnswers {
+            authStateFlow.value = firstArg()
+            Result.success(Unit)
+        }
         coEvery { oidcAuthManager.refreshTokens(any()) } coAnswers {
             entered.complete(Unit)
-            kotlinx.coroutines.awaitCancellation()
+            release.await()
+            OidcAuthManager.RefreshResult.Success("new-token", "new-refresh")
         }
         val owner = async { tokenRefresher.refreshTokens() }
         entered.await()
@@ -160,17 +166,51 @@ class OidcTokenRefresherTest {
             tokenRefresher.refreshTokens()
         }
         owner.cancel()
+        release.complete(Unit)
         owner.join()
-        val result = waiter.await() as TokenRefresher.RefreshResult.Failed
-        assertThat(result.requiresReauthentication).isFalse()
-        coVerify(exactly = 0) { authStore.storeAuthState(any()) }
+        assertThat(waiter.await()).isEqualTo(TokenRefresher.RefreshResult.Success("new-token"))
+        assertThat((authStateFlow.value as AuthState.LoggedIn).refreshToken).isEqualTo("new-refresh")
+        coVerify(exactly = 1) { oidcAuthManager.refreshTokens("refresh-token") }
 
         coEvery { oidcAuthManager.refreshTokens(any()) } returns
             OidcAuthManager.RefreshResult.Success("new-token", "new-refresh")
         assertThat(tokenRefresher.refreshTokens()).isEqualTo(TokenRefresher.RefreshResult.Success("new-token"))
+        coVerify(exactly = 1) { oidcAuthManager.refreshTokens("new-refresh") }
+    }
+
+    @Test
+    fun `refresh completing after logout does not restore session`() = runTest {
+        authStateFlow.value = createLoggedInState()
+        coEvery { oidcAuthManager.refreshTokens(any()) } coAnswers {
+            authStateFlow.value = AuthState.LoggedOut
+            OidcAuthManager.RefreshResult.Success("new-token", "new-refresh")
+        }
+        assertThat(tokenRefresher.refreshTokens()).isInstanceOf(TokenRefresher.RefreshResult.Failed::class.java)
+        coVerify(exactly = 0) { authStore.storeAuthState(any()) }
     }
 
     // --- Request Coalescing Tests ---
+
+    @Test
+    fun `refresh without rotation keeps existing refresh credential`() = runTest {
+        authStateFlow.value = createLoggedInState()
+        coEvery { oidcAuthManager.refreshTokens(any()) } returns
+            OidcAuthManager.RefreshResult.Success("new-token", null)
+        assertThat(tokenRefresher.refreshTokens()).isEqualTo(TokenRefresher.RefreshResult.Success("new-token"))
+        coVerify { authStore.storeAuthState(createLoggedInState().copy(authToken = "new-token")) }
+    }
+
+    @Test
+    fun `rejection from previous session does not invalidate new sign in`() = runTest {
+        authStateFlow.value = createLoggedInState()
+        coEvery { oidcAuthManager.refreshTokens(any()) } coAnswers {
+            authStateFlow.value = createLoggedInState("another-refresh-token")
+            OidcAuthManager.RefreshResult.Failed("invalid_grant", requiresReauthentication = true)
+        }
+        val result = tokenRefresher.refreshTokens() as TokenRefresher.RefreshResult.Failed
+        assertThat(result.requiresReauthentication).isFalse()
+        coVerify(exactly = 0) { authStore.storeAuthState(any()) }
+    }
 
     @Test
     fun `coalesces concurrent refresh requests - only one OIDC call`() = runTest {

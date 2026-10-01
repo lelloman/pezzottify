@@ -60,10 +60,18 @@ class OidcTokenRefresher @Inject constructor(
         // Use try-finally to ensure we always complete the deferred and clear state
         var result: TokenRefresher.RefreshResult? = null
         try {
-            result = performRefresh()
+            // A refresh grant may rotate the credential even if its caller is cancelled.
+            // Finish the exchange and persist its result before honouring cancellation.
+            // Complete waiters inside this context: withContext can throw cancellation
+            // while returning to the owner after the rotated token has been saved.
+            withContext(NonCancellable) {
+                val completedResult = performRefresh()
+                result = completedResult
+                deferred.complete(completedResult)
+            }
         } catch (e: CancellationException) {
             // Propagate cancellation, but still complete deferred for other waiters
-            result = TokenRefresher.RefreshResult.Failed("Cancelled")
+            if (result == null) result = TokenRefresher.RefreshResult.Failed("Cancelled")
             throw e
         } catch (e: Exception) {
             logger.error("refreshTokens() unexpected error", e)
@@ -97,7 +105,12 @@ class OidcTokenRefresher @Inject constructor(
         }
 
         logger.debug("refreshTokens() attempting OIDC token refresh")
-        return when (val oidcResult = oidcAuthManager.refreshTokens(refreshToken)) {
+        val oidcResult = oidcAuthManager.refreshTokens(refreshToken)
+        // Neither success nor rejection from an old session applies to a new sign-in.
+        if (authStore.getAuthState().value != currentState) {
+            return TokenRefresher.RefreshResult.Failed("Session changed during refresh")
+        }
+        return when (oidcResult) {
             is OidcAuthManager.RefreshResult.Success -> {
                 val newAuthToken = oidcResult.idToken
                 if (newAuthToken.isNullOrBlank()) {
@@ -114,7 +127,7 @@ class OidcTokenRefresher @Inject constructor(
                 logger.info("refreshTokens() success")
                 val newState = currentState.copy(
                     authToken = newAuthToken,
-                    refreshToken = oidcResult.refreshToken,
+                    refreshToken = oidcResult.refreshToken ?: currentState.refreshToken,
                 )
                 authStore.storeAuthState(newState)
                 TokenRefresher.RefreshResult.Success(newAuthToken)
