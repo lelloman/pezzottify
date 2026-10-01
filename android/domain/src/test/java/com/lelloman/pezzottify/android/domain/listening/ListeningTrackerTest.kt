@@ -548,6 +548,25 @@ class ListeningTrackerTest {
         }
     }
 
+    @Test
+    fun `corrects previous track duration when new duration arrives`() = runTest {
+        tracker = ListeningTracker(player, listeningEventStore, listeningEventSynchronizer,
+            timeProvider, backgroundScope, loggerFactory)
+        tracker.initialize()
+        setUpPlaylist()
+        currentTrackDurationSecondsFlow.value = 469
+        currentTrackIndexFlow.value = 0
+        isPlayingFlow.value = true
+        testScheduler.runCurrent()
+        currentTrackDurationSecondsFlow.value = 587
+        testScheduler.runCurrent()
+        currentTime += 10_000
+        advanceTimeBy(11_000)
+        coVerify { listeningEventStore.saveEvent(withArg {
+            assertThat(it.trackDurationSeconds).isEqualTo(587)
+        }) }
+    }
+
     // ========== Session Cleanup Tests ==========
 
     @Test

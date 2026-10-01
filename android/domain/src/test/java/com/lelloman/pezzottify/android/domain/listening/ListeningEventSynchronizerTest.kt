@@ -7,6 +7,9 @@ import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ListeningEventRecordedResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.usercontent.SyncStatus
+import com.lelloman.pezzottify.android.domain.statics.StaticsStore
+import com.lelloman.pezzottify.android.domain.statics.Track
+import kotlinx.coroutines.flow.flowOf
 import com.lelloman.pezzottify.android.logger.Logger
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import io.mockk.coEvery
@@ -32,6 +35,7 @@ class ListeningEventSynchronizerTest {
 
     private lateinit var listeningEventStore: ListeningEventStore
     private lateinit var remoteApiClient: RemoteApiClient
+    private lateinit var staticsStore: StaticsStore
     private lateinit var timeProvider: TimeProvider
     private lateinit var loggerFactory: LoggerFactory
 
@@ -49,6 +53,9 @@ class ListeningEventSynchronizerTest {
 
         listeningEventStore = mockk(relaxed = true)
         remoteApiClient = mockk(relaxed = true)
+        staticsStore = mockk()
+        val track = mockk<Track> { every { durationSeconds } returns 320 }
+        every { staticsStore.getTrack(any()) } returns flowOf(track)
         timeProvider = TimeProvider { currentTime }
 
         val mockLogger = mockk<Logger>(relaxed = true)
@@ -72,6 +79,7 @@ class ListeningEventSynchronizerTest {
         return ListeningEventSynchronizer(
             listeningEventStore = listeningEventStore,
             remoteApiClient = remoteApiClient,
+            staticsStore = staticsStore,
             timeProvider = timeProvider,
             loggerFactory = loggerFactory,
             dispatcher = testDispatcher,
@@ -204,6 +212,45 @@ class ListeningEventSynchronizerTest {
                 }
             )
         }
+    }
+
+    @Test
+    fun `repairs stale track duration and caps accumulated listening time`() = runTest {
+        val event = createTestEvent(durationSeconds = 408, trackDurationSeconds = 257)
+        coEvery { listeningEventStore.getPendingSyncEvents() } returnsMany listOf(listOf(event), emptyList())
+        coEvery { remoteApiClient.recordListeningEvent(any()) } returns
+            RemoteApiResponse.Success(ListeningEventRecordedResponse(1L, true))
+        synchronizer = createSynchronizer()
+        synchronizer.initialize()
+        advanceUntilIdle()
+        coVerify { remoteApiClient.recordListeningEvent(withArg {
+            assertThat(it.trackDurationSeconds).isEqualTo(320)
+            assertThat(it.durationSeconds).isEqualTo(320)
+        }) }
+    }
+
+    @Test
+    fun `permanently rejected events are kept as sync errors`() = runTest {
+        val event = createTestEvent()
+        coEvery { listeningEventStore.getPendingSyncEvents() } returnsMany listOf(listOf(event), emptyList())
+        coEvery { remoteApiClient.recordListeningEvent(any()) } returns RemoteApiResponse.Error.Unknown("Rejected", 400)
+        synchronizer = createSynchronizer()
+        synchronizer.initialize()
+        advanceUntilIdle()
+        coVerify { listeningEventStore.updateSyncStatus(event.id, SyncStatus.SyncError) }
+        coVerify(exactly = 0) { listeningEventStore.updateSyncStatus(event.id, SyncStatus.PendingSync) }
+    }
+
+    @Test
+    fun `missing catalog duration waits without sending stale metadata`() = runTest {
+        val event = createTestEvent()
+        every { staticsStore.getTrack(any()) } returns flowOf(null)
+        coEvery { listeningEventStore.getPendingSyncEvents() } returnsMany listOf(listOf(event), emptyList())
+        synchronizer = createSynchronizer()
+        synchronizer.initialize()
+        advanceUntilIdle()
+        coVerify(exactly = 0) { remoteApiClient.recordListeningEvent(any()) }
+        coVerify(exactly = 0) { listeningEventStore.updateSyncStatus(any(), any()) }
     }
 
     // ========== Error Handling Tests ==========

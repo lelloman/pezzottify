@@ -4,11 +4,13 @@ import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.sync.BaseSynchronizer
+import com.lelloman.pezzottify.android.domain.statics.StaticsStore
 import com.lelloman.pezzottify.android.domain.usercontent.SyncStatus
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -27,6 +29,7 @@ import kotlin.time.Duration.Companion.seconds
 class ListeningEventSynchronizer @Inject constructor(
     private val listeningEventStore: ListeningEventStore,
     private val remoteApiClient: RemoteApiClient,
+    private val staticsStore: StaticsStore,
     private val timeProvider: TimeProvider,
     loggerFactory: LoggerFactory,
     dispatcher: CoroutineDispatcher,
@@ -56,9 +59,21 @@ class ListeningEventSynchronizer @Inject constructor(
     }
 
     private suspend fun syncEvent(event: ListeningEvent) {
+        // Player duration can still belong to the previous track at a transition.
+        // Use catalog metadata, which is also the server's validation authority.
+        val duration = staticsStore.getTrack(event.trackId).first()?.durationSeconds
+        if (duration == null || duration <= 0) {
+            logger.debug("Waiting for catalog duration before syncing ${event.sessionId}")
+            return
+        }
         listeningEventStore.updateSyncStatus(event.id, SyncStatus.Syncing)
 
-        val result = remoteApiClient.recordListeningEvent(event.toSyncData())
+        val result = remoteApiClient.recordListeningEvent(event.toSyncData().copy(
+            trackDurationSeconds = duration,
+            // Buffering/replays can inflate elapsed playing time beyond one track.
+            // A listening session represents at most one complete track.
+            durationSeconds = event.durationSeconds.coerceIn(0, duration),
+        ))
 
         when (result) {
             is RemoteApiResponse.Success -> {
@@ -76,9 +91,14 @@ class ListeningEventSynchronizer @Inject constructor(
                 listeningEventStore.updateSyncStatus(event.id, SyncStatus.PendingSync)
                 logger.debug("Unauthorized syncing event ${event.sessionId}, will retry")
             }
+            RemoteApiResponse.Error.NotFound -> {
+                // Keep the rejected record locally without repeatedly submitting it.
+                listeningEventStore.updateSyncStatus(event.id, SyncStatus.SyncError)
+                logger.warn("Listening event ${event.sessionId} rejected permanently: $result")
+            }
             else -> {
-                // Retry infinitely (conform to existing pattern)
-                listeningEventStore.updateSyncStatus(event.id, SyncStatus.PendingSync)
+                val permanent = result is RemoteApiResponse.Error.Unknown && result.httpStatus == 400
+                listeningEventStore.updateSyncStatus(event.id, if (permanent) SyncStatus.SyncError else SyncStatus.PendingSync)
                 logger.error("Failed to sync listening event ${event.sessionId}: $result")
             }
         }
