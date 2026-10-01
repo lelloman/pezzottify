@@ -17,6 +17,6 @@ sealed interface RemoteApiResponse<out T> {
          */
         data object EventsPruned : Error
 
-        data class Unknown(val message: String) : Error
+        data class Unknown(val message: String, val httpStatus: Int? = null) : Error
     }
 }
