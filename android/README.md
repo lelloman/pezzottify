@@ -315,6 +315,7 @@ diagnostic calls are serialized with each other (not with ordinary app operation
 | `playlist` | Local playlist by `id`, with paginated track IDs |
 | `sync_backlog` | Pending playlists/listening events and loading catalog count |
 | `logs` | Unredacted session logs, with cursor, level and exact-tag filters |
+| `saved_logs` | Unredacted historical rolling log files, with date, severity, tag and message filters |
 | `retry_playback` | **Mutating:** request player retry on the main thread |
 | `sync_catch_up` | **Mutating:** run `user` or `catalog` catch-up; can update local data and user sync may fall back to full sync |
 | `reconnect` | **Mutating:** disconnect/reconnect the server WebSocket |
@@ -337,6 +338,18 @@ contain fewer entries than requested. Poll with the returned `nextCursor`;
 `oldestAvailableId` identifies the oldest retained entry and `hasMore` indicates
 another page. Reading logs is session
 activity, but log production itself does not extend the inactivity deadline.
+
+`saved_logs` reads the five internal `pezzottify_0.log` through `pezzottify_4.log`
+files saved while file logging was enabled, oldest first. Inclusive `from` and `to`
+use `yyyy-MM-dd HH:mm:ss.SSS` in the device-local time recorded in the files.
+`minimumLevel` accepts `INFO` (default), `WARN`, or `ERROR`; `tag` matches exactly,
+and `text` searches messages and stack-trace lines case-insensitively. Results
+include `files`, `entries`, and `nextOffset`; pass that offset with the same filters
+for the next page. Messages are capped at 4096 characters with a `truncated` flag,
+and pages share the session log character budget. File rotation can shift offsets
+between calls; narrow date ranges help when investigating a specific incident.
+Reading saved logs requires an active paired session and does not change logging
+settings or delete files.
 
 Logs are deliberately **not sanitized**: URLs, bodies, credentials and personal
 data already written by app code may be visible to the paired PC. There is no

@@ -1,5 +1,8 @@
 package com.lelloman.pezzottify.android.debuginterface
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
 import com.lelloman.androidoscopy.Androidoscopy
 import com.lelloman.androidoscopy.tools.Tool
 import com.lelloman.androidoscopy.tools.ToolResult
@@ -21,6 +24,7 @@ import com.lelloman.pezzottify.android.domain.websocket.ConnectionState
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
 import com.lelloman.pezzottify.android.logger.LogLevel
 import com.lelloman.pezzottify.android.logger.LoggerFactory
+import com.lelloman.pezzottify.android.logger.SavedLogReader
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -50,6 +54,7 @@ class PezzottifyDiagnosticTools @Inject constructor(
     private val playlists: Provider<UserPlaylistStore>,
     private val listening: Provider<ListeningEventStore>,
     private val loggerFactory: LoggerFactory,
+    @ApplicationContext private val context: Context,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val mutations = Mutex()
@@ -177,6 +182,19 @@ class PezzottifyDiagnosticTools @Inject constructor(
                 "hasMore" to logs.hasMore, "entries" to logs.entries.map {
                     obj("id" to it.id, "timestampMs" to it.timestampMs, "level" to it.level.name, "tag" to it.tag, "message" to it.message, "truncated" to it.truncated)
                 })
+        },
+        tool("saved_logs", "Search UNREDACTED historical rolling log files (only saved while file logging was enabled), oldest first. Inclusive from/to use yyyy-MM-dd HH:mm:ss.SSS in device-local log time; exact tag, minimum severity and case-insensitive message text filters. Includes stack traces; messages capped at 4096 characters, pages bounded. Pass nextOffset with identical filters for the next page. Rotation during pagination can shift offsets; query a narrow date range. Accessible only during an approved diagnostic session.",
+            schema(pageProperties + mapOf("from" to stringSchema(), "to" to stringSchema(),
+                "minimumLevel" to enumSchema("INFO", "WARN", "ERROR"), "tag" to stringSchema(), "text" to stringSchema()))) { args ->
+            val result = SavedLogReader(File(context.filesDir, "logs")).read(
+                offset = args.int("offset", 0), limit = args.int("limit", 100),
+                from = args["from"]?.jsonPrimitive?.content, to = args["to"]?.jsonPrimitive?.content,
+                minimumLevel = args["minimumLevel"]?.jsonPrimitive?.content ?: "INFO",
+                tag = args["tag"]?.jsonPrimitive?.content, text = args["text"]?.jsonPrimitive?.content)
+            obj("files" to result.files, "nextOffset" to result.nextOffset, "entries" to result.entries.map {
+                obj("timestamp" to it.timestamp, "level" to it.level, "tag" to it.tag,
+                    "message" to it.message, "truncated" to it.truncated)
+            })
         },
         tool("retry_playback", "Request retry of the current local playback error. Changes playback; completion does not imply recovery.", readOnly = false) {
             withContext(Dispatchers.Main.immediate) { player.get().retry() }
