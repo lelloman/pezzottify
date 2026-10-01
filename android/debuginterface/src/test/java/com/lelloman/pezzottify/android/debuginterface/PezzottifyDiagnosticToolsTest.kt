@@ -44,7 +44,7 @@ class PezzottifyDiagnosticToolsTest {
         Provider { player }, Provider { playbackStore }, Provider { mode }, Provider { cache }, Provider { memory },
         Provider { sync }, Provider { syncStore }, Provider { catalogSync }, Provider { catalogStore },
         Provider { socket }, Provider { network }, Provider { statics }, Provider { fetchStates },
-        Provider { downloads }, Provider { playlists }, Provider { listening }, logger,
+        Provider { downloads }, Provider { playlists }, Provider { listening }, logger, mockk(relaxed = true),
     )
     private val tools by lazy { subject.tools().associateBy { it.name.removePrefix("pezzottify_") } }
     private suspend fun call(name: String, args: String = "{}"): JsonObject {
@@ -55,7 +55,7 @@ class PezzottifyDiagnosticToolsTest {
     }
 
     @Test fun `manifest is explicit lazy and marks all mutations`() {
-        assertEquals(14, tools.size)
+        assertEquals(15, tools.size)
         assertEquals(setOf("saved_playback", "retry_playback", "sync_catch_up", "reconnect", "cache_action"),
             tools.filterValues { !it.readOnly }.keys)
         verify { listOf(player, playbackStore, mode, cache, memory, sync, syncStore, catalogSync, catalogStore,
