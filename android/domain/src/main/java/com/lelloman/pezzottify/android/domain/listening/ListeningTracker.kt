@@ -166,9 +166,8 @@ class ListeningTracker @Inject constructor(
 
     private fun updateTrackDuration(durationSeconds: Int) {
         val session = currentSession ?: return
-        // Only update if we had no duration (0) or if it's significantly different
-        // This handles the case where duration becomes available after session start
-        if (session.trackDurationSeconds == 0 && durationSeconds > 0) {
+        // The initial value can belong to the previous track until the next player poll.
+        if (durationSeconds > 0 && session.trackDurationSeconds != durationSeconds) {
             session.trackDurationSeconds = durationSeconds
             logger.debug("Updated track duration for session ${session.sessionId}: ${durationSeconds}s")
         }

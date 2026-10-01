@@ -407,6 +407,9 @@ internal class RemoteApiClientImpl(
             clientType = "android",
         )
         val response = getRetrofit().recordListeningEvent(authToken = authToken, request = request)
+        if (response.code() == 400) {
+            return@catchingNetworkError RemoteApiResponse.Error.Unknown("Listening event rejected", httpStatus = 400)
+        }
         response.commonError?.let { return@catchingNetworkError it }
         val body = response.body()
             ?: return@catchingNetworkError RemoteApiResponse.Error.Unknown("No body")
