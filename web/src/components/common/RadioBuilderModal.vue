@@ -146,84 +146,11 @@
 </template>
 
 <script setup>
-import { computed, defineComponent, h, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import ModalDialog from "@/components/common/ModalDialog.vue";
+import ReferenceEditor from "@/components/common/ReferenceEditor.vue";
 import { usePlaybackStore } from "@/store/playback";
 import { useRemoteStore } from "@/store/remote";
-
-const ReferenceEditor = defineComponent({
-  props: {
-    title: {
-      type: String,
-      required: true,
-    },
-    modelValue: {
-      type: Array,
-      required: true,
-    },
-  },
-  emits: ["update:modelValue"],
-  setup(props, { emit }) {
-    const addReference = () => {
-      emit("update:modelValue", [
-        ...props.modelValue,
-        { entity_type: "track", entity_id: "", weight: 1 },
-      ]);
-    };
-    const updateReference = (index, patch) => {
-      const next = props.modelValue.map((reference, itemIndex) =>
-        itemIndex === index ? { ...reference, ...patch } : reference,
-      );
-      emit("update:modelValue", next);
-    };
-    const removeReference = (index) => {
-      emit(
-        "update:modelValue",
-        props.modelValue.filter((_, itemIndex) => itemIndex !== index),
-      );
-    };
-
-    return () =>
-      h("section", { class: "referenceSection" }, [
-        h("div", { class: "referenceHeader" }, [
-          h("h3", props.title),
-          h("button", { onClick: addReference }, "+"),
-        ]),
-        ...props.modelValue.map((reference, index) =>
-          h("div", { class: "referenceRow" }, [
-            h(
-              "select",
-              {
-                value: reference.entity_type,
-                onChange: (event) =>
-                  updateReference(index, { entity_type: event.target.value }),
-              },
-              ["track", "album", "artist"].map((type) =>
-                h("option", { value: type }, type),
-              ),
-            ),
-            h("input", {
-              value: reference.entity_id,
-              placeholder: "ID",
-              onInput: (event) =>
-                updateReference(index, { entity_id: event.target.value }),
-            }),
-            h("input", {
-              type: "number",
-              min: "0",
-              step: "0.25",
-              value: reference.weight,
-              onInput: (event) =>
-                updateReference(index, {
-                  weight: Number(event.target.value) || 1,
-                }),
-            }),
-            h("button", { onClick: () => removeReference(index) }, "x"),
-          ]),
-        ),
-      ]);
-  },
-});
 
 const props = defineProps({
   isOpen: {

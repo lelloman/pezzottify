@@ -1,7 +1,13 @@
 <template>
   <div v-if="album">
     <div class="topSection">
-      <MultiSourceImage class="coverImage" :urls="coverUrls" />
+      <MultiSourceImage
+        class="coverImage"
+        :urls="coverUrls"
+        @contextmenu.prevent="
+          entityMenu?.openMenu($event, 'album', albumId, album.name)
+        "
+      />
       <div class="albumInfoColum">
         <div class="albumIdentity">
           <h1 class="albumName">{{ album.name }}</h1>
@@ -44,6 +50,14 @@
             @click.stop="showRadioBuilder = true"
           >
             Customize radio
+          </button>
+          <button
+            class="advancedRadioButton steerButton"
+            title="Steer the current queue toward this album"
+            @click.stop="showDestinationPrompt = true"
+          >
+            <SteeringWheelIcon class="steerButtonIcon" />
+            Steer here
           </button>
           <ToggableFavoriteIcon
             :toggled="isAlbumLiked"
@@ -163,6 +177,16 @@
       </div>
     </div>
     <TrackContextMenu ref="trackContextMenuRef" />
+    <DestinationStepsPrompt
+      :isOpen="showDestinationPrompt"
+      :reference="{
+        entity_type: 'album',
+        entity_id: albumId,
+        label: album.name,
+      }"
+      @close="showDestinationPrompt = false"
+    />
+    <EntityContextMenu ref="entityMenu" />
     <RadioBuilderModal
       :isOpen="showRadioBuilder"
       seedEntityType="album"
@@ -191,6 +215,9 @@ import TrackContextMenu from "@/components/common/contextmenu/TrackContextMenu.v
 import LoadTrackListItem from "../common/LoadTrackListItem.vue";
 import { useStaticsStore } from "@/store/statics";
 import RadioBuilderModal from "@/components/common/RadioBuilderModal.vue";
+import DestinationStepsPrompt from "@/components/common/DestinationStepsPrompt.vue";
+import EntityContextMenu from "@/components/common/contextmenu/EntityContextMenu.vue";
+import SteeringWheelIcon from "@/components/icons/SteeringWheelIcon.vue";
 import EnrichmentStatusIndicator from "@/components/common/EnrichmentStatusIndicator.vue";
 
 const props = defineProps({
@@ -331,6 +358,8 @@ const currentTrackId = ref(null);
 const currentTrackIndex = ref(null);
 const isAlbumLiked = ref(false);
 const showRadioBuilder = ref(false);
+const showDestinationPrompt = ref(false);
+const entityMenu = ref(null);
 
 // Download request state
 const isRequesting = ref(false);
@@ -848,5 +877,17 @@ onUnmounted(() => {
   .coverImage {
     max-width: 280px;
   }
+}
+
+.steerButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.steerButtonIcon {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
 }
 </style>

@@ -342,25 +342,23 @@ export const useRemoteStore = defineStore("remote", () => {
     return response.data.track_ids;
   };
 
-  const fetchContinuationRecommendations = async ({
-    contextTrackIds,
-    excludeTrackIds,
-    count = 1,
-  }) => {
+  // `request` is built by utils/gravity.buildContinuationRequest. Returns the
+  // recommended ids plus the server's steering diagnostics (everything but track_ids).
+  const fetchContinuationRecommendations = async (request) => {
     try {
       const response = await axios.post(
         "/v1/content/recommendations/continuation",
-        {
-          context_track_ids: contextTrackIds,
-          exclude_track_ids: excludeTrackIds,
-          count,
-        },
+        request,
         { timeout: 20000 },
       );
-      return response.data.track_ids || [];
+      const { track_ids: trackIds, ...diagnostics } = response.data || {};
+      return {
+        trackIds: trackIds || [],
+        diagnostics: Object.keys(diagnostics).length ? diagnostics : null,
+      };
     } catch (error) {
       console.error("Error fetching continuation recommendations:", error);
-      return [];
+      return { trackIds: [], diagnostics: null };
     }
   };
 

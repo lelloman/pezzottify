@@ -6,6 +6,11 @@
     :seedEntityId="trackId || ''"
     @close="showRadioBuilder = false"
   />
+  <DestinationStepsPrompt
+    :isOpen="destinationReference !== null"
+    :reference="destinationReference"
+    @close="destinationReference = null"
+  />
 </template>
 
 <script setup>
@@ -19,6 +24,8 @@ import { usePlaybackStore } from "@/store/playback";
 import PlaylistCancelIcon from "@/components/icons/PlaylistCancelIcon.vue";
 import TrashOutlineIcon from "@/components/icons/TrashOutlineIcon.vue";
 import RadioBuilderModal from "@/components/common/RadioBuilderModal.vue";
+import DestinationStepsPrompt from "@/components/common/DestinationStepsPrompt.vue";
+import SteeringWheelIcon from "@/components/icons/SteeringWheelIcon.vue";
 
 const props = defineProps({
   canRemoveFromQueue: {
@@ -42,6 +49,7 @@ const playback = usePlaybackStore();
 const trackId = ref(null);
 const trackIndex = ref(null);
 const showRadioBuilder = ref(false);
+const destinationReference = ref(null);
 
 const handleAddToQueueClick = () => {
   console.log("TrackContextMenu handleAddToQueueClick" + trackId.value);
@@ -108,6 +116,19 @@ menuItems.value.push({
   action: () => {
     if (trackId.value) {
       showRadioBuilder.value = true;
+    }
+  },
+});
+
+menuItems.value.push({
+  icon: markRaw(SteeringWheelIcon),
+  name: "Set as playback destination",
+  action: () => {
+    if (trackId.value) {
+      destinationReference.value = {
+        entity_type: "track",
+        entity_id: trackId.value,
+      };
     }
   },
 });

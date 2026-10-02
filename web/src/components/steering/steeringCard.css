@@ -1,0 +1,88 @@
+.steeringCard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: var(--surface-panel);
+  color: var(--text-base);
+  color-scheme: dark;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cardTitle {
+  color: #9eddb7;
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cardHint {
+  margin: 0;
+  color: var(--text-subdued);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.textButton,
+.cardButton {
+  min-height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--bg-highlight);
+  color: var(--text-bright);
+  padding: 0 12px;
+}
+
+.textButton:hover:not(:disabled),
+.cardButton:hover:not(:disabled) {
+  background: var(--bg-press);
+}
+
+.cardButton.primary {
+  background: var(--accent-color);
+  font-weight: var(--font-semibold);
+}
+
+.cardButton.primary:hover:not(:disabled) {
+  background: var(--spotify-green-hover);
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.fieldRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.numberInput {
+  width: 90px;
+  min-height: 32px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-highlight);
+  color: var(--text-bright);
+  padding: 4px 8px;
+  outline: none;
+}
+
+.numberInput:focus {
+  border-color: var(--spotify-green);
+}
+
+input[type="range"],
+input[type="checkbox"] {
+  accent-color: var(--spotify-green);
+}
