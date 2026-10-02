@@ -39,7 +39,7 @@ The app supports an explicit local composite build for testing before publicatio
 ```sh
 cd android
 ./gradlew -PassistantCheckout=/tmp/simple-android-assistant-safety \
-  :app:compilePhoneDebugKotlin :ui:testDebugUnitTest :domain:test
+  :app:compileNormalPhoneDebugKotlin :ui:testDebugUnitTest :domain:test
 ```
 
 Other checks:

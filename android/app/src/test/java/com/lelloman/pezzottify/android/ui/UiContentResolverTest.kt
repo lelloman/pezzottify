@@ -39,6 +39,8 @@ class UiContentResolverTest {
             every { availability } returns DomainTrackAvailability.Unavailable
             every { enrichmentStatus } returns null
             every { enrichment } returns null
+            every { workResolution } returns null
+            every { workEnrichmentStatus } returns null
         }
         val staticsProvider = mockk<StaticsProvider> {
             every { provideTrack("track-1") } returns

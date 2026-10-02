@@ -213,12 +213,12 @@ CI can clone it. Separate builds are required because the projects use different
 
 ```bash
 ./gradlew build               # Build all modules
-./gradlew :app:assemblePhoneDebug :player-app:assembleDebug
-./gradlew :app:assemblePhoneRelease :player-app:assembleRelease
+./gradlew :app:assembleNormalPhoneDebug :player-app:assembleDebug
+./gradlew :app:assembleNormalPhoneRelease :player-app:assembleRelease
 ./gradlew :app:assembleTvDebug # Build the existing TV app
 ```
 
-Debug APKs are written to `app/build/outputs/apk/phone/debug/app-phone-debug.apk`
+Debug APKs are written to `app/build/outputs/apk/normalPhone/debug/app-normal-phone-debug.apk`
 and `player-app/build/outputs/apk/debug/player-app-debug.apk`. Both application
 modules use the repository version and optional `signing.properties` release key.
 
@@ -377,7 +377,7 @@ Integration tests require Docker to be installed and running.
 ### Running
 
 ```bash
-./gradlew :app:installPhoneDebug
+./gradlew :app:installNormalPhoneDebug
 ./gradlew :player-app:installDebug
 ```
 
@@ -407,3 +407,12 @@ Android CI provisions this checkout, all four Android Rust targets, NDK
 27.0.12077973, and cargo-ndk 4.1.2 before running lint and unit tests.
 See that repository's README for the Rust/NDK prerequisites. Existing Room history
 is imported by the version 2 database migration.
+
+## Paravoid packaging
+
+The streaming app also builds a separate Paravoid phone APK, with its own
+`.paravoid` identity. Provision the source pinned in `../paravoid.rev` with
+`bash scripts/checkout-paravoid.sh` from the repository root. See
+[PARAVOID.md](PARAVOID.md) for build variants, OAuth callback registration,
+packaging checks and the experimental packaging scope. Normal phone/TV
+variants use the `normal` packaging flavor; the standalone player is unchanged.

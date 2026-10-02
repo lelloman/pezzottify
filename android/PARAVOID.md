@@ -1,12 +1,22 @@
 # Paravoid integration experiment
 
-This worktree uses the source checkout of Paravoid, not a published release.
+The Android app uses the Paravoid source revision pinned in `../paravoid.rev`,
+not a published release. The current pin is `33340c6` (DVPK delivery and
+APK-only distribution); no public Paravoid version has been released yet.
 It adds the `paravoidPackaging` dimension: `normal` and `paravoidAndroid`.
 Only **Paravoid phone/debug and phone/paravoidTestRelease** are enabled. Normal
 phone/TV build types remain available. Shell TV (LEANBACK) and shrinking are not
 supported yet.
 
 ## Build
+
+From the repository root, provision the pinned source with
+`bash scripts/checkout-paravoid.sh`. Existing checkouts must be clean and match
+the pin; the script leaves other revisions unchanged. For an isolated checkout,
+set `PARAVOID_CHECKOUT=/path/to/checkout` when running the script and pass the
+same path as `-PparavoidCheckout=/path/to/checkout` to Gradle. All six API,
+contract and runtime projects come from that checkout, along with the core and
+Hilt Gradle plugins.
 
 Use the exact assistant revision in `../simple-android-assistant.rev`; an older
 local checkout can fail both normal and shell compilation. Keep Androidoscopy
@@ -94,7 +104,7 @@ accounts. It installs **both** APKs, force-stops/restarts them, temporarily rota
 the display (restoring its settings), sends a callback without an auth code, and
 checks copies of their Room databases. It does not clear app data or use a server.
 
-The API-30 and API-36.1/x86_64 runs passed for both modes: login Compose UI, cold start,
+The initial integration's API-30 and API-36.1/x86_64 runs passed for both modes: login Compose UI, cold start,
 restart, Androidoscopy initialization, rotation, isolated callback resolution and
 SQLite integrity/Room identity for `StaticsDb` and `user_content`. APK inspection
 found five payload DEX files totaling 70,789,516 bytes, requiring Paravoid's updated
@@ -105,3 +115,14 @@ screens; AppAuth's browser Activity lifecycle; authenticated background sync,
 playback or assistant JNI execution. ADB cannot directly launch these non-exported
 library Activities as the shell UID; do not weaken their exported flags for a test.
 Startup and packaged native libraries are not evidence that all those flows work.
+
+## Latest dependency upgrade validation
+
+On 2026-10-02, revision `33340c6` passed both phone/debug APK builds and
+`check-paravoid.py` (five payload DEX files totaling 70,950,800 bytes). Both
+packaging modes passed lint and all 50 app unit tests each. Normal phone release
+and TV debug Kotlin compilation and the standalone player debug APK build passed.
+A disposable API-36.1/x86_64 emulator passed `smoke-paravoid.py` for both modes: cold
+start, restart, login UI, Androidoscopy initialization, rotation, isolated OAuth
+callback routing and Room database integrity. This upgrade did not rerun API 30
+or authenticated login, playback and background-sync scenarios.
