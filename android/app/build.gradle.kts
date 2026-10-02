@@ -27,8 +27,8 @@ val paravoidAcceptanceGeneration = providers.gradleProperty("paravoidAcceptanceG
 if (paravoidComplete) {
     paravoid {
         packaging.set("complete")
-        // The delivery harness opens this alias; ordinary complete shells keep it off.
-        controlsLauncher.set(paravoidAcceptance || paravoidProduction)
+        // Only disposable acceptance fixtures expose the harness launcher.
+        controlsLauncher.set(paravoidAcceptance)
         bootstrap.set("embedded")
         crashRecovery { enabled.set(paravoidProduction); updater.set("default") }
         payloadVersion.set(providers.gradleProperty("paravoidPayloadVersion").map(String::toLong).orElse(1L))
@@ -36,6 +36,14 @@ if (paravoidComplete) {
             enabled.set(paravoidAcceptance || paravoidProduction)
             baseUrl.set(if (paravoidProduction) "https://store.lelloman.com/api/paravoid/" else "http://127.0.0.1:19165/")
             authentication.set(if (paravoidProduction) "apkKey" else "public")
+            if (paravoidProduction) {
+                localTriggers {
+                    trustedCallers.put(
+                        "com.lelloman.store",
+                        listOf("5d35a11c5b882924343a01dfc1836e7a78573a93e50af161d5769128994f9350"),
+                    )
+                }
+            }
             debugHttpAllowed.set(paravoidAcceptance)
             trustPolicyFile.set(rootProject.file(providers.gradleProperty("paravoidTrustPolicy").get()))
         }

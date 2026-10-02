@@ -187,7 +187,10 @@ python3 check-paravoid-complete.py \
 
 This non-debuggable, unshrunk release embeds its signed VPK and enables HTTPS
 updates at `https://store.lelloman.com/api/paravoid/` with APK-key authentication,
-crash recovery and an App updates launcher. Acceptance markers remain disabled.
+crash recovery and an App updates button in Settings. There is no separate
+update launcher. LelloStore (`com.lelloman.store`) is the sole trusted local
+update-hint caller, pinned to its release signing certificate. Store hints queue
+the shell's own authenticated update check; scheduled checks remain a fallback. Acceptance markers remain disabled.
 Normal production variants retain their existing shrinking configuration.
 
 Use the authoritative LelloStore publisher on the generated `shell.apk`, with
