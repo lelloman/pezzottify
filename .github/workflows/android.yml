@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'android/**'
+      - 'paravoid.rev'
+      - 'scripts/checkout-paravoid.sh'
       - 'simple-android-assistant.rev'
       - 'scripts/checkout-simple-android-assistant.sh'
       - 'androidoscopy.rev'
@@ -21,6 +23,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check out the pinned Paravoid dependency
+        run: bash scripts/checkout-paravoid.sh
+        working-directory: .
 
       - name: Check out the pinned assistant dependency
         run: bash scripts/checkout-simple-android-assistant.sh
@@ -56,4 +62,7 @@ jobs:
         working-directory: .
 
       - name: Lint and test
-        run: ./gradlew lintDebug testDebugUnitTest :app:lintPhoneDebug :app:testPhoneDebugUnitTest :app:compilePhoneReleaseKotlin :player-app:assembleDebug :player-app:assembleRelease
+        run: ./gradlew lintDebug testDebugUnitTest :app:lintNormalPhoneDebug :app:testNormalPhoneDebugUnitTest :app:compileNormalPhoneReleaseKotlin :app:lintParavoidAndroidPhoneDebug :app:testParavoidAndroidPhoneDebugUnitTest :app:assembleNormalPhoneDebug :app:assembleParavoidAndroidPhoneDebug :player-app:assembleDebug :player-app:assembleRelease
+
+      - name: Verify normal and Paravoid APK packaging
+        run: python3 check-paravoid.py
