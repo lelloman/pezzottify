@@ -10,6 +10,8 @@ data class QueueTrackItem(
     val artists: List<ArtistInfo>,
     val durationSeconds: Int,
     val availability: TrackAvailability = TrackAvailability.Available,
+    /** True when smart continuation appended this track rather than the user. */
+    val isAuto: Boolean = false,
 ) {
     val isPlayable: Boolean
         get() = availability.isPlayable

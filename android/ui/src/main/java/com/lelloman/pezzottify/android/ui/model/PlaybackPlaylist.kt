@@ -21,4 +21,5 @@ data class PlaybackPlaylist(
     val context: PlaybackPlaylistContext,
     val tracksIds: List<String>,
     val continuation: com.lelloman.pezzottify.android.domain.player.RadioContinuation? = null,
+    val gravity: com.lelloman.pezzottify.android.domain.player.Gravity? = null,
 )

@@ -20,6 +20,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import com.lelloman.pezzottify.android.domain.player.RadioContinuation
+import com.lelloman.pezzottify.android.domain.player.Gravity
+import com.lelloman.pezzottify.android.domain.player.GravityDiagnostics
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -156,20 +158,20 @@ class PlayerImpl(
         smartContinuationInFlightSignature = signature
         smartContinuationRequestJob?.cancel()
         smartContinuationRequestJob = coroutineScope.launch(Dispatchers.Main) {
-            val contextTrackIds = playlist.tracksIds
-                .takeLast(10)
+            // Anchor on the user-chosen tracks, not on the queue tail the server itself appended.
+            val request = playlist.gravityOrDefault()!!
+                .buildContinuationRequest(playlist.tracksIds, trackIndex, 3 - remaining)
             var nextTrackIds = emptyList<String>()
+            var diagnostics: GravityDiagnostics? = null
             for (attempt in 0..2) {
                 if (attempt > 0) delay(1500L * attempt)
                 if (smartContinuationInFlightSignature != signature || !userSettingsStore.isSmartContinuationEnabled.value) break
                 val response = withTimeoutOrNull(20_000) {
-                    remoteApiClient.getContinuationRecommendations(
-                        contextTrackIds = contextTrackIds,
-                        excludeTrackIds = playlist.tracksIds,
-                        count = 3 - remaining,
-                    )
+                    remoteApiClient.getContinuationRecommendations(request)
                 }
-                nextTrackIds = (response as? RemoteApiResponse.Success)?.data.orEmpty()
+                val result = (response as? RemoteApiResponse.Success)?.data
+                nextTrackIds = result?.trackIds.orEmpty()
+                diagnostics = result?.diagnostics
                 if (nextTrackIds.isNotEmpty()) break
             }
             if (smartContinuationInFlightSignature != signature) return@launch
@@ -182,7 +184,18 @@ class PlayerImpl(
             if (!userSettingsStore.isSmartContinuationEnabled.value) return@launch
 
             val additions = nextTrackIds.distinct().filter { it !in currentPlaylist.tracksIds }
-            if (additions.isNotEmpty()) appendTracks(additions, automatic = true)
+            if (additions.isNotEmpty()) appendTracks(additions, automatic = true, diagnostics = diagnostics)
+        }
+    }
+
+    private fun PlaybackPlaylist.gravityOrDefault(): Gravity? =
+        if (context is PlaybackPlaylistContext.Radio) null else gravity ?: Gravity()
+
+    override fun setGravity(gravity: Gravity) {
+        runOnPlayerThread {
+            val playlist = mutablePlaybackPlaylist.value ?: return@runOnPlayerThread
+            if (playlist.context is PlaybackPlaylistContext.Radio) return@runOnPlayerThread
+            mutablePlaybackPlaylist.value = playlist.copy(gravity = gravity)
         }
     }
 
@@ -384,6 +397,7 @@ class PlayerImpl(
                     mutablePlaybackPlaylist.value = PlaybackPlaylist(
                         context = PlaybackPlaylistContext.Album(albumId),
                         tracksIds = tracksIds,
+                        gravity = Gravity(),
                     )
 
                     // If a specific track was requested, start from that track
@@ -437,6 +451,7 @@ class PlayerImpl(
                     mutablePlaybackPlaylist.value = PlaybackPlaylist(
                         context = PlaybackPlaylistContext.UserPlaylist(userPlaylistId, isEdited = false),
                         tracksIds = tracksIds,
+                        gravity = Gravity(),
                     )
 
                     // If a specific track was requested, start from that track
@@ -484,6 +499,7 @@ class PlayerImpl(
                 mutablePlaybackPlaylist.value = PlaybackPlaylist(
                     context = PlaybackPlaylistContext.UserMix,
                     tracksIds = listOf(trackId),
+                    gravity = Gravity(),
                 )
                 logger.info("Loaded single track $trackId")
             }
@@ -500,6 +516,7 @@ class PlayerImpl(
             mutablePlaybackPlaylist.value = PlaybackPlaylist(
                 context = PlaybackPlaylistContext.UserMix,
                 tracksIds = trackIds,
+                gravity = Gravity(),
             )
             logger.info("Loaded radio/user mix with ${trackIds.size} tracks")
         }
@@ -526,6 +543,7 @@ class PlayerImpl(
                 continuation = continuation ?: RadioContinuation.create(trackIds),
                 context = context,
                 tracksIds = trackIds,
+                gravity = null,
             )
             logger.info("Loaded radio ${context.source}:${context.seedEntityType}:${context.seedEntityId} with ${trackIds.size} tracks")
         }
@@ -585,7 +603,12 @@ class PlayerImpl(
             }
 
             platformPlayer.moveMediaItem(fromIndex, toIndex)
-            mutablePlaybackPlaylist.value = PlaybackPlaylist(newContext, reorderedTracks, editedContinuation(currentPlaylist, reorderedTracks))
+            mutablePlaybackPlaylist.value = PlaybackPlaylist(
+                newContext,
+                reorderedTracks,
+                editedContinuation(currentPlaylist, reorderedTracks),
+                gravity = currentPlaylist.gravity,
+            )
             logger.info("Moved track from index $fromIndex to $toIndex")
         }
     }
@@ -594,10 +617,16 @@ class PlayerImpl(
         appendTracks(tracksIds, automatic = false)
     }
 
-    private fun appendTracks(tracksIds: List<String>, automatic: Boolean) {
+    private fun appendTracks(tracksIds: List<String>, automatic: Boolean, diagnostics: GravityDiagnostics? = null) {
         runOnPlayerThread {
             val currentPlaylist = mutablePlaybackPlaylist.value
             if (currentPlaylist != null) {
+                // Provenance drives the Source gravity: automatic appends never join it,
+                // while an explicit user choice promotes a previous suggestion.
+                val gravity = currentPlaylist.gravityOrDefault()?.let { gravity ->
+                    if (automatic) gravity.appendedAuto(tracksIds).let { if (diagnostics != null) it.withDiagnostics(diagnostics) else it }
+                    else gravity.userAdded(tracksIds)
+                }
                 // Add tracks to the existing playlist
                 val newTracksIds = currentPlaylist.tracksIds + tracksIds
                 val newContext = if (automatic) currentPlaylist.context else when (val ctx = currentPlaylist.context) {
@@ -610,6 +639,7 @@ class PlayerImpl(
                     context = newContext,
                     tracksIds = newTracksIds,
                     continuation = if (automatic) currentPlaylist.continuation else editedContinuation(currentPlaylist, newTracksIds),
+                    gravity = gravity,
                 )
                 // Add new tracks to platform player
                 val baseUrl = configStore.baseUrl.value
@@ -621,6 +651,7 @@ class PlayerImpl(
                 mutablePlaybackPlaylist.value = PlaybackPlaylist(
                     context = PlaybackPlaylistContext.UserMix,
                     tracksIds = tracksIds,
+                    gravity = Gravity(),
                 )
                 val baseUrl = configStore.baseUrl.value
                 val urls = tracksIds.map { "$baseUrl/v1/content/stream/$it" }
@@ -656,6 +687,7 @@ class PlayerImpl(
 
     private fun removeTrackAtIndexInternal(trackIndex: Int) {
         val currentPlaylist = mutablePlaybackPlaylist.value ?: return
+        val removedTrackId = currentPlaylist.tracksIds[trackIndex]
         val newTracksIds = currentPlaylist.tracksIds.toMutableList().apply {
             removeAt(trackIndex)
         }
@@ -672,6 +704,7 @@ class PlayerImpl(
             context = newContext,
             tracksIds = newTracksIds,
             continuation = editedContinuation(currentPlaylist, newTracksIds),
+            gravity = currentPlaylist.gravity?.removed(removedTrackId),
         )
 
         // Remove from platform player

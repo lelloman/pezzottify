@@ -6,6 +6,7 @@ import com.lelloman.pezzottify.android.domain.device.DeviceInfoProvider
 import com.lelloman.pezzottify.android.domain.player.PlaybackModeManager
 import com.lelloman.pezzottify.android.domain.player.internal.PlaybackMetadataProviderImpl
 import com.lelloman.pezzottify.android.domain.player.internal.PlayerImpl
+import com.lelloman.pezzottify.android.domain.player.Gravity
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylist
 import com.lelloman.pezzottify.android.domain.player.PlaybackPlaylistContext
 import com.lelloman.pezzottify.android.domain.player.PlaybackQueueState
@@ -23,6 +24,7 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.serialization.json.JsonObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -325,6 +327,7 @@ class PlaybackSessionHandlerTest {
         playbackPlaylistFlow.value = PlaybackPlaylist(
             context = PlaybackPlaylistContext.Album("album-2"),
             tracksIds = listOf("track-2", "track-3"),
+            gravity = Gravity().appendedAuto(listOf("track-3")),
         )
         testScheduler.runCurrent()
 
@@ -339,6 +342,48 @@ class PlaybackSessionHandlerTest {
         assertThat(queue[0]["id"]).isEqualTo("track-2")
         assertThat(queue[1]["id"]).isEqualTo("track-3")
         assertThat(payload["queue_version"]).isNotNull()
+        @Suppress("UNCHECKED_CAST")
+        val context = payload["context"] as Map<String, Any?>
+        val gravity = context["gravity"] as JsonObject
+        assertThat(gravity["auto_track_ids"].toString()).isEqualTo("[\"track-3\"]")
+        assertThat(gravity["steps_total"].toString()).isEqualTo("20")
+    }
+
+    @Test
+    fun `setGravity command replaces the player gravity`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+        capturedMessageHandler.onMessage("playback.command", """{
+            "command":"setGravity", "payload": {
+                "gravity":{"v":1,"source":{"kind":"queue"},"auto_track_ids":["s1"],"destination":{"entity_type":"artist","entity_id":"a1","label":"A"},"steps_total":7,"steps_done":2,"knobs":{"recency_weight":null,"criteria":null,"diversity":null,"randomness":null,"mode":null,"away":[]},"last_diagnostics":null}
+            }
+        }""")
+        testScheduler.runCurrent()
+        verify { player.setGravity(match {
+            it.destination?.entityId == "a1" && it.stepsTotal == 7 && it.stepsDone == 2 && it.autoTrackIds == listOf("s1")
+        }) }
+    }
+
+    @Test
+    fun `remote queue exposes the other device gravity`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+        capturedMessageHandler.onMessage("playback.device_queue", """{
+            "device_id":42,"queue":[{"id":"one"}],"context":{
+                "type":"user_mix","edited":false,"continuation":null,
+                "gravity":{"v":1,"source":{"kind":"references","references":[{"entity_type":"album","entity_id":"al1"}]},"auto_track_ids":[],"destination":null,"steps_total":5,"steps_done":0}
+            }
+        }""")
+        testScheduler.runCurrent()
+        val gravity = handler.otherDeviceGravities.value[42]!!
+        assertThat(gravity.source.kind).isEqualTo("references")
+        assertThat(gravity.source.references.single().entityId).isEqualTo("al1")
+        assertThat(gravity.stepsTotal).isEqualTo(5)
+        capturedMessageHandler.onMessage("playback.device_stopped", """{"device_id":42}""")
+        testScheduler.runCurrent()
+        assertThat(handler.otherDeviceGravities.value).doesNotContainKey(42)
     }
 
     // ========== Periodic Broadcast Tests ==========

@@ -70,6 +70,7 @@ import com.lelloman.pezzottify.android.ui.component.ScrollingTextRow
 import com.lelloman.pezzottify.android.ui.toAlbum
 import com.lelloman.pezzottify.android.ui.toArtist
 import com.lelloman.pezzottify.android.ui.toQueue
+import com.lelloman.pezzottify.android.ui.toSteering
 import com.lelloman.pezzottify.android.ui.toTrack
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -331,6 +332,8 @@ private fun PlayerScreenContent(
                     onShuffle = actions::clickOnShuffle,
                     onRepeat = actions::clickOnRepeat,
                     onSmartContinuation = actions::toggleSmartContinuation,
+                    hasDestination = state.hasDestination,
+                    onSteering = { navController.toSteering() },
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -468,6 +471,8 @@ private fun PlaybackControls(
     onShuffle: () -> Unit,
     onRepeat: () -> Unit,
     onSmartContinuation: () -> Unit,
+    hasDestination: Boolean = false,
+    onSteering: () -> Unit = {},
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -579,6 +584,22 @@ private fun PlaybackControls(
                 contentDescription = stringResource(R.string.smart_continuation),
                 modifier = Modifier.size(24.dp),
                 tint = if (smartContinuationEnabled) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                }
+            )
+        }
+
+        if (showSmartContinuation) IconButton(
+            onClick = onSteering,
+            modifier = Modifier.size(48.dp),
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_steering_wheel_24),
+                contentDescription = stringResource(R.string.steering_open),
+                modifier = Modifier.size(24.dp),
+                tint = if (hasDestination) {
                     MaterialTheme.colorScheme.primary
                 } else {
                     MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)

@@ -27,4 +27,6 @@ data class PlaybackPlaylist(
     val context: PlaybackPlaylistContext,
     val tracksIds: List<String>,
     val continuation: RadioContinuation? = null,
+    /** Smart-continuation gravity; null for radio playlists. */
+    val gravity: Gravity? = null,
 )

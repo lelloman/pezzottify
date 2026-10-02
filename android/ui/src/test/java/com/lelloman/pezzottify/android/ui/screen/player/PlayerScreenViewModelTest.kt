@@ -136,6 +136,21 @@ class PlayerScreenViewModelTest {
     }
 
     @Test
+    fun `hasDestination follows the interactor`() = runTest {
+        createViewModel()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.hasDestination).isFalse()
+
+        fakeInteractor.hasDestinationFlow.value = true
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.hasDestination).isTrue()
+
+        fakeInteractor.hasDestinationFlow.value = false
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.hasDestination).isFalse()
+    }
+
+    @Test
     fun `clickOnPlayPause calls interactor togglePlayPause`() = runTest {
         createViewModel()
 
@@ -266,6 +281,10 @@ class PlayerScreenViewModelTest {
 
         override fun getSmartContinuationEnabled(): Flow<Boolean> =
             smartContinuationEnabledFlow
+
+        val hasDestinationFlow = MutableStateFlow(false)
+
+        override fun getHasDestination(): Flow<Boolean> = hasDestinationFlow
 
         override fun togglePlayPause() {
             togglePlayPauseCalled = true
