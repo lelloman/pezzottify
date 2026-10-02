@@ -6,6 +6,9 @@
       class="searchResultRow albumListRow"
       :data-id="album.id"
       @click="handleClick(album.id)"
+      @contextmenu.prevent="
+        contextMenu?.openMenu($event, 'album', album.id, album.name)
+      "
     >
       <MultiSourceImage
         :urls="chooseAlbumCoverImageUrl(album)"
@@ -37,6 +40,7 @@
     <div v-else-if="error" class="albumState errorState">
       Error. {{ error }}
     </div>
+    <EntityContextMenu ref="contextMenu" />
   </div>
 </template>
 
@@ -52,6 +56,7 @@ import PlayIcon from "@/components/icons/PlayIcon.vue";
 import { usePlaybackStore } from "@/store/playback";
 import LoadClickableArtistsNames from "@/components/common/LoadClickableArtistsNames.vue";
 import { useStaticsStore } from "@/store/statics";
+import EntityContextMenu from "@/components/common/contextmenu/EntityContextMenu.vue";
 
 const router = useRouter();
 const staticsStore = useStaticsStore();
@@ -74,6 +79,7 @@ const props = defineProps({
 });
 
 const album = ref(props.album || null);
+const contextMenu = ref(null);
 const artistsRefs = ref(null);
 const loading = ref(!props.album);
 const error = ref(null);

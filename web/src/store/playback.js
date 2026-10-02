@@ -19,6 +19,7 @@ import {
   nextSnapshotBatch,
   appendRadioBatch,
 } from "../utils/radioContinuation";
+import * as gravity from "../utils/gravity";
 
 export const usePlaybackStore = defineStore("playback", () => {
   const staticsStore = useStaticsStore();
@@ -115,6 +116,16 @@ export const usePlaybackStore = defineStore("playback", () => {
     }
     return null;
   });
+
+  // Radio playlists have no gravity; older persisted playlists get the defaults lazily.
+  const gravityOf = (playlist) => {
+    if (!playlist || playlist.type === PLAYBACK_CONTEXTS.radio) return null;
+    return playlist.gravity
+      ? gravity.normalize(playlist.gravity)
+      : gravity.create();
+  };
+
+  const currentGravity = computed(() => gravityOf(currentPlaylist.value));
 
   const canGoToPreviousPlaylist = computed(
     () => currentPlaylistIndex.value > 0,
@@ -384,17 +395,16 @@ export const usePlaybackStore = defineStore("playback", () => {
       queueSize: queue.length,
     });
     const trackIds = queue.map((item) => item.id);
+    const isRadio = context?.type === "radio";
     playlistsHistory.value = [
       {
         context: context
-          ? { ...context, continuation: undefined }
+          ? { ...context, continuation: undefined, gravity: undefined }
           : { name: "Remote", id: null, edited: false },
         continuation: context?.continuation || null,
+        gravity: isRadio ? null : gravity.normalize(context?.gravity),
         tracksIds: trackIds,
-        type:
-          context?.type === "radio"
-            ? PLAYBACK_CONTEXTS.radio
-            : PLAYBACK_CONTEXTS.userMix,
+        type: isRadio ? PLAYBACK_CONTEXTS.radio : PLAYBACK_CONTEXTS.userMix,
       },
     ];
     currentPlaylistIndex.value = 0;
@@ -469,6 +479,7 @@ export const usePlaybackStore = defineStore("playback", () => {
           ...(playlist.continuation
             ? { continuation: playlist.continuation }
             : {}),
+          ...(playlist.gravity ? { gravity: playlist.gravity } : {}),
         }
       : null;
   }
@@ -481,24 +492,28 @@ export const usePlaybackStore = defineStore("playback", () => {
     context: { name: album.name, id: album.id, edited: false },
     tracksIds: album.discs.flatMap((disc) => disc.tracks),
     type: PLAYBACK_CONTEXTS.album,
+    gravity: gravity.create(),
   });
 
   const makePlaylistFromUserPlaylist = (playlist) => ({
     context: { ...playlist, edited: false },
     tracksIds: playlist.tracks.map((t) => t),
     type: PLAYBACK_CONTEXTS.userPlaylist,
+    gravity: gravity.create(),
   });
 
   const makePlaylistFromTrackId = (trackId) => ({
     context: { edited: false },
     tracksIds: [trackId],
     type: PLAYBACK_CONTEXTS.userMix,
+    gravity: gravity.create(),
   });
 
   const makePlaylistFromTrackIds = (trackIds, name = "Mix") => ({
     context: { name, id: null, edited: false },
     tracksIds: trackIds,
     type: PLAYBACK_CONTEXTS.userMix,
+    gravity: gravity.create(),
   });
 
   const makePlaylistFromRadio = (trackIds, radioContext) => ({
@@ -512,6 +527,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     type: PLAYBACK_CONTEXTS.radio,
     continuation:
       radioContext.continuation || createRadioContinuation(trackIds),
+    gravity: null,
   });
 
   const resolveRadioSeedLabel = async (entityType, entityId) => {
@@ -575,9 +591,15 @@ export const usePlaybackStore = defineStore("playback", () => {
     if (smartContinuationInFlightSignature.value === signature) return;
     smartContinuationInFlightSignature.value = signature;
 
-    // Include queued tracks in the seed and keep three tracks ahead when possible.
-    const contextTrackIds = tracksIds.slice(-10);
+    // Anchor on the user-chosen tracks (gravity) and keep three tracks ahead when possible.
+    const request = gravity.buildContinuationRequest(
+      gravityOf(currentPlaylist.value),
+      tracksIds,
+      currentTrackIndex.value,
+      3 - remaining,
+    );
     let nextTrackIds = [];
+    let diagnostics = null;
     for (let attempt = 0; attempt < 3; attempt++) {
       if (attempt)
         await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
@@ -587,11 +609,10 @@ export const usePlaybackStore = defineStore("playback", () => {
         mode.value !== "local"
       )
         break;
-      nextTrackIds = await remoteStore.fetchContinuationRecommendations({
-        contextTrackIds,
-        excludeTrackIds: tracksIds,
-        count: 3 - remaining,
-      });
+      const result =
+        await remoteStore.fetchContinuationRecommendations(request);
+      nextTrackIds = result?.trackIds || [];
+      diagnostics = result?.diagnostics || null;
       if (nextTrackIds.length) break;
     }
 
@@ -605,7 +626,7 @@ export const usePlaybackStore = defineStore("playback", () => {
       (trackId) => !existingTrackIds.has(trackId),
     );
     if (additions.length) {
-      addTracksToPlaylist(additions, true);
+      addTracksToPlaylist(additions, true, diagnostics);
     }
   };
 
@@ -1294,17 +1315,33 @@ export const usePlaybackStore = defineStore("playback", () => {
     savePlaylistHistory(playlistsHistory.value);
   };
 
-  const addTracksToPlaylist = (tracksIds, automatic = false) => {
+  const addTracksToPlaylist = (
+    tracksIds,
+    automatic = false,
+    diagnostics = null,
+  ) => {
     if (mode.value === "remote") return;
     if (!currentPlaylist.value) return;
 
     let pushNewHistory = false;
     const newTracks = [...currentPlaylist.value.tracksIds, ...tracksIds];
+    // The spread carries `gravity` through every branch below, including the
+    // ALBUM -> USER_MIX conversion that replaces `context`.
     const newPlaylist = {
       ...currentPlaylist.value,
       context: { ...currentPlaylist.value.context },
       tracksIds: newTracks,
     };
+    const currentGravityState = gravityOf(currentPlaylist.value);
+    if (currentGravityState) {
+      let nextGravity = automatic
+        ? gravity.appendAuto(currentGravityState, tracksIds)
+        : gravity.markUserAdded(currentGravityState, tracksIds);
+      if (automatic && diagnostics) {
+        nextGravity = gravity.applyDiagnostics(nextGravity, diagnostics);
+      }
+      newPlaylist.gravity = nextGravity;
+    }
 
     if (!automatic) markRadioEdited(newPlaylist);
     if (!automatic && currentPlaylist.value.type === PLAYBACK_CONTEXTS.album) {
@@ -1353,6 +1390,13 @@ export const usePlaybackStore = defineStore("playback", () => {
       context: { ...currentPlaylist.value.context },
       tracksIds: newTracks,
     };
+    const removedGravity = gravityOf(currentPlaylist.value);
+    if (removedGravity) {
+      newPlaylist.gravity = gravity.noteRemoved(
+        removedGravity,
+        currentPlaylist.value.tracksIds[index],
+      );
+    }
 
     markRadioEdited(newPlaylist);
     if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.album) {
@@ -1395,6 +1439,56 @@ export const usePlaybackStore = defineStore("playback", () => {
       getSessionStore()?.notifyStateChanged();
     }
   };
+
+  // ============================================
+  // Gravity (smart continuation steering)
+  // ============================================
+
+  // Replace the current playlist's gravity. In remote mode the playing device
+  // owns the queue, so the change is sent as a command instead.
+  const applyGravity = (nextGravity) => {
+    const playlist = currentPlaylist.value;
+    if (!playlist || playlist.type === PLAYBACK_CONTEXTS.radio) return;
+    const normalized = gravity.normalize(nextGravity);
+    if (mode.value === "remote") {
+      getSessionStore()?.sendCommand("setGravity", { gravity: normalized });
+      return;
+    }
+    playlistsHistory.value[currentPlaylistIndex.value] = {
+      ...playlist,
+      gravity: normalized,
+    };
+    savePlaylistHistory(playlistsHistory.value);
+    getSessionStore()?.notifyQueueChanged();
+  };
+
+  const updateGravity = (transform) => {
+    const current = currentGravity.value;
+    if (!current) return;
+    applyGravity(transform(current));
+  };
+
+  const setGravityDestination = async (reference, stepsTotal) => {
+    if (!reference?.entity_type || !reference?.entity_id) return;
+    const label =
+      reference.label ||
+      (await resolveRadioSeedLabel(reference.entity_type, reference.entity_id));
+    updateGravity((current) =>
+      gravity.setDestination(current, { ...reference, label }, stepsTotal),
+    );
+  };
+
+  const clearGravityDestination = () =>
+    updateGravity((current) => gravity.setDestination(current, null));
+
+  const setGravityKnobs = (partial) =>
+    updateGravity((current) => gravity.setKnobs(current, partial));
+
+  const setGravityStepsTotal = (stepsTotal) =>
+    updateGravity((current) => gravity.setStepsTotal(current, stepsTotal));
+
+  const setGravitySource = (source) =>
+    updateGravity((current) => gravity.setSource(current, source));
 
   watch(
     [
@@ -1474,6 +1568,15 @@ export const usePlaybackStore = defineStore("playback", () => {
     moveTrack,
     addTracksToPlaylist,
     removeTrackFromPlaylist,
+
+    // Gravity (smart continuation steering)
+    currentGravity,
+    applyGravity,
+    setGravityDestination,
+    clearGravityDestination,
+    setGravityKnobs,
+    setGravityStepsTotal,
+    setGravitySource,
 
     // Remote mode
     enterRemoteMode,

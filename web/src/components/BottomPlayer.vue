@@ -156,6 +156,24 @@
         >
           <AiContinuationIcon />
         </button>
+        <button
+          type="button"
+          v-if="
+            playback.currentPlaylist?.type !== playback.PLAYBACK_CONTEXTS.radio
+          "
+          class="lightControlFill scaleClickFeedback scalingIcon mediumIcon smartContinuationButton"
+          :class="{ active: steeringDestination }"
+          :title="
+            steeringDestination
+              ? 'Steering toward ' +
+                (steeringDestination.label || steeringDestination.entity_id)
+              : 'Steering'
+          "
+          aria-label="Open steering"
+          @click="router.push('/steering')"
+        >
+          <SteeringWheelIcon />
+        </button>
         <DeviceSelector />
         <ControlIconButton
           v-if="playback.mode === 'local'"
@@ -188,6 +206,7 @@ import TrackName from "./common/TrackName.vue";
 import { useStaticsStore } from "@/store/statics";
 import DeviceSelector from "./DeviceSelector.vue";
 import AiContinuationIcon from "./icons/AiContinuationIcon.vue";
+import SteeringWheelIcon from "./icons/SteeringWheelIcon.vue";
 import { useUserStore } from "@/store/user";
 
 const ControlIconButton = {
@@ -236,6 +255,9 @@ const computedVolumePercent = computed(() => {
 
 const smartContinuationEnabled = computed(
   () => userStore.isSmartContinuationEnabled,
+);
+const steeringDestination = computed(
+  () => playback.currentGravity?.destination ?? null,
 );
 
 // Track display state
