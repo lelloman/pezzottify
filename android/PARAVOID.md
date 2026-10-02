@@ -190,7 +190,9 @@ updates at `https://store.lelloman.com/api/paravoid/` with APK-key authenticatio
 crash recovery and an App updates button in Settings. There is no separate
 update launcher. LelloStore (`com.lelloman.store`) is the sole trusted local
 update-hint caller, pinned to its release signing certificate. Store hints queue
-the shell's own authenticated update check; scheduled checks remain a fallback. Acceptance markers remain disabled.
+the shell's own authenticated update check. Background checks and downloads are
+enabled, with checks every 48 hours (6-hour flex) as a fallback for missed hints;
+background downloads use unmetered networks. Acceptance markers remain disabled.
 Normal production variants retain their existing shrinking configuration.
 
 Use the authoritative LelloStore publisher on the generated `shell.apk`, with
