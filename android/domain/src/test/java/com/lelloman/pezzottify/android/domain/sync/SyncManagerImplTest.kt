@@ -625,6 +625,16 @@ class SyncManagerImplTest {
     }
 
     @Test
+    fun `handleSyncMessage ignores already-applied event and keeps cursor`() = runTest(testDispatcher) {
+        every { syncStateStore.getCurrentCursor() } returns 5L
+        val event = createContentLikedEvent(seq = 4L, contentId = "track1")
+
+        syncManager.handleSyncMessage(event)
+
+        coVerify(exactly = 0) { syncStateStore.saveCursor(any()) }
+    }
+
+    @Test
     fun `handleSyncMessage triggers catchUp when sequence gap detected`() = runTest(testDispatcher) {
         every { syncStateStore.getCurrentCursor() } returns 5L
         val event = createContentLikedEvent(seq = 10L, contentId = "track1")
@@ -797,7 +807,7 @@ class SyncManagerImplTest {
             albumId = "album-1", albumName = "Test Album", artistName = "Test Artist",
             imageId = null, requestId = "req-1",
         )
-        val twoDaysAgo = System.currentTimeMillis() - 2 * 24 * 60 * 60 * 1000L
+        val twoDaysAgo = System.currentTimeMillis() / 1000 - 2 * 24 * 60 * 60L
         val notification = createDownloadNotification("notif-1", data, createdAt = twoDaysAgo)
 
         syncManager.showSystemNotificationsForUnread(listOf(notification))
@@ -1012,7 +1022,7 @@ class SyncManagerImplTest {
         id: String,
         data: DownloadCompletedData,
         readAt: Long? = null,
-        createdAt: Long = System.currentTimeMillis(),
+        createdAt: Long = System.currentTimeMillis() / 1000,
     ): com.lelloman.pezzottify.android.domain.notifications.Notification {
         return com.lelloman.pezzottify.android.domain.notifications.Notification(
             id = id,
