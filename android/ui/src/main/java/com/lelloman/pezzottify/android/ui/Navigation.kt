@@ -121,6 +121,9 @@ sealed interface Screen {
         data object Queue : Main
 
         @Serializable
+        data object Steering : Main
+
+        @Serializable
         data object MyRequests : Main
 
         @Serializable
@@ -153,6 +156,8 @@ fun NavController.toFullScreenImage(imageUrl: String?) {
 fun NavController.toPlayer() = navigate(Screen.Main.Player)
 
 fun NavController.toQueue() = navigate(Screen.Main.Queue)
+
+fun NavController.toSteering() = navigate(Screen.Main.Steering)
 
 fun NavController.toMyRequests() = navigate(Screen.Main.MyRequests)
 

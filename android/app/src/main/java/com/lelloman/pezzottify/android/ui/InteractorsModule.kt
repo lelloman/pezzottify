@@ -1578,8 +1578,12 @@ class InteractorsModule {
         playbackSessionHandler: PlaybackSessionHandler,
         userSettingsStore: UserSettingsStore,
         updateSmartContinuationSetting: UpdateSmartContinuationSetting,
+        playbackGravity: com.lelloman.pezzottify.android.domain.player.PlaybackGravity,
     ): PlayerScreenViewModel.Interactor =
         object : PlayerScreenViewModel.Interactor {
+            override fun getHasDestination(): Flow<Boolean> =
+                playbackGravity.state.map { it.gravity?.destination != null }.distinctUntilChanged()
+
             override fun getRadioCreationStatus() = radioCreation.status.combine(player.radioContinuationError) { status, continuationError ->
                 if (status == com.lelloman.pezzottify.android.domain.player.RadioCreationStatus.Idle && continuationError)
                     com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi.ContinuationError
@@ -1776,6 +1780,72 @@ class InteractorsModule {
         }
 
     @Provides
+    fun providePlaybackDestinationInteractor(
+        playbackGravity: com.lelloman.pezzottify.android.domain.player.PlaybackGravity,
+        setPlaybackDestination: com.lelloman.pezzottify.android.domain.player.SetPlaybackDestination,
+    ): com.lelloman.pezzottify.android.ui.component.destination.PlaybackDestinationViewModel.Interactor =
+        object : com.lelloman.pezzottify.android.ui.component.destination.PlaybackDestinationViewModel.Interactor {
+            override fun isSteerable() = playbackGravity.current().isSteerable
+
+            override fun currentStepsTotal() = playbackGravity.current().gravity?.stepsTotal
+
+            override suspend fun setDestination(
+                entityType: String,
+                entityId: String,
+                label: String,
+                steps: Int,
+            ) = setPlaybackDestination(entityType, entityId, steps, label)
+        }
+
+    @Provides
+    fun provideSteeringScreenInteractor(
+        playbackGravity: com.lelloman.pezzottify.android.domain.player.PlaybackGravity,
+        userSettingsStore: UserSettingsStore,
+        updateSmartContinuationSetting: UpdateSmartContinuationSetting,
+        remoteApiClient: RemoteApiClient,
+    ): com.lelloman.pezzottify.android.ui.screen.steering.SteeringScreenViewModel.Interactor =
+        object : com.lelloman.pezzottify.android.ui.screen.steering.SteeringScreenViewModel.Interactor {
+            override fun getGravityState() = playbackGravity.state
+
+            override fun getSmartContinuationEnabled(): Flow<Boolean> =
+                userSettingsStore.isSmartContinuationEnabled
+
+            override suspend fun setSmartContinuationEnabled(enabled: Boolean) {
+                updateSmartContinuationSetting(enabled)
+            }
+
+            override fun updateGravity(
+                transform: (com.lelloman.pezzottify.android.domain.player.Gravity) -> com.lelloman.pezzottify.android.domain.player.Gravity,
+            ) {
+                playbackGravity.update(transform)
+            }
+
+            override suspend fun getRadioOptions() =
+                (remoteApiClient.getRadioOptions() as? RemoteApiResponse.Success)?.data
+
+            override suspend fun searchReferences(
+                query: String,
+            ): List<com.lelloman.pezzottify.android.ui.screen.steering.SteeringReference>? =
+                when (val response = remoteApiClient.search(
+                    query,
+                    listOf(
+                        RemoteApiClient.SearchFilter.Artist,
+                        RemoteApiClient.SearchFilter.Album,
+                        RemoteApiClient.SearchFilter.Track,
+                    ),
+                )) {
+                    is RemoteApiResponse.Error -> null
+                    is RemoteApiResponse.Success -> response.data.take(30).map { result ->
+                        com.lelloman.pezzottify.android.ui.screen.steering.SteeringReference(
+                            entityType = result.itemType.name.lowercase(),
+                            entityId = result.itemId,
+                            label = result.matchableText,
+                        )
+                    }
+                }
+        }
+
+    @Provides
     fun provideQueueScreenInteractor(
         @dagger.hilt.android.qualifiers.ApplicationContext context: android.content.Context,
         player: PezzottifyPlayer,
@@ -1835,6 +1905,7 @@ class InteractorsModule {
                                     false,
                                 )
                             }
+                            val autoTrackIds = playlist?.gravity?.autoTrackIds?.toHashSet().orEmpty()
                             QueueScreenViewModel.Interactor.QueueState(
                                 tracks = queueState.tracks.map { track ->
                                     QueueScreenViewModel.Interactor.QueueTrack(
@@ -1849,6 +1920,7 @@ class InteractorsModule {
                                         },
                                         durationSeconds = track.durationSeconds,
                                         availability = track.availability.toTrackAvailability(),
+                                        isAuto = track.trackId in autoTrackIds,
                                     )
                                 },
                                 currentIndex = queueState.currentIndex,

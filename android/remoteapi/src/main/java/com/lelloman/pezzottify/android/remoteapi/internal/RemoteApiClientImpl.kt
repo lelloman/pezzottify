@@ -480,22 +480,51 @@ internal class RemoteApiClientImpl(
         }
 
     override suspend fun getContinuationRecommendations(
-        contextTrackIds: List<String>,
-        excludeTrackIds: List<String>,
-        count: Int,
-    ): RemoteApiResponse<List<String>> =
+        request: com.lelloman.pezzottify.android.domain.remoteapi.ContinuationRequest,
+    ): RemoteApiResponse<com.lelloman.pezzottify.android.domain.remoteapi.ContinuationResult> =
         catchingNetworkError {
+            fun com.lelloman.pezzottify.android.domain.remoteapi.ContinuationReference.toWire() =
+                com.lelloman.pezzottify.android.remoteapi.internal.requests.ContinuationReferenceRequest(entityType, entityId, weight)
+            val wireRequest = ContinuationRecommendationsRequest(
+                contextTrackIds = request.contextTrackIds,
+                excludeTrackIds = request.excludeTrackIds,
+                count = request.count,
+                sourceTrackIds = request.sourceTrackIds,
+                sourceReferences = request.sourceReferences.map { it.toWire() },
+                recentTrackIds = request.recentTrackIds,
+                recencyWeight = request.recencyWeight,
+                destination = request.destination?.toWire(),
+                progress = request.progress,
+                criteria = request.criteria?.map {
+                    com.lelloman.pezzottify.android.remoteapi.internal.requests.ContinuationCriterionRequest(it.namespace, it.weight)
+                },
+                diversity = request.diversity,
+                randomness = request.randomness,
+                mode = request.mode,
+                away = request.away.map { it.toWire() },
+            )
             when (val response = getRetrofit()
-                .getContinuationRecommendations(
-                    authToken = authToken,
-                    request = ContinuationRecommendationsRequest(
-                        contextTrackIds = contextTrackIds,
-                        excludeTrackIds = excludeTrackIds,
-                        count = count,
-                    ),
-                )
+                .getContinuationRecommendations(authToken = authToken, request = wireRequest)
                 .returnFromRetrofitResponse()) {
-                is RemoteApiResponse.Success -> RemoteApiResponse.Success(response.data.trackIds)
+                is RemoteApiResponse.Success -> RemoteApiResponse.Success(
+                    com.lelloman.pezzottify.android.domain.remoteapi.ContinuationResult(
+                        trackIds = response.data.trackIds,
+                        diagnostics = com.lelloman.pezzottify.android.domain.player.GravityDiagnostics(
+                            recencyWeight = response.data.recencyWeight,
+                            progress = response.data.progress,
+                            namespaces = response.data.namespaces.map {
+                                com.lelloman.pezzottify.android.domain.player.GravityNamespaceDiagnostics(
+                                    namespace = it.namespace,
+                                    weight = it.weight,
+                                    sourceToDestination = it.sourceToDestination,
+                                    queryToSource = it.queryToSource,
+                                    queryToDestination = it.queryToDestination,
+                                )
+                            },
+                            at = System.currentTimeMillis(),
+                        ),
+                    )
+                )
                 is RemoteApiResponse.Error -> response
             }
         }
@@ -539,6 +568,13 @@ internal class RemoteApiClientImpl(
                 is RemoteApiResponse.Success -> RemoteApiResponse.Success(response.data.trackIds)
                 is RemoteApiResponse.Error -> response
             }
+        }
+
+    override suspend fun getRadioOptions(): RemoteApiResponse<com.lelloman.pezzottify.android.domain.remoteapi.response.RadioOptions> =
+        catchingNetworkError {
+            getRetrofit()
+                .getRadioOptions(authToken = authToken)
+                .returnFromRetrofitResponse()
         }
 
     override suspend fun getDevices(): RemoteApiResponse<DevicesResponse> =

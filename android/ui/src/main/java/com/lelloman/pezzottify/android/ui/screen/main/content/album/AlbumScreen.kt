@@ -1,5 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.main.content.album
 
+import com.lelloman.pezzottify.android.ui.component.destination.DestinationRequest
+import com.lelloman.pezzottify.android.ui.component.destination.PlaybackDestinationDialog
 import androidx.compose.animation.core.LinearEasing
 import com.lelloman.pezzottify.android.ui.screen.main.MainScreenScaffold
 import androidx.compose.animation.core.RepeatMode
@@ -175,12 +177,18 @@ private fun AlbumScreenContent(
         }
     }
 
+    var destinationRequest by remember { mutableStateOf<DestinationRequest?>(null) }
+    PlaybackDestinationDialog(destinationRequest) { destinationRequest = null }
+
     // Track actions bottom sheet
     selectedTrack?.let { track ->
         TrackActionsBottomSheet(
             track = track,
             sheetState = trackSheetState,
             onDismiss = { selectedTrack = null },
+            onSetDestination = {
+                destinationRequest = DestinationRequest("track", track.id, track.name)
+            },
             onPlay = {
                 actions.clickOnTrack(track.id)
             },
@@ -220,6 +228,9 @@ private fun AlbumScreenContent(
             },
             onRadio = {
                 actions.playAlbumRadio(state.album.id)
+            },
+            onSetDestination = {
+                destinationRequest = DestinationRequest("album", state.album.id, state.album.name)
             },
             onAddToQueue = {
                 actions.addAlbumToQueue(state.album.id)

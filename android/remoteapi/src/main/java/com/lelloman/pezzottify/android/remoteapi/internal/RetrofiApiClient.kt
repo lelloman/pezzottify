@@ -159,7 +159,7 @@ internal interface RetrofitApiClient {
     suspend fun getContinuationRecommendations(
         @Header("Authorization") authToken: String,
         @Body request: ContinuationRecommendationsRequest,
-    ): Response<TrackIdsResponse>
+    ): Response<com.lelloman.pezzottify.android.remoteapi.internal.requests.ContinuationResponse>
 
     @GET("/v1/content/artist/{artistId}/greatest-hits")
     suspend fun getArtistGreatestHits(
@@ -172,6 +172,11 @@ internal interface RetrofitApiClient {
         @Header("Authorization") authToken: String,
         @Body request: com.lelloman.pezzottify.android.remoteapi.internal.requests.RadioContinuationRequest,
     ): Response<TrackIdsResponse>
+
+    @GET("/v1/content/radio/options")
+    suspend fun getRadioOptions(
+        @Header("Authorization") authToken: String,
+    ): Response<com.lelloman.pezzottify.android.domain.remoteapi.response.RadioOptions>
 
     @GET("/v1/content/radio/{entityType}/{entityId}")
     suspend fun getRadioTrackIds(

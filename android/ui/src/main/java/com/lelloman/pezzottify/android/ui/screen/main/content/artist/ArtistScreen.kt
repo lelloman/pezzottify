@@ -1,5 +1,9 @@
 package com.lelloman.pezzottify.android.ui.screen.main.content.artist
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import com.lelloman.pezzottify.android.ui.component.destination.DestinationRequest
+import com.lelloman.pezzottify.android.ui.component.destination.PlaybackDestinationDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -385,6 +389,9 @@ fun ArtistLoadedScreen(
             }
         }
 
+        var destinationRequest by remember { mutableStateOf<DestinationRequest?>(null) }
+        PlaybackDestinationDialog(destinationRequest) { destinationRequest = null }
+
         ContentOverflowMenu(
             tint = lerp(MaterialTheme.colorScheme.onSurface, Color.White, imageAlpha),
             modifier = Modifier.align(Alignment.TopEnd)
@@ -393,6 +400,13 @@ fun ArtistLoadedScreen(
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.listen_to_radio)) },
                 onClick = { dismiss(); actions.clickOnRadio() },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.set_as_playback_destination)) },
+                onClick = {
+                    dismiss()
+                    destinationRequest = DestinationRequest("artist", artist.id, artist.name)
+                },
             )
         }
 

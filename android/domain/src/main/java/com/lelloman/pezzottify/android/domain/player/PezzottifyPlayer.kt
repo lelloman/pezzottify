@@ -20,6 +20,9 @@ interface PezzottifyPlayer : ControlsAndStatePlayer, AppInitializer{
     fun retryRadioContinuation()
     fun dismissRadioContinuationError()
 
+    /** Replaces the smart-continuation gravity of the current non-radio playlist. */
+    fun setGravity(gravity: Gravity)
+
 
     fun goToPreviousPlaylist()
     fun goToNextPlaylist()

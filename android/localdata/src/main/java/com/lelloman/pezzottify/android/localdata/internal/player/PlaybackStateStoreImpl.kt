@@ -56,6 +56,7 @@ internal class PlaybackStateStoreImpl(
                 )
             },
             continuation = playlist.continuation,
+            gravity = playlist.gravity,
             tracksIds = playlist.tracksIds,
             currentTrackIndex = currentTrackIndex,
             positionMs = positionMs,
@@ -104,6 +105,7 @@ internal class PlaybackStateStoreImpl(
                     context = context,
                     tracksIds = persistable.tracksIds,
                     continuation = persistable.continuation,
+                    gravity = persistable.gravity,
                 ),
                 currentTrackIndex = persistable.currentTrackIndex,
                 positionMs = persistable.positionMs,
@@ -137,6 +139,8 @@ private data class PersistablePlaybackState(
     val context: PersistableContext,
     val tracksIds: List<String>,
     val continuation: com.lelloman.pezzottify.android.domain.player.RadioContinuation? = null,
+    // Nullable with a default: older saved blobs without this key must still decode.
+    val gravity: com.lelloman.pezzottify.android.domain.player.Gravity? = null,
     val currentTrackIndex: Int,
     val positionMs: Long,
     val isPlaying: Boolean,
