@@ -9,9 +9,11 @@ from pathlib import Path
 import zipfile
 
 parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--application-id", default="com.lelloman.pezzottify.android.paravoid")
 parser.add_argument("output", nargs="?", type=Path, default=Path(__file__).resolve().parent /
                     "app/build/outputs/paravoid/paravoidAndroidPhoneDebug")
-output = parser.parse_args().output
+args = parser.parse_args()
+output = args.output
 payload = (output / "payload.vpk").read_bytes()
 assert hashlib.sha256(payload).hexdigest() == (output / "payload.sha256").read_text().strip()
 with zipfile.ZipFile(output / "shell.apk") as shell:
@@ -23,7 +25,7 @@ with zipfile.ZipFile(io.BytesIO(payload)) as archive:
     envelope = archive.read("release.json")
     assert envelope == (output / "release.json").read_bytes()
     release = json.loads(base64.b64decode(json.loads(envelope)["body"]))
-    assert release["applicationId"] == policy["descriptor"]["installed"]["applicationId"] == "com.lelloman.pezzottify.android.paravoid"
+    assert release["applicationId"] == policy["descriptor"]["installed"]["applicationId"] == args.application_id
     assert release["shellContractId"] == policy["contractId"]
     assert len(archive.namelist()) == len(set(archive.namelist()))
     inventory = release["inventory"]

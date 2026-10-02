@@ -146,11 +146,15 @@ android {
     flavorDimensions += "formFactor"
     productFlavors {
         getByName("paravoidAndroid") {
+            // Production is an in-place update of Pezzottify. Only disposable
+            // test builds use an isolated package and OAuth callback.
+            applicationIdSuffix = if (paravoidProduction) "" else ".paravoid"
             buildConfigField("boolean", "PARAVOID_ACCEPTANCE_ENABLED", paravoidAcceptance.toString())
             buildConfigField("String", "PARAVOID_ACCEPTANCE_GENERATION", paravoidAcceptanceGeneration.asBuildConfigString())
             minSdk = 30
-            manifestPlaceholders["appAuthRedirectScheme"] = "com.lelloman.pezzottify.android.paravoid"
-            buildConfigField("String", "OIDC_REDIRECT_SCHEME", "\"com.lelloman.pezzottify.android.paravoid\"")
+            val redirectScheme = if (paravoidProduction) "com.lelloman.pezzottify.android" else "com.lelloman.pezzottify.android.paravoid"
+            manifestPlaceholders["appAuthRedirectScheme"] = redirectScheme
+            buildConfigField("String", "OIDC_REDIRECT_SCHEME", redirectScheme.asBuildConfigString())
         }
         create("phone") {
             dimension = "formFactor"
