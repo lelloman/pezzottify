@@ -67,7 +67,7 @@ class RadioPlaybackTest {
         assertThat(player.playbackPlaylist.value!!.continuation!!.status).isEqualTo("exhausted")
         index.value = 24
         runCurrent()
-        coVerify(exactly = 0) { api.getContinuationRecommendations(any(), any(), any()) }
+        coVerify(exactly = 0) { api.getContinuationRecommendations(any()) }
         coVerify(exactly = 0) { api.continueRadio(any(), any(), any()) }
     }
 
@@ -85,7 +85,7 @@ class RadioPlaybackTest {
         index.value = 8
         runCurrent()
         assertThat(player.playbackPlaylist.value!!.tracksIds).hasSize(9)
-        coVerify(exactly = 0) { api.getContinuationRecommendations(any(), any(), any()) }
+        coVerify(exactly = 0) { api.getContinuationRecommendations(any()) }
     }
 
     @Test fun `large snapshot trims played history and keeps current audio`() = runTest(dispatcher) {
@@ -154,7 +154,7 @@ class RadioPlaybackTest {
         assertThat(player.radioContinuationError.value).isFalse()
         assertThat(player.playbackPlaylist.value!!.tracksIds).contains("new-1")
         verify(exactly = 0) { platform.setIsPlaying(true) }
-        coVerify(exactly = 0) { api.getContinuationRecommendations(any(), any(), any()) }
+        coVerify(exactly = 0) { api.getContinuationRecommendations(any()) }
     }
 
     @Test fun `pause cancels an outstanding batch without restarting playback`() = runTest(dispatcher) {

@@ -534,6 +534,7 @@
     <!-- PLAYBACK SETTINGS -->
     <string name="playback_section">Riproduzione</string>
     <string name="smart_continuation">Continuazione intelligente</string>
+    <string name="added_by_smart_continuation">Aggiunto dalla continuazione intelligente</string>
     <string name="smart_continuation_description">Aggiunge automaticamente brani correlati alle code normali. Le radio gestiscono autonomamente la continuazione.</string>
     <string name="radio_queue_edit">Quando modifichi la coda di una radio</string>
     <string name="radio_keep_going">Continua la radio</string>
@@ -591,4 +592,53 @@
     <string name="feedback_prepare_failed">Impossibile preparare la segnalazione. Se hai selezionato la chat, abilita prima la registrazione locale e registra la conversazione interessata. Verifica di aver effettuato accesso.</string>
     <string name="feedback_wait_seconds">Il server richiede di attendere %1$d secondi prima di riprovare.</string>
     <string name="feedback_reports_failed">Impossibile caricare le segnalazioni. Tocca Aggiorna per riprovare.</string>
+
+    <!-- Steering -->
+    <string name="steering_title">Guida</string>
+    <string name="steering_open">Guida la coda</string>
+    <string name="set_as_playback_destination">Imposta come destinazione</string>
+    <string name="steering_steps_title">Guida la coda</string>
+    <string name="steering_steps_prompt">La continuazione intelligente si sposterà verso %1$s in questo numero di brani suggeriti.</string>
+    <string name="steering_steps_label">Brani</string>
+    <string name="steering_set">Guida</string>
+    <string name="steering_destination_set">In viaggio verso %1$s</string>
+    <string name="steering_not_steerable">Avvia un album, una playlist o un mix per guidarne la continuazione.</string>
+    <string name="steering_nothing_playing">Nessuna riproduzione. Avvia un album, una playlist o un mix per guidarne la continuazione.</string>
+    <string name="steering_radio">Le radio gestiscono la propria continuazione e non possono essere guidate.</string>
+    <string name="steering_smart_off">La continuazione intelligente è disattivata, quindi la guida non ha ancora effetto.</string>
+    <string name="steering_turn_on">Attiva</string>
+    <string name="steering_remote">Stai guidando la coda in riproduzione su un altro dispositivo.</string>
+    <string name="steering_source">Origine</string>
+    <string name="steering_source_queue">%1$d brani scelti da te, %2$d suggeriti</string>
+    <string name="steering_source_references">Ancorata a</string>
+    <string name="steering_reset_to_queue">Usa la coda</string>
+    <string name="steering_add_anchor">Aggiungi ancora</string>
+    <string name="steering_destination">Destinazione</string>
+    <string name="steering_no_destination">Nessuna destinazione. La continuazione resta vicina all\'origine.</string>
+    <string name="steering_set_destination">Imposta destinazione</string>
+    <string name="steering_change_destination">Cambia</string>
+    <string name="steering_clear_destination">Rimuovi</string>
+    <string name="steering_progress">%1$d di %2$d brani</string>
+    <string name="steering_match">Ultima scelta simile al %1$d%% alla destinazione</string>
+    <string name="steering_steps_remaining">Brani rimanenti</string>
+    <string name="steering_knobs">Regolazioni</string>
+    <string name="steering_recency">Recenza</string>
+    <string name="steering_recency_hint">Quanto gli ultimi brani ascoltati influenzano la prossima scelta.</string>
+    <string name="steering_diversity">Varietà</string>
+    <string name="steering_randomness">Casualità</string>
+    <string name="steering_mode">Modalità</string>
+    <string name="steering_mode_similar">Simile</string>
+    <string name="steering_mode_explore">Esplora</string>
+    <string name="steering_explore_disabled">Esplora non è disponibile mentre è impostata una destinazione.</string>
+    <string name="steering_criteria">Criteri sonori</string>
+    <string name="steering_away">Allontanati da</string>
+    <string name="steering_add_away">Aggiungi</string>
+    <string name="steering_reset_knobs">Ripristina predefiniti</string>
+    <string name="steering_search_hint">Cerca artisti, album, brani</string>
+    <string name="steering_search_error">Ricerca non riuscita</string>
+    <string name="steering_search_empty">Nessun risultato</string>
+    <string name="steering_entity_artist">Artista</string>
+    <string name="steering_entity_album">Album</string>
+    <string name="steering_entity_track">Brano</string>
+    <string name="steering_remove">Rimuovi</string>
 </resources>

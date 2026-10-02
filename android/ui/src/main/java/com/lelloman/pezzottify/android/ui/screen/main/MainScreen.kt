@@ -79,6 +79,7 @@ import com.lelloman.pezzottify.android.ui.screen.main.content.track.TrackScreen
 import com.lelloman.pezzottify.android.ui.screen.main.content.userplaylist.UserPlaylistScreen
 import com.lelloman.pezzottify.android.ui.screen.player.PlayerScreen
 import com.lelloman.pezzottify.android.ui.screen.queue.QueueScreen
+import com.lelloman.pezzottify.android.ui.screen.steering.SteeringScreen
 import com.lelloman.pezzottify.android.ui.toAlbum
 import com.lelloman.pezzottify.android.ui.toPlayer
 import com.lelloman.pezzottify.android.ui.toProfile
@@ -132,6 +133,7 @@ fun MainScreen(rootNavController: androidx.navigation.NavController) {
 private val overlayRoutes = setOf(
     Screen.Main.Player::class.qualifiedName,
     Screen.Main.Queue::class.qualifiedName,
+    Screen.Main.Steering::class.qualifiedName,
     Screen.Main.FullScreenImage::class.qualifiedName,
 )
 
@@ -349,6 +351,9 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                 }
                 composable<Screen.Main.Queue> {
                     QueueScreen(navController = navController)
+                }
+                composable<Screen.Main.Steering> {
+                    SteeringScreen(navController = navController)
                 }
                 composable<Screen.Main.FullScreenImage> {
                     FullScreenImageScreen(

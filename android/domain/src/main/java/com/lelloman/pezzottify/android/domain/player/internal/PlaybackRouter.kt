@@ -310,6 +310,14 @@ class PlaybackRouter @Inject constructor(
             }.collect { flow.value = it }
         }
     }
+    override fun setGravity(gravity: com.lelloman.pezzottify.android.domain.player.Gravity) {
+        if (isRemote) {
+            sendRemoteCommand("setGravity", mapOf("gravity" to gravity.toWireJson()))
+        } else {
+            localPlayer.setGravity(gravity)
+        }
+    }
+
     override fun retryRadioContinuation() { if (!isRemote) localPlayer.retryRadioContinuation() }
     override fun dismissRadioContinuationError() { localPlayer.dismissRadioContinuationError() }
 

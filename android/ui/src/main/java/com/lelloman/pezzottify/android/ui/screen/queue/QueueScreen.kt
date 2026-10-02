@@ -1,5 +1,7 @@
 package com.lelloman.pezzottify.android.ui.screen.queue
 
+import com.lelloman.pezzottify.android.ui.component.destination.DestinationRequest
+import com.lelloman.pezzottify.android.ui.component.destination.PlaybackDestinationDialog
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -26,6 +28,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -105,6 +108,8 @@ private fun QueueScreenContent(
     var selectedTrackIsLiked by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
+    var destinationRequest by remember { mutableStateOf<DestinationRequest?>(null) }
+    PlaybackDestinationDialog(destinationRequest) { destinationRequest = null }
 
     // Collect like state for the selected track
     selectedTrackItem?.let { trackItem ->
@@ -218,6 +223,9 @@ private fun QueueScreenContent(
             onDismiss = {
                 selectedTrackItem = null
                 selectedTrackIndex = null
+            },
+            onSetDestination = {
+                destinationRequest = DestinationRequest("track", track.id, track.name)
             },
             onPlay = {
                 selectedTrackIndex?.let { index ->
@@ -470,13 +478,26 @@ private fun QueueTrackItemRow(
         Column(
             modifier = Modifier.weight(1f)
         ) {
-            Text(
-                text = trackItem.trackName,
-                style = MaterialTheme.typography.bodyLarge,
-                color = textColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = trackItem.trackName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = textColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (trackItem.isAuto) {
+                    Icon(
+                        imageVector = Icons.Filled.AutoAwesome,
+                        contentDescription = stringResource(R.string.added_by_smart_continuation),
+                        tint = secondaryTextColor.copy(alpha = 0.6f),
+                        modifier = Modifier
+                            .padding(start = 6.dp)
+                            .size(14.dp),
+                    )
+                }
+            }
             Text(
                 text = trackItem.artists.joinToString(", ") { it.name },
                 style = MaterialTheme.typography.bodyMedium,

@@ -181,10 +181,8 @@ interface RemoteApiClient {
     suspend fun updateUserSettings(settings: List<UserSetting>): RemoteApiResponse<Unit>
 
     suspend fun getContinuationRecommendations(
-        contextTrackIds: List<String>,
-        excludeTrackIds: List<String>,
-        count: Int = 1,
-    ): RemoteApiResponse<List<String>>
+        request: ContinuationRequest,
+    ): RemoteApiResponse<ContinuationResult>
 
     suspend fun getArtistGreatestHits(artistId: String): RemoteApiResponse<List<String>>
     suspend fun continueRadio(
@@ -198,6 +196,8 @@ interface RemoteApiClient {
         entityId: String,
         count: Int = 50,
     ): RemoteApiResponse<List<String>>
+
+    suspend fun getRadioOptions(): RemoteApiResponse<com.lelloman.pezzottify.android.domain.remoteapi.response.RadioOptions>
 
     /**
      * Get devices registered for the current user.

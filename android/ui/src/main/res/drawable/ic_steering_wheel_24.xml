@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Steering wheel: outer rim, hub and three spokes. -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM12,4c3.73,0 6.86,2.55 7.75,6h-4.08c-0.69,-1.19 -1.98,-2 -3.47,-2h-0.4c-1.49,0 -2.78,0.81 -3.47,2L4.25,10C5.14,6.55 8.27,4 12,4zM4.07,12h4.03c0.17,1.52 1.2,2.78 2.6,3.29v4.6C7.17,19.36 4.4,16.03 4.07,12zM13.3,19.89v-4.6c1.4,-0.51 2.43,-1.77 2.6,-3.29h4.03c-0.33,4.03 -3.1,7.36 -6.63,7.89zM12,14c-1.1,0 -2,-0.9 -2,-2s0.9,-2 2,-2 2,0.9 2,2 -0.9,2 -2,2z" />
+</vector>

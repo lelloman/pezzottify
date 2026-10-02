@@ -50,6 +50,12 @@ class PlayerScreenViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            interactor.getHasDestination().collect { hasDestination ->
+                mutableState.value = mutableState.value.copy(hasDestination = hasDestination)
+            }
+        }
+
+        viewModelScope.launch {
             interactor.getPlaybackState().collect { playbackState ->
                 val currentState = mutableState.value
                 mutableState.value = when (playbackState) {
@@ -141,6 +147,7 @@ class PlayerScreenViewModel @Inject constructor(
         fun getRemoteDeviceName(): Flow<String?>
         fun getHasOtherDeviceConnected(): Flow<Boolean>
         fun getSmartContinuationEnabled(): Flow<Boolean>
+        fun getHasDestination(): Flow<Boolean> = kotlinx.coroutines.flow.flowOf(false)
         fun togglePlayPause()
         fun skipToNext()
         fun skipToPrevious()
