@@ -4,7 +4,8 @@ The Android app uses the Paravoid source revision pinned in `../paravoid.rev`,
 not a published release. The current pin is `33340c6` (DVPK delivery and
 APK-only distribution); no public Paravoid version has been released yet.
 It adds the `paravoidPackaging` dimension: `normal` and `paravoidAndroid`.
-Only **Paravoid phone/debug and phone/paravoidTestRelease** are enabled. Normal
+Paravoid phone/debug and phone/paravoidTestRelease are enabled by default; the
+production opt-in enables phone/paravoidRelease. Normal
 phone/TV build types remain available. Shell TV (LEANBACK) and shrinking are not
 supported yet.
 
@@ -162,6 +163,37 @@ The plugin checks resource IDs and the shell contract against that baseline.
 A contract change requires a new shell APK. Complete shells require Android 11
 (API 30); the Paravoid-only Room overlay disables pre-unlock execution of Room's
 multi-instance invalidation service. Normal APK declarations are unchanged.
+
+## Production APK publication
+
+The production variant uses the existing APK release keystore, an app-specific
+persistent RSA payload key, and the Store's public head/grant trust keys.
+The initial local identity lives in ignored `android/.paravoid-signing/`;
+back up `release.pk8` securely and retain `trust.json` for future releases.
+Never regenerate this identity for an update or substitute disposable fixture keys.
+
+```sh
+./gradlew :app:assembleParavoidAndroidPhoneParavoidRelease \
+  -PparavoidCheckout=/path/to/pinned/paravoid-android \
+  -PparavoidComplete=true -PparavoidProduction=true \
+  -PparavoidTrustPolicy=.paravoid-signing/trust.json \
+  -PparavoidReleaseKey=.paravoid-signing/release.pk8 \
+  -PparavoidPayloadVersion=<git-commit-count>
+python3 check-paravoid-complete.py \
+  app/build/outputs/paravoid/paravoidAndroidPhoneParavoidRelease
+```
+
+This non-debuggable, unshrunk release embeds its signed VPK and enables HTTPS
+updates at `https://store.lelloman.com/api/paravoid/` with APK-key authentication,
+crash recovery and an App updates launcher. Acceptance markers remain disabled.
+Normal production variants retain their existing shrinking configuration.
+
+Use the authoritative LelloStore publisher on the generated `shell.apk`, with
+`upload --distribution-mode paravoid --dry-run --json` before authentication.
+Upload as a draft, inspect the validated installer and distribution, then use the
+separate `publish` command with its current expected revision. Preserve the
+`baseline-candidate/` after the shell is accepted; compatible future VPK builds
+must use that baseline and an increasing payload version.
 
 ## Disposable update-delivery acceptance
 
