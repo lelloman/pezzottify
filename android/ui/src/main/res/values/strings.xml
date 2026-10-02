@@ -641,4 +641,5 @@
     <string name="steering_entity_album">Album</string>
     <string name="steering_entity_track">Track</string>
     <string name="steering_remove">Remove</string>
+    <string name="app_updates">App updates</string>
 </resources>
