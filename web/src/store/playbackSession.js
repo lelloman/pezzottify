@@ -445,6 +445,11 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
           _playbackStore.moveTrack(cmdPayload.fromIndex, cmdPayload.toIndex);
         }
         break;
+      case "setGravity":
+        if (cmdPayload?.gravity) {
+          _playbackStore.applyGravity(cmdPayload.gravity);
+        }
+        break;
       default:
         console.warn("[PlaybackSession] Unknown command:", command);
     }

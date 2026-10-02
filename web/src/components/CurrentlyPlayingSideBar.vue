@@ -43,6 +43,14 @@
               :isCurrentlyPlaying="index == currentIndex"
               :minimal="true"
             />
+            <span
+              v-if="record.isAuto"
+              class="autoMarker"
+              title="Added by smart continuation"
+              aria-label="Added by smart continuation"
+            >
+              <AiContinuationIcon />
+            </span>
           </div>
         </template>
       </VirtualList>
@@ -61,6 +69,7 @@ import ChevronRight from "@/components/icons/ChevronRight.vue";
 import SlidingText from "@/components/common/SlidingText.vue";
 import VirtualList from "vue-virtual-draglist";
 import LoadTrackListItem from "./common/LoadTrackListItem.vue";
+import AiContinuationIcon from "./icons/AiContinuationIcon.vue";
 
 const panelVisible = computed(() => tracksVModel.value.length);
 const currentIndex = ref(null);
@@ -121,14 +130,16 @@ watch(
   { immediate: true },
 );
 
-const buildTrackRows = (trackIds) => {
+const buildTrackRows = (trackIds, autoTrackIds = []) => {
   const seenTrackCounter = {};
+  const autoSet = new Set(autoTrackIds);
   return trackIds.map((trackId) => {
     const seenCount = seenTrackCounter[trackId] || 0;
     seenTrackCounter[trackId] = seenCount + 1;
     return {
       id: trackId,
       listItemId: `${trackId}:${seenCount}`,
+      isAuto: autoSet.has(trackId),
     };
   });
 };
@@ -169,9 +180,12 @@ watch(
 );
 
 watch(
-  () => playback.currentPlaylist?.tracksIds || [],
-  (trackIds) => {
-    tracksVModel.value = buildTrackRows(trackIds);
+  () => [
+    playback.currentPlaylist?.tracksIds || [],
+    playback.currentPlaylist?.gravity?.auto_track_ids || [],
+  ],
+  ([trackIds, autoTrackIds]) => {
+    tracksVModel.value = buildTrackRows(trackIds, autoTrackIds);
   },
   { immediate: true, deep: true },
 );
@@ -288,5 +302,20 @@ watch(
 
 .trackItem.isPlaying:hover {
   background-color: transparent;
+}
+
+.autoMarker {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  opacity: 0.45;
+}
+
+.autoMarker :deep(svg) {
+  width: 100%;
+  height: 100%;
 }
 </style>

@@ -10,6 +10,7 @@ import {
   nextSnapshotBatch,
   appendRadioBatch,
 } from "../utils/radioContinuation.js";
+import * as gravity from "../utils/gravity.js";
 
 const ids = (count) => Array.from({ length: count }, (_, i) => `track-${i}`);
 function harness() {
@@ -22,12 +23,14 @@ function harness() {
     setItem: (key, value) => storage.set(key, String(value)),
   };
   const calls = { smart: 0, radio: 0, loads: 0, plays: 0 };
+  const smartRequests = [];
   const remote = {
     fetchArtistGreatestHits: async () => ids(25),
     fetchRadioTrackIds: async () => ids(10),
-    fetchContinuationRecommendations: async () => {
+    fetchContinuationRecommendations: async (request) => {
       calls.smart++;
-      return ["smart-track"];
+      smartRequests.push(request);
+      return { trackIds: [`smart-track-${calls.smart}`], diagnostics: null };
     },
     fetchRadioContinuation: async () => {
       calls.radio++;
@@ -41,6 +44,11 @@ function harness() {
   const statics = {
     getTrack: (id) => ({ item: { id, name: id } }),
     waitArtistData: async () => ({ name: "Artist" }),
+    waitAlbumData: async (id) => ({
+      id,
+      name: "Album",
+      discs: [{ tracks: ["album-1", "album-2", "album-3"] }],
+    }),
   };
   class LocalOutlet {
     constructor(callbacks) {
@@ -77,6 +85,7 @@ function harness() {
     "editRadioContinuation",
     "nextSnapshotBatch",
     "appendRadioBatch",
+    "gravity",
     source + "\nreturn usePlaybackStore;",
   );
   const useStore = factory(
@@ -94,8 +103,9 @@ function harness() {
     editRadioContinuation,
     nextSnapshotBatch,
     appendRadioBatch,
+    gravity,
   );
-  return { store: useStore(), calls, remote, user, storage };
+  return { store: useStore(), calls, remote, user, storage, smartRequests };
 }
 async function flush() {
   for (let i = 0; i < 5; i++) await nextTick();
@@ -292,5 +302,172 @@ test("all versions respects proxy playback and preserves the queue on an empty r
   await store.setWorkVersions("work", "remote", "Composition");
   assert.equal(store.radioCreationState.status, "error");
   assert.deepEqual(store.currentPlaylist.tracksIds, ["remote"]);
+  store.stop();
+});
+
+test("smart continuation anchors on user-chosen tracks and excludes its own suggestions", async () => {
+  const { store, smartRequests, storage } = harness();
+  store.setPlaylistFromTrackIds(["u0", "u1", "u2"], 2);
+  await flush();
+  assert.ok(smartRequests.length >= 1);
+  assert.deepEqual(smartRequests[0], {
+    context_track_ids: ["u0", "u1", "u2"],
+    recent_track_ids: ["u0", "u1", "u2"],
+    exclude_track_ids: ["u0", "u1", "u2"],
+    count: 3,
+    source_track_ids: ["u0", "u1", "u2"],
+  });
+  assert.ok(store.currentPlaylist.tracksIds.includes("smart-track-1"));
+  assert.ok(
+    store.currentPlaylist.gravity.auto_track_ids.includes("smart-track-1"),
+  );
+  // The follow-up request keeps the source on the user's tracks and excludes the suggestion.
+  const followUp = smartRequests.at(-1);
+  assert.deepEqual(followUp.source_track_ids, ["u0", "u1", "u2"]);
+  assert.ok(followUp.exclude_track_ids.includes("smart-track-1"));
+  const saved = JSON.parse(storage.get("playlistsHistory"));
+  assert.ok(saved.at(-1).gravity.auto_track_ids.includes("smart-track-1"));
+  store.stop();
+});
+
+test("removed suggestions stay excluded and manual re-adds promote them to the source", async () => {
+  const { store, smartRequests } = harness();
+  store.setPlaylistFromTrackIds(["u0", "u1", "u2"], 2);
+  await flush();
+  const autoIndex = store.currentPlaylist.tracksIds.indexOf("smart-track-1");
+  assert.ok(autoIndex > 2);
+  store.removeTrackFromPlaylist(autoIndex);
+  await flush();
+  assert.equal(
+    store.currentPlaylist.tracksIds.includes("smart-track-1"),
+    false,
+  );
+  assert.ok(
+    store.currentPlaylist.gravity.auto_track_ids.includes("smart-track-1"),
+  );
+  store.loadTrackIndex(store.currentPlaylist.tracksIds.length - 1);
+  await flush();
+  assert.ok(smartRequests.at(-1).exclude_track_ids.includes("smart-track-1"));
+  assert.equal(
+    smartRequests.at(-1).source_track_ids.includes("smart-track-1"),
+    false,
+  );
+  store.addTracksToPlaylist(["smart-track-1"]);
+  await flush();
+  assert.equal(
+    store.currentPlaylist.gravity.auto_track_ids.includes("smart-track-1"),
+    false,
+  );
+  store.loadTrackIndex(store.currentPlaylist.tracksIds.length - 1);
+  await flush();
+  assert.ok(smartRequests.at(-1).source_track_ids.includes("smart-track-1"));
+  store.stop();
+});
+
+test("editing an album keeps gravity through the mix conversion and radio has none", async () => {
+  const { store, calls } = harness();
+  await store.setAlbumId("album");
+  await flush();
+  assert.equal(store.currentPlaylist.type, store.PLAYBACK_CONTEXTS.album);
+  store.loadTrackIndex(2);
+  await flush();
+  assert.ok(calls.smart >= 1);
+  assert.ok(
+    store.currentPlaylist.gravity.auto_track_ids.includes("smart-track-1"),
+  );
+  store.addTracksToPlaylist(["x"]);
+  await flush();
+  assert.equal(store.currentPlaylist.type, store.PLAYBACK_CONTEXTS.userMix);
+  assert.ok(
+    store.currentPlaylist.gravity.auto_track_ids.includes("smart-track-1"),
+  );
+  assert.ok(store.currentPlaylist.tracksIds.includes("x"));
+  await store.setArtistGreatestHits("artist");
+  await flush();
+  assert.equal(store.currentPlaylist.gravity, null);
+  assert.equal(store.currentGravity, null);
+  store.stop();
+});
+
+test("gravity travels in the queue context and remote controllers send setGravity commands", async () => {
+  const { store } = harness();
+  const commands = [];
+  store.setSessionStore({
+    sendCommand: (...args) => commands.push(args),
+    notifyStateChanged() {},
+    notifyQueueChanged() {},
+  });
+  store.setPlaylistFromTrackIds(["u0", "u1", "u2"], 2);
+  await flush();
+  const context = store.snapshotQueueContext();
+  assert.ok(context.gravity.auto_track_ids.includes("smart-track-1"));
+  const queue = store.snapshotQueue();
+  store.enterRemoteMode();
+  store.applyRemoteQueue(queue, context);
+  await flush();
+  assert.deepEqual(
+    store.currentPlaylist.gravity.auto_track_ids,
+    context.gravity.auto_track_ids,
+  );
+  assert.equal(store.currentPlaylist.context.gravity, undefined);
+  await store.setGravityDestination(
+    { entity_type: "artist", entity_id: "a1" },
+    7,
+  );
+  const command = commands.find(([name]) => name === "setGravity");
+  assert.ok(command);
+  assert.equal(command[1].gravity.destination.entity_id, "a1");
+  assert.equal(command[1].gravity.destination.label, "Artist");
+  assert.equal(command[1].gravity.steps_total, 7);
+  assert.equal(store.currentPlaylist.gravity.destination, null);
+  store.exitRemoteMode();
+  store.setSessionStore(null);
+  store.stop();
+});
+
+test("arriving at the destination turns it into the source and stores diagnostics", async () => {
+  const { store, remote, smartRequests, calls } = harness();
+  remote.fetchContinuationRecommendations = async (request) => {
+    calls.smart++;
+    smartRequests.push(request);
+    return {
+      trackIds: [`smart-track-${calls.smart}`],
+      diagnostics: {
+        recency_weight: 0.2,
+        progress: request.progress ?? null,
+        namespaces: [],
+      },
+    };
+  };
+  store.setPlaylistFromTrackIds(["u0", "u1", "u2"], 0);
+  await flush();
+  assert.equal(calls.smart, 0);
+  await store.setGravityDestination(
+    { entity_type: "artist", entity_id: "a1", label: "Dest" },
+    1,
+  );
+  assert.equal(store.currentGravity.destination.label, "Dest");
+  store.loadTrackIndex(2);
+  await flush();
+  assert.deepEqual(smartRequests[0].destination, {
+    entity_type: "artist",
+    entity_id: "a1",
+  });
+  assert.equal(smartRequests[0].progress, 0);
+  const gravityState = store.currentPlaylist.gravity;
+  assert.equal(gravityState.destination, null);
+  assert.deepEqual(gravityState.source, {
+    kind: "references",
+    references: [
+      { entity_type: "artist", entity_id: "a1", label: "Dest", weight: 1 },
+    ],
+  });
+  assert.equal(gravityState.last_diagnostics.recency_weight, 0.2);
+  assert.ok(Number.isFinite(gravityState.last_diagnostics.at));
+  assert.ok(smartRequests.length >= 2);
+  assert.deepEqual(smartRequests.at(-1).source_references, [
+    { entity_type: "artist", entity_id: "a1", weight: 1 },
+  ]);
+  assert.equal("destination" in smartRequests.at(-1), false);
   store.stop();
 });

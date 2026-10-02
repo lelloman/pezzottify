@@ -32,6 +32,7 @@
         :genreName="genreName"
       />
       <DevicesView v-else-if="isDevicesRoute" />
+      <Steering v-else-if="isSteeringRoute" />
       <HomePage v-else />
     </keep-alive>
   </main>
@@ -50,6 +51,7 @@ import HomePage from "@/components/content/HomePage.vue";
 import GenreList from "@/components/content/GenreList.vue";
 import GenreDetail from "@/components/content/GenreDetail.vue";
 import DevicesView from "@/components/content/DevicesView.vue";
+import Steering from "@/components/content/Steering.vue";
 import { useRoute } from "vue-router";
 import { useDebugStore } from "@/store/debug";
 import { storeToRefs } from "pinia";
@@ -76,6 +78,7 @@ const isSettingsRoute = computed(() => route.name === "settings");
 const isRequestsRoute = computed(() => route.name === "requests");
 const isGenresRoute = computed(() => route.name === "genres");
 const isDevicesRoute = computed(() => route.name === "devices");
+const isSteeringRoute = computed(() => route.name === "steering");
 const genreName = ref(route.params.genreName || "");
 
 // Scroll position persistence across navigations
@@ -94,6 +97,7 @@ function currentRouteKey() {
   if (isRequestsRoute.value) return "requests";
   if (isGenresRoute.value) return "genres";
   if (isDevicesRoute.value) return "devices";
+  if (isSteeringRoute.value) return "steering";
   return "home";
 }
 

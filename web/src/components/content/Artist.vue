@@ -1,7 +1,13 @@
 <template>
   <div v-if="artist">
     <div class="topSection">
-      <MultiSourceImage class="coverImage" :urls="coverUrls" />
+      <MultiSourceImage
+        class="coverImage"
+        :urls="coverUrls"
+        @contextmenu.prevent="
+          entityMenu?.openMenu($event, 'artist', artistId, artist.name)
+        "
+      />
       <div class="artistInfoColum">
         <div class="artistIdentity">
           <h1 class="artistName">{{ artist.name }}</h1>
@@ -47,6 +53,14 @@
           >
             Customize radio
           </button>
+          <button
+            class="advancedRadioButton steerButton"
+            title="Steer the current queue toward this artist"
+            @click.stop="showDestinationPrompt = true"
+          >
+            <SteeringWheelIcon class="steerButtonIcon" />
+            Steer here
+          </button>
         </div>
       </div>
       <EnrichmentStatusIndicator
@@ -67,6 +81,16 @@
     <div class="discographyContainer">
       <ArtistDiscography :artistId="artistId" :appearsOn="true" />
     </div>
+    <DestinationStepsPrompt
+      :isOpen="showDestinationPrompt"
+      :reference="{
+        entity_type: 'artist',
+        entity_id: artistId,
+        label: artist.name,
+      }"
+      @close="showDestinationPrompt = false"
+    />
+    <EntityContextMenu ref="entityMenu" />
     <RadioBuilderModal
       :isOpen="showRadioBuilder"
       seedEntityType="artist"
@@ -93,6 +117,9 @@ import ArtistDiscography from "@/components/common/ArtistDiscography.vue";
 import RadioIcon from "@/components/icons/RadioIcon.vue";
 import { usePlaybackStore } from "@/store/playback";
 import RadioBuilderModal from "@/components/common/RadioBuilderModal.vue";
+import DestinationStepsPrompt from "@/components/common/DestinationStepsPrompt.vue";
+import EntityContextMenu from "@/components/common/contextmenu/EntityContextMenu.vue";
+import SteeringWheelIcon from "@/components/icons/SteeringWheelIcon.vue";
 import EnrichmentStatusIndicator from "@/components/common/EnrichmentStatusIndicator.vue";
 
 const props = defineProps({
@@ -106,6 +133,8 @@ const artist = ref(null);
 const coverUrls = ref(null);
 const isArtistLiked = ref(false);
 const showRadioBuilder = ref(false);
+const showDestinationPrompt = ref(false);
+const entityMenu = ref(null);
 const userStore = useUserStore();
 const staticsStore = useStaticsStore();
 const remoteStore = useRemoteStore();
@@ -422,5 +451,17 @@ onUnmounted(() => {
   .coverImage {
     max-width: 280px;
   }
+}
+
+.steerButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.steerButtonIcon {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
 }
 </style>
