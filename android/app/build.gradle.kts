@@ -11,16 +11,24 @@ plugins {
     id("com.lelloman.paravoid.hilt")
 }
 
-// Opt-in complete-package experiment. Test signing material lives outside source control.
-if (providers.gradleProperty("paravoidComplete").orNull == "true") {
+// Complete packaging and its disposable delivery acceptance are explicit opt-ins.
+val paravoidComplete = providers.gradleProperty("paravoidComplete").map(String::toBooleanStrict).orElse(false).get()
+val paravoidAcceptance = providers.gradleProperty("paravoidAcceptance").map(String::toBooleanStrict).orElse(false).get()
+require(!paravoidAcceptance || paravoidComplete) { "paravoidAcceptance requires paravoidComplete=true" }
+require(!providers.gradleProperty("paravoidAcceptanceGeneration").isPresent || paravoidAcceptance) {
+    "paravoidAcceptanceGeneration requires paravoidAcceptance=true"
+}
+val paravoidAcceptanceGeneration = providers.gradleProperty("paravoidAcceptanceGeneration").orElse("none").get()
+
+if (paravoidComplete) {
     paravoid {
         packaging.set("complete")
         bootstrap.set("embedded")
         payloadVersion.set(providers.gradleProperty("paravoidPayloadVersion").map(String::toLong).orElse(1L))
         updates {
-            enabled.set(providers.gradleProperty("paravoidAcceptance").orNull == "true")
+            enabled.set(paravoidAcceptance)
             baseUrl.set("http://127.0.0.1:19165/")
-            debugHttpAllowed.set(providers.gradleProperty("paravoidAcceptance").orNull == "true")
+            debugHttpAllowed.set(paravoidAcceptance)
             trustPolicyFile.set(rootProject.file(providers.gradleProperty("paravoidTrustPolicy").get()))
         }
         signing {
@@ -107,7 +115,8 @@ android {
         targetSdk = 36
         versionCode = commitCount
         versionName = appVersion
-        buildConfigField("String", "PARAVOID_ACCEPTANCE_GENERATION", "\"${providers.gradleProperty("paravoidAcceptanceGeneration").orElse("none").get()}\"")
+        buildConfigField("boolean", "PARAVOID_ACCEPTANCE_ENABLED", "false")
+        buildConfigField("String", "PARAVOID_ACCEPTANCE_GENERATION", "\"none\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -124,6 +133,8 @@ android {
     flavorDimensions += "formFactor"
     productFlavors {
         getByName("paravoidAndroid") {
+            buildConfigField("boolean", "PARAVOID_ACCEPTANCE_ENABLED", paravoidAcceptance.toString())
+            buildConfigField("String", "PARAVOID_ACCEPTANCE_GENERATION", paravoidAcceptanceGeneration.asBuildConfigString())
             minSdk = 30
             manifestPlaceholders["appAuthRedirectScheme"] = "com.lelloman.pezzottify.android.paravoid"
             buildConfigField("String", "OIDC_REDIRECT_SCHEME", "\"com.lelloman.pezzottify.android.paravoid\"")
@@ -166,6 +177,8 @@ android {
             buildConfigField("String", "AUTHENTICATOR_CERTIFICATE", certificate.asBuildConfigString())
         }
         release {
+            buildConfigField("boolean", "PARAVOID_ACCEPTANCE_ENABLED", "false")
+            buildConfigField("String", "PARAVOID_ACCEPTANCE_GENERATION", "\"none\"")
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -206,7 +219,8 @@ android {
 androidComponents.beforeVariants {
     val shell = it.productFlavors.any { flavor -> flavor.second == "paravoidAndroid" }
     if (shell) {
-        it.enable = it.buildType in listOf("debug", "paravoidTestRelease") && it.productFlavors.any { flavor -> flavor.second == "phone" }
+        val allowedBuildTypes = if (paravoidAcceptance) listOf("debug") else listOf("debug", "paravoidTestRelease")
+        it.enable = it.buildType in allowedBuildTypes && it.productFlavors.any { flavor -> flavor.second == "phone" }
     } else if (it.buildType == "paravoidTestRelease") {
         it.enable = false
     }

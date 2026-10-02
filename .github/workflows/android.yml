@@ -66,3 +66,18 @@ jobs:
 
       - name: Verify normal and Paravoid APK packaging
         run: python3 check-paravoid.py
+
+      - name: Prepare disposable complete-payload signing keys
+        run: |
+          python3 -m pip install cryptography
+          python3 ../../paravoid-android/packaging-tests/prepare-keys.py \
+            --application-id com.lelloman.pezzottify.android.paravoid \
+            --output "$RUNNER_TEMP/paravoid-keys"
+
+      - name: Build and inspect complete Paravoid packaging
+        run: |
+          ./gradlew :app:assembleParavoidAndroidPhoneDebug \
+            -PparavoidComplete=true \
+            -PparavoidTrustPolicy="$RUNNER_TEMP/paravoid-keys/trust.json" \
+            -PparavoidReleaseKey="$RUNNER_TEMP/paravoid-keys/release.der"
+          python3 check-paravoid-complete.py
