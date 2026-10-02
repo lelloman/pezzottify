@@ -37,6 +37,13 @@ if (paravoidComplete) {
             baseUrl.set(if (paravoidProduction) "https://store.lelloman.com/api/paravoid/" else "http://127.0.0.1:19165/")
             authentication.set(if (paravoidProduction) "apkKey" else "public")
             if (paravoidProduction) {
+                // Store hints drive prompt updates; polling covers missed hints.
+                schedule {
+                    checks.set(true)
+                    downloads.set(true)
+                    intervalSeconds.set(48L * 3600)
+                    flexSeconds.set(6L * 3600)
+                }
                 localTriggers {
                     trustedCallers.put(
                         "com.lelloman.store",
