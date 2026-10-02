@@ -22,6 +22,21 @@ use super::api_error::ApiError;
 use super::session::Session;
 use super::state::ServerState;
 
+/// A recommendation request that is malformed rather than a store failure.
+#[derive(Debug, thiserror::Error)]
+#[error("{0}")]
+struct InvalidRecommendationRequest(String);
+
+macro_rules! invalid_request {
+    ($($arg:tt)*) => {
+        anyhow::Error::new(InvalidRecommendationRequest(format!($($arg)*)))
+    };
+}
+
+fn is_invalid_request(err: &anyhow::Error) -> bool {
+    err.downcast_ref::<InvalidRecommendationRequest>().is_some()
+}
+
 const DEFAULT_TRACK_NAMESPACE: &str = "musicfm.mean.v1";
 const DEFAULT_ALBUM_NAMESPACE: &str = "album.musicfm.median.v1";
 const CONTINUATION_CONTEXT_LIMIT: usize = 10;
@@ -33,7 +48,18 @@ const RADIO_ALBUM_PENALTY_WEIGHT: f32 = 0.12;
 const RADIO_ARTIST_PENALTY_WEIGHT: f32 = 0.10;
 const RADIO_COOLDOWN_MIN: f32 = 0.01;
 const RADIO_ARTIST_REPEAT_MIN_DISTANCE: usize = 4;
+const RADIO_MAX_REFERENCES: usize = 8;
+const CONTINUATION_SOURCE_TRACKS_MAX: usize = 200;
+const CONTINUATION_SOURCE_SAMPLE: usize = 64;
+const CONTINUATION_DEFAULT_RECENCY_WEIGHT: f32 = 0.2;
+const CONTINUATION_OVERSAMPLE_MIN: usize = 60;
+const CONTINUATION_OVERSAMPLE_MAX: usize = 400;
 
+/// Smart continuation request.
+///
+/// Legacy clients send only `context_track_ids`. Current clients send the user-chosen
+/// `source_track_ids` (or `source_references`) plus `recent_track_ids`, and optionally a
+/// `destination` with a `progress` to steer the queue.
 #[derive(Debug, Deserialize)]
 struct ContinuationRequest {
     #[serde(default)]
@@ -41,6 +67,46 @@ struct ContinuationRequest {
     #[serde(default)]
     exclude_track_ids: Vec<String>,
     count: Option<usize>,
+    #[serde(default)]
+    source_track_ids: Vec<String>,
+    #[serde(default)]
+    source_references: Vec<RadioReference>,
+    #[serde(default)]
+    recent_track_ids: Vec<String>,
+    recency_weight: Option<f32>,
+    destination: Option<RadioReference>,
+    progress: Option<f32>,
+    #[serde(default)]
+    criteria: Vec<RadioCriterionRequest>,
+    diversity: Option<f32>,
+    randomness: Option<f32>,
+    mode: Option<RadioMode>,
+    #[serde(default)]
+    away: Vec<RadioReference>,
+}
+
+#[derive(Debug, Serialize)]
+struct ContinuationResponse {
+    track_ids: Vec<String>,
+    recency_weight: Option<f32>,
+    progress: Option<f32>,
+    namespaces: Vec<ContinuationNamespaceDiagnostics>,
+}
+
+#[derive(Debug, Serialize)]
+struct ContinuationNamespaceDiagnostics {
+    namespace: String,
+    weight: f32,
+    source_to_destination: Option<f32>,
+    query_to_source: Option<f32>,
+    query_to_destination: Option<f32>,
+}
+
+/// A query vector for one embedding namespace, with its normalised criterion weight.
+struct NamespaceQuery {
+    namespace: String,
+    weight: f32,
+    vector: Vec<f32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -263,7 +329,7 @@ async fn post_radio_continuation(
         .await
     {
         Ok(track_ids) => no_store_json(TrackIdsResponse { track_ids }),
-        Err(DbRunError::Store(err)) if err.to_string().starts_with("invalid radio request:") => {
+        Err(DbRunError::Store(err)) if is_invalid_request(&err) => {
             ApiError::bad_request("invalid_radio_request", err.to_string()).into_response()
         }
         Err(err) => ApiError::from(err).into_response(),
@@ -301,7 +367,7 @@ fn continue_radio(
     if request.source == "custom" {
         let mut recipe: RadioBuildRequest =
             serde_json::from_value(request.settings.unwrap_or_default())
-                .map_err(|err| anyhow::anyhow!("invalid radio request: {err}"))?;
+                .map_err(|err| invalid_request!("invalid radio request: {err}"))?;
         recipe.seed = request.seed;
         recipe.count = Some(count);
         return build_radio_with_history(store, settings, recipe, exclude, &recent);
@@ -355,34 +421,21 @@ async fn post_continuation_recommendations(
     State(state): State<ServerState>,
     Json(body): Json<ContinuationRequest>,
 ) -> Response {
-    let count = body.count.unwrap_or(1).clamp(1, 10);
-    let catalog = state.database.catalog_read.clone();
-    let namespace = track_namespace(state.config.audio_embeddings.as_ref());
-
-    match catalog
+    let settings = state.config.audio_embeddings.clone();
+    match state
+        .database
+        .catalog_read
         .run(DbPriority::Interactive, move |catalog_store| {
-            let seed = weighted_track_vector(
-                catalog_store,
-                &namespace,
-                &body.context_track_ids,
-                CONTINUATION_CONTEXT_LIMIT,
-            )?;
-            let Some(seed) = seed else {
-                return Ok(Vec::new());
-            };
-
-            let exclude = body.exclude_track_ids.into_iter().collect::<HashSet<_>>();
-            recommend_tracks(catalog_store, &namespace, &seed, count, &exclude)
+            continue_queue(catalog_store, settings.as_ref(), body)
         })
         .await
     {
-        Ok(track_ids) => no_store_json(TrackIdsResponse { track_ids }),
+        Ok(response) => no_store_json(response),
+        Err(DbRunError::Store(err)) if is_invalid_request(&err) => {
+            ApiError::bad_request("invalid_continuation_request", err.to_string()).into_response()
+        }
         Err(DbRunError::Store(err)) => {
-            error!("Error generating continuation recommendations: {}", err);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to generate recommendations".to_string(),
-            )
+            ApiError::internal("Failed to generate continuation recommendations", err)
                 .into_response()
         }
         Err(err) => ApiError::from(err).into_response(),
@@ -461,7 +514,7 @@ async fn post_radio_build(
     {
         Ok(track_ids) => no_store_json(TrackIdsResponse { track_ids }),
         Err(DbRunError::Store(err)) => {
-            let status = if err.to_string().starts_with("invalid radio request:") {
+            let status = if is_invalid_request(&err) {
                 StatusCode::BAD_REQUEST
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
@@ -706,13 +759,13 @@ fn build_radio_with_history(
     let continuing = !exclude.is_empty() || !recent.is_empty();
     validate_entity_type(&request.seed.entity_type)?;
     if request.criteria.len() > 8 || request.toward.len() > 8 || request.away.len() > 8 {
-        return Err(anyhow::anyhow!(
+        return Err(invalid_request!(
             "invalid radio request: at most 8 criteria and 8 references per direction are allowed"
         ));
     }
     if let Some(recipe_id) = request.recipe_id.as_deref() {
         if !recipes_contain_recipe(settings, recipe_id) {
-            return Err(anyhow::anyhow!(
+            return Err(invalid_request!(
                 "invalid radio request: unknown recipe_id '{recipe_id}'"
             ));
         }
@@ -723,10 +776,18 @@ fn build_radio_with_history(
             .weight
             .is_some_and(|weight| !weight.is_finite() || weight <= 0.0)
         {
-            return Err(anyhow::anyhow!(
+            return Err(invalid_request!(
                 "invalid radio request: reference weights must be positive"
             ));
         }
+    }
+
+    if request.diversity.is_some_and(|value| !value.is_finite())
+        || request.randomness.is_some_and(|value| !value.is_finite())
+    {
+        return Err(invalid_request!(
+            "invalid radio request: diversity and randomness must be finite"
+        ));
     }
 
     let count = request.count.unwrap_or(50).clamp(1, 200);
@@ -762,14 +823,14 @@ fn build_radio_with_history(
     }
 
     let oversample = (count * criteria.len().max(1) * 24).clamp(150, 2000);
-    let mut candidates: HashMap<String, CandidateScore> = HashMap::new();
+    let mut queries = Vec::with_capacity(criteria.len());
     for criterion in &criteria {
         let Some(seed) =
             radio_seed_vector(catalog_store, settings, &request.seed, &criterion.namespace)?
         else {
             continue;
         };
-        let Some(query) = steered_vector(
+        let Some(vector) = steered_vector(
             catalog_store,
             settings,
             &criterion.namespace,
@@ -780,51 +841,27 @@ fn build_radio_with_history(
         else {
             continue;
         };
-        let results = if continuing {
-            continuation_candidates(
-                catalog_store,
-                &criterion.namespace,
-                &query,
-                oversample,
-                &exclude,
-                request.filters.as_ref(),
-            )?
-        } else {
-            catalog_store.search_available_track_embeddings(
-                &criterion.namespace,
-                &query,
-                oversample,
-            )?
-        };
-        for search_result in results {
-            if exclude.contains(&search_result.entity_id) {
-                continue;
-            }
-            let similarity = search_result.score;
-            let score = match mode {
-                RadioMode::Similar => similarity,
-                RadioMode::Explore => 1.0 - (similarity.clamp(-1.0, 1.0) - 0.55).abs(),
-            } * criterion.weight;
-            let entry = candidates
-                .entry(search_result.entity_id)
-                .or_insert(CandidateScore {
-                    score: 0.0,
-                    best_similarity: similarity,
-                });
-            entry.score += score;
-            entry.best_similarity = entry.best_similarity.max(similarity);
-        }
+        queries.push(NamespaceQuery {
+            namespace: criterion.namespace.clone(),
+            weight: criterion.weight,
+            vector,
+        });
     }
-
-    let mut rng = rand::rng();
-    let mut scored = candidates.into_iter().collect::<Vec<_>>();
-    scored.sort_by(|left, right| {
-        let left_score = left.1.score + left.1.best_similarity * 0.05;
-        let right_score = right.1.score + right.1.best_similarity * 0.05;
-        right_score
-            .partial_cmp(&left_score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    let candidates = score_radio_candidates(
+        catalog_store,
+        &queries,
+        mode,
+        oversample,
+        &exclude,
+        continuing,
+        request.filters.as_ref(),
+    )?;
+    let ranked = rank_radio_candidates(
+        catalog_store,
+        candidates,
+        request.filters.as_ref(),
+        randomness,
+    )?;
 
     let mut album_cooldowns: HashMap<String, f32> = HashMap::new();
     let mut artist_cooldowns: HashMap<String, f32> = HashMap::new();
@@ -874,26 +911,6 @@ fn build_radio_with_history(
         }
     }
 
-    let mut ranked = Vec::with_capacity(scored.len());
-    for (track_id, candidate) in scored {
-        let Some(resolved) = catalog_store.get_resolved_track(&track_id)? else {
-            continue;
-        };
-        if !resolved_track_passes_filters(&resolved, request.filters.as_ref()) {
-            continue;
-        }
-        let jitter = if randomness > 0.0 {
-            rng.random_range(0.0..(0.1 * randomness))
-        } else {
-            0.0
-        };
-        ranked.push(RankedRadioCandidate {
-            track_id,
-            resolved,
-            score: candidate.score + candidate.best_similarity * 0.05 + jitter,
-        });
-    }
-
     {
         let mut selection = RadioSelectionState {
             result: &mut result,
@@ -915,6 +932,94 @@ fn build_radio_with_history(
     }
 
     Ok(result)
+}
+
+/// Search every namespace query and accumulate weighted candidate scores.
+fn score_radio_candidates(
+    catalog_store: &dyn CatalogStore,
+    queries: &[NamespaceQuery],
+    mode: RadioMode,
+    oversample: usize,
+    exclude: &HashSet<String>,
+    continuing: bool,
+    filters: Option<&RadioFilters>,
+) -> anyhow::Result<HashMap<String, CandidateScore>> {
+    let mut candidates: HashMap<String, CandidateScore> = HashMap::new();
+    for query in queries {
+        let results = if continuing {
+            continuation_candidates(
+                catalog_store,
+                &query.namespace,
+                &query.vector,
+                oversample,
+                exclude,
+                filters,
+            )?
+        } else {
+            catalog_store.search_available_track_embeddings(
+                &query.namespace,
+                &query.vector,
+                oversample,
+            )?
+        };
+        for search_result in results {
+            if exclude.contains(&search_result.entity_id) {
+                continue;
+            }
+            let similarity = search_result.score;
+            let score = match mode {
+                RadioMode::Similar => similarity,
+                RadioMode::Explore => 1.0 - (similarity.clamp(-1.0, 1.0) - 0.55).abs(),
+            } * query.weight;
+            let entry = candidates
+                .entry(search_result.entity_id)
+                .or_insert(CandidateScore {
+                    score: 0.0,
+                    best_similarity: similarity,
+                });
+            entry.score += score;
+            entry.best_similarity = entry.best_similarity.max(similarity);
+        }
+    }
+    Ok(candidates)
+}
+
+/// Resolve, filter and jitter scored candidates, best first.
+fn rank_radio_candidates(
+    catalog_store: &dyn CatalogStore,
+    candidates: HashMap<String, CandidateScore>,
+    filters: Option<&RadioFilters>,
+    randomness: f32,
+) -> anyhow::Result<Vec<RankedRadioCandidate>> {
+    let mut rng = rand::rng();
+    let mut scored = candidates.into_iter().collect::<Vec<_>>();
+    scored.sort_by(|left, right| {
+        let left_score = left.1.score + left.1.best_similarity * 0.05;
+        let right_score = right.1.score + right.1.best_similarity * 0.05;
+        right_score
+            .partial_cmp(&left_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let mut ranked = Vec::with_capacity(scored.len());
+    for (track_id, candidate) in scored {
+        let Some(resolved) = catalog_store.get_resolved_track(&track_id)? else {
+            continue;
+        };
+        if !resolved_track_passes_filters(&resolved, filters) {
+            continue;
+        }
+        let jitter = if randomness > 0.0 {
+            rng.random_range(0.0..(0.1 * randomness))
+        } else {
+            0.0
+        };
+        ranked.push(RankedRadioCandidate {
+            track_id,
+            resolved,
+            score: candidate.score + candidate.best_similarity * 0.05 + jitter,
+        });
+    }
+    Ok(ranked)
 }
 
 // Grow the search window until there are enough unseen, filter-matching candidates.
@@ -1115,7 +1220,7 @@ fn recipes_contain_recipe(settings: Option<&AudioEmbeddingsSettings>, recipe_id:
 fn validate_entity_type(entity_type: &str) -> anyhow::Result<()> {
     match entity_type {
         "track" | "album" | "artist" => Ok(()),
-        other => Err(anyhow::anyhow!(
+        other => Err(invalid_request!(
             "invalid radio request: unsupported entity_type '{other}'"
         )),
     }
@@ -1127,14 +1232,14 @@ fn validate_filters(filters: Option<&RadioFilters>) -> anyhow::Result<()> {
     };
     if let (Some(min), Some(max)) = (filters.release_year_min, filters.release_year_max) {
         if min > max {
-            return Err(anyhow::anyhow!(
+            return Err(invalid_request!(
                 "invalid radio request: release_year_min must be <= release_year_max"
             ));
         }
     }
     if let (Some(min), Some(max)) = (filters.popularity_min, filters.popularity_max) {
         if min > max {
-            return Err(anyhow::anyhow!(
+            return Err(invalid_request!(
                 "invalid radio request: popularity_min must be <= popularity_max"
             ));
         }
@@ -1146,7 +1251,7 @@ fn validate_filters(filters: Option<&RadioFilters>) -> anyhow::Result<()> {
             .popularity_max
             .is_some_and(|value| !(0..=100).contains(&value))
     {
-        return Err(anyhow::anyhow!(
+        return Err(invalid_request!(
             "invalid radio request: popularity filters must be between 0 and 100"
         ));
     }
@@ -1158,12 +1263,9 @@ fn normalize_radio_criteria(
     recipes: &[RadioRecipe],
     request: &RadioBuildRequest,
 ) -> anyhow::Result<Vec<NormalizedRadioCriterion>> {
-    let allowed = available_track_namespaces(settings)
-        .into_iter()
-        .collect::<HashSet<_>>();
     let raw = if request.criteria.is_empty() {
         let recipe = selected_recipe(recipes, request.recipe_id.as_deref())
-            .ok_or_else(|| anyhow::anyhow!("invalid radio request: unknown recipe_id"))?;
+            .ok_or_else(|| invalid_request!("invalid radio request: unknown recipe_id"))?;
         recipe
             .criteria
             .iter()
@@ -1175,17 +1277,26 @@ fn normalize_radio_criteria(
     } else {
         request.criteria.clone()
     };
+    normalize_criteria_list(settings, raw)
+}
 
+fn normalize_criteria_list(
+    settings: Option<&AudioEmbeddingsSettings>,
+    raw: Vec<RadioCriterionRequest>,
+) -> anyhow::Result<Vec<NormalizedRadioCriterion>> {
+    let allowed = available_track_namespaces(settings)
+        .into_iter()
+        .collect::<HashSet<_>>();
     let mut criteria = Vec::new();
     for criterion in raw {
         if !allowed.contains(&criterion.namespace) {
-            return Err(anyhow::anyhow!(
+            return Err(invalid_request!(
                 "invalid radio request: unsupported namespace '{}'",
                 criterion.namespace
             ));
         }
         if !criterion.weight.is_finite() || criterion.weight <= 0.0 {
-            return Err(anyhow::anyhow!(
+            return Err(invalid_request!(
                 "invalid radio request: criterion weights must be positive"
             ));
         }
@@ -1195,7 +1306,7 @@ fn normalize_radio_criteria(
         });
     }
     if criteria.is_empty() {
-        return Err(anyhow::anyhow!(
+        return Err(invalid_request!(
             "invalid radio request: at least one criterion is required"
         ));
     }
@@ -1204,7 +1315,7 @@ fn normalize_radio_criteria(
         .map(|criterion| criterion.weight)
         .sum::<f32>();
     if !total_weight.is_finite() {
-        return Err(anyhow::anyhow!(
+        return Err(invalid_request!(
             "invalid radio request: combined criterion weights are too large"
         ));
     }
@@ -1659,55 +1770,398 @@ fn get_vector(
         .and_then(|embedding| embedding.vector))
 }
 
-fn recommend_tracks(
+/// Smart continuation: pick the next tracks for a non-radio queue.
+///
+/// The query is anchored on the user-chosen source, optionally interpolated toward a
+/// destination by `progress`, then blended with a small recency term. Server-appended
+/// tracks must not be part of the source, otherwise the anchor random-walks away from
+/// what the user chose.
+fn continue_queue(
     catalog_store: &dyn CatalogStore,
-    namespace: &str,
-    seed: &[f32],
-    count: usize,
-    exclude: &HashSet<String>,
-) -> anyhow::Result<Vec<String>> {
-    if count == 0 {
-        return Ok(Vec::new());
+    settings: Option<&AudioEmbeddingsSettings>,
+    request: ContinuationRequest,
+) -> anyhow::Result<ContinuationResponse> {
+    validate_continuation_request(&request)?;
+    let count = request.count.unwrap_or(1).clamp(1, 10);
+    let mode = request.mode.unwrap_or(RadioMode::Similar);
+    let diversity = request
+        .diversity
+        .unwrap_or(DEFAULT_RADIO_DIVERSITY)
+        .clamp(0.0, 1.0);
+    let randomness = request
+        .randomness
+        .unwrap_or(DEFAULT_RADIO_RANDOMNESS)
+        .clamp(0.0, 1.0);
+
+    let mut exclude: HashSet<String> = request.exclude_track_ids.iter().cloned().collect();
+    exclude.extend(request.context_track_ids.iter().cloned());
+    exclude.extend(request.source_track_ids.iter().cloned());
+    exclude.extend(request.recent_track_ids.iter().cloned());
+
+    let is_legacy = request.source_track_ids.is_empty()
+        && request.source_references.is_empty()
+        && request.destination.is_none();
+    if is_legacy {
+        let namespace = track_namespace(settings);
+        let Some(seed) = weighted_track_vector(
+            catalog_store,
+            &namespace,
+            &request.context_track_ids,
+            CONTINUATION_CONTEXT_LIMIT,
+        )?
+        else {
+            return Ok(ContinuationResponse {
+                track_ids: Vec::new(),
+                recency_weight: None,
+                progress: None,
+                namespaces: Vec::new(),
+            });
+        };
+        let queries = [NamespaceQuery {
+            namespace,
+            weight: 1.0,
+            vector: seed,
+        }];
+        let track_ids = select_continuation(
+            catalog_store,
+            &queries,
+            mode,
+            count,
+            diversity,
+            randomness,
+            exclude,
+            &[],
+        )?;
+        return Ok(ContinuationResponse {
+            track_ids,
+            recency_weight: None,
+            progress: None,
+            namespaces: Vec::new(),
+        });
     }
 
-    let oversample = (count * 16).clamp(100, 1000);
-    let results = catalog_store.search_available_track_embeddings(namespace, seed, oversample)?;
+    let criteria = if request.criteria.is_empty() {
+        vec![NormalizedRadioCriterion {
+            namespace: track_namespace(settings),
+            weight: 1.0,
+        }]
+    } else {
+        normalize_criteria_list(settings, request.criteria.clone())?
+    };
+    let recent = last_n(&request.recent_track_ids, CONTINUATION_CONTEXT_LIMIT);
+    let recency_weight = request
+        .recency_weight
+        .unwrap_or(CONTINUATION_DEFAULT_RECENCY_WEIGHT)
+        .clamp(0.0, 1.0);
+    let progress = request
+        .destination
+        .as_ref()
+        .map(|_| request.progress.unwrap_or(0.0).clamp(0.0, 1.0));
+    let source_ids = sample_evenly(&request.source_track_ids, CONTINUATION_SOURCE_SAMPLE);
 
-    let mut rng = rand::rng();
-    let mut scored = results
-        .into_iter()
-        .map(|result| (result.entity_id, result.score + rng.random_range(0.0..0.03)))
-        .collect::<Vec<_>>();
-    scored.sort_by(|left, right| {
-        right
-            .1
-            .partial_cmp(&left.1)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    let mut queries = Vec::with_capacity(criteria.len());
+    let mut namespaces = Vec::with_capacity(criteria.len());
+    let mut recency_applied = false;
+    for criterion in criteria {
+        let namespace = criterion.namespace;
+        let mut diagnostics = ContinuationNamespaceDiagnostics {
+            namespace: namespace.clone(),
+            weight: criterion.weight,
+            source_to_destination: None,
+            query_to_source: None,
+            query_to_destination: None,
+        };
+        let from_tracks = normalised_mean_track_vector(catalog_store, &namespace, &source_ids)?;
+        let from_references = normalised_reference_sum(
+            catalog_store,
+            settings,
+            &request.source_references,
+            &namespace,
+        )?;
+        let source = match (from_tracks, from_references) {
+            (Some(tracks), Some(references)) => {
+                blend(&tracks, 1.0, &references, 1.0).unwrap_or(tracks)
+            }
+            (Some(vector), None) | (None, Some(vector)) => vector,
+            (None, None) => {
+                namespaces.push(diagnostics);
+                continue;
+            }
+        };
 
-    let mut selected = Vec::with_capacity(count);
-    let mut seen = exclude.clone();
-    for (track_id, _) in scored {
-        if selected.len() >= count {
-            break;
+        let destination = match &request.destination {
+            Some(reference) => {
+                reference_vector(catalog_store, settings, reference, &namespace)?
+                    .and_then(normalised)
+                    .filter(|vector| vector.len() == source.len())
+            }
+            None => None,
+        };
+        let mut query = source.clone();
+        if let (Some(destination), Some(progress), Some(reference)) =
+            (&destination, progress, &request.destination)
+        {
+            let weight = reference.weight.unwrap_or(1.0);
+            query = blend(&source, 1.0 - progress, destination, progress * weight)
+                .unwrap_or_else(|| source.clone());
         }
-        if !seen.insert(track_id.clone()) {
-            continue;
+
+        if recency_weight > 0.0 {
+            if let Some(recent_vector) =
+                normalised_mean_track_vector(catalog_store, &namespace, &recent)?
+            {
+                if let Some(blended) =
+                    blend(&query, 1.0 - recency_weight, &recent_vector, recency_weight)
+                {
+                    query = blended;
+                    recency_applied = true;
+                }
+            }
         }
-        if !track_is_available(catalog_store, &track_id)? {
-            continue;
+
+        if !request.away.is_empty() {
+            let mut pushed = query.clone();
+            let dim = pushed.len();
+            for reference in &request.away {
+                if let Some(vector) = reference_vector(catalog_store, settings, reference, &namespace)?
+                    .and_then(normalised)
+                {
+                    add_scaled_vector(&mut pushed, &vector, -reference.weight.unwrap_or(1.0), dim);
+                }
+            }
+            if let Some(pushed) = normalised(pushed) {
+                query = pushed;
+            }
         }
-        selected.push(track_id);
+
+        diagnostics.query_to_source = cosine(&query, &source);
+        if let Some(destination) = &destination {
+            diagnostics.source_to_destination = cosine(&source, destination);
+            diagnostics.query_to_destination = cosine(&query, destination);
+        }
+        namespaces.push(diagnostics);
+        queries.push(NamespaceQuery {
+            namespace,
+            weight: criterion.weight,
+            vector: query,
+        });
     }
 
-    Ok(selected)
+    let track_ids = if queries.is_empty() {
+        Vec::new()
+    } else {
+        select_continuation(
+            catalog_store,
+            &queries,
+            mode,
+            count,
+            diversity,
+            randomness,
+            exclude,
+            &recent,
+        )?
+    };
+    Ok(ContinuationResponse {
+        track_ids,
+        recency_weight: Some(if recency_applied { recency_weight } else { 0.0 }),
+        progress,
+        namespaces,
+    })
 }
 
-fn track_is_available(catalog_store: &dyn CatalogStore, track_id: &str) -> anyhow::Result<bool> {
-    Ok(catalog_store
-        .get_track(track_id)?
-        .map(|track| track.availability == TrackAvailability::Available)
-        .unwrap_or(false))
+#[allow(clippy::too_many_arguments)]
+fn select_continuation(
+    catalog_store: &dyn CatalogStore,
+    queries: &[NamespaceQuery],
+    mode: RadioMode,
+    count: usize,
+    diversity: f32,
+    randomness: f32,
+    mut exclude: HashSet<String>,
+    recent: &[String],
+) -> anyhow::Result<Vec<String>> {
+    let oversample = (count * 16).clamp(CONTINUATION_OVERSAMPLE_MIN, CONTINUATION_OVERSAMPLE_MAX);
+    let candidates =
+        score_radio_candidates(catalog_store, queries, mode, oversample, &exclude, true, None)?;
+    let ranked = rank_radio_candidates(catalog_store, candidates, None, randomness)?;
+
+    let mut result = Vec::with_capacity(count + recent.len());
+    let mut album_cooldowns = HashMap::new();
+    let mut artist_cooldowns = HashMap::new();
+    let mut artist_last_positions = HashMap::new();
+    let prefix = {
+        let mut selection = RadioSelectionState {
+            result: &mut result,
+            exclude: &mut exclude,
+            album_cooldowns: &mut album_cooldowns,
+            artist_cooldowns: &mut artist_cooldowns,
+            artist_last_positions: &mut artist_last_positions,
+        };
+        initialize_radio_history(catalog_store, recent, &mut selection)?;
+        let prefix = selection.result.len();
+        select_radio_candidates(ranked, count + prefix, diversity, &mut selection);
+        prefix
+    };
+    result.drain(..prefix);
+    Ok(result)
+}
+
+fn validate_continuation_request(request: &ContinuationRequest) -> anyhow::Result<()> {
+    if request.source_track_ids.len() > CONTINUATION_SOURCE_TRACKS_MAX {
+        return Err(invalid_request!(
+            "invalid continuation request: at most {CONTINUATION_SOURCE_TRACKS_MAX} source_track_ids are allowed"
+        ));
+    }
+    if request.criteria.len() > RADIO_MAX_REFERENCES {
+        return Err(invalid_request!(
+            "invalid continuation request: at most {RADIO_MAX_REFERENCES} criteria are allowed"
+        ));
+    }
+    validate_reference_list(&request.source_references, "source_references")?;
+    validate_reference_list(&request.away, "away")?;
+    validate_reference_list(request.destination.as_slice(), "destination")?;
+    for (field, value) in [
+        ("recency_weight", request.recency_weight),
+        ("progress", request.progress),
+        ("diversity", request.diversity),
+        ("randomness", request.randomness),
+    ] {
+        if value.is_some_and(|value| !value.is_finite()) {
+            return Err(invalid_request!(
+                "invalid continuation request: {field} must be a finite number"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_reference_list(references: &[RadioReference], field: &str) -> anyhow::Result<()> {
+    if references.len() > RADIO_MAX_REFERENCES {
+        return Err(invalid_request!(
+            "invalid continuation request: at most {RADIO_MAX_REFERENCES} {field} are allowed"
+        ));
+    }
+    for reference in references {
+        if !matches!(reference.entity_type.as_str(), "track" | "album" | "artist") {
+            return Err(invalid_request!(
+                "invalid continuation request: unsupported {field} entity_type '{}'",
+                reference.entity_type
+            ));
+        }
+        if reference
+            .weight
+            .is_some_and(|weight| !weight.is_finite() || weight <= 0.0)
+        {
+            return Err(invalid_request!(
+                "invalid continuation request: {field} weights must be positive"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn last_n(ids: &[String], n: usize) -> Vec<String> {
+    ids[ids.len().saturating_sub(n)..].to_vec()
+}
+
+/// Deduplicate preserving order, then take an evenly strided, deterministic sample so a
+/// long playlist is represented end to end and the anchor is stable between calls.
+fn sample_evenly(ids: &[String], max: usize) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let unique = ids
+        .iter()
+        .filter(|id| seen.insert(id.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    if unique.len() <= max {
+        return unique;
+    }
+    (0..max)
+        .map(|index| unique[index * unique.len() / max].clone())
+        .collect()
+}
+
+fn normalised(mut vector: Vec<f32>) -> Option<Vec<f32>> {
+    let norm = vector.iter().map(|value| value * value).sum::<f32>().sqrt();
+    if !norm.is_finite() || norm <= f32::EPSILON {
+        return None;
+    }
+    for value in &mut vector {
+        *value /= norm;
+    }
+    Some(vector)
+}
+
+fn cosine(left: &[f32], right: &[f32]) -> Option<f32> {
+    if left.is_empty() || left.len() != right.len() {
+        return None;
+    }
+    let dot = left.iter().zip(right).map(|(a, b)| a * b).sum::<f32>();
+    let left_norm = left.iter().map(|value| value * value).sum::<f32>().sqrt();
+    let right_norm = right.iter().map(|value| value * value).sum::<f32>().sqrt();
+    let denominator = left_norm * right_norm;
+    if !denominator.is_finite() || denominator <= f32::EPSILON {
+        return None;
+    }
+    Some(dot / denominator)
+}
+
+/// `normalise(left * left_weight + right * right_weight)`; `None` on dimension mismatch
+/// or when the two cancel out.
+fn blend(left: &[f32], left_weight: f32, right: &[f32], right_weight: f32) -> Option<Vec<f32>> {
+    if left.len() != right.len() {
+        return None;
+    }
+    normalised(
+        left.iter()
+            .zip(right)
+            .map(|(a, b)| a * left_weight + b * right_weight)
+            .collect(),
+    )
+}
+
+/// Mean of unit-length track vectors, so a few loud embeddings do not dominate.
+fn normalised_mean_track_vector(
+    catalog_store: &dyn CatalogStore,
+    namespace: &str,
+    track_ids: &[String],
+) -> anyhow::Result<Option<Vec<f32>>> {
+    let mut vectors = Vec::new();
+    for track_id in track_ids {
+        if let Some(vector) =
+            get_vector(catalog_store, "track", track_id, namespace)?.and_then(normalised)
+        {
+            vectors.push((vector, 1.0));
+        }
+    }
+    Ok(weighted_mean(vectors)?.and_then(normalised))
+}
+
+/// Weighted sum of unit-length reference vectors. Normalising each one first removes the
+/// scale difference between track means and derived album medians.
+fn normalised_reference_sum(
+    catalog_store: &dyn CatalogStore,
+    settings: Option<&AudioEmbeddingsSettings>,
+    references: &[RadioReference],
+    namespace: &str,
+) -> anyhow::Result<Option<Vec<f32>>> {
+    let mut sum: Option<Vec<f32>> = None;
+    for reference in references {
+        let Some(vector) =
+            reference_vector(catalog_store, settings, reference, namespace)?.and_then(normalised)
+        else {
+            continue;
+        };
+        let weight = reference.weight.unwrap_or(1.0);
+        match sum.as_mut() {
+            Some(sum) => {
+                let dim = sum.len();
+                add_scaled_vector(sum, &vector, weight, dim);
+            }
+            None => sum = Some(vector.into_iter().map(|value| value * weight).collect()),
+        }
+    }
+    Ok(sum.and_then(normalised))
 }
 
 #[cfg(test)]
@@ -2164,5 +2618,295 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("at most 8"));
+    }
+
+    // ---- smart continuation ----
+
+    /// a1 [1,0], a2 [0.95,0.31] (artist-a); b1 [0,1], b2 [0.31,0.95] (artist-b);
+    /// c1 [0.707,0.707] (artist-c). Each artist has its own album.
+    fn continuation_store() -> (tempfile::TempDir, crate::catalog_store::SqliteCatalogStore) {
+        use crate::catalog_store::SqliteCatalogStore;
+        let dir = tempfile::tempdir().unwrap();
+        let store = SqliteCatalogStore::new(
+            dir.path().join("catalog.db"),
+            dir.path(),
+            2,
+            &crate::backup::DbRegistry::new(),
+        )
+        .unwrap();
+        let tracks: [(&str, &str, &str, [f32; 2]); 5] = [
+            ("a1", "album-a", "artist-a", [1.0, 0.0]),
+            ("a2", "album-a", "artist-a", [0.95, 0.31]),
+            ("b1", "album-b", "artist-b", [0.0, 1.0]),
+            ("b2", "album-b", "artist-b", [0.31, 0.95]),
+            ("c1", "album-c", "artist-c", [0.707, 0.707]),
+        ];
+        let mut created_albums = HashSet::new();
+        for (track_id, album_id, artist_id, vector) in tracks {
+            let resolved = resolved_track(track_id, album_id, &[artist_id]);
+            if created_albums.insert(album_id) {
+                store.create_artist(&resolved.artists[0].artist).unwrap();
+                store
+                    .create_album(&resolved.album, &[artist_id.into()])
+                    .unwrap();
+            }
+            store
+                .create_track(&resolved.track, &[artist_id.into()])
+                .unwrap();
+            store
+                .set_track_audio_uri(track_id, "audio.ogg")
+                .unwrap();
+            store
+                .upsert_entity_embedding(&embedding(
+                    "track",
+                    track_id,
+                    DEFAULT_TRACK_NAMESPACE,
+                    vector.to_vec(),
+                ))
+                .unwrap();
+        }
+        (dir, store)
+    }
+
+    fn continuation(value: serde_json::Value) -> ContinuationRequest {
+        let mut value = value;
+        value
+            .as_object_mut()
+            .unwrap()
+            .entry("randomness")
+            .or_insert(serde_json::json!(0));
+        serde_json::from_value(value).unwrap()
+    }
+
+    fn assert_close(actual: Option<f32>, expected: f32) {
+        let actual = actual.expect("expected a value");
+        assert!(
+            (actual - expected).abs() < 0.01,
+            "expected {expected}, got {actual}"
+        );
+    }
+
+    #[test]
+    fn continuation_anchors_on_source_not_appended_context() {
+        let (_dir, store) = continuation_store();
+        let anchored = continue_queue(
+            &store,
+            None,
+            continuation(serde_json::json!({
+                "source_track_ids": ["a1"],
+                "recent_track_ids": ["b1"],
+                "recency_weight": 0,
+            })),
+        )
+        .unwrap();
+        assert_eq!(anchored.track_ids, vec!["a2"]);
+        assert_eq!(anchored.namespaces.len(), 1);
+        assert_close(anchored.namespaces[0].query_to_source, 1.0);
+
+        // The legacy decayed centroid of [a1, b1] has drifted halfway to b1.
+        let legacy = continue_queue(
+            &store,
+            None,
+            continuation(serde_json::json!({ "context_track_ids": ["a1", "b1"] })),
+        )
+        .unwrap();
+        assert_eq!(legacy.track_ids, vec!["c1"]);
+        assert_eq!(legacy.recency_weight, None);
+        assert!(legacy.namespaces.is_empty());
+    }
+
+    #[test]
+    fn continuation_recency_weight_blends_toward_recent() {
+        let (_dir, store) = continuation_store();
+        let blended = continue_queue(
+            &store,
+            None,
+            continuation(serde_json::json!({
+                "source_track_ids": ["a1"],
+                "recent_track_ids": ["b1"],
+                "recency_weight": 0.5,
+            })),
+        )
+        .unwrap();
+        assert_eq!(blended.track_ids, vec!["c1"]);
+        assert_eq!(blended.recency_weight, Some(0.5));
+
+        let without_recent = continue_queue(
+            &store,
+            None,
+            continuation(serde_json::json!({ "source_track_ids": ["a1"] })),
+        )
+        .unwrap();
+        assert_eq!(without_recent.track_ids, vec!["a2"]);
+        assert_eq!(without_recent.recency_weight, Some(0.0));
+    }
+
+    #[test]
+    fn continuation_normalises_reference_scales() {
+        let (_dir, store) = continuation_store();
+        // A derived album vector with a much larger magnitude than the track vectors.
+        store
+            .upsert_entity_embedding(&embedding(
+                "album",
+                "album-b",
+                DEFAULT_ALBUM_NAMESPACE,
+                vec![0.0, 50.0],
+            ))
+            .unwrap();
+        let response = continue_queue(
+            &store,
+            None,
+            continuation(serde_json::json!({
+                "source_references": [
+                    {"entity_type": "track", "entity_id": "a1"},
+                    {"entity_type": "album", "entity_id": "album-b"},
+                ],
+                "exclude_track_ids": ["a1", "b1"],
+                "recency_weight": 0,
+            })),
+        )
+        .unwrap();
+        assert_eq!(response.track_ids, vec!["c1"]);
+    }
+
+    #[test]
+    fn continuation_diversity_defers_recent_artist() {
+        let (_dir, store) = continuation_store();
+        let response = continue_queue(
+            &store,
+            None,
+            continuation(serde_json::json!({
+                "source_track_ids": ["a1"],
+                "recent_track_ids": ["a1"],
+                "count": 2,
+            })),
+        )
+        .unwrap();
+        assert_eq!(response.track_ids, vec!["c1", "b2"]);
+    }
+
+    #[test]
+    fn continuation_destination_progress_lerps_query() {
+        let (_dir, store) = continuation_store();
+        let at = |progress: f32| {
+            continue_queue(
+                &store,
+                None,
+                continuation(serde_json::json!({
+                    "source_track_ids": ["a1"],
+                    "destination": {"entity_type": "track", "entity_id": "b1"},
+                    "progress": progress,
+                    "recency_weight": 0,
+                })),
+            )
+            .unwrap()
+        };
+        assert_eq!(at(0.0).track_ids, vec!["a2"]);
+        let halfway = at(0.5);
+        assert_eq!(halfway.track_ids, vec!["c1"]);
+        assert_eq!(halfway.progress, Some(0.5));
+        let diagnostics = &halfway.namespaces[0];
+        assert_close(diagnostics.source_to_destination, 0.0);
+        assert_close(diagnostics.query_to_source, 0.707);
+        assert_close(diagnostics.query_to_destination, 0.707);
+        let arrived = at(1.0);
+        assert_eq!(arrived.track_ids, vec!["b1"]);
+        assert_close(arrived.namespaces[0].query_to_destination, 1.0);
+    }
+
+    #[test]
+    fn continuation_zero_vector_guards_fall_back_to_source() {
+        let (_dir, store) = continuation_store();
+        let antipode = resolved_track("anti", "album-a", &["artist-a"]);
+        store
+            .create_track(&antipode.track, &["artist-a".into()])
+            .unwrap();
+        store
+            .upsert_entity_embedding(&embedding(
+                "track",
+                "anti",
+                DEFAULT_TRACK_NAMESPACE,
+                vec![-1.0, 0.0],
+            ))
+            .unwrap();
+        let cancelled = continue_queue(
+            &store,
+            None,
+            continuation(serde_json::json!({
+                "source_track_ids": ["a1"],
+                "destination": {"entity_type": "track", "entity_id": "anti"},
+                "progress": 0.5,
+                "recency_weight": 0,
+            })),
+        )
+        .unwrap();
+        assert_eq!(cancelled.track_ids, vec!["a2"]);
+
+        let pushed_to_zero = continue_queue(
+            &store,
+            None,
+            continuation(serde_json::json!({
+                "source_track_ids": ["a1"],
+                "away": [{"entity_type": "track", "entity_id": "a1"}],
+                "recency_weight": 0,
+            })),
+        )
+        .unwrap();
+        assert_eq!(pushed_to_zero.track_ids, vec!["a2"]);
+    }
+
+    #[test]
+    fn continuation_rejects_invalid_requests() {
+        let (_dir, store) = continuation_store();
+        let reference = serde_json::json!({"entity_type": "track", "entity_id": "a1"});
+        let invalid = [
+            serde_json::json!({"source_track_ids": ["a1"], "away": vec![reference.clone(); 9]}),
+            serde_json::json!({"source_references": vec![reference.clone(); 9]}),
+            serde_json::json!({"destination": {"entity_type": "playlist", "entity_id": "p"}}),
+            serde_json::json!({"source_references": [{"entity_type": "track", "entity_id": "a1", "weight": 0}]}),
+            serde_json::json!({"source_track_ids": vec!["a1"; 201]}),
+            serde_json::json!({"source_track_ids": ["a1"], "criteria": [{"namespace": "unknown.v1", "weight": 1}]}),
+        ];
+        for body in invalid {
+            let err = continue_queue(&store, None, continuation(body.clone())).unwrap_err();
+            assert!(is_invalid_request(&err), "{body} -> {err}");
+        }
+        let mut nan = continuation(serde_json::json!({"source_track_ids": ["a1"]}));
+        nan.recency_weight = Some(f32::NAN);
+        assert!(is_invalid_request(
+            &continue_queue(&store, None, nan).unwrap_err()
+        ));
+    }
+
+    #[test]
+    fn continuation_legacy_context_only_path_is_unchanged() {
+        let (_dir, store) = continuation_store();
+        let response = continue_queue(
+            &store,
+            None,
+            continuation(serde_json::json!({
+                "context_track_ids": ["a1"],
+                "exclude_track_ids": ["a1"],
+            })),
+        )
+        .unwrap();
+        assert_eq!(response.track_ids, vec!["a2"]);
+        assert_eq!(response.recency_weight, None);
+        assert_eq!(response.progress, None);
+        assert!(response.namespaces.is_empty());
+
+        let empty = continue_queue(&store, None, continuation(serde_json::json!({}))).unwrap();
+        assert!(empty.track_ids.is_empty());
+    }
+
+    #[test]
+    fn continuation_source_sampling_is_even_and_deterministic() {
+        let ids = (0..200).map(|index| index.to_string()).collect::<Vec<_>>();
+        let sample = sample_evenly(&ids, 64);
+        assert_eq!(sample.len(), 64);
+        assert_eq!(sample[0], "0");
+        assert_eq!(sample, sample_evenly(&ids, 64));
+        let duplicated = vec!["x".to_string(), "x".to_string(), "y".to_string()];
+        assert_eq!(sample_evenly(&duplicated, 64), vec!["x", "y"]);
     }
 }
