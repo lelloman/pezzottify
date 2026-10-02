@@ -23,6 +23,8 @@ val paravoidAcceptanceGeneration = providers.gradleProperty("paravoidAcceptanceG
 if (paravoidComplete) {
     paravoid {
         packaging.set("complete")
+        // The delivery harness opens this alias; ordinary complete shells keep it off.
+        controlsLauncher.set(paravoidAcceptance)
         bootstrap.set("embedded")
         payloadVersion.set(providers.gradleProperty("paravoidPayloadVersion").map(String::toLong).orElse(1L))
         updates {
