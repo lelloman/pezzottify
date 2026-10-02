@@ -60,11 +60,11 @@ and callback registration remain the same as the debug experiment.
 | Mode | Application ID | OIDC redirect URI |
 | --- | --- | --- |
 | Normal phone | `com.lelloman.pezzottify.android` | `com.lelloman.pezzottify.android://oauth/callback` |
-| Paravoid phone | `com.lelloman.pezzottify.android.paravoid` | `com.lelloman.pezzottify.android.paravoid://oauth/callback` |
+| Paravoid disposable test phone | `com.lelloman.pezzottify.android.paravoid` | `com.lelloman.pezzottify.android.paravoid://oauth/callback` |
 
-The apps coexist with separate data. The Paravoid launcher icon has a small V badge
-(including round and themed icons); the normal icon is unchanged. The badge is a
-flavor resource overlay, not a plugin-wide change to downstream branding.
+Production Paravoid uses `com.lelloman.pezzottify.android` and its original OAuth
+callback, signing certificate and icon, updating the existing app in place. Only
+disposable test builds use `.paravoid` and coexist with separate data.
 Provider authorities use `${applicationId}`.
 The callback manifest, request URI and callback handler share the flavor's
 redirect scheme. **Register the Paravoid URI with the OIDC provider before trying
@@ -166,6 +166,7 @@ multi-instance invalidation service. Normal APK declarations are unchanged.
 
 ## Production APK publication
 
+The production trust policy must name `com.lelloman.pezzottify.android`.
 The production variant uses the existing APK release keystore, an app-specific
 persistent RSA payload key, and the Store's public head/grant trust keys.
 The initial local identity lives in ignored `android/.paravoid-signing/`;
@@ -180,7 +181,8 @@ Never regenerate this identity for an update or substitute disposable fixture ke
   -PparavoidReleaseKey=.paravoid-signing/release.pk8 \
   -PparavoidPayloadVersion=<git-commit-count>
 python3 check-paravoid-complete.py \
-  app/build/outputs/paravoid/paravoidAndroidPhoneParavoidRelease
+  app/build/outputs/paravoid/paravoidAndroidPhoneParavoidRelease \
+  --application-id com.lelloman.pezzottify.android
 ```
 
 This non-debuggable, unshrunk release embeds its signed VPK and enables HTTPS
@@ -194,6 +196,12 @@ Upload as a draft, inspect the validated installer and distribution, then use th
 separate `publish` command with its current expected revision. Preserve the
 `baseline-candidate/` after the shell is accepted; compatible future VPK builds
 must use that baseline and an increasing payload version.
+
+`bash ../scripts/publish-paravoid-apk.sh --dry-run --json` builds and validates
+this exact production identity. With an authorized `--yes --json`, it uploads
+the shell draft for the existing Pezzottify entry. It never publishes the
+disposable `.paravoid` test identity. Set `PARAVOID_CHECKOUT` to reuse a clean
+pinned checkout; otherwise it provisions one in the ignored signing directory.
 
 ## Disposable update-delivery acceptance
 
