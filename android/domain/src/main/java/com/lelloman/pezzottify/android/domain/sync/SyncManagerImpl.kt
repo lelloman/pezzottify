@@ -206,6 +206,8 @@ class SyncManagerImpl internal constructor(
 
                 // Apply events in order
                 for (storedEvent in eventsResponse.events) {
+                    // Never re-apply (or re-notify for) events at or below the cursor
+                    if (storedEvent.seq <= syncStateStore.getCurrentCursor()) continue
                     applyStoredEvent(storedEvent)
                     syncStateStore.saveCursor(storedEvent.seq)
                 }
@@ -249,6 +251,13 @@ class SyncManagerImpl internal constructor(
         logger.debug("handleSyncMessage() seq=${storedEvent.seq}")
 
         val cursor = syncStateStore.getCurrentCursor()
+
+        // Already applied (duplicate or out-of-order delivery): ignore so we neither
+        // re-notify nor move the cursor backwards.
+        if (storedEvent.seq <= cursor) {
+            logger.debug("Ignoring already-applied sync event seq=${storedEvent.seq} (cursor=$cursor)")
+            return@withContext
+        }
 
         // Check for sequence gap
         if (storedEvent.seq > cursor + 1) {
@@ -486,7 +495,8 @@ class SyncManagerImpl internal constructor(
         for (notification in notifications) {
             if (notification.readAt != null) continue
             if (notification.notificationType != NotificationType.DownloadCompleted) continue
-            if (notification.createdAt < cutoffMs) continue
+            // Server created_at is in epoch seconds
+            if (notification.createdAt * 1000 < cutoffMs) continue
 
             try {
                 downloads.add(
