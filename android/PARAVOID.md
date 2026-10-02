@@ -1,4 +1,4 @@
-# Paravoid integration experiment
+# Paravoid Android integration
 
 The Android app uses the Paravoid source revision pinned in `../paravoid.rev`,
 not a published release. The current pin is `33340c6` (DVPK delivery and
@@ -83,8 +83,9 @@ adapter rewrites payload-side injection lookups. The installed manifest keeps
 AppAuth/Androidoscopy Activities and other dependency components. Their code goes
 into the payload. Adding/changing component declarations requires a new shell.
 
-This remains embedded DEX packaging: resources, assets and native libraries stay
-in the installed APK. It is not an external updater or complete resource packaging.
+The default remains embedded DEX packaging: resources, assets and native libraries
+stay in the installed APK. Opt-in complete packaging moves those components into
+a signed VPK; see the build and delivery acceptance instructions below.
 Build and emulator results must be recorded separately from authenticated server,
 playback and background-sync coverage. Do not install the normal APK on a personal
 device as part of this experiment: its identity is the everyday app's identity.
@@ -126,3 +127,61 @@ A disposable API-36.1/x86_64 emulator passed `smoke-paravoid.py` for both modes:
 start, restart, login UI, Androidoscopy initialization, rotation, isolated OAuth
 callback routing and Room database integrity. This upgrade did not rerun API 30
 or authenticated login, playback and background-sync scenarios.
+
+## Complete packaging
+
+The former `codex/paravoid-v1-packaging` and `codex/paravoid-release-realapp`
+experiments are integrated into `dev`. Complete packaging is opt-in; ordinary
+normal and embedded DEX builds retain their existing commands.
+
+Generate disposable test keys using the pinned Paravoid checkout (requires Python
+`cryptography`), then build from this directory:
+
+```sh
+python3 /path/to/paravoid-android/packaging-tests/prepare-keys.py \
+  --application-id com.lelloman.pezzottify.android.paravoid \
+  --output /tmp/pezzottify-paravoid-test-keys
+./gradlew :app:assembleParavoidAndroidPhoneDebug \
+  -PparavoidCheckout=/path/to/paravoid-android \
+  -PparavoidComplete=true \
+  -PparavoidTrustPolicy=/tmp/pezzottify-paravoid-test-keys/trust.json \
+  -PparavoidReleaseKey=/tmp/pezzottify-paravoid-test-keys/release.der
+python3 check-paravoid-complete.py
+```
+
+Outputs under `app/build/outputs/paravoid/paravoidAndroidPhoneDebug/` include
+`shell.apk`, `payload.vpk`, its signed `release.json`, `payload.sha256`, packaging
+reports and a `baseline-candidate/`. The final ordinary APK output is also the
+complete shell. This is embedded bootstrap with updates disabled by default.
+Keys stay outside Git; disposable test keys are unsuitable for published artifacts.
+
+To produce a compatible next payload, pass a monotonically increasing
+`-PparavoidPayloadVersion=N` and `-PparavoidBaseline=/path/to/accepted`, where
+`accepted/paravoidAndroidPhoneDebug/` contains the first build's baseline candidate.
+The plugin checks resource IDs and the shell contract against that baseline.
+A contract change requires a new shell APK. Complete shells require Android 11
+(API 30); the Paravoid-only Room overlay disables pre-unlock execution of Room's
+multi-instance invalidation service. Normal APK declarations are unchanged.
+
+## Disposable update-delivery acceptance
+
+`-PparavoidAcceptance=true` requires `-PparavoidComplete=true` and enables debug
+HTTP updates at `http://127.0.0.1:19165/`. Paravoid acceptance is limited to
+debug variants; normal variants keep acceptance disabled. `-PparavoidAcceptanceGeneration=A|B|broken|repair` selects the
+Application marker; `broken` deliberately fails startup so the shell's quarantine
+and forward-repair paths can be tested. This property is rejected outside acceptance
+mode. Normal builds have acceptance disabled, and release-derived builds disable
+the marker and fault regardless of build properties.
+
+The pinned Paravoid checkout's `release-tests/pezzottify-build.sh` builds immutable
+A1/B2/broken4/repair5 artifacts from this app, and `pezzottify-device.py` exercises
+signed delivery, activation, incompatible-release refusal, quarantine, repair,
+retained app preferences and Room database integrity. See that checkout's
+`release-tests/PEZZOTTIFY.md` for the environment variables and invocation; the
+historical branch/commit references there describe the original fixture, whose
+properties are now available in `dev`. Use only a fresh disposable emulator;
+the harness refuses a physical device or an existing app installation.
+
+CI checks ordinary APK packaging first, then builds complete packaging with
+throwaway keys and inspects embedded/standalone payload integrity and code separation.
+Delivery acceptance remains an explicit emulator run.
