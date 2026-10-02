@@ -21,6 +21,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -28,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -76,6 +78,7 @@ private fun SettingsScreenInternal(
 ) {
     val currentState by state.collectAsState()
     val context = LocalContext.current
+    val appUpdatesAvailable = remember(context) { AppUpdates.available(context) }
 
     LaunchedEffect(Unit) {
         events.collect { event ->
@@ -109,6 +112,16 @@ private fun SettingsScreenInternal(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
         ) {
+            if (appUpdatesAvailable) {
+                OutlinedButton(
+                    onClick = { AppUpdates.open(context) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.app_updates))
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
             // Appearance Section
             Text(
                 text = stringResource(R.string.appearance),
