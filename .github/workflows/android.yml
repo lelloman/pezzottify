@@ -61,8 +61,22 @@ jobs:
         run: bash scripts/prepare-androidoscopy.sh
         working-directory: .
 
-      - name: Lint and test
-        run: ./gradlew lintDebug testDebugUnitTest :app:lintNormalPhoneDebug :app:testNormalPhoneDebugUnitTest :app:compileNormalPhoneReleaseKotlin :app:lintParavoidAndroidPhoneDebug :app:testParavoidAndroidPhoneDebugUnitTest :app:assembleNormalPhoneDebug :app:assembleParavoidAndroidPhoneDebug :player-app:assembleDebug :player-app:assembleRelease
+      - name: Build and test
+        run: |
+          ./gradlew testDebugUnitTest \
+            :app:testNormalPhoneDebugUnitTest :app:testParavoidAndroidPhoneDebugUnitTest \
+            :app:compileNormalPhoneReleaseKotlin :app:assembleNormalPhoneDebug \
+            :app:assembleParavoidAndroidPhoneDebug :player-app:assembleDebug :player-app:assembleRelease
+
+      - name: Lint downstream modules and app variants
+        # Runtime-library lint lacks the plugin-generated shell permissions and API floor.
+        # Run after compilation: lint can otherwise race KAPT-generated variant sources.
+        run: |
+          ./gradlew \
+            :domain:lintDebug :ui:lintDebug :remoteapi:lintDebug :localdata:lintDebug \
+            :debuginterface:lintDebug :player:lintDebug :logger:lintDebug \
+            :equalizer:lintDebug :theme:lintDebug :player-app:lintDebug \
+            :app:lintNormalPhoneDebug :app:lintParavoidAndroidPhoneDebug
 
       - name: Verify normal and Paravoid APK packaging
         run: python3 check-paravoid.py
