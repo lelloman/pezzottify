@@ -539,11 +539,15 @@ fn track_namespace(settings: Option<&AudioEmbeddingsSettings>) -> String {
     let Some(settings) = settings else {
         return DEFAULT_TRACK_NAMESPACE.to_string();
     };
-    settings
+    let served = settings
         .specs
         .iter()
+        .filter(|spec| spec.serve)
+        .collect::<Vec<_>>();
+    served
+        .iter()
         .find(|spec| spec.namespace == DEFAULT_TRACK_NAMESPACE)
-        .or_else(|| settings.specs.first())
+        .or_else(|| served.first())
         .map(|spec| spec.namespace.clone())
         .unwrap_or_else(|| DEFAULT_TRACK_NAMESPACE.to_string())
 }
@@ -553,6 +557,8 @@ fn album_namespace_for_track_namespace(namespace: &str) -> String {
         "musicfm.mean.v1" => DEFAULT_ALBUM_NAMESPACE.to_string(),
         "ast.audioset.v1" => "album.ast.median.v1".to_string(),
         "ast.instruments.v1" => "album.ast_instruments.median.v1".to_string(),
+        "ast.audioset.v2" => "album.ast.median.v2".to_string(),
+        "ast.instruments.v2" => "album.ast_instruments.median.v2".to_string(),
         _ => format!("album.{namespace}.median"),
     }
 }
@@ -596,6 +602,7 @@ fn available_track_namespaces(settings: Option<&AudioEmbeddingsSettings>) -> Vec
             settings
                 .specs
                 .iter()
+                .filter(|spec| spec.serve)
                 .map(|spec| spec.namespace.clone())
                 .collect::<Vec<_>>()
         })
@@ -604,6 +611,17 @@ fn available_track_namespaces(settings: Option<&AudioEmbeddingsSettings>) -> Vec
         namespaces.push(DEFAULT_TRACK_NAMESPACE.to_string());
     }
     namespaces
+}
+
+/// AST namespaces in order of preference: whole-track windows first, single clip last.
+const AST_AUDIOSET_NAMESPACES: &[&str] = &["ast.audioset.v2", "ast.audioset.v1"];
+const AST_INSTRUMENTS_NAMESPACES: &[&str] = &["ast.instruments.v2", "ast.instruments.v1"];
+
+fn preferred_namespace<'a>(namespaces: &[String], preference: &[&'a str]) -> Option<&'a str> {
+    preference
+        .iter()
+        .copied()
+        .find(|candidate| namespaces.iter().any(|namespace| namespace == candidate))
 }
 
 fn radio_recipes_for_namespaces(namespaces: &[String]) -> Vec<RadioRecipe> {
@@ -623,11 +641,13 @@ fn radio_recipes_for_namespaces(namespaces: &[String]) -> Vec<RadioRecipe> {
     if has("musicfm.mean.v1") {
         balanced.push(("musicfm.mean.v1".to_string(), 0.55));
     }
-    if has("ast.audioset.v1") {
-        balanced.push(("ast.audioset.v1".to_string(), 0.3));
+    let audio_scene = preferred_namespace(namespaces, AST_AUDIOSET_NAMESPACES);
+    let instrumentation = preferred_namespace(namespaces, AST_INSTRUMENTS_NAMESPACES);
+    if let Some(namespace) = audio_scene {
+        balanced.push((namespace.to_string(), 0.3));
     }
-    if has("ast.instruments.v1") {
-        balanced.push(("ast.instruments.v1".to_string(), 0.15));
+    if let Some(namespace) = instrumentation {
+        balanced.push((namespace.to_string(), 0.15));
     }
     if balanced.is_empty() {
         balanced.push((track_namespace_from_available(namespaces), 1.0));
@@ -648,7 +668,7 @@ fn radio_recipes_for_namespaces(namespaces: &[String]) -> Vec<RadioRecipe> {
     recipes.push(recipe_for_namespace(
         "audio_scene",
         "Audio scene",
-        "ast.audioset.v1",
+        audio_scene.unwrap_or("ast.audioset.v1"),
         namespaces,
         "similar",
         0.35,
@@ -657,7 +677,7 @@ fn radio_recipes_for_namespaces(namespaces: &[String]) -> Vec<RadioRecipe> {
     recipes.push(recipe_for_namespace(
         "instrumentation",
         "Instrumentation",
-        "ast.instruments.v1",
+        instrumentation.unwrap_or("ast.instruments.v1"),
         namespaces,
         "similar",
         0.35,
@@ -735,8 +755,8 @@ fn track_namespace_from_available(namespaces: &[String]) -> String {
 fn criterion_label(namespace: &str) -> String {
     match namespace {
         "musicfm.mean.v1" => "Sound profile".to_string(),
-        "ast.audioset.v1" => "Audio scene".to_string(),
-        "ast.instruments.v1" => "Instrumentation".to_string(),
+        "ast.audioset.v1" | "ast.audioset.v2" => "Audio scene".to_string(),
+        "ast.instruments.v1" | "ast.instruments.v2" => "Instrumentation".to_string(),
         other => other.to_string(),
     }
 }
@@ -2556,6 +2576,7 @@ mod tests {
             specs: vec![crate::config::AudioEmbeddingSpec {
                 model: "test".into(),
                 namespace: DEFAULT_TRACK_NAMESPACE.into(),
+                serve: true,
             }],
             album_derivations: crate::config::AlbumEmbeddingDerivationsSettings {
                 enabled: true,
@@ -2908,5 +2929,71 @@ mod tests {
         assert_eq!(sample, sample_evenly(&ids, 64));
         let duplicated = vec!["x".to_string(), "x".to_string(), "y".to_string()];
         assert_eq!(sample_evenly(&duplicated, 64), vec!["x", "y"]);
+    }
+
+    #[test]
+    fn unserved_namespaces_are_hidden_and_v2_ast_is_preferred() {
+        let spec = |namespace: &str, serve: bool| crate::config::AudioEmbeddingSpec {
+            model: "m".into(),
+            namespace: namespace.into(),
+            serve,
+        };
+        let settings = |specs| AudioEmbeddingsSettings {
+            enabled: true,
+            simple_ai_base_url: String::new(),
+            api_key: String::new(),
+            interval_hours: 24,
+            jitter_minutes: 0,
+            max_tracks_per_run: 10,
+            request_timeout_secs: 60,
+            specs,
+            album_derivations: crate::config::AlbumEmbeddingDerivationsSettings {
+                enabled: false,
+                interval_hours: 24,
+                jitter_minutes: 0,
+                max_albums_per_run: 10,
+                specs: Vec::new(),
+            },
+        };
+        let audio_scene = |settings: &AudioEmbeddingsSettings| {
+            radio_recipes_for_namespaces(&available_track_namespaces(Some(settings)))
+                .into_iter()
+                .find(|recipe| recipe.id == "audio_scene")
+                .unwrap()
+                .criteria[0]
+                .namespace
+                .clone()
+        };
+
+        // Backfilling: v2 is computed but not served yet.
+        let backfilling = settings(vec![
+            spec(DEFAULT_TRACK_NAMESPACE, true),
+            spec("ast.audioset.v1", true),
+            spec("ast.audioset.v2", false),
+        ]);
+        assert_eq!(
+            available_track_namespaces(Some(&backfilling)),
+            vec![DEFAULT_TRACK_NAMESPACE, "ast.audioset.v1"]
+        );
+        assert_eq!(audio_scene(&backfilling), "ast.audioset.v1");
+
+        // Switched over: v2 wins even while v1 is still configured.
+        let switched = settings(vec![
+            spec(DEFAULT_TRACK_NAMESPACE, true),
+            spec("ast.audioset.v1", true),
+            spec("ast.audioset.v2", true),
+        ]);
+        assert_eq!(audio_scene(&switched), "ast.audioset.v2");
+        assert_eq!(
+            album_namespace_for_track_namespace("ast.audioset.v2"),
+            "album.ast.median.v2"
+        );
+
+        // The default track namespace is never an unserved one.
+        let unserved_default = settings(vec![
+            spec(DEFAULT_TRACK_NAMESPACE, false),
+            spec("ast.audioset.v2", true),
+        ]);
+        assert_eq!(track_namespace(Some(&unserved_default)), "ast.audioset.v2");
     }
 }

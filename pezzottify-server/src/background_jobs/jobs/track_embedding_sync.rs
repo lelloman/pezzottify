@@ -411,10 +411,13 @@ mod tests {
                 AudioEmbeddingSpec {
                     model: "model-a".to_string(),
                     namespace: "namespace.a".to_string(),
+                    serve: true,
                 },
                 AudioEmbeddingSpec {
                     model: "model-b".to_string(),
                     namespace: "namespace.b".to_string(),
+                    // Unserved namespaces are still backfilled.
+                    serve: false,
                 },
             ],
             ..test_settings()
