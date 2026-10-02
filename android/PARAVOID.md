@@ -166,7 +166,9 @@ multi-instance invalidation service. Normal APK declarations are unchanged.
 ## Disposable update-delivery acceptance
 
 `-PparavoidAcceptance=true` requires `-PparavoidComplete=true` and enables debug
-HTTP updates at `http://127.0.0.1:19165/`. Paravoid acceptance is limited to
+HTTP updates at `http://127.0.0.1:19165/` and the shell-owned **App updates**
+launcher used by the harness. Ordinary complete shells leave this launcher off.
+Paravoid acceptance is limited to
 debug variants; normal variants keep acceptance disabled. `-PparavoidAcceptanceGeneration=A|B|broken|repair` selects the
 Application marker; `broken` deliberately fails startup so the shell's quarantine
 and forward-repair paths can be tested. This property is rejected outside acceptance
@@ -174,14 +176,47 @@ mode. Normal builds have acceptance disabled, and release-derived builds disable
 the marker and fault regardless of build properties.
 
 The pinned Paravoid checkout's `release-tests/pezzottify-build.sh` builds immutable
-A1/B2/broken4/repair5 artifacts from this app, and `pezzottify-device.py` exercises
-signed delivery, activation, incompatible-release refusal, quarantine, repair,
-retained app preferences and Room database integrity. See that checkout's
-`release-tests/PEZZOTTIFY.md` for the environment variables and invocation; the
-historical branch/commit references there describe the original fixture, whose
-properties are now available in `dev`. Use only a fresh disposable emulator;
-the harness refuses a physical device or an existing app installation.
+A1/B2/broken4/repair5 artifacts from this app. Use this repository's
+`accept-paravoid-delivery.py` for the current controls UI; the older upstream
+`pezzottify-device.py` still expects the previous labels and download behavior.
+The driver retains the upstream assertions for signed delivery, activation,
+incompatible-release refusal, quarantine, repair, app preferences and Room integrity.
+It loads the reference distributor and lifecycle-record reader from the pinned
+checkout. See that checkout's `release-tests/PEZZOTTIFY.md` for the build script's
+environment variables. After building the four immutable artifact directories:
+
+```sh
+python3 accept-paravoid-delivery.py \
+  --paravoid-checkout /path/to/paravoid-android \
+  --serial emulator-5588 --avd YourDisposableAvd \
+  --a /path/to/cases/A --b /path/to/cases/B \
+  --broken /path/to/cases/broken --repair /path/to/cases/repair \
+  --keys /path/to/test-keys --reopen-controls
+```
+
+Use only a fresh disposable emulator; the driver refuses a physical device or an
+existing app installation. The historical branch/commit references in the upstream
+document describe the original fixture, whose properties are now available in `dev`.
 
 CI checks ordinary APK packaging first, then builds complete packaging with
 throwaway keys and inspects embedded/standalone payload integrity and code separation.
 Delivery acceptance remains an explicit emulator run.
+
+## Combined branch validation
+
+On 2026-10-02, after rebasing the remaining experiments onto `dev` including the
+new gravity/steering work, 788 downstream unit tests passed. Both app variants
+and all downstream Android modules passed lint after compilation was separated
+from lint to avoid a KAPT generated-source race. Normal/DEX APK inspection,
+normal phone release compilation and standalone player debug/release builds passed.
+A complete updates-disabled shell built and passed payload integrity/separation checks.
+
+Fresh complete acceptance artifacts A1/B2/broken4/repair5 passed on a disposable
+API-36.1/x86_64 emulator using `accept-paravoid-delivery.py --reopen-controls`:
+embedded Compose/Hilt/Room startup, signed download and confirmed cold activation,
+rotation and rejected OAuth callback routing, signed wrong-contract version-3 refusal,
+broken-version quarantine, forward repair, retained app-owned preference and both
+Room database identities/integrity, and offline final startup. The installed shell
+path and SHA-256 stayed unchanged. All four artifacts passed the complete-packaging
+integrity/separation checker. This is logged-out emulator evidence; authenticated
+login/playback/background sync, assistant JNI calls and physical ARM64 are untested.
