@@ -300,6 +300,19 @@ impl TestClient {
             .expect("Continuation recommendation request failed")
     }
 
+    /// POST /v1/content/recommendations/continuation with an arbitrary body.
+    pub async fn post_continuation(&self, body: serde_json::Value) -> Response {
+        self.client
+            .post(format!(
+                "{}/v1/content/recommendations/continuation",
+                self.base_url
+            ))
+            .json(&body)
+            .send()
+            .await
+            .expect("Continuation recommendation request failed")
+    }
+
     /// GET /v1/content/radio/{entity_type}/{entity_id}
     pub async fn get_radio(&self, entity_type: &str, entity_id: &str, count: usize) -> Response {
         self.client
