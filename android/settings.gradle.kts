@@ -64,7 +64,10 @@ include(":equalizer")
 
 val paravoidCheckout = providers.gradleProperty("paravoidCheckout").orNull
     ?: file("../../paravoid-android").absolutePath
-listOf("paravoid-api", "paravoid-runtime").forEach { module ->
+listOf(
+    "paravoid-api", "paravoid-runtime", "paravoid-contract",
+    "paravoid-update-api", "paravoid-update-ipc", "paravoid-recovery-api",
+).forEach { module ->
     include(":$module")
     project(":$module").projectDir = file("$paravoidCheckout/$module")
 }
