@@ -345,6 +345,10 @@ pub struct AudioEmbeddingsConfig {
 pub struct AudioEmbeddingSpecConfig {
     pub model: String,
     pub namespace: String,
+    /// Whether recommendations use this namespace. Defaults to true. Set to false to
+    /// backfill a new namespace before switching radio and continuation over to it.
+    #[serde(default)]
+    pub serve: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]

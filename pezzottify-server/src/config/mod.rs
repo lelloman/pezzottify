@@ -589,6 +589,7 @@ impl AppConfig {
                         .map(|spec| AudioEmbeddingSpec {
                             model: spec.model,
                             namespace: spec.namespace,
+                            serve: spec.serve.unwrap_or(true),
                         })
                         .collect(),
                     _ => AudioEmbeddingSpec::defaults(),
@@ -600,7 +601,7 @@ impl AppConfig {
                         .into_iter()
                         .map(AlbumEmbeddingDerivationSpec::try_from)
                         .collect::<Result<Vec<_>>>()?,
-                    _ => AlbumEmbeddingDerivationSpec::defaults(),
+                    _ => AlbumEmbeddingDerivationSpec::defaults_for(&specs),
                 };
                 let album_derivations = AlbumEmbeddingDerivationsSettings {
                     // Album derivation is an expensive maintenance workload and must be
@@ -1008,6 +1009,9 @@ pub struct AudioEmbeddingsSettings {
 pub struct AudioEmbeddingSpec {
     pub model: String,
     pub namespace: String,
+    /// Whether recommendations use this namespace. Unserved namespaces are still
+    /// computed, so a new namespace can be backfilled before it replaces an old one.
+    pub serve: bool,
 }
 
 impl AudioEmbeddingSpec {
@@ -1016,14 +1020,17 @@ impl AudioEmbeddingSpec {
             Self {
                 model: "musicfm-msd".to_string(),
                 namespace: "musicfm.mean.v1".to_string(),
+                serve: true,
             },
             Self {
                 model: "ast-audioset".to_string(),
                 namespace: "ast.audioset.v1".to_string(),
+                serve: true,
             },
             Self {
                 model: "ast-audioset".to_string(),
                 namespace: "ast.instruments.v1".to_string(),
+                serve: true,
             },
         ]
     }
@@ -1067,35 +1074,42 @@ impl AlbumEmbeddingAggregation {
     }
 }
 
+/// Known album derivations: (track namespace, album namespace, quantile or median).
+const KNOWN_ALBUM_DERIVATIONS: &[(&str, &str, Option<f32>)] = &[
+    ("musicfm.mean.v1", "album.musicfm.median.v1", None),
+    ("ast.audioset.v1", "album.ast.median.v1", None),
+    ("ast.audioset.v1", "album.ast.essence.q25.v1", Some(0.25)),
+    ("ast.instruments.v1", "album.ast_instruments.median.v1", None),
+    ("ast.instruments.v1", "album.ast_instruments.essence.q25.v1", Some(0.25)),
+    ("ast.audioset.v2", "album.ast.median.v2", None),
+    ("ast.audioset.v2", "album.ast.essence.q25.v2", Some(0.25)),
+    ("ast.instruments.v2", "album.ast_instruments.median.v2", None),
+    ("ast.instruments.v2", "album.ast_instruments.essence.q25.v2", Some(0.25)),
+];
+
 impl AlbumEmbeddingDerivationSpec {
+    /// Derivations for the default track namespaces.
     pub fn defaults() -> Vec<Self> {
-        vec![
-            Self {
-                source_namespace: "musicfm.mean.v1".to_string(),
-                target_namespace: "album.musicfm.median.v1".to_string(),
-                aggregation: AlbumEmbeddingAggregation::Median,
-            },
-            Self {
-                source_namespace: "ast.audioset.v1".to_string(),
-                target_namespace: "album.ast.median.v1".to_string(),
-                aggregation: AlbumEmbeddingAggregation::Median,
-            },
-            Self {
-                source_namespace: "ast.audioset.v1".to_string(),
-                target_namespace: "album.ast.essence.q25.v1".to_string(),
-                aggregation: AlbumEmbeddingAggregation::Quantile { quantile: 0.25 },
-            },
-            Self {
-                source_namespace: "ast.instruments.v1".to_string(),
-                target_namespace: "album.ast_instruments.median.v1".to_string(),
-                aggregation: AlbumEmbeddingAggregation::Median,
-            },
-            Self {
-                source_namespace: "ast.instruments.v1".to_string(),
-                target_namespace: "album.ast_instruments.essence.q25.v1".to_string(),
-                aggregation: AlbumEmbeddingAggregation::Quantile { quantile: 0.25 },
-            },
-        ]
+        Self::defaults_for(&AudioEmbeddingSpec::defaults())
+    }
+
+    /// Known derivations for the configured track namespaces, so adding a track
+    /// namespace (e.g. `ast.audioset.v2`) also derives its album embeddings.
+    pub fn defaults_for(track_specs: &[AudioEmbeddingSpec]) -> Vec<Self> {
+        KNOWN_ALBUM_DERIVATIONS
+            .iter()
+            .filter(|(source, _, _)| track_specs.iter().any(|spec| spec.namespace == *source))
+            .map(|(source, target, quantile)| Self {
+                source_namespace: (*source).to_string(),
+                target_namespace: (*target).to_string(),
+                aggregation: match quantile {
+                    Some(quantile) => AlbumEmbeddingAggregation::Quantile {
+                        quantile: *quantile,
+                    },
+                    None => AlbumEmbeddingAggregation::Median,
+                },
+            })
+            .collect()
     }
 }
 
@@ -1582,10 +1596,18 @@ mod tests {
                 jitter_minutes: Some(30),
                 max_tracks_per_run: Some(42),
                 request_timeout_secs: Some(60),
-                specs: Some(vec![AudioEmbeddingSpecConfig {
-                    model: "custom-model".to_string(),
-                    namespace: "custom.namespace.v1".to_string(),
-                }]),
+                specs: Some(vec![
+                    AudioEmbeddingSpecConfig {
+                        model: "custom-model".to_string(),
+                        namespace: "custom.namespace.v1".to_string(),
+                        serve: None,
+                    },
+                    AudioEmbeddingSpecConfig {
+                        model: "ast-audioset".to_string(),
+                        namespace: "ast.audioset.v2".to_string(),
+                        serve: Some(false),
+                    },
+                ]),
                 ..Default::default()
             }),
             ..Default::default()
@@ -1600,11 +1622,27 @@ mod tests {
         assert_eq!(settings.request_timeout_secs, 60);
         assert_eq!(
             settings.specs,
-            vec![AudioEmbeddingSpec {
-                model: "custom-model".to_string(),
-                namespace: "custom.namespace.v1".to_string(),
-            }]
+            vec![
+                AudioEmbeddingSpec {
+                    model: "custom-model".to_string(),
+                    namespace: "custom.namespace.v1".to_string(),
+                    serve: true,
+                },
+                AudioEmbeddingSpec {
+                    model: "ast-audioset".to_string(),
+                    namespace: "ast.audioset.v2".to_string(),
+                    serve: false,
+                },
+            ]
         );
+        // Album derivations follow the configured track namespaces.
+        let targets = settings
+            .album_derivations
+            .specs
+            .iter()
+            .map(|spec| spec.target_namespace.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(targets, vec!["album.ast.median.v2", "album.ast.essence.q25.v2"]);
     }
 
     #[test]
