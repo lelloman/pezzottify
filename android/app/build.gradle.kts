@@ -14,6 +14,10 @@ plugins {
 // Complete packaging and its disposable delivery acceptance are explicit opt-ins.
 val paravoidComplete = providers.gradleProperty("paravoidComplete").map(String::toBooleanStrict).orElse(false).get()
 val paravoidAcceptance = providers.gradleProperty("paravoidAcceptance").map(String::toBooleanStrict).orElse(false).get()
+val paravoidProduction = providers.gradleProperty("paravoidProduction").map(String::toBooleanStrict).orElse(false).get()
+require(!paravoidProduction || (paravoidComplete && !paravoidAcceptance)) {
+    "paravoidProduction requires complete packaging without acceptance mode"
+}
 require(!paravoidAcceptance || paravoidComplete) { "paravoidAcceptance requires paravoidComplete=true" }
 require(!providers.gradleProperty("paravoidAcceptanceGeneration").isPresent || paravoidAcceptance) {
     "paravoidAcceptanceGeneration requires paravoidAcceptance=true"
@@ -24,12 +28,14 @@ if (paravoidComplete) {
     paravoid {
         packaging.set("complete")
         // The delivery harness opens this alias; ordinary complete shells keep it off.
-        controlsLauncher.set(paravoidAcceptance)
+        controlsLauncher.set(paravoidAcceptance || paravoidProduction)
         bootstrap.set("embedded")
+        crashRecovery { enabled.set(paravoidProduction); updater.set("default") }
         payloadVersion.set(providers.gradleProperty("paravoidPayloadVersion").map(String::toLong).orElse(1L))
         updates {
-            enabled.set(paravoidAcceptance)
-            baseUrl.set("http://127.0.0.1:19165/")
+            enabled.set(paravoidAcceptance || paravoidProduction)
+            baseUrl.set(if (paravoidProduction) "https://store.lelloman.com/api/paravoid/" else "http://127.0.0.1:19165/")
+            authentication.set(if (paravoidProduction) "apkKey" else "public")
             debugHttpAllowed.set(paravoidAcceptance)
             trustPolicyFile.set(rootProject.file(providers.gradleProperty("paravoidTrustPolicy").get()))
         }
@@ -62,6 +68,11 @@ val signingProperties = Properties().apply {
     if (signingPropsFile.exists()) {
         signingPropsFile.inputStream().use { load(it) }
     }
+}
+if (paravoidProduction) {
+    require(listOf("storeFile", "storePassword", "keyAlias", "keyPassword").all {
+        !signingProperties.getProperty(it).isNullOrBlank()
+    }) { "Paravoid production requires complete release signing.properties" }
 }
 
 // Compute full version: MAJOR.MINOR.COMMIT-COUNT
@@ -202,6 +213,12 @@ android {
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
         }
+        create("paravoidRelease") {
+            initWith(getByName("release"))
+            isMinifyEnabled = false
+            isDebuggable = false
+            matchingFallbacks += listOf("release")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -216,14 +233,17 @@ android {
     }
 }
 
-// Phone-only experiment. The ordinary release variants still use R8 and remain
-// disabled for shell packaging; the explicit test release is unshrunk/debug-signed.
+// Shells use a separate unshrunk release type; normal releases retain R8.
 androidComponents.beforeVariants {
     val shell = it.productFlavors.any { flavor -> flavor.second == "paravoidAndroid" }
     if (shell) {
-        val allowedBuildTypes = if (paravoidAcceptance) listOf("debug") else listOf("debug", "paravoidTestRelease")
+        val allowedBuildTypes = when {
+            paravoidProduction -> listOf("paravoidRelease")
+            paravoidAcceptance -> listOf("debug")
+            else -> listOf("debug", "paravoidTestRelease")
+        }
         it.enable = it.buildType in allowedBuildTypes && it.productFlavors.any { flavor -> flavor.second == "phone" }
-    } else if (it.buildType == "paravoidTestRelease") {
+    } else if (it.buildType in listOf("paravoidTestRelease", "paravoidRelease")) {
         it.enable = false
     }
 }
