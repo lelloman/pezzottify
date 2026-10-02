@@ -140,6 +140,20 @@ read_pool_size = 4
 # model = "musicfm-msd"
 # namespace = "musicfm.mean.v1"
 #
+# The v1 AST namespaces score a single 10 s clip starting at 0:30. The v2
+# namespaces (ast.audioset.v2, ast.instruments.v2) average windows across the
+# whole track; Simple-AI runners must advertise them first. To switch over:
+# 1. List the v1 specs and add the v2 specs with `serve = false`. Unserved
+#    namespaces are computed (and their album embeddings derived) but not used
+#    by radio or smart continuation.
+# 2. Once track and album coverage for v2 is complete, drop `serve = false`.
+#    Radio recipes prefer v2 as soon as it is served.
+# 3. Remove the v1 specs.
+# [[audio_embeddings.specs]]
+# model = "ast-audioset"
+# namespace = "ast.audioset.v2"
+# serve = false
+#
 # Derived album embeddings are materialized into entity_embeddings with
 # entity_type = "album" when every catalog track is present on disk and has
 # the required source embedding.
@@ -149,7 +163,8 @@ read_pool_size = 4
 # jitter_minutes = 120
 # max_albums_per_run = 1000
 #
-# Default derived album namespaces:
+# Without explicit specs, album derivations follow the configured track
+# namespaces (v2 track namespaces derive album.ast.*.v2). Default ones:
 # - album.musicfm.median.v1 from musicfm.mean.v1
 # - album.ast.median.v1 from ast.audioset.v1
 # - album.ast.essence.q25.v1 from ast.audioset.v1
