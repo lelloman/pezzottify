@@ -67,7 +67,10 @@ class SteeringScreenViewModelTest {
 
         val state = viewModel.state.value
         assertThat(state.availability).isEqualTo(SteeringAvailability.Ready)
-        assertThat(state.source).isEqualTo(SteeringSource.Queue(userChosenCount = 2, suggestedCount = 1))
+        // The artwork collage previews only the tracks the user chose.
+        assertThat(state.source).isEqualTo(
+            SteeringSource.Queue(userChosenCount = 2, suggestedCount = 1, previewTrackIds = listOf("t1", "t2")),
+        )
         assertThat(state.destination).isNull()
     }
 

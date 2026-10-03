@@ -13,7 +13,12 @@ data class SteeringReference(
 )
 
 sealed interface SteeringSource {
-    data class Queue(val userChosenCount: Int, val suggestedCount: Int) : SteeringSource
+    data class Queue(
+        val userChosenCount: Int,
+        val suggestedCount: Int,
+        /** First user-chosen tracks, for the artwork collage. */
+        val previewTrackIds: List<String> = emptyList(),
+    ) : SteeringSource
     data class References(val references: List<SteeringReference>) : SteeringSource
 }
 

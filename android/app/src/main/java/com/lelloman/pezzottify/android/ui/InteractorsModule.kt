@@ -1812,8 +1812,24 @@ class InteractorsModule {
         userSettingsStore: UserSettingsStore,
         updateSmartContinuationSetting: UpdateSmartContinuationSetting,
         remoteApiClient: RemoteApiClient,
+        contentResolver: com.lelloman.pezzottify.android.ui.content.ContentResolver,
     ): com.lelloman.pezzottify.android.ui.screen.steering.SteeringScreenViewModel.Interactor =
         object : com.lelloman.pezzottify.android.ui.screen.steering.SteeringScreenViewModel.Interactor {
+            private fun <T> resolved(content: com.lelloman.pezzottify.android.ui.content.Content<T>): T? =
+                (content as? com.lelloman.pezzottify.android.ui.content.Content.Resolved<T>)?.data
+
+            @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+            override fun artworkUrl(entityType: String, entityId: String): Flow<String?> = when (entityType) {
+                "album" -> contentResolver.resolveAlbum(entityId).map { resolved(it)?.imageUrl }
+                "artist" -> contentResolver.resolveArtist(entityId).map { resolved(it)?.imageUrl }
+                "track" -> contentResolver.resolveTrack(entityId).flatMapLatest { content ->
+                    resolved(content)?.albumId
+                        ?.let { albumId -> contentResolver.resolveAlbum(albumId).map { resolved(it)?.imageUrl } }
+                        ?: kotlinx.coroutines.flow.flowOf(null)
+                }
+                else -> kotlinx.coroutines.flow.flowOf(null)
+            }.distinctUntilChanged()
+
             override fun getGravityState() = playbackGravity.state
 
             override fun getSmartContinuationEnabled(): Flow<Boolean> =
