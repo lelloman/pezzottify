@@ -9,6 +9,11 @@
         }}</strong>
         over the next tracks it adds.
       </p>
+      <p v-if="existingParts" class="promptText">
+        This replaces the current destination mix ({{ existingParts }}
+        {{ existingParts === 1 ? "part" : "parts" }}). Use "Add to playback
+        destination" to extend it instead.
+      </p>
       <p v-if="!canSteer" class="promptWarning" role="alert">
         {{ blockedReason }}
       </p>
@@ -70,6 +75,9 @@ const enableSmartContinuation = ref(true);
 const stepsInput = ref(null);
 
 const label = computed(() => props.reference?.label || "");
+const existingParts = computed(
+  () => playback.currentGravity?.destination?.length || 0,
+);
 const smartContinuationEnabled = computed(
   () => userStore.isSmartContinuationEnabled,
 );

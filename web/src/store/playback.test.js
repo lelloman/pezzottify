@@ -416,8 +416,9 @@ test("gravity travels in the queue context and remote controllers send setGravit
   );
   const command = commands.find(([name]) => name === "setGravity");
   assert.ok(command);
-  assert.equal(command[1].gravity.destination.entity_id, "a1");
-  assert.equal(command[1].gravity.destination.label, "Artist");
+  assert.equal(command[1].gravity.destination.length, 1);
+  assert.equal(command[1].gravity.destination[0].entity_id, "a1");
+  assert.equal(command[1].gravity.destination[0].label, "Artist");
   assert.equal(command[1].gravity.steps_total, 7);
   assert.equal(store.currentPlaylist.gravity.destination, null);
   store.exitRemoteMode();
@@ -446,13 +447,12 @@ test("arriving at the destination turns it into the source and stores diagnostic
     { entity_type: "artist", entity_id: "a1", label: "Dest" },
     1,
   );
-  assert.equal(store.currentGravity.destination.label, "Dest");
+  assert.equal(store.currentGravity.destination[0].label, "Dest");
   store.loadTrackIndex(2);
   await flush();
-  assert.deepEqual(smartRequests[0].destination, {
-    entity_type: "artist",
-    entity_id: "a1",
-  });
+  assert.deepEqual(smartRequests[0].destination, [
+    { entity_type: "artist", entity_id: "a1", weight: 1 },
+  ]);
   assert.equal(smartRequests[0].progress, 0);
   const gravityState = store.currentPlaylist.gravity;
   assert.equal(gravityState.destination, null);
@@ -469,5 +469,45 @@ test("arriving at the destination turns it into the source and stores diagnostic
     { entity_type: "artist", entity_id: "a1", weight: 1 },
   ]);
   assert.equal("destination" in smartRequests.at(-1), false);
+  store.stop();
+});
+
+test("destination mixes combine catalog items and concepts", async () => {
+  const { store } = harness();
+  store.setPlaylistFromTrackIds(["u0", "u1", "u2"], 0);
+  await flush();
+  await store.setGravityDestination(
+    { entity_type: "artist", entity_id: "a1" },
+    6,
+  );
+  await store.addGravityDestinationComponent({
+    entity_type: "concept",
+    entity_id: "audioset:Jazz",
+    label: "Jazz",
+    weight: 0.5,
+  });
+  let destination = store.currentGravity.destination;
+  assert.deepEqual(
+    destination.map((c) => [c.entity_type, c.entity_id, c.label, c.weight]),
+    [
+      ["artist", "a1", "Artist", 1],
+      ["concept", "audioset:Jazz", "Jazz", 0.5],
+    ],
+  );
+  store.setGravityDestinationComponentWeight(
+    { entity_type: "concept", entity_id: "audioset:Jazz" },
+    2,
+  );
+  assert.equal(store.currentGravity.destination[1].weight, 2);
+  store.removeGravityDestinationComponent({
+    entity_type: "artist",
+    entity_id: "a1",
+  });
+  destination = store.currentGravity.destination;
+  assert.deepEqual(
+    destination.map((c) => c.entity_id),
+    ["audioset:Jazz"],
+  );
+  assert.equal(store.currentGravity.steps_total, 6);
   store.stop();
 });

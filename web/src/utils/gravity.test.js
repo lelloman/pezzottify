@@ -2,6 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   AUTO_IDS_CAP,
+  MAX_COMPONENTS,
+  addDestinationComponent,
+  removeDestinationComponent,
+  setDestinationComponentWeight,
   SOURCE_SAMPLE_CAP,
   appendAuto,
   applyDiagnostics,
@@ -23,12 +27,18 @@ import {
 const ids = (count, prefix = "t") =>
   Array.from({ length: count }, (_, i) => `${prefix}${i}`);
 const artist = { entity_type: "artist", entity_id: "a1", label: "Artist" };
+const artistMix = [{ ...artist, weight: 1 }];
+const jazz = {
+  entity_type: "concept",
+  entity_id: "audioset:Jazz",
+  label: "Jazz",
+};
 
 test("create returns the documented defaults and independent copies", () => {
   const first = create();
   const second = create();
   assert.deepEqual(first, {
-    v: 1,
+    v: 2,
     source: { kind: "queue" },
     auto_track_ids: [],
     destination: null,
@@ -46,7 +56,7 @@ test("create returns the documented defaults and independent copies", () => {
   });
   first.auto_track_ids.push("x");
   assert.deepEqual(second.auto_track_ids, []);
-  assert.equal(JSON.parse(JSON.stringify(first)).v, 1);
+  assert.equal(JSON.parse(JSON.stringify(first)).v, 2);
 });
 
 test("normalize fills missing keys from persisted or remote objects", () => {
@@ -87,7 +97,7 @@ test("destination steps advance per appended track and arrive at the total", () 
   g = appendAuto(g, ["s1", "s2"]);
   assert.equal(g.steps_done, 2);
   assert.ok(Math.abs(progress(g) - 2 / 3) < 1e-9);
-  assert.deepEqual(g.destination, artist);
+  assert.deepEqual(g.destination, artistMix);
   g = appendAuto(g, ["s3", "s4"]);
   assert.equal(g.destination, null, "arrived");
   assert.deepEqual(g.source, {
@@ -105,7 +115,8 @@ test("setDestination resets steps, clearing keeps the source, arrive without des
   g = setDestination(g, { entity_type: "track", entity_id: "t9" });
   assert.equal(g.steps_done, 0);
   assert.equal(g.steps_total, 4, "steps total kept when not given");
-  assert.equal(g.destination.label, "t9", "label falls back to the id");
+  assert.equal(g.destination.length, 1, "replaces the whole mix");
+  assert.equal(g.destination[0].label, "t9", "label falls back to the id");
   const cleared = setDestination(g, null);
   assert.equal(cleared.destination, null);
   assert.deepEqual(cleared.source, { kind: "queue" });
@@ -120,7 +131,7 @@ test("setStepsTotal clamps to one and arrives when already past the total", () =
   assert.equal(arrived.destination, null);
   assert.equal(arrived.source.kind, "references");
   const notYet = setStepsTotal(g, 3);
-  assert.deepEqual(notYet.destination, artist);
+  assert.deepEqual(notYet.destination, artistMix);
   assert.equal(notYet.steps_total, 3);
 });
 
@@ -196,10 +207,9 @@ test("buildContinuationRequest carries references, destination, progress and kno
     away: [{ entity_type: "track", entity_id: "bad", weight: 2, label: "x" }],
   });
   const request = buildContinuationRequest(g, ["u0", "s1"], 1, 1);
-  assert.deepEqual(request.destination, {
-    entity_type: "artist",
-    entity_id: "a1",
-  });
+  assert.deepEqual(request.destination, [
+    { entity_type: "artist", entity_id: "a1", weight: 1 },
+  ]);
   assert.equal(request.progress, 0.25);
   assert.equal(request.recency_weight, 0.1);
   assert.deepEqual(request.criteria, [
@@ -218,4 +228,97 @@ test("buildContinuationRequest carries references, destination, progress and kno
   ]);
   assert.equal("source_track_ids" in arrived, false);
   assert.equal("destination" in arrived, false);
+});
+
+test("destination mixes: add, merge, weight, remove and cap", () => {
+  let g = setDestination(create(), artist, 5);
+  g = appendAuto(g, ["s1"]);
+  g = addDestinationComponent(g, { ...jazz, weight: 0.5 });
+  assert.deepEqual(
+    g.destination.map((c) => [c.entity_id, c.weight]),
+    [
+      ["a1", 1],
+      ["audioset:Jazz", 0.5],
+    ],
+  );
+  assert.equal(g.steps_done, 1, "adding a component keeps progress");
+  g = addDestinationComponent(g, { ...jazz, weight: 2 });
+  assert.equal(g.destination.length, 2, "same entity merges");
+  assert.equal(g.destination[1].weight, 2);
+  g = setDestinationComponentWeight(g, jazz, 0.7);
+  assert.equal(g.destination[1].weight, 0.7);
+  assert.equal(
+    setDestinationComponentWeight(g, jazz, 0),
+    g,
+    "weights stay positive",
+  );
+  g = removeDestinationComponent(g, artist);
+  assert.deepEqual(
+    g.destination.map((c) => c.entity_id),
+    ["audioset:Jazz"],
+  );
+  const empty = removeDestinationComponent(g, jazz);
+  assert.equal(
+    empty.destination,
+    null,
+    "removing the last component clears it",
+  );
+
+  let full = create();
+  for (let i = 0; i < MAX_COMPONENTS + 3; i++) {
+    full = addDestinationComponent(full, {
+      entity_type: "track",
+      entity_id: `t${i}`,
+    });
+  }
+  assert.equal(full.destination.length, MAX_COMPONENTS);
+  const capped = setDestination(
+    create(),
+    ids(12).map((id) => ({ entity_type: "track", entity_id: id })),
+  );
+  assert.equal(capped.destination.length, MAX_COMPONENTS);
+});
+
+test("arriving at a mix turns the whole mix into the source", () => {
+  let g = setDestination(create(), [artist, { ...jazz, weight: 0.5 }], 2);
+  g = appendAuto(g, ["s1", "s2"]);
+  assert.equal(g.destination, null);
+  assert.deepEqual(g.source, {
+    kind: "references",
+    references: [
+      { ...artist, weight: 1 },
+      { ...jazz, weight: 0.5 },
+    ],
+  });
+  const request = buildContinuationRequest(g, ["u0", "s1", "s2"], 2, 1);
+  assert.deepEqual(request.source_references, [
+    { entity_type: "artist", entity_id: "a1", weight: 1 },
+    { entity_type: "concept", entity_id: "audioset:Jazz", weight: 0.5 },
+  ]);
+});
+
+test("mix requests send every component with its weight", () => {
+  const g = setDestination(create(), [artist, { ...jazz, weight: 0.5 }], 4);
+  const request = buildContinuationRequest(g, ["u0"], 0, 1);
+  assert.deepEqual(request.destination, [
+    { entity_type: "artist", entity_id: "a1", weight: 1 },
+    { entity_type: "concept", entity_id: "audioset:Jazz", weight: 0.5 },
+  ]);
+  assert.equal(request.progress, 0);
+});
+
+test("v1 single-object destinations are dropped, not migrated", () => {
+  const legacy = normalize({
+    v: 1,
+    destination: artist,
+    steps_total: 7,
+    steps_done: 3,
+  });
+  assert.equal(legacy.v, 2);
+  assert.equal(legacy.destination, null);
+  assert.equal(progress(legacy), 0);
+  assert.equal(
+    "destination" in buildContinuationRequest(legacy, ["u0"], 0, 1),
+    false,
+  );
 });

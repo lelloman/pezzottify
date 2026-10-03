@@ -344,6 +344,19 @@ export const useRemoteStore = defineStore("remote", () => {
 
   // `request` is built by utils/gravity.buildContinuationRequest. Returns the
   // recommended ids plus the server's steering diagnostics (everything but track_ids).
+  // Steering concepts (genres, instruments, moods, eras) usable in destination mixes.
+  const fetchConcepts = async ({ q, family, limit = 500 } = {}, signal) => {
+    const params = { limit };
+    if (q) params.q = q;
+    if (family) params.family = family;
+    const response = await axios.get("/v1/content/concepts", {
+      params,
+      signal,
+      timeout: 20000,
+    });
+    return response.data?.concepts || [];
+  };
+
   const fetchContinuationRecommendations = async (request) => {
     try {
       const response = await axios.post(
@@ -1423,6 +1436,7 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchGenreTracks,
     fetchGenreRadio,
     fetchContinuationRecommendations,
+    fetchConcepts,
     fetchArtistGreatestHits,
     fetchWorkVersions,
     fetchRadioContinuation,

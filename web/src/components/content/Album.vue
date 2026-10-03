@@ -59,6 +59,21 @@
             <SteeringWheelIcon class="steerButtonIcon" />
             Steer here
           </button>
+          <button
+            v-if="canAddToDestinationMix"
+            class="advancedRadioButton steerButton"
+            title="Add this album to the current destination mix"
+            @click.stop="
+              playback.addGravityDestinationComponent({
+                entity_type: 'album',
+                entity_id: albumId,
+                label: album.name,
+              })
+            "
+          >
+            <SteeringWheelIcon class="steerButtonIcon" />
+            Add to mix
+          </button>
           <ToggableFavoriteIcon
             :toggled="isAlbumLiked"
             :clickCallback="handleClickOnFavoriteIcon"
@@ -201,6 +216,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { MAX_COMPONENTS } from "@/utils/gravity";
 import { chooseAlbumCoverImageUrl } from "@/utils";
 import { canRequestAlbumDownload } from "@/utils/downloadRequests";
 import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
@@ -231,6 +247,10 @@ const album = ref(null);
 const coverUrls = ref(null);
 
 const playback = usePlaybackStore();
+const canAddToDestinationMix = computed(() => {
+  const destination = playback.currentGravity?.destination;
+  return Boolean(destination?.length && destination.length < MAX_COMPONENTS);
+});
 const userStore = useUserStore();
 const staticsStore = useStaticsStore();
 const remoteStore = useRemoteStore();
