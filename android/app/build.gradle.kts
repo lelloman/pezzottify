@@ -110,7 +110,13 @@ val commitCount: Int by lazy {
     }
 }
 
-val appVersion = "$baseVersion.$commitCount"
+// A Paravoid payload (VPK) update must be built for the already installed shell, whose
+// manifest includes its version. -PparavoidShellVersionCode pins the shell version to
+// that release while the payload version still advances.
+val shellVersionCode: Int =
+    providers.gradleProperty("paravoidShellVersionCode").orNull?.toInt() ?: commitCount
+
+val appVersion = "$baseVersion.$shellVersionCode"
 
 fun buildProperty(name: String, default: String): String =
     providers.gradleProperty(name).orNull ?: localProperties.getProperty(name, default)
@@ -141,7 +147,7 @@ android {
         applicationId = "com.lelloman.pezzottify.android"
         minSdk = 24
         targetSdk = 36
-        versionCode = commitCount
+        versionCode = shellVersionCode
         versionName = appVersion
         buildConfigField("boolean", "PARAVOID_ACCEPTANCE_ENABLED", "false")
         buildConfigField("String", "PARAVOID_ACCEPTANCE_GENERATION", "\"none\"")

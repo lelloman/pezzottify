@@ -202,6 +202,12 @@ separate `publish` command with its current expected revision. Preserve the
 `baseline-candidate/` after the shell is accepted; compatible future VPK builds
 must use that baseline and an increasing payload version.
 
+`bash ../scripts/publish-paravoid-vpk.sh <shell-version-code>` publishes a payload-only
+update for an already published shell: it builds against that shell's saved baseline
+with `-PparavoidShellVersionCode` pinning the shell version (the manifest is part of
+the contract), refuses unless the result is compatible with the accepted contract,
+then uploads, waits for validation and publishes the VPK.
+
 `bash ../scripts/publish-paravoid-apk.sh --dry-run --json` builds and validates
 this exact production identity. With an authorized `--yes --json`, it uploads
 the shell draft for the existing Pezzottify entry. It never publishes the
