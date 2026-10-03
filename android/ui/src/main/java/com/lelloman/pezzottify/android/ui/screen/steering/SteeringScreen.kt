@@ -26,7 +26,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,7 +45,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -123,6 +124,13 @@ private fun SteeringControls(state: SteeringScreenState, actions: SteeringScreen
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        item {
+            Text(
+                text = stringResource(R.string.steering_intro),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         if (!state.smartContinuationEnabled) {
             item { SmartContinuationOffBanner(onTurnOn = { actions.setSmartContinuationEnabled(true) }) }
         }
@@ -137,7 +145,7 @@ private fun SteeringControls(state: SteeringScreenState, actions: SteeringScreen
         }
         item { SourceCard(state.source, actions) }
         item { DestinationCard(state, actions) }
-        item { KnobsCard(state, actions) }
+        item { AlongTheWayCard(state, actions) }
     }
 }
 
@@ -159,18 +167,31 @@ private fun SmartContinuationOffBanner(onTurnOn: () -> Unit) {
 }
 
 @Composable
-private fun SectionCard(title: String, content: @Composable () -> Unit) {
+private fun SectionCard(title: String, help: String? = null, content: @Composable () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(text = title, style = MaterialTheme.typography.titleMedium)
+            help?.let { HelpText(it) }
             content()
         }
     }
 }
 
 @Composable
+private fun HelpText(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
 private fun SourceCard(source: SteeringSource, actions: SteeringScreenActions) {
-    SectionCard(title = stringResource(R.string.steering_source)) {
+    SectionCard(
+        title = stringResource(R.string.steering_source),
+        help = stringResource(R.string.steering_source_help),
+    ) {
         when (source) {
             is SteeringSource.Queue -> Text(
                 text = stringResource(
@@ -205,7 +226,10 @@ private fun SourceCard(source: SteeringSource, actions: SteeringScreenActions) {
 
 @Composable
 private fun DestinationCard(state: SteeringScreenState, actions: SteeringScreenActions) {
-    SectionCard(title = stringResource(R.string.steering_destination)) {
+    SectionCard(
+        title = stringResource(R.string.steering_destination),
+        help = stringResource(R.string.steering_destination_help),
+    ) {
         val destination = state.destination
         if (destination == null) {
             Text(
@@ -236,11 +260,7 @@ private fun DestinationCard(state: SteeringScreenState, actions: SteeringScreenA
             progress = { destination.progress },
             modifier = Modifier.fillMaxWidth(),
         )
-        Text(
-            text = stringResource(R.string.steering_progress, state.stepsDone, state.stepsTotal),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        HelpText(stringResource(R.string.steering_progress, state.stepsDone, state.stepsTotal))
         destination.queryToDestination?.let { similarity ->
             Text(
                 text = stringResource(R.string.steering_match, percent(similarity)),
@@ -249,25 +269,22 @@ private fun DestinationCard(state: SteeringScreenState, actions: SteeringScreenA
             )
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = stringResource(R.string.steering_steps_remaining),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f),
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.steering_steps_remaining, state.stepsRemaining),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                HelpText(stringResource(R.string.steering_steps_help))
+            }
             FilledTonalIconButton(
                 onClick = { actions.setStepsRemaining(state.stepsRemaining - 1) },
                 enabled = state.stepsRemaining > 1,
             ) {
-                Icon(Icons.Default.Remove, contentDescription = null)
+                Icon(Icons.Default.Remove, contentDescription = stringResource(R.string.steering_fewer_tracks))
             }
-            Text(
-                text = state.stepsRemaining.toString(),
-                style = MaterialTheme.typography.titleMedium,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.width(48.dp),
-            )
+            Spacer(Modifier.width(8.dp))
             FilledTonalIconButton(onClick = { actions.setStepsRemaining(state.stepsRemaining + 1) }) {
-                Icon(Icons.Default.Add, contentDescription = null)
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.steering_more_tracks))
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -350,94 +367,129 @@ private const val MIN_COMPONENT_WEIGHT = 0.1f
 private const val MAX_COMPONENT_WEIGHT = 2f
 
 @Composable
-private fun KnobsCard(state: SteeringScreenState, actions: SteeringScreenActions) {
+private fun AlongTheWayCard(state: SteeringScreenState, actions: SteeringScreenActions) {
     val knobs = state.knobs
-    SectionCard(title = stringResource(R.string.steering_knobs)) {
-        KnobSlider(
-            label = stringResource(R.string.steering_recency),
-            hint = stringResource(R.string.steering_recency_hint),
-            value = knobs.recencyWeight,
-            onCommit = actions::setRecencyWeight,
-        )
-        KnobSlider(stringResource(R.string.steering_diversity), null, knobs.diversity, actions::setDiversity)
-        KnobSlider(stringResource(R.string.steering_randomness), null, knobs.randomness, actions::setRandomness)
-
-        Text(text = stringResource(R.string.steering_mode), style = MaterialTheme.typography.bodyMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = knobs.mode == SteeringKnobs.MODE_SIMILAR,
-                onClick = { actions.setMode(SteeringKnobs.MODE_SIMILAR) },
-                label = { Text(stringResource(R.string.steering_mode_similar)) },
-            )
-            FilterChip(
-                selected = knobs.mode == SteeringKnobs.MODE_EXPLORE,
-                enabled = state.canUseExplore,
-                onClick = { actions.setMode(SteeringKnobs.MODE_EXPLORE) },
-                label = { Text(stringResource(R.string.steering_mode_explore)) },
-            )
-        }
-        if (!state.canUseExplore) {
-            Text(
-                text = stringResource(R.string.steering_explore_disabled),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        if (knobs.criteria.size > 1) {
-            HorizontalDivider()
-            Text(text = stringResource(R.string.steering_criteria), style = MaterialTheme.typography.bodyMedium)
-            knobs.criteria.forEach { criterion ->
-                KnobSlider(
-                    label = criterion.label,
-                    hint = null,
-                    value = criterion.weight,
-                    onCommit = { actions.setCriterionWeight(criterion.namespace, it) },
-                )
-            }
+    var showMore by rememberSaveable { mutableStateOf(false) }
+    SectionCard(
+        title = stringResource(R.string.steering_knobs),
+        help = stringResource(R.string.steering_knobs_help),
+    ) {
+        Text(text = stringResource(R.string.steering_away), style = MaterialTheme.typography.bodyMedium)
+        HelpText(stringResource(R.string.steering_away_help))
+        ReferenceChips(knobs.away, onRemove = actions::removeAway)
+        OutlinedButton(onClick = { actions.openSearch(SteeringSearchTarget.Away) }) {
+            Text(stringResource(R.string.steering_add_away))
         }
 
         HorizontalDivider()
-        Text(text = stringResource(R.string.steering_away), style = MaterialTheme.typography.bodyMedium)
-        ReferenceChips(knobs.away, onRemove = actions::removeAway)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { actions.openSearch(SteeringSearchTarget.Away) }) {
-                Text(stringResource(R.string.steering_add_away))
+        SpectrumSlider(
+            title = stringResource(R.string.steering_follow),
+            help = stringResource(R.string.steering_follow_help),
+            startLabel = stringResource(R.string.steering_follow_start),
+            endLabel = stringResource(R.string.steering_follow_end),
+            value = knobs.recencyWeight,
+            onCommit = actions::setRecencyWeight,
+        )
+        SpectrumSlider(
+            title = stringResource(R.string.steering_variety),
+            help = stringResource(R.string.steering_variety_help),
+            startLabel = stringResource(R.string.steering_variety_start),
+            endLabel = stringResource(R.string.steering_variety_end),
+            value = knobs.variety,
+            onCommit = actions::setVariety,
+        )
+
+        if (knobs.criteria.size > 1) {
+            TextButton(onClick = { showMore = !showMore }) {
+                Text(
+                    stringResource(
+                        if (showMore) R.string.steering_fewer_options else R.string.steering_more_options
+                    )
+                )
             }
-            if (!knobs.isDefault) {
-                TextButton(onClick = actions::resetKnobs) {
-                    Text(stringResource(R.string.steering_reset_knobs))
+            if (showMore) {
+                Text(text = stringResource(R.string.steering_listen_for), style = MaterialTheme.typography.bodyMedium)
+                HelpText(stringResource(R.string.steering_listen_for_help))
+                knobs.criteria.forEach { criterion ->
+                    CriterionSlider(
+                        label = criterionLabel(criterion),
+                        value = criterion.weight,
+                        onCommit = { actions.setCriterionWeight(criterion.namespace, it) },
+                    )
                 }
+            }
+        }
+
+        if (!knobs.isDefault) {
+            TextButton(onClick = actions::resetKnobs) {
+                Text(stringResource(R.string.steering_reset_knobs))
             }
         }
     }
 }
 
-/** Slider that shows changes while dragging but only commits on release. */
 @Composable
-private fun KnobSlider(label: String, hint: String?, value: Float, onCommit: (Float) -> Unit) {
+private fun criterionLabel(criterion: SteeringCriterion): String = when (criterion.kind) {
+    SteeringCriterionKind.OverallSound -> stringResource(R.string.steering_listen_sound)
+    SteeringCriterionKind.AudioScene -> stringResource(R.string.steering_listen_scene)
+    SteeringCriterionKind.Instruments -> stringResource(R.string.steering_listen_instruments)
+    SteeringCriterionKind.Other -> criterion.label
+}
+
+/** A 0..1 slider described by what each end means; shows changes while dragging, commits on release. */
+@Composable
+private fun SpectrumSlider(
+    title: String,
+    help: String,
+    startLabel: String,
+    endLabel: String,
+    value: Float,
+    onCommit: (Float) -> Unit,
+) {
     var dragValue by remember(value) { mutableFloatStateOf(value) }
     Column {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(text = label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            Text(
-                text = "%.2f".format(dragValue),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        hint?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        Text(text = title, style = MaterialTheme.typography.bodyMedium)
+        HelpText(help)
         Slider(
             value = dragValue,
             onValueChange = { dragValue = it },
             onValueChangeFinished = { onCommit(dragValue) },
             valueRange = 0f..1f,
+        )
+        Row {
+            Text(
+                text = startLabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = endLabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.End,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+/** How much one way of comparing music counts, from "not at all" to "fully". */
+@Composable
+private fun CriterionSlider(label: String, value: Float, onCommit: (Float) -> Unit) {
+    var dragValue by remember(value) { mutableFloatStateOf(value) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.width(112.dp),
+        )
+        Slider(
+            value = dragValue,
+            onValueChange = { dragValue = it },
+            onValueChangeFinished = { onCommit(dragValue) },
+            valueRange = 0f..1f,
+            modifier = Modifier.weight(1f),
         )
     }
 }

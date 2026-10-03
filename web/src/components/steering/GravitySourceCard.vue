@@ -1,16 +1,20 @@
 <template>
   <section class="steeringCard">
     <header class="cardHeader">
-      <span class="cardTitle">Source</span>
+      <span class="cardTitle">Starting point</span>
       <button
         v-if="gravity.source.kind === 'references'"
         type="button"
         class="textButton"
         @click="resetToQueue"
       >
-        Reset to queue
+        Use my queue again
       </button>
     </header>
+    <p class="cardHint">
+      What the queue sounds like now: the tracks you chose, or where a previous
+      journey arrived.
+    </p>
 
     <template v-if="gravity.source.kind === 'queue'">
       <p class="sourceSummary">
@@ -22,25 +26,24 @@
         </template>
       </p>
       <p class="cardHint">
-        Suggestions follow the tracks you chose, with a small pull from what
-        just played. Tracks added by smart continuation never become the source.
+        Tracks added by smart continuation never change the starting point.
       </p>
     </template>
 
     <template v-else>
       <ReferenceEditor
-        title="Anchored on"
+        title="Based on"
         :modelValue="gravity.source.references"
         :allowManualAdd="false"
-        emptyText="No references: suggestions fall back to the queue."
+        emptyText="Nothing here: suggestions follow your queue."
         @update:modelValue="updateReferences"
       />
     </template>
 
     <details class="anchorPicker">
-      <summary>Anchor on something else</summary>
+      <summary>Start from something else</summary>
       <ReferencePicker
-        placeholder="Search an artist, album or track to anchor on"
+        placeholder="Search something to start from"
         @select="addReference"
       />
     </details>
