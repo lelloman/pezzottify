@@ -674,4 +674,6 @@
     <string name="steering_search_catalog">Artists, albums and tracks</string>
     <string name="steering_search_concepts">Concepts</string>
     <string name="app_updates">App updates</string>
+    <string name="app_updates_description">Check for and install updates</string>
+    <string name="app_updates_description_with_version">Version %1$s · Check for and install updates</string>
 </resources>

@@ -21,7 +21,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -79,6 +78,11 @@ private fun SettingsScreenInternal(
     val currentState by state.collectAsState()
     val context = LocalContext.current
     val appUpdatesAvailable = remember(context) { AppUpdates.available(context) }
+    val versionName = remember(context) {
+        runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull()
+    }
 
     LaunchedEffect(Unit) {
         events.collect { event ->
@@ -112,16 +116,6 @@ private fun SettingsScreenInternal(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
         ) {
-            if (appUpdatesAvailable) {
-                OutlinedButton(
-                    onClick = { AppUpdates.open(context) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.app_updates))
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
             // Appearance Section
             Text(
                 text = stringResource(R.string.appearance),
@@ -265,6 +259,14 @@ private fun SettingsScreenInternal(
                 onBaseUrlInputChanged = actions::onBaseUrlInputChanged,
                 onSaveBaseUrl = actions::saveBaseUrl
             )
+
+            if (appUpdatesAvailable) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+                AppUpdatesSection(
+                    versionName = versionName,
+                    onOpenAppUpdates = { AppUpdates.open(context) },
+                )
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
         }
