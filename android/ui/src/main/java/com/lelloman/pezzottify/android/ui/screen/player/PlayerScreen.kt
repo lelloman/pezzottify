@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -474,137 +473,145 @@ private fun PlaybackControls(
     hasDestination: Boolean = false,
     onSteering: () -> Unit = {},
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Shuffle
-        IconButton(
-            onClick = onShuffle,
-            modifier = Modifier.size(48.dp),
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                painter = painterResource(R.drawable.baseline_shuffle_24),
-                contentDescription = stringResource(R.string.shuffle),
-                modifier = Modifier.size(24.dp),
-                tint = if (shuffleEnabled) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                }
-            )
-        }
-
-        // Skip previous
-        IconButton(
-            onClick = onSkipPrevious,
-            enabled = hasPrevious,
-            modifier = Modifier.size(56.dp),
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.baseline_skip_previous_24),
-                contentDescription = stringResource(R.string.previous),
-                modifier = Modifier.size(36.dp),
-                tint = if (hasPrevious) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                }
-            )
-        }
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        // Play/Pause
-        IconButton(
-            onClick = onPlayPause,
-            modifier = Modifier
-                .size(72.dp)
-                .background(MaterialTheme.colorScheme.primary, CircleShape),
-        ) {
-            Icon(
-                painter = painterResource(
-                    if (isPlaying) R.drawable.baseline_pause_24 else R.drawable.baseline_play_arrow_24
-                ),
-                contentDescription = if (isPlaying) stringResource(R.string.pause) else stringResource(R.string.play),
-                modifier = Modifier.size(40.dp),
-                tint = MaterialTheme.colorScheme.onSurface,
-            )
-        }
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        // Skip next
-        IconButton(
-            onClick = onSkipNext,
-            enabled = hasNext,
-            modifier = Modifier.size(56.dp),
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.baseline_skip_next_24),
-                contentDescription = stringResource(R.string.next),
-                modifier = Modifier.size(36.dp),
-                tint = if (hasNext) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                }
-            )
-        }
-
-        // Repeat
-        IconButton(
-            onClick = onRepeat,
-            modifier = Modifier.size(48.dp),
-        ) {
-            Icon(
-                painter = painterResource(
-                    when (repeatMode) {
-                        RepeatModeUi.OFF -> R.drawable.baseline_repeat_24
-                        RepeatModeUi.ALL -> R.drawable.baseline_repeat_24
-                        RepeatModeUi.ONE -> R.drawable.baseline_repeat_one_24
+            // Shuffle
+            IconButton(
+                onClick = onShuffle,
+                modifier = Modifier.size(48.dp),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.baseline_shuffle_24),
+                    contentDescription = stringResource(R.string.shuffle),
+                    modifier = Modifier.size(24.dp),
+                    tint = if (shuffleEnabled) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     }
-                ),
-                contentDescription = stringResource(R.string.repeat),
-                modifier = Modifier.size(24.dp),
-                tint = when (repeatMode) {
-                    RepeatModeUi.OFF -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    RepeatModeUi.ALL, RepeatModeUi.ONE -> MaterialTheme.colorScheme.primary
-                }
-            )
+                )
+            }
+
+            // Skip previous
+            IconButton(
+                onClick = onSkipPrevious,
+                enabled = hasPrevious,
+                modifier = Modifier.size(56.dp),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.baseline_skip_previous_24),
+                    contentDescription = stringResource(R.string.previous),
+                    modifier = Modifier.size(36.dp),
+                    tint = if (hasPrevious) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    }
+                )
+            }
+
+            // Play/Pause
+            IconButton(
+                onClick = onPlayPause,
+                modifier = Modifier
+                    .size(72.dp)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape),
+            ) {
+                Icon(
+                    painter = painterResource(
+                        if (isPlaying) R.drawable.baseline_pause_24 else R.drawable.baseline_play_arrow_24
+                    ),
+                    contentDescription = if (isPlaying) stringResource(R.string.pause) else stringResource(R.string.play),
+                    modifier = Modifier.size(40.dp),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+
+            // Skip next
+            IconButton(
+                onClick = onSkipNext,
+                enabled = hasNext,
+                modifier = Modifier.size(56.dp),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.baseline_skip_next_24),
+                    contentDescription = stringResource(R.string.next),
+                    modifier = Modifier.size(36.dp),
+                    tint = if (hasNext) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    }
+                )
+            }
+
+            // Repeat
+            IconButton(
+                onClick = onRepeat,
+                modifier = Modifier.size(48.dp),
+            ) {
+                Icon(
+                    painter = painterResource(
+                        when (repeatMode) {
+                            RepeatModeUi.OFF -> R.drawable.baseline_repeat_24
+                            RepeatModeUi.ALL -> R.drawable.baseline_repeat_24
+                            RepeatModeUi.ONE -> R.drawable.baseline_repeat_one_24
+                        }
+                    ),
+                    contentDescription = stringResource(R.string.repeat),
+                    modifier = Modifier.size(24.dp),
+                    tint = when (repeatMode) {
+                        RepeatModeUi.OFF -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        RepeatModeUi.ALL, RepeatModeUi.ONE -> MaterialTheme.colorScheme.primary
+                    }
+                )
+            }
         }
 
-        if (showSmartContinuation) IconButton(
-            onClick = onSmartContinuation,
-            modifier = Modifier.size(48.dp),
+        // Secondary row, like Spotify's devices/queue row: smart continuation on the
+        // left, steering on the right. Radio queues continue from their own seed.
+        if (showSmartContinuation) Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                painter = painterResource(R.drawable.baseline_playlist_add_24),
-                contentDescription = stringResource(R.string.smart_continuation),
-                modifier = Modifier.size(24.dp),
-                tint = if (smartContinuationEnabled) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                }
-            )
-        }
+            IconButton(
+                onClick = onSmartContinuation,
+                modifier = Modifier.size(48.dp),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.baseline_playlist_add_24),
+                    contentDescription = stringResource(R.string.smart_continuation),
+                    modifier = Modifier.size(24.dp),
+                    tint = if (smartContinuationEnabled) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    }
+                )
+            }
 
-        if (showSmartContinuation) IconButton(
-            onClick = onSteering,
-            modifier = Modifier.size(48.dp),
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_steering_wheel_24),
-                contentDescription = stringResource(R.string.steering_open),
-                modifier = Modifier.size(24.dp),
-                tint = if (hasDestination) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                }
-            )
+            IconButton(
+                onClick = onSteering,
+                modifier = Modifier.size(48.dp),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_steering_wheel_24),
+                    contentDescription = stringResource(R.string.steering_open),
+                    modifier = Modifier.size(24.dp),
+                    tint = if (hasDestination) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    }
+                )
+            }
         }
     }
 }
