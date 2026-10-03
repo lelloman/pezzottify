@@ -669,5 +669,9 @@
     <string name="steering_family_genre_tag">Tag di genere</string>
     <string name="steering_family_recorded">Registrato negli anni</string>
     <string name="steering_family_composed">Composto negli anni</string>
+    <string name="steering_your_queue">La tua coda</string>
+    <string name="steering_mix_title">Un mix di %1$d</string>
+    <string name="steering_search_catalog">Artisti, album e brani</string>
+    <string name="steering_search_concepts">Concetti</string>
     <string name="app_updates">Aggiornamenti app</string>
 </resources>

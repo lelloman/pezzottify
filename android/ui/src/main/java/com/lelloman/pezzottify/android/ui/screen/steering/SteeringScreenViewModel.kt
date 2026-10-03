@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -34,6 +35,17 @@ class SteeringScreenViewModel @Inject constructor(
 
     /** Loaded once, on first search, and filtered locally: the whole list is a few hundred items. */
     private var concepts: List<Concept>? = null
+
+    private val artwork = HashMap<String, StateFlow<String?>>()
+
+    /** Artwork URL for a catalog reference (album art for tracks); concepts have none. */
+    fun artworkUrl(reference: SteeringReference): StateFlow<String?> {
+        val key = "${reference.entityType}:${reference.entityId}"
+        return artwork.getOrPut(key) {
+            interactor.artworkUrl(reference.entityType, reference.entityId)
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+        }
+    }
 
     val state: StateFlow<SteeringScreenState> = combine(
         interactor.getGravityState(),
@@ -218,6 +230,7 @@ class SteeringScreenViewModel @Inject constructor(
             SteeringSource.Queue(
                 userChosenCount = gravityState.trackIds.size - suggested,
                 suggestedCount = suggested,
+                previewTrackIds = gravityState.trackIds.filterNot { it in auto }.take(QUEUE_PREVIEW_TRACKS),
             )
         }
         val firstNamespace = gravity.lastDiagnostics?.namespaces?.firstOrNull()
@@ -293,12 +306,16 @@ class SteeringScreenViewModel @Inject constructor(
 
         /** Every steering concept; null when loading failed. */
         suspend fun getConcepts(): List<Concept>?
+
+        /** Artwork for an artist, album or track (its album's art); null when unknown. */
+        fun artworkUrl(entityType: String, entityId: String): Flow<String?> = flowOf(null)
     }
 
     companion object {
         const val DEFAULT_NAMESPACE = "musicfm.mean.v1"
         const val MAX_REFERENCES = 8
         private const val SEARCH_DEBOUNCE_MS = 300L
+        private const val QUEUE_PREVIEW_TRACKS = 12
     }
 }
 
