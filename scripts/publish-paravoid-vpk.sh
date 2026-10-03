@@ -75,7 +75,7 @@ upload_id="$("$publisher" upload-vpk "$package" "$contract" "$output/payload.vpk
 for _ in $(seq 1 90); do
     status_json="$("$publisher" upload-status "$upload_id" --json < /dev/null | tail -n 1)"
     status="$(json_field "['status']" <<< "$status_json")"
-    [[ "$status" == queued || "$status" == running ]] || break
+    [[ "$status" == queued || "$status" == validating || "$status" == running ]] || break
     sleep 10
 done
 [[ "$status" == ready ]] || { echo "Upload validation ended as '$status': $status_json" >&2; exit 1; }
