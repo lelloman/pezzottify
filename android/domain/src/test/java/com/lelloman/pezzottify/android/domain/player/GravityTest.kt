@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.domain.player
 
 import com.google.common.truth.Truth.assertThat
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import org.junit.Test
 
@@ -11,7 +12,7 @@ class GravityTest {
 
     @Test fun `defaults match the shared schema`() {
         val gravity = Gravity()
-        assertThat(gravity.v).isEqualTo(1)
+        assertThat(gravity.v).isEqualTo(2)
         assertThat(gravity.source).isEqualTo(GravitySource(kind = "queue"))
         assertThat(gravity.autoTrackIds).isEmpty()
         assertThat(gravity.destination).isNull()
@@ -46,13 +47,13 @@ class GravityTest {
         gravity = gravity.appendedAuto(listOf("x", "y"))
         assertThat(gravity.stepsDone).isEqualTo(2)
         assertThat(gravity.progress()).isWithin(1e-9).of(2.0 / 3.0)
-        assertThat(gravity.destination).isEqualTo(artist)
+        assertThat(gravity.destination).containsExactly(artist)
         gravity = gravity.appendedAuto(listOf("z", "w"))
         assertThat(gravity.destination).isNull()
         assertThat(gravity.stepsDone).isEqualTo(0)
         assertThat(gravity.stepsTotal).isEqualTo(3)
         assertThat(gravity.source.kind).isEqualTo("references")
-        assertThat(gravity.source.references).containsExactly(artist.copy(weight = 1.0))
+        assertThat(gravity.source.references).containsExactly(artist)
         assertThat(gravity.autoTrackIds).containsExactly("x", "y", "z", "w").inOrder()
     }
 
@@ -72,11 +73,52 @@ class GravityTest {
     @Test fun `lowering steps total below steps done arrives`() {
         val gravity = Gravity().withDestination(artist, 10).appendedAuto(listOf("x", "y", "z"))
         val same = gravity.withStepsTotal(5)
-        assertThat(same.destination).isEqualTo(artist)
+        assertThat(same.destination).containsExactly(artist)
         assertThat(same.stepsTotal).isEqualTo(5)
         val arrived = gravity.withStepsTotal(3)
         assertThat(arrived.destination).isNull()
-        assertThat(arrived.source.references).containsExactly(artist.copy(weight = 1.0))
+        assertThat(arrived.source.references).containsExactly(artist)
+    }
+
+    @Test fun `a destination mix keeps weights through arrival and is capped`() {
+        val jazz = GravityReference("concept", "audioset:Jazz", label = "Jazz", weight = 0.5)
+        val mix = Gravity().withDestination(listOf(artist, jazz, artist.copy(label = "dup")), stepsTotal = 2)
+        assertThat(mix.destination).containsExactly(artist, jazz).inOrder()
+        val arrived = mix.appendedAuto(listOf("x", "y"))
+        assertThat(arrived.destination).isNull()
+        assertThat(arrived.source.references).containsExactly(artist, jazz).inOrder()
+        val many = (0 until 12).map { GravityReference("track", "t$it") }
+        assertThat(Gravity().withDestination(many).destination).hasSize(Gravity.MAX_COMPONENTS)
+        assertThat(Gravity().withDestination(emptyList()).destination).isNull()
+    }
+
+    @Test fun `mix components can be added, reweighted and removed`() {
+        val jazz = GravityReference("concept", "audioset:Jazz", label = "Jazz")
+        val started = Gravity().withDestinationComponentAdded(jazz)
+        assertThat(started.destination).containsExactly(jazz)
+
+        val progressed = started.withStepsTotal(10).appendedAuto(listOf("x", "y"))
+        val grown = progressed.withDestinationComponentAdded(artist)
+        assertThat(grown.destination).containsExactly(jazz, artist).inOrder()
+        assertThat(grown.stepsDone).isEqualTo(2)
+
+        val replaced = grown.withDestinationComponentAdded(jazz.copy(weight = 3.0))
+        assertThat(replaced.destination!!.first().weight).isEqualTo(3.0)
+        assertThat(replaced.destination).hasSize(2)
+
+        val reweighted = grown.withDestinationComponentWeight("artist", "a1", 0.0)
+        assertThat(reweighted.destination!!.last().weight).isEqualTo(Gravity.MIN_COMPONENT_WEIGHT)
+        assertThat(grown.withDestinationComponentWeight("artist", "a1", Double.NaN).destination!!.last().weight)
+            .isEqualTo(1.0)
+
+        val removedOne = grown.withDestinationComponentRemoved("concept", "audioset:Jazz")
+        assertThat(removedOne.destination).containsExactly(artist)
+        val removedAll = removedOne.withDestinationComponentRemoved("artist", "a1")
+        assertThat(removedAll.destination).isNull()
+        assertThat(removedAll.stepsDone).isEqualTo(0)
+
+        val full = Gravity().withDestination((0 until 8).map { GravityReference("track", "t$it") })
+        assertThat(full.withDestinationComponentAdded(artist)).isEqualTo(full)
     }
 
     @Test fun `knobs source and diagnostics setters`() {
@@ -132,8 +174,8 @@ class GravityTest {
             .appendedAuto(listOf("s1"))
             .withKnobs(GravityKnobs(recencyWeight = 0.1, criteria = listOf(GravityCriterion("ns", 0.7)), diversity = 0.2, randomness = 0.0, mode = "similar", away = listOf(GravityReference("track", "x", weight = 2.0))))
         val request = gravity.buildContinuationRequest(listOf("a", "s1"), 1, 3)
-        assertThat(request.destination?.entityType).isEqualTo("artist")
-        assertThat(request.destination?.entityId).isEqualTo("a1")
+        assertThat(request.destination?.single()?.entityType).isEqualTo("artist")
+        assertThat(request.destination?.single()?.entityId).isEqualTo("a1")
         assertThat(request.progress).isWithin(1e-9).of(0.25)
         assertThat(request.recencyWeight).isEqualTo(0.1)
         assertThat(request.criteria?.single()?.namespace).isEqualTo("ns")
@@ -157,23 +199,44 @@ class GravityTest {
         assertThat(wire["steps_done"].toString()).isEqualTo("2")
         assertThat(wire["auto_track_ids"].toString()).isEqualTo("[\"t1\",\"t2\"]")
         assertThat(wire["source"]!!.jsonObject["kind"].toString()).isEqualTo("\"queue\"")
-        assertThat(wire["destination"]!!.jsonObject["entity_type"].toString()).isEqualTo("\"artist\"")
+        assertThat(wire["destination"]!!.jsonArray.single().jsonObject["entity_type"].toString())
+            .isEqualTo("\"artist\"")
+        assertThat(wire["v"].toString()).isEqualTo("2")
         assertThat(wire["knobs"]!!.jsonObject["recency_weight"].toString()).isEqualTo("0.3")
         assertThat(wire["knobs"]!!.jsonObject["diversity"].toString()).isEqualTo("null")
         assertThat(wire["last_diagnostics"].toString()).isEqualTo("null")
         assertThat(Gravity.fromWireJson(wire)).isEqualTo(gravity)
     }
 
-    @Test fun `web produced fixture decodes with defaults for missing keys`() {
-        val fixture = """{"v":1,"source":{"kind":"queue"},"auto_track_ids":["t1"],"destination":{"entity_type":"artist","entity_id":"a1","label":"A"},"steps_total":7,"steps_done":2,"knobs":{"recency_weight":null,"criteria":null,"diversity":null,"randomness":null,"mode":null,"away":[]},"last_diagnostics":null}"""
+    @Test fun `web produced v2 fixture decodes with defaults for missing keys`() {
+        val fixture = """{"v":2,"source":{"kind":"queue"},"auto_track_ids":["t1"],"destination":[{"entity_type":"artist","entity_id":"a1","label":"A"},{"entity_type":"concept","entity_id":"recorded:1960s","label":"Recorded in the 1960s","weight":0.5}],"steps_total":7,"steps_done":2,"knobs":{"recency_weight":null,"criteria":null,"diversity":null,"randomness":null,"mode":null,"away":[]},"last_diagnostics":{"namespaces":[{"namespace":"musicfm.mean.v1","destination_components":[{"entity_type":"artist","entity_id":"a1","similarity":0.3}]}]}}"""
         val gravity = Gravity.fromWireJson(Json.parseToJsonElement(fixture).jsonObject)
         assertThat(gravity.autoTrackIds).containsExactly("t1")
-        assertThat(gravity.destination).isEqualTo(GravityReference("artist", "a1", label = "A", weight = 1.0))
+        assertThat(gravity.destination).containsExactly(
+            GravityReference("artist", "a1", label = "A", weight = 1.0),
+            GravityReference("concept", "recorded:1960s", label = "Recorded in the 1960s", weight = 0.5),
+        ).inOrder()
+        assertThat(gravity.lastDiagnostics!!.namespaces.single().destinationComponents.single().similarity)
+            .isEqualTo(0.3)
         assertThat(gravity.stepsTotal).isEqualTo(7)
         assertThat(gravity.stepsDone).isEqualTo(2)
         assertThat(gravity.source.references).isEmpty()
         assertThat(gravity.knobs).isEqualTo(GravityKnobs())
         val minimal = Gravity.fromWireJson(Json.parseToJsonElement("""{"unknown":true}""").jsonObject)
         assertThat(minimal).isEqualTo(Gravity())
+    }
+
+    @Test fun `a v1 single-object destination is dropped and the rest survives`() {
+        val v1 = """{"v":1,"source":{"kind":"references","references":[{"entity_type":"album","entity_id":"al1"}]},"auto_track_ids":["t1","t2"],"destination":{"entity_type":"artist","entity_id":"a1","label":"A"},"steps_total":7,"steps_done":2,"knobs":{"recency_weight":0.4,"away":[]},"last_diagnostics":null}"""
+        val gravity = Gravity.fromWireJson(Json.parseToJsonElement(v1).jsonObject)
+        assertThat(gravity.destination).isNull()
+        assertThat(gravity.autoTrackIds).containsExactly("t1", "t2").inOrder()
+        assertThat(gravity.source.references.single().entityId).isEqualTo("al1")
+        assertThat(gravity.stepsTotal).isEqualTo(7)
+        assertThat(gravity.knobs.recencyWeight).isEqualTo(0.4)
+        // Garbage in the destination slot is tolerated the same way.
+        val garbage = Gravity.fromWireJson(Json.parseToJsonElement("""{"destination":"nope","auto_track_ids":["x"]}""").jsonObject)
+        assertThat(garbage.destination).isNull()
+        assertThat(garbage.autoTrackIds).containsExactly("x")
     }
 }

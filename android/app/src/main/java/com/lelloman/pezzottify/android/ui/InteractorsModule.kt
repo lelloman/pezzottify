@@ -1789,12 +1789,21 @@ class InteractorsModule {
 
             override fun currentStepsTotal() = playbackGravity.current().gravity?.stepsTotal
 
+            override fun observeHasDestination(): Flow<Boolean> =
+                playbackGravity.state.map { it.gravity?.destination != null }.distinctUntilChanged()
+
             override suspend fun setDestination(
                 entityType: String,
                 entityId: String,
                 label: String,
                 steps: Int,
             ) = setPlaybackDestination(entityType, entityId, steps, label)
+
+            override suspend fun addToDestination(
+                entityType: String,
+                entityId: String,
+                label: String,
+            ) = setPlaybackDestination.add(entityType, entityId, label)
         }
 
     @Provides
@@ -1822,6 +1831,9 @@ class InteractorsModule {
 
             override suspend fun getRadioOptions() =
                 (remoteApiClient.getRadioOptions() as? RemoteApiResponse.Success)?.data
+
+            override suspend fun getConcepts() =
+                (remoteApiClient.getConcepts(limit = 500) as? RemoteApiResponse.Success)?.data?.concepts
 
             override suspend fun searchReferences(
                 query: String,

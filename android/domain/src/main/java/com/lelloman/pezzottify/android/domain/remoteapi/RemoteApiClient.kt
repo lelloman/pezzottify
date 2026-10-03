@@ -199,6 +199,13 @@ interface RemoteApiClient {
 
     suspend fun getRadioOptions(): RemoteApiResponse<com.lelloman.pezzottify.android.domain.remoteapi.response.RadioOptions>
 
+    /** Search steering concepts by label substring, optionally within one family. */
+    suspend fun getConcepts(
+        query: String? = null,
+        family: String? = null,
+        limit: Int = 50,
+    ): RemoteApiResponse<com.lelloman.pezzottify.android.domain.remoteapi.response.ConceptsResponse>
+
     /**
      * Get devices registered for the current user.
      */
