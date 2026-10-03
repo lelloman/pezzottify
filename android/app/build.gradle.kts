@@ -37,7 +37,14 @@ if (paravoidComplete) {
         minifyPayload.set(
             providers.gradleProperty("paravoidMinifyPayload").map(String::toBoolean).orElse(true)
         )
-        payloadProguardFiles.from("proguard-rules.pro", "paravoid-payload-rules.pro")
+        // Same baseline as the normal release (enum values()/valueOf(), Parcelable creators,
+        // native methods, ...): without it R8 stripped an enum's values() used by reflection
+        // and the payload failed to start.
+        payloadProguardFiles.from(
+            android.getDefaultProguardFile("proguard-android-optimize.txt"),
+            "proguard-rules.pro",
+            "paravoid-payload-rules.pro",
+        )
         updates {
             enabled.set(paravoidAcceptance || paravoidProduction)
             baseUrl.set(if (paravoidProduction) "https://store.lelloman.com/api/paravoid/" else "http://127.0.0.1:19165/")
@@ -67,6 +74,10 @@ if (paravoidComplete) {
         providers.gradleProperty("paravoidBaseline").orNull?.let { baselineDirectory.set(rootProject.file(it)) }
     }
 }
+
+// The payload R8 rules include AGP's extracted proguard-android-optimize.txt.
+tasks.matching { it.name.startsWith("package") && it.name.endsWith("ParavoidApplication") }
+    .configureEach { dependsOn("extractProguardFiles") }
 
 // Load local.properties for OIDC config
 val localProperties = Properties().apply {
