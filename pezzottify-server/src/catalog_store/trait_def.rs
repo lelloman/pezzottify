@@ -427,6 +427,28 @@ pub trait CatalogStore: Send + Sync {
         Ok(Vec::new())
     }
 
+    /// Every float32 vector of one entity type in one namespace.
+    fn list_entity_vectors(
+        &self,
+        _entity_type: &str,
+        _namespace: &str,
+    ) -> Result<Vec<(String, Vec<f32>)>> {
+        Ok(Vec::new())
+    }
+
+    /// (entity_id, namespace, metadata) of every embedding of one entity type, without vectors.
+    fn list_entity_embedding_metadata(
+        &self,
+        _entity_type: &str,
+    ) -> Result<Vec<(String, String, serde_json::Value)>> {
+        Ok(Vec::new())
+    }
+
+    /// Facts about every available track, used to build steering concepts.
+    fn list_concept_track_facts(&self) -> Result<Vec<super::ConceptTrackFacts>> {
+        Ok(Vec::new())
+    }
+
     /// Delete one embedding by entity and namespace.
     fn delete_entity_embedding(
         &self,

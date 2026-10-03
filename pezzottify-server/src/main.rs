@@ -11,7 +11,7 @@ use tracing_subscriber::EnvFilter;
 
 // Import modules from the library crate
 use pezzottify_server::background_jobs::jobs::{
-    AlbumEmbeddingSyncJob, AudioAnalysisJob, CatalogAvailabilityStatsJob,
+    AlbumEmbeddingSyncJob, AudioAnalysisJob, CatalogAvailabilityStatsJob, ConceptEmbeddingSyncJob,
     CatalogCardinalityStatsJob, DevicePruningJob, FeaturedAlbumsJob, IngestionCleanupJob,
     MetadataEnrichmentJob, PopularContentJob, ProxyRetentionJob, RelatedArtistsEnrichmentJob,
     TrackEmbeddingSyncJob, WhatsNewBatchJob,
@@ -442,6 +442,13 @@ async fn run() -> Result<()> {
                 )))
                 .await;
             info!("Registered album embedding sync job");
+        }
+
+        if ae_settings.concepts.enabled {
+            scheduler
+                .register_job(Arc::new(ConceptEmbeddingSyncJob::new(ae_settings.clone())))
+                .await;
+            info!("Registered concept embedding sync job");
         }
     }
 

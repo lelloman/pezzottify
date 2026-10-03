@@ -290,6 +290,19 @@ pub struct ResolvedTrack {
 /// Generic embedding attached to a catalog entity.
 ///
 /// Embeddings are intentionally model-agnostic. The namespace identifies the
+/// Facts about one available track used to build steering concepts.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ConceptTrackFacts {
+    pub track_id: String,
+    /// Main artist (lowest role, then lowest rowid), used to cap examples per artist.
+    pub artist_id: Option<String>,
+    /// Year of the earliest release among all catalog tracks sharing this ISRC, falling
+    /// back to the track's own album date.
+    pub recording_year: Option<i32>,
+    /// Genre tags of all credited artists.
+    pub genres: Vec<String>,
+}
+
 /// embedding family/version, while metadata/model JSON describe how it was
 /// produced and how callers should interpret it.
 #[derive(Clone, Debug, Serialize, Deserialize)]

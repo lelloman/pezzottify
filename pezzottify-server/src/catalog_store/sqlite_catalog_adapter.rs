@@ -1997,6 +1997,117 @@ impl CatalogStore for SqliteCatalogStore {
             .map_err(Into::into)
     }
 
+    fn list_entity_vectors(
+        &self,
+        entity_type: &str,
+        namespace: &str,
+    ) -> Result<Vec<(String, Vec<f32>)>> {
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT entity_id, vector_blob FROM entity_embeddings
+             WHERE entity_type = ?1 AND namespace = ?2 AND dtype = 'float32'",
+        )?;
+        let rows = stmt.query_map(params![entity_type, namespace], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?))
+        })?;
+        let mut vectors = Vec::new();
+        for row in rows {
+            let (entity_id, blob) = row?;
+            vectors.push((entity_id, Self::decode_f32_vector(&blob)?));
+        }
+        Ok(vectors)
+    }
+
+    fn list_entity_embedding_metadata(
+        &self,
+        entity_type: &str,
+    ) -> Result<Vec<(String, String, serde_json::Value)>> {
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT entity_id, namespace, metadata_json FROM entity_embeddings
+             WHERE entity_type = ?1 ORDER BY entity_id, namespace",
+        )?;
+        let rows = stmt.query_map(params![entity_type], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (entity_id, namespace, metadata) = row?;
+            out.push((
+                entity_id,
+                namespace,
+                serde_json::from_str(&metadata).unwrap_or(serde_json::Value::Null),
+            ));
+        }
+        Ok(out)
+    }
+
+    fn list_concept_track_facts(&self) -> Result<Vec<ConceptTrackFacts>> {
+        let read_conn = self.get_read_conn();
+        let conn = read_conn.lock().unwrap();
+        let mut facts = Vec::new();
+        let mut index = HashMap::new();
+        {
+            // The earliest release of the recording (by ISRC, across the whole catalog)
+            // dates it better than a reissue's album date.
+            let mut stmt = conn.prepare(
+                "SELECT t.id,
+                        (SELECT a.id FROM track_artists ta JOIN artists a ON a.rowid = ta.artist_rowid
+                          WHERE ta.track_rowid = t.rowid ORDER BY ta.role, a.rowid LIMIT 1),
+                        COALESCE(
+                          (SELECT MIN(CAST(substr(al2.release_date, 1, 4) AS INTEGER))
+                             FROM tracks t2 JOIN albums al2 ON al2.rowid = t2.album_rowid
+                            WHERE t.external_id_isrc IS NOT NULL
+                              AND t2.external_id_isrc = t.external_id_isrc
+                              AND al2.release_date IS NOT NULL
+                              AND length(al2.release_date) >= 4),
+                          CAST(substr(al.release_date, 1, 4) AS INTEGER))
+                 FROM tracks t JOIN albums al ON al.rowid = t.album_rowid
+                 WHERE t.track_available = 1",
+            )?;
+            let rows = stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<i64>>(2)?,
+                ))
+            })?;
+            for row in rows {
+                let (track_id, artist_id, year) = row?;
+                index.insert(track_id.clone(), facts.len());
+                facts.push(ConceptTrackFacts {
+                    track_id,
+                    artist_id,
+                    recording_year: year
+                        .filter(|year| (1..=9999).contains(year))
+                        .map(|year| year as i32),
+                    genres: Vec::new(),
+                });
+            }
+        }
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT t.id, g.genre
+             FROM tracks t
+             JOIN track_artists ta ON ta.track_rowid = t.rowid
+             JOIN artist_genres g ON g.artist_rowid = ta.artist_rowid
+             WHERE t.track_available = 1",
+        )?;
+        let rows = stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?;
+        for row in rows {
+            let (track_id, genre) = row?;
+            if let Some(&position) = index.get(&track_id) {
+                facts[position].genres.push(genre);
+            }
+        }
+        Ok(facts)
+    }
+
     fn delete_entity_embedding(
         &self,
         entity_type: &str,

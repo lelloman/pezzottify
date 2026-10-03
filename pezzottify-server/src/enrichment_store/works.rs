@@ -81,6 +81,16 @@ impl WorkPresentation {
         }
         result
     }
+
+    /// Numeric (first, last) composition years from the same composer/writer dates the
+    /// presentation string uses.
+    pub(crate) fn composition_year_range(evidence: &serde_json::Value) -> Option<(i32, i32)> {
+        let text = Self::from_evidence(evidence).composition_year?;
+        let mut parts = text.split('–').filter_map(|part| part.trim().parse::<i32>().ok());
+        let first = parts.next()?;
+        let last = parts.next().unwrap_or(first);
+        Some((first.min(last), first.max(last)))
+    }
 }
 
 /// A model proposes identity; storage decides whether it can be accepted.
@@ -859,6 +869,29 @@ impl SqliteEnrichmentStore {
             },
         )?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    /// Composition year range for every track linked to a Work with MusicBrainz evidence.
+    pub(super) fn read_track_composition_years(&self) -> Result<Vec<(String, i32, i32)>> {
+        let conn = self.read_conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT r.track_id, e.evidence_json
+             FROM work_resolutions_v1 r
+             JOIN work_source_evidence_v1 e ON e.work_id = r.work_id AND e.provider = 'musicbrainz'
+             WHERE r.work_id IS NOT NULL",
+        )?;
+        let rows = stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?;
+        let mut years = Vec::new();
+        for row in rows {
+            let (track_id, evidence) = row?;
+            let Ok(evidence) = serde_json::from_str::<serde_json::Value>(&evidence) else {
+                continue;
+            };
+            if let Some((first, last)) = WorkPresentation::composition_year_range(&evidence) {
+                years.push((track_id, first, last));
+            }
+        }
+        Ok(years)
     }
 
     pub(super) fn read_work_presentation(&self, id: &str) -> Result<WorkPresentation> {

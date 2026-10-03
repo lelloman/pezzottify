@@ -59,6 +59,10 @@ pub trait EnrichmentStore: Send + Sync {
     fn get_work_resolution(&self, _track_id: &str) -> Result<Option<super::WorkResolution>> {
         Ok(None)
     }
+    /// (track_id, first_year, last_year) for every track linked to a dated Work.
+    fn list_track_composition_years(&self) -> Result<Vec<(String, i32, i32)>> {
+        Ok(Vec::new())
+    }
     fn list_work_track_ids(
         &self,
         _work_id: &str,

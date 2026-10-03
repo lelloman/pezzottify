@@ -177,3 +177,56 @@ async fn legacy_continuation_still_works() {
     assert!([json!(TRACK_2_ID), json!(TRACK_3_ID)].contains(&track_ids[0]));
     assert_eq!(body["namespaces"], json!([]));
 }
+
+#[tokio::test]
+async fn concepts_require_authentication_and_list_as_json() {
+    let server = TestServer::spawn().await;
+    let anonymous = TestClient::new(server.base_url.clone());
+    let response = anonymous
+        .client
+        .get(format!("{}/v1/content/concepts", server.base_url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    let client = TestClient::authenticated(server.base_url.clone()).await;
+    let response = client
+        .client
+        .get(format!("{}/v1/content/concepts?q=jazz&limit=5", server.base_url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers().get(header::CACHE_CONTROL).unwrap(),
+        "no-store, max-age=0"
+    );
+    // Concepts are materialized by the weekly job; a fresh catalog has none.
+    assert_eq!(response.json::<Value>().await.unwrap(), json!({ "concepts": [] }));
+}
+
+#[tokio::test]
+async fn continuation_accepts_destination_mixes_and_concept_references() {
+    let (_server, client) = server_with_embeddings().await;
+    let response = client
+        .post_continuation(json!({
+            "source_track_ids": [TRACK_1_ID],
+            "destination": [
+                {"entity_type": "track", "entity_id": TRACK_4_ID},
+                {"entity_type": "concept", "entity_id": "audioset:Jazz", "weight": 0.5}
+            ],
+            "progress": 1.0,
+            "recency_weight": 0,
+            "randomness": 0,
+        }))
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.json::<Value>().await.unwrap();
+    assert_eq!(body["track_ids"], json!([TRACK_4_ID]));
+    let components = body["namespaces"][0]["destination_components"].as_array().unwrap();
+    assert_eq!(components.len(), 2);
+    assert!(approx(&components[0]["similarity"], 1.0));
+    // The concept has no vector in this catalog, so it is reported without a similarity.
+    assert_eq!(components[1]["similarity"], Value::Null);
+}
