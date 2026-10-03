@@ -26,5 +26,6 @@ payload_version="$(git -C "$repo_root" rev-list --count HEAD)"
 output="$repo_root/android/app/build/outputs/paravoid/paravoidAndroidPhoneParavoidRelease"
 python3 "$repo_root/android/check-paravoid-complete.py" "$output" \
     --application-id com.lelloman.pezzottify.android >&2
+python3 "$repo_root/android/check-paravoid-services.py" "$output" >&2
 "$publisher" upload "$output/shell.apk" --distribution-mode paravoid --dry-run --json >&2
 exec "$publisher" upload "$output/shell.apk" --distribution-mode paravoid "$@"

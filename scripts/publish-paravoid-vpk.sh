@@ -67,6 +67,7 @@ grep -q '^Compatible with accepted shell contract' "$output/vpk-contract-check.t
     exit 1
 }
 python3 "$repo_root/android/check-paravoid-complete.py" "$output" --application-id "$package" >&2
+python3 "$repo_root/android/check-paravoid-services.py" "$output" >&2
 contract="$(sed -n 's/^Contract ID: //p' "$output/vpk-contract-check.txt")"
 
 json_field() { python3 -c "import json,sys; print(json.loads(sys.stdin.read().strip().splitlines()[-1])$1)"; }
