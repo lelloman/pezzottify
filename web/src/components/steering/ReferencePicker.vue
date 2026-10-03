@@ -1,6 +1,6 @@
 <template>
   <div class="referencePicker">
-    <div v-if="allowConcepts" class="pickerTabs" role="tablist">
+    <div v-if="allowConcepts" class="segmented" role="tablist">
       <button
         type="button"
         role="tab"
@@ -8,27 +8,31 @@
         :class="{ active: tab === 'catalog' }"
         @click="tab = 'catalog'"
       >
-        Artists, albums, tracks
+        Search
       </button>
       <button
         type="button"
         role="tab"
+        data-test="concepts-tab"
         :aria-selected="tab === 'concepts'"
         :class="{ active: tab === 'concepts' }"
         @click="tab = 'concepts'"
       >
-        Concepts
+        Browse concepts
       </button>
     </div>
 
     <template v-if="tab === 'concepts'">
-      <input
-        v-model="conceptQuery"
-        type="search"
-        placeholder="Filter genres, instruments, moods, decades"
-        aria-label="Filter concepts"
-        @keydown.esc="conceptQuery = ''"
-      />
+      <label class="searchField">
+        <span class="searchIcon" aria-hidden="true" />
+        <input
+          v-model="conceptQuery"
+          type="search"
+          placeholder="Genres, instruments, moods, decades"
+          aria-label="Filter concepts"
+          @keydown.esc="conceptQuery = ''"
+        />
+      </label>
       <p v-if="conceptsLoading" class="pickerHint">Loading concepts…</p>
       <p v-else-if="conceptsError" class="pickerHint" role="alert">
         {{ conceptsError }}
@@ -39,16 +43,18 @@
       <div v-else class="conceptGroups">
         <section v-for="group in conceptGroups" :key="group.family">
           <h4 class="conceptFamily">{{ group.label }}</h4>
-          <div class="conceptChips">
+          <div class="conceptGrid">
             <button
               v-for="concept in group.items"
               :key="concept.id"
               type="button"
-              class="conceptChip"
+              class="conceptTile"
+              :style="{ backgroundColor: tileColor(concept.id) }"
               :title="`${concept.example_count} example tracks`"
               @click="selectConcept(concept)"
             >
-              {{ concept.label }}
+              <span class="conceptTileLabel">{{ concept.label }}</span>
+              <span class="conceptTileShape" aria-hidden="true" />
             </button>
           </div>
         </section>
@@ -56,13 +62,16 @@
     </template>
 
     <template v-else>
-      <input
-        v-model="query"
-        type="search"
-        :placeholder="placeholder"
-        :aria-label="placeholder"
-        @keydown.esc="clear"
-      />
+      <label class="searchField">
+        <span class="searchIcon" aria-hidden="true" />
+        <input
+          v-model="query"
+          type="search"
+          :placeholder="placeholder"
+          :aria-label="placeholder"
+          @keydown.esc="clear"
+        />
+      </label>
       <p v-if="isLoading" class="pickerHint">Searching…</p>
       <p v-else-if="error" class="pickerHint" role="alert">{{ error }}</p>
       <p v-else-if="query.trim() && !results.length" class="pickerHint">
@@ -73,11 +82,16 @@
           v-for="result in results"
           :key="result.entity_type + result.entity_id"
         >
-          <button type="button" @click="select(result)">
-            <span class="resultType">{{ result.entity_type }}</span>
-            <span class="resultName">{{ result.label }}</span>
-            <span v-if="result.detail" class="resultDetail">
-              {{ result.detail }}
+          <button type="button" class="resultRow" @click="select(result)">
+            <SteeringArtwork :reference="result" size="sm" />
+            <span class="resultText">
+              <span class="resultName">{{ result.label }}</span>
+              <span class="resultDetail">
+                {{ typeLabel(result.entity_type)
+                }}<template v-if="result.detail">
+                  · {{ result.detail }}</template
+                >
+              </span>
             </span>
           </button>
         </li>
@@ -92,6 +106,11 @@ import axios from "axios";
 import { debounce } from "lodash-es";
 import { useRemoteStore } from "@/store/remote";
 import { groupConcepts, matchesConceptQuery } from "@/utils/concepts";
+import { tileColor } from "@/utils/steeringArt";
+import SteeringArtwork from "./SteeringArtwork.vue";
+
+const TYPE_LABELS = { artist: "Artist", album: "Album", track: "Song" };
+const typeLabel = (type) => TYPE_LABELS[type] || type;
 
 const props = defineProps({
   placeholder: {
@@ -245,137 +264,226 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.pickerTabs {
-  display: flex;
-  gap: 4px;
-}
-
-.pickerTabs button {
-  min-height: 30px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: var(--bg-highlight);
-  color: var(--text-subdued);
-  font-size: 0.82rem;
-}
-
-.pickerTabs button.active {
-  background: var(--bg-press);
-  color: var(--text-bright);
-}
-
-.conceptGroups {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-height: 320px;
-  overflow: auto;
-}
-
-.conceptFamily {
-  margin: 0 0 6px;
-  color: var(--text-subdued);
-  font-size: 0.75rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.conceptChips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.conceptChip {
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--border-default);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-bright);
-  font-size: 0.85rem;
-}
-
-.conceptChip:hover,
-.conceptChip:focus-visible {
-  border-color: var(--spotify-green);
-  background: var(--bg-highlight);
-}
-
 .referencePicker {
   display: flex;
   flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.segmented {
+  display: inline-flex;
+  align-self: flex-start;
   gap: 8px;
 }
 
-input {
-  min-height: 36px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-highlight);
+.segmented button {
+  min-height: 32px;
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.07);
   color: var(--text-bright);
-  padding: 6px 10px;
-  outline: none;
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
 }
 
-input:focus {
-  border-color: var(--spotify-green);
-  box-shadow: 0 0 0 2px var(--bg-tinted);
+.segmented button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.segmented button.active {
+  background: var(--text-bright);
+  color: #000;
+}
+
+.searchField {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 14px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--text-subdued);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.searchIcon::after {
+  content: "";
+  position: absolute;
+  right: -5px;
+  bottom: -4px;
+  width: 6px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--text-subdued);
+  transform: rotate(45deg);
+}
+
+.searchField input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 16px 0 40px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-bright);
+  font-size: var(--text-md);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.searchField input:hover {
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.searchField input:focus {
+  border-color: var(--text-bright);
+  outline: none;
 }
 
 .pickerHint {
   margin: 0;
   color: var(--text-subdued);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 .pickerResults {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  max-height: 260px;
-  overflow: auto;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.pickerResults button {
+.resultRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   width: 100%;
-  display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
-  align-items: baseline;
-  column-gap: 10px;
-  padding: 8px 10px;
+  padding: 8px;
+  border: none;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--text-bright);
+  color: inherit;
   text-align: left;
+  cursor: pointer;
 }
 
-.pickerResults button:hover,
-.pickerResults button:focus-visible {
-  background: var(--surface-hover, var(--bg-highlight));
+.resultRow:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
-.resultType {
-  grid-row: span 2;
-  color: var(--text-subdued);
-  font-size: 0.75rem;
-  text-transform: uppercase;
+.resultRow :deep(.steeringArtwork) {
+  box-shadow: none;
 }
 
-.resultName,
-.resultDetail {
+.resultText {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+}
+
+.resultName {
   overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--text-bright);
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
   white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .resultDetail {
+  overflow: hidden;
   color: var(--text-subdued);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.conceptGroups {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  max-height: 560px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.conceptFamily {
+  margin: 0 0 12px;
+  color: var(--text-bright);
+  font-size: var(--text-lg);
+  font-weight: var(--font-bold);
+}
+
+.conceptGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.conceptTile {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  padding: 12px;
+  border: none;
+  border-radius: var(--radius-lg);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform var(--transition-fast),
+    filter var(--transition-fast);
+}
+
+.conceptTile:hover {
+  filter: brightness(1.12);
+  transform: scale(1.02);
+}
+
+.conceptTileLabel {
+  position: relative;
+  z-index: 1;
+  display: block;
+  font-size: var(--text-lg);
+  font-weight: var(--font-black);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.conceptTileShape {
+  position: absolute;
+  right: -14px;
+  bottom: -12px;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.22);
+  box-shadow: -6px 6px 18px rgba(0, 0, 0, 0.25);
+  transform: rotate(25deg);
+}
+
+@media (max-width: 600px) {
+  .conceptGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .conceptTileLabel {
+    font-size: var(--text-md);
+  }
 }
 </style>

@@ -1,7 +1,18 @@
 <template>
   <ModalDialog :isOpen="isOpen" :closeCallback="close" :closeOnEsc="true">
     <form class="destinationPrompt" @submit.prevent="confirm">
-      <h2>Set as playback destination</h2>
+      <header class="promptHeader">
+        <SteeringArtwork
+          v-if="reference"
+          :reference="reference"
+          size="md"
+          showLabel
+        />
+        <div class="promptTitle">
+          <span class="promptKicker">Heading to</span>
+          <h2>{{ label || "Set as playback destination" }}</h2>
+        </div>
+      </header>
       <p class="promptText">
         Smart continuation will steer the queue toward
         <strong>{{
@@ -17,26 +28,46 @@
       <p v-if="!canSteer" class="promptWarning" role="alert">
         {{ blockedReason }}
       </p>
-      <label>
-        <span>Steps</span>
-        <input
-          ref="stepsInput"
-          v-model.number="steps"
-          type="number"
-          min="1"
-          max="500"
-          required
-        />
-      </label>
+      <div class="stepper">
+        <span>Get there in</span>
+        <span class="stepperControl">
+          <button
+            type="button"
+            aria-label="Fewer tracks"
+            :disabled="steps <= 1"
+            @click="steps = Math.max(1, (Number(steps) || 1) - 1)"
+          >
+            −
+          </button>
+          <input
+            ref="stepsInput"
+            v-model.number="steps"
+            type="number"
+            min="1"
+            max="500"
+            required
+            aria-label="Tracks to get there"
+          />
+          <button
+            type="button"
+            aria-label="More tracks"
+            :disabled="steps >= 500"
+            @click="steps = Math.min(500, (Number(steps) || 0) + 1)"
+          >
+            +
+          </button>
+        </span>
+        <span>tracks</span>
+      </div>
       <label v-if="!smartContinuationEnabled" class="checkRow">
         <input v-model="enableSmartContinuation" type="checkbox" />
         <span>Turn on smart continuation</span>
       </label>
       <footer class="promptActions">
-        <button type="button" @click="close">Cancel</button>
+        <button type="button" class="pill" @click="close">Cancel</button>
         <button
           type="submit"
-          class="primaryButton"
+          class="pill primary"
           :disabled="!canSteer || !validSteps"
         >
           Steer
@@ -49,6 +80,7 @@
 <script setup>
 import { computed, nextTick, ref, watch } from "vue";
 import ModalDialog from "@/components/common/ModalDialog.vue";
+import SteeringArtwork from "@/components/steering/SteeringArtwork.vue";
 import { usePlaybackStore } from "@/store/playback";
 import { useUserStore } from "@/store/user";
 import { DEFAULT_STEPS_TOTAL } from "@/utils/gravity";
@@ -120,57 +152,64 @@ const confirm = async () => {
 </script>
 
 <style scoped>
+@import "@/components/steering/steeringCard.css";
+
 .destinationPrompt {
-  width: min(420px, 86vw);
+  width: min(440px, 86vw);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   color: var(--text-bright);
   color-scheme: dark;
 }
 
+.promptHeader {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.promptTitle {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.promptKicker {
+  color: var(--text-subdued);
+  font-size: var(--text-xs);
+  font-weight: var(--font-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 h2 {
   margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
 }
 
 .promptText,
 .promptWarning {
   margin: 0;
   color: var(--text-subdued);
-  line-height: 1.4;
+  font-size: var(--text-sm);
+  line-height: 1.45;
 }
 
 .promptWarning {
   color: var(--warning-color, #f0b35b);
 }
 
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-label span {
-  color: var(--text-subdued);
-}
-
 .checkRow {
-  flex-direction: row;
+  display: flex;
   align-items: center;
-}
-
-input[type="number"] {
-  min-height: 34px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-highlight);
-  color: var(--text-bright);
-  padding: 6px 10px;
-  outline: none;
-}
-
-input[type="number"]:focus {
-  border-color: var(--spotify-green);
+  gap: 8px;
+  color: var(--text-subdued);
+  font-size: var(--text-sm);
 }
 
 input[type="checkbox"] {
@@ -180,32 +219,7 @@ input[type="checkbox"] {
 .promptActions {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-}
-
-button {
-  min-height: 34px;
-  border-radius: var(--radius-md);
-  background: var(--bg-highlight);
-  color: var(--text-bright);
-  padding: 0 12px;
-}
-
-button:hover:not(:disabled) {
-  background: var(--bg-press);
-}
-
-button:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-
-.primaryButton {
-  background: var(--accent-color);
-  font-weight: var(--font-semibold);
-}
-
-.primaryButton:hover:not(:disabled) {
-  background: var(--spotify-green-hover);
+  gap: 10px;
+  margin-top: 4px;
 }
 </style>
