@@ -87,7 +87,6 @@ class SteeringScreenViewModelTest {
         assertThat(state.destination?.progress).isWithin(1e-6f).of(0.4f)
         assertThat(state.destination?.queryToDestination).isWithin(1e-6f).of(0.42f)
         assertThat(state.stepsRemaining).isEqualTo(6)
-        assertThat(state.canUseExplore).isFalse()
     }
 
     @Test
@@ -118,41 +117,58 @@ class SteeringScreenViewModelTest {
     }
 
     @Test
-    fun `knob edits write gravity knobs and reset clears them`() = runTest {
+    fun `along the way settings write gravity knobs and reset clears them`() = runTest {
         interactor.state.value = queue(Gravity())
         val viewModel = SteeringScreenViewModel(interactor)
         advanceUntilIdle()
-        assertThat(viewModel.state.value.knobs.isDefault).isTrue()
-        assertThat(viewModel.state.value.knobs.recencyWeight).isEqualTo(SteeringKnobs.DEFAULT_RECENCY_WEIGHT)
+        val defaults = viewModel.state.value.knobs
+        assertThat(defaults.isDefault).isTrue()
+        assertThat(defaults.recencyWeight).isEqualTo(SteeringKnobs.DEFAULT_RECENCY_WEIGHT)
+        assertThat(defaults.variety).isWithin(1e-6f).of(SteeringKnobs.DEFAULT_VARIETY)
 
         viewModel.setRecencyWeight(0.5f)
-        viewModel.setDiversity(0.7f)
-        viewModel.setMode(SteeringKnobs.MODE_EXPLORE)
+        viewModel.setVariety(0.7f)
         advanceUntilIdle()
         assertThat(interactor.gravity.knobs.recencyWeight).isWithin(1e-6).of(0.5)
+        // One "Variety" setting drives both fields.
         assertThat(interactor.gravity.knobs.diversity).isWithin(1e-6).of(0.7)
-        assertThat(interactor.gravity.knobs.mode).isEqualTo("explore")
+        assertThat(interactor.gravity.knobs.randomness).isWithin(1e-6).of(0.7)
+        assertThat(viewModel.state.value.knobs.variety).isWithin(1e-6f).of(0.7f)
         assertThat(viewModel.state.value.knobs.isDefault).isFalse()
 
         viewModel.resetKnobs()
+        advanceUntilIdle()
         assertThat(interactor.gravity.knobs).isEqualTo(GravityKnobs())
+        assertThat(viewModel.state.value.knobs.isDefault).isTrue()
     }
 
     @Test
-    fun `explore is refused while a destination is set and dropped when one is picked`() = runTest {
+    fun `variety shows the average of older separate settings`() = runTest {
+        interactor.state.value = queue(Gravity(knobs = GravityKnobs(diversity = 0.2, randomness = 0.6)))
+        val viewModel = SteeringScreenViewModel(interactor)
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.knobs.variety).isWithin(1e-6f).of(0.4f)
+    }
+
+    @Test
+    fun `explore mode left over from earlier is cleared by any edit and by picking a destination`() = runTest {
         interactor.state.value = queue(Gravity(knobs = GravityKnobs(mode = "explore")))
         val viewModel = SteeringScreenViewModel(interactor)
         advanceUntilIdle()
 
+        viewModel.setRecencyWeight(0.3f)
+        assertThat(interactor.gravity.knobs.mode).isNull()
+
+        interactor.state.value = queue(interactor.gravity.withKnobs(GravityKnobs(mode = "explore")))
+        advanceUntilIdle()
+        // Only a leftover mode: the settings still read as defaults.
+        assertThat(viewModel.state.value.knobs.isDefault).isTrue()
         viewModel.openSearch(SteeringSearchTarget.Destination)
         viewModel.pickSearchResult(SteeringReference("album", "al1", "Album"))
         advanceUntilIdle()
         assertThat(interactor.gravity.destination?.single()?.entityId).isEqualTo("al1")
         assertThat(interactor.gravity.knobs.mode).isNull()
         assertThat(viewModel.state.value.search).isNull()
-
-        viewModel.setMode(SteeringKnobs.MODE_EXPLORE)
-        assertThat(interactor.gravity.knobs.mode).isNull()
     }
 
     @Test
@@ -167,6 +183,10 @@ class SteeringScreenViewModelTest {
         val viewModel = SteeringScreenViewModel(interactor)
         advanceUntilIdle()
         assertThat(viewModel.state.value.knobs.criteria.map { it.weight }).containsExactly(1f, 0f).inOrder()
+        assertThat(viewModel.state.value.knobs.criteria.map { it.kind }).containsExactly(
+            SteeringCriterionKind.OverallSound,
+            SteeringCriterionKind.AudioScene,
+        ).inOrder()
 
         viewModel.setCriterionWeight("ast.audioset.v1", 0.5f)
         assertThat(interactor.gravity.knobs.criteria).containsExactly(
@@ -324,5 +344,13 @@ class SteeringScreenViewModelTest {
             conceptLoads++
             return concepts
         }
+    }
+
+    @Test
+    fun `criteria are named by what they compare`() {
+        assertThat(criterionKind("musicfm.mean.v1")).isEqualTo(SteeringCriterionKind.OverallSound)
+        assertThat(criterionKind("ast.audioset.v2")).isEqualTo(SteeringCriterionKind.AudioScene)
+        assertThat(criterionKind("ast.instruments.v2")).isEqualTo(SteeringCriterionKind.Instruments)
+        assertThat(criterionKind("custom.ns")).isEqualTo(SteeringCriterionKind.Other)
     }
 }

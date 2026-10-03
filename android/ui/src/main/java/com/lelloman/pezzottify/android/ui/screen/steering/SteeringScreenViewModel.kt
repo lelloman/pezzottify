@@ -86,13 +86,10 @@ class SteeringScreenViewModel @Inject constructor(
 
     override fun setRecencyWeight(value: Float) = updateKnobs { it.copy(recencyWeight = value.toDouble()) }
 
-    override fun setDiversity(value: Float) = updateKnobs { it.copy(diversity = value.toDouble()) }
-
-    override fun setRandomness(value: Float) = updateKnobs { it.copy(randomness = value.toDouble()) }
-
-    override fun setMode(mode: String) {
-        if (mode == SteeringKnobs.MODE_EXPLORE && !state.value.canUseExplore) return
-        updateKnobs { it.copy(mode = mode) }
+    /** One plain "Variety" setting drives both spreading artists/albums and shuffling picks. */
+    override fun setVariety(value: Float) = updateKnobs {
+        val variety = value.toDouble().coerceIn(0.0, 1.0)
+        it.copy(diversity = variety, randomness = variety)
     }
 
     override fun setCriterionWeight(namespace: String, weight: Float) = updateKnobs { knobs ->
@@ -184,8 +181,12 @@ class SteeringScreenViewModel @Inject constructor(
         search.value = null
     }
 
+    /**
+     * The screen no longer offers explore mode (it avoids the closest matches, so a journey
+     * never arrives); any write from here clears it.
+     */
     private fun updateKnobs(transform: (GravityKnobs) -> GravityKnobs) {
-        interactor.updateGravity { it.withKnobs(transform(it.knobs)) }
+        interactor.updateGravity { it.withKnobs(transform(it.knobs).copy(mode = null)) }
     }
 
     private fun toState(
@@ -259,6 +260,7 @@ class SteeringScreenViewModel @Inject constructor(
             SteeringCriterion(
                 namespace = namespace,
                 label = labels[namespace] ?: namespace,
+                kind = criterionKind(namespace),
                 weight = when {
                     selected != null -> selected[namespace]?.toFloat() ?: 0f
                     namespace == DEFAULT_NAMESPACE -> 1f
@@ -266,16 +268,16 @@ class SteeringScreenViewModel @Inject constructor(
                 },
             )
         }
+        val diversity = knobs.diversity?.toFloat()
+            ?: options?.diversity?.default?.toFloat() ?: SteeringKnobs.DEFAULT_VARIETY
+        val randomness = knobs.randomness?.toFloat()
+            ?: options?.randomness?.default?.toFloat() ?: SteeringKnobs.DEFAULT_VARIETY
         return SteeringKnobs(
             recencyWeight = knobs.recencyWeight?.toFloat() ?: SteeringKnobs.DEFAULT_RECENCY_WEIGHT,
-            diversity = knobs.diversity?.toFloat()
-                ?: options?.diversity?.default?.toFloat() ?: SteeringKnobs.DEFAULT_DIVERSITY,
-            randomness = knobs.randomness?.toFloat()
-                ?: options?.randomness?.default?.toFloat() ?: SteeringKnobs.DEFAULT_RANDOMNESS,
-            mode = knobs.mode ?: SteeringKnobs.MODE_SIMILAR,
+            variety = ((diversity + randomness) / 2f).coerceIn(0f, 1f),
             criteria = criteria,
             away = knobs.away.map { it.toUi() },
-            isDefault = knobs == GravityKnobs(),
+            isDefault = knobs.copy(mode = null) == GravityKnobs(),
         )
     }
 
@@ -298,6 +300,13 @@ class SteeringScreenViewModel @Inject constructor(
         const val MAX_REFERENCES = 8
         private const val SEARCH_DEBOUNCE_MS = 300L
     }
+}
+
+internal fun criterionKind(namespace: String): SteeringCriterionKind = when {
+    namespace.startsWith("musicfm.") -> SteeringCriterionKind.OverallSound
+    namespace.startsWith("ast.audioset.") -> SteeringCriterionKind.AudioScene
+    namespace.startsWith("ast.instruments.") -> SteeringCriterionKind.Instruments
+    else -> SteeringCriterionKind.Other
 }
 
 private fun GravityReference.toUi() = SteeringReference(
