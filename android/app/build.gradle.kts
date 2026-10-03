@@ -32,6 +32,12 @@ if (paravoidComplete) {
         bootstrap.set("embedded")
         crashRecovery { enabled.set(paravoidProduction); updater.set("default") }
         payloadVersion.set(providers.gradleProperty("paravoidPayloadVersion").map(String::toLong).orElse(1L))
+        // Shrink the payload with Paravoid's payload-only R8 (AGP minify stays off for
+        // Paravoid variants). -PparavoidMinifyPayload=false builds an unshrunk payload.
+        minifyPayload.set(
+            providers.gradleProperty("paravoidMinifyPayload").map(String::toBoolean).orElse(true)
+        )
+        payloadProguardFiles.from("proguard-rules.pro", "paravoid-payload-rules.pro")
         updates {
             enabled.set(paravoidAcceptance || paravoidProduction)
             baseUrl.set(if (paravoidProduction) "https://store.lelloman.com/api/paravoid/" else "http://127.0.0.1:19165/")
