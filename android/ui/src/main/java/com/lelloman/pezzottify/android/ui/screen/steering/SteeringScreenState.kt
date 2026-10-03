@@ -42,28 +42,31 @@ data class SteeringConceptGroup(
     val concepts: List<SteeringReference>,
 )
 
+/** Which way of comparing music a namespace stands for, so the UI can name it plainly. */
+enum class SteeringCriterionKind { OverallSound, AudioScene, Instruments, Other }
+
 data class SteeringCriterion(
     val namespace: String,
+    /** Server label, used only for [SteeringCriterionKind.Other]. */
     val label: String,
+    val kind: SteeringCriterionKind,
     val weight: Float,
 )
 
+/** The "Along the way" settings. Null values in the stored state show the server defaults. */
 data class SteeringKnobs(
+    /** 0 = stay on the starting point, 1 = follow the recently played tracks. */
     val recencyWeight: Float = DEFAULT_RECENCY_WEIGHT,
-    val diversity: Float = DEFAULT_DIVERSITY,
-    val randomness: Float = DEFAULT_RANDOMNESS,
-    val mode: String = MODE_SIMILAR,
+    /** 0 = focused, 1 = varied. Drives both artist/album spreading and pick shuffling. */
+    val variety: Float = DEFAULT_VARIETY,
     val criteria: List<SteeringCriterion> = emptyList(),
     val away: List<SteeringReference> = emptyList(),
     val isDefault: Boolean = true,
 ) {
     companion object {
-        // Mirror the server defaults so an untouched knob shows the value actually used.
+        // Mirror the server defaults so an untouched setting shows the value actually used.
         const val DEFAULT_RECENCY_WEIGHT = 0.2f
-        const val DEFAULT_DIVERSITY = 0.3f
-        const val DEFAULT_RANDOMNESS = 0.3f
-        const val MODE_SIMILAR = "similar"
-        const val MODE_EXPLORE = "explore"
+        const val DEFAULT_VARIETY = 0.3f
     }
 }
 
@@ -90,7 +93,4 @@ data class SteeringScreenState(
     val search: SteeringSearch? = null,
 ) {
     val stepsRemaining: Int get() = (stepsTotal - stepsDone).coerceAtLeast(0)
-
-    /** Explore mode deliberately avoids the closest matches, so it never arrives. */
-    val canUseExplore: Boolean get() = destination == null
 }

@@ -1,14 +1,14 @@
 <template>
   <section class="steeringCard">
     <header class="cardHeader">
-      <span class="cardTitle">Destination</span>
+      <span class="cardTitle">Heading to</span>
       <button
         v-if="components.length"
         type="button"
         class="textButton"
         @click="playback.clearGravityDestination()"
       >
-        Clear
+        Stop steering
       </button>
     </header>
 
@@ -33,7 +33,7 @@
             </span>
             <span
               class="componentCloseness"
-              :title="'How close the last pick aimed at this part of the mix'"
+              :title="'How close the last pick was to this'"
             >
               {{ closenessFor(component) }}
             </span>
@@ -47,7 +47,7 @@
             </button>
           </div>
           <label v-if="components.length > 1" class="weightRow">
-            <span>Weight</span>
+            <span>Share</span>
             <input
               type="range"
               min="0.1"
@@ -80,29 +80,31 @@
       <div class="progressNumbers">
         <span>{{ progressPercent }}% of the way</span>
         <span>
-          {{ gravity.steps_done }} / {{ gravity.steps_total }} tracks
+          {{ gravity.steps_done }} of {{ gravity.steps_total }} tracks along the
+          way
         </span>
       </div>
 
       <dl v-if="diagnostics" class="diagnostics">
         <div>
-          <dt>Last pick aimed at</dt>
+          <dt>Last pick</dt>
           <dd>
-            {{ percent(diagnostics.query_to_destination) }} destination,
-            {{ percent(diagnostics.query_to_source) }} source
+            {{ percent(diagnostics.query_to_destination) }} like where it's
+            heading, {{ percent(diagnostics.query_to_source) }} like the
+            starting point
           </dd>
         </div>
         <div v-if="diagnostics.source_to_destination != null">
-          <dt>Source to destination similarity</dt>
-          <dd>{{ percent(diagnostics.source_to_destination) }}</dd>
+          <dt>Starting point and destination</dt>
+          <dd>{{ percent(diagnostics.source_to_destination) }} alike</dd>
         </div>
       </dl>
       <p v-else class="cardHint">
-        Similarities appear after smart continuation adds the next tracks.
+        Progress details appear after smart continuation adds the next tracks.
       </p>
 
       <label class="fieldRow">
-        <span>Tracks remaining</span>
+        <span>Get there in</span>
         <input
           class="numberInput"
           type="number"
@@ -110,9 +112,10 @@
           :value="remaining"
           @change="updateRemaining($event.target.value)"
         />
+        <span>more tracks</span>
       </label>
       <p class="cardHint">
-        When it arrives, the whole mix becomes the new source.
+        When it gets there, this becomes the new starting point.
       </p>
 
       <details
@@ -121,7 +124,7 @@
       >
         <summary>Add to the mix</summary>
         <ReferencePicker
-          placeholder="Search an artist, album or track to add"
+          placeholder="Search something to add"
           @select="addComponent"
         />
       </details>
@@ -132,12 +135,11 @@
 
     <template v-else>
       <p class="cardHint">
-        Pick where the queue should drift to: an artist, album, track, a concept
-        like a genre, instrument, mood or decade, or a mix of several. Each
-        track smart continuation adds moves the suggestions a step closer.
+        Not steering. Pick an artist, album, track or concept to head toward.
+        You can mix several.
       </p>
       <label class="fieldRow">
-        <span>Steps</span>
+        <span>Get there in</span>
         <input
           v-model.number="newSteps"
           class="numberInput"
@@ -145,9 +147,10 @@
           min="1"
           max="500"
         />
+        <span>tracks</span>
       </label>
       <ReferencePicker
-        placeholder="Search a destination artist, album or track"
+        placeholder="Search where to head"
         @select="startDestination"
       />
     </template>

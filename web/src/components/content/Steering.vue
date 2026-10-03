@@ -3,8 +3,8 @@
     <header class="steeringHeader">
       <h1 class="pageTitle">Steering</h1>
       <p class="pageIntro">
-        Smart continuation keeps your queue going around a centre of gravity.
-        Choose where it starts, where it should drift to, and how.
+        Smart continuation picks what plays next. Steer it from where your queue
+        started toward somewhere new.
       </p>
     </header>
 
@@ -36,7 +36,7 @@
         <GravitySourceCard :gravity="gravity" :tracksIds="tracksIds" />
         <GravityDestinationCard :gravity="gravity" />
       </div>
-      <GravityKnobs :gravity="gravity" />
+      <GravityJourneyCard :gravity="gravity" />
     </template>
   </div>
 </template>
@@ -45,7 +45,7 @@
 import { computed } from "vue";
 import GravitySourceCard from "@/components/steering/GravitySourceCard.vue";
 import GravityDestinationCard from "@/components/steering/GravityDestinationCard.vue";
-import GravityKnobs from "@/components/steering/GravityKnobs.vue";
+import GravityJourneyCard from "@/components/steering/GravityJourneyCard.vue";
 import { usePlaybackStore } from "@/store/playback";
 import { useUserStore } from "@/store/user";
 
