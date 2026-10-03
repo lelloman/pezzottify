@@ -74,7 +74,9 @@ struct ContinuationRequest {
     #[serde(default)]
     recent_track_ids: Vec<String>,
     recency_weight: Option<f32>,
-    destination: Option<RadioReference>,
+    /// One reference object or an array of up to 8: a weighted mix.
+    #[serde(default, deserialize_with = "one_or_many_references")]
+    destination: Vec<RadioReference>,
     progress: Option<f32>,
     #[serde(default)]
     criteria: Vec<RadioCriterionRequest>,
@@ -100,6 +102,33 @@ struct ContinuationNamespaceDiagnostics {
     source_to_destination: Option<f32>,
     query_to_source: Option<f32>,
     query_to_destination: Option<f32>,
+    destination_components: Vec<DestinationComponentDiagnostics>,
+}
+
+/// Similarity between the current query and one destination component.
+#[derive(Debug, Serialize)]
+struct DestinationComponentDiagnostics {
+    entity_type: String,
+    entity_id: String,
+    similarity: Option<f32>,
+}
+
+fn one_or_many_references<'de, D>(deserializer: D) -> Result<Vec<RadioReference>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        One(RadioReference),
+        Many(Vec<RadioReference>),
+        Null(()),
+    }
+    Ok(match OneOrMany::deserialize(deserializer)? {
+        OneOrMany::One(reference) => vec![reference],
+        OneOrMany::Many(references) => references,
+        OneOrMany::Null(()) => Vec::new(),
+    })
 }
 
 /// A query vector for one embedding namespace, with its normalised criterion weight.
@@ -278,6 +307,7 @@ pub fn recommendation_routes() -> Router<ServerState> {
         .route("/artist/{id}/greatest-hits", get(get_artist_greatest_hits))
         .route("/radio/continue", post(post_radio_continuation))
         .route("/radio/options", get(get_radio_options))
+        .route("/concepts", get(get_concepts))
         .route("/radio/build", post(post_radio_build))
         .route("/radio/{entity_type}/{entity_id}", get(get_radio))
 }
@@ -487,6 +517,122 @@ async fn get_radio(
         }
         Err(err) => ApiError::from(err).into_response(),
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct ConceptsQuery {
+    q: Option<String>,
+    family: Option<String>,
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+struct ConceptSummary {
+    id: String,
+    family: String,
+    label: String,
+    example_count: u64,
+}
+
+#[derive(Debug, Serialize)]
+struct ConceptsResponse {
+    concepts: Vec<ConceptSummary>,
+}
+
+const CONCEPT_FAMILY_ORDER: &[&str] = &[
+    "sound_genre",
+    "instrument",
+    "vocals",
+    "mood",
+    "genre_tag",
+    "recorded",
+    "composed",
+];
+
+async fn get_concepts(
+    Extract(_session): Extract<Session>,
+    State(state): State<ServerState>,
+    Query(query): Query<ConceptsQuery>,
+) -> Response {
+    let preferred_namespace = track_namespace(state.config.audio_embeddings.as_ref());
+    match state
+        .database
+        .catalog_read
+        .run(DbPriority::Interactive, move |store| {
+            store.list_entity_embedding_metadata("concept")
+        })
+        .await
+    {
+        Ok(rows) => no_store_json(ConceptsResponse {
+            concepts: summarize_concepts(rows, &preferred_namespace, &query),
+        }),
+        Err(err) => ApiError::from(err).into_response(),
+    }
+}
+
+/// One summary per concept (metadata from the preferred namespace when present), filtered
+/// and ordered by family, then label; decade families sort chronologically by id.
+fn summarize_concepts(
+    rows: Vec<(String, String, serde_json::Value)>,
+    preferred_namespace: &str,
+    query: &ConceptsQuery,
+) -> Vec<ConceptSummary> {
+    let mut by_id: HashMap<String, (bool, serde_json::Value)> = HashMap::new();
+    for (id, namespace, metadata) in rows {
+        let preferred = namespace == preferred_namespace;
+        match by_id.get(&id) {
+            Some((true, _)) => {}
+            Some((false, _)) if !preferred => {}
+            _ => {
+                by_id.insert(id, (preferred, metadata));
+            }
+        }
+    }
+    let needle = query
+        .q
+        .as_deref()
+        .map(str::trim)
+        .filter(|q| !q.is_empty())
+        .map(str::to_lowercase);
+    let mut concepts = by_id
+        .into_iter()
+        .map(|(id, (_, metadata))| ConceptSummary {
+            family: metadata["family"].as_str().unwrap_or("other").to_string(),
+            label: metadata["label"].as_str().unwrap_or(&id).to_string(),
+            example_count: metadata["example_count"].as_u64().unwrap_or(0),
+            id,
+        })
+        .filter(|concept| query.family.as_deref().is_none_or(|family| concept.family == family))
+        .filter(|concept| {
+            needle
+                .as_deref()
+                .is_none_or(|needle| concept.label.to_lowercase().contains(needle))
+        })
+        .collect::<Vec<_>>();
+    let family_rank = |family: &str| {
+        CONCEPT_FAMILY_ORDER
+            .iter()
+            .position(|candidate| *candidate == family)
+            .unwrap_or(CONCEPT_FAMILY_ORDER.len())
+    };
+    concepts.sort_by(|left, right| {
+        family_rank(&left.family)
+            .cmp(&family_rank(&right.family))
+            .then_with(|| match left.family.as_str() {
+                "recorded" | "composed" => decade_of(&left.id).cmp(&decade_of(&right.id)),
+                _ => left.label.to_lowercase().cmp(&right.label.to_lowercase()),
+            })
+    });
+    concepts.truncate(query.limit.unwrap_or(50).clamp(1, 500));
+    concepts
+}
+
+fn decade_of(concept_id: &str) -> i64 {
+    concept_id
+        .rsplit(':')
+        .next()
+        .and_then(|decade| decade.trim_end_matches('s').parse().ok())
+        .unwrap_or(i64::MAX)
 }
 
 async fn get_radio_options(
@@ -1239,7 +1385,7 @@ fn recipes_contain_recipe(settings: Option<&AudioEmbeddingsSettings>, recipe_id:
 
 fn validate_entity_type(entity_type: &str) -> anyhow::Result<()> {
     match entity_type {
-        "track" | "album" | "artist" => Ok(()),
+        "track" | "album" | "artist" | "concept" => Ok(()),
         other => Err(invalid_request!(
             "invalid radio request: unsupported entity_type '{other}'"
         )),
@@ -1385,6 +1531,7 @@ fn radio_seed_vector(
 ) -> anyhow::Result<Option<Vec<f32>>> {
     match seed.entity_type.as_str() {
         "track" => get_vector(catalog_store, "track", &seed.entity_id, track_namespace),
+        "concept" => get_vector(catalog_store, "concept", &seed.entity_id, track_namespace),
         "album" => {
             let album_namespace =
                 album_namespace_for_track_namespace_with_settings(settings, track_namespace);
@@ -1820,7 +1967,7 @@ fn continue_queue(
 
     let is_legacy = request.source_track_ids.is_empty()
         && request.source_references.is_empty()
-        && request.destination.is_none();
+        && request.destination.is_empty();
     if is_legacy {
         let namespace = track_namespace(settings);
         let Some(seed) = weighted_track_vector(
@@ -1873,10 +2020,8 @@ fn continue_queue(
         .recency_weight
         .unwrap_or(CONTINUATION_DEFAULT_RECENCY_WEIGHT)
         .clamp(0.0, 1.0);
-    let progress = request
-        .destination
-        .as_ref()
-        .map(|_| request.progress.unwrap_or(0.0).clamp(0.0, 1.0));
+    let progress = (!request.destination.is_empty())
+        .then(|| request.progress.unwrap_or(0.0).clamp(0.0, 1.0));
     let source_ids = sample_evenly(&request.source_track_ids, CONTINUATION_SOURCE_SAMPLE);
 
     let mut queries = Vec::with_capacity(criteria.len());
@@ -1890,6 +2035,7 @@ fn continue_queue(
             source_to_destination: None,
             query_to_source: None,
             query_to_destination: None,
+            destination_components: Vec::new(),
         };
         let from_tracks = normalised_mean_track_vector(catalog_store, &namespace, &source_ids)?;
         let from_references = normalised_reference_sum(
@@ -1909,20 +2055,33 @@ fn continue_queue(
             }
         };
 
-        let destination = match &request.destination {
-            Some(reference) => {
-                reference_vector(catalog_store, settings, reference, &namespace)?
-                    .and_then(normalised)
-                    .filter(|vector| vector.len() == source.len())
+        // The destination mix: normalised weighted sum of unit component vectors.
+        // Components without a vector in this namespace are skipped here.
+        let mut components = Vec::with_capacity(request.destination.len());
+        for reference in &request.destination {
+            let vector = reference_vector(catalog_store, settings, reference, &namespace)?
+                .and_then(normalised)
+                .filter(|vector| vector.len() == source.len());
+            components.push((reference, vector));
+        }
+        let destination = {
+            let mut sum: Option<Vec<f32>> = None;
+            for (reference, vector) in &components {
+                let Some(vector) = vector else { continue };
+                let weight = reference.weight.unwrap_or(1.0);
+                match sum.as_mut() {
+                    Some(sum) => {
+                        let dim = sum.len();
+                        add_scaled_vector(sum, vector, weight, dim);
+                    }
+                    None => sum = Some(vector.iter().map(|value| value * weight).collect()),
+                }
             }
-            None => None,
+            sum.and_then(normalised)
         };
         let mut query = source.clone();
-        if let (Some(destination), Some(progress), Some(reference)) =
-            (&destination, progress, &request.destination)
-        {
-            let weight = reference.weight.unwrap_or(1.0);
-            query = blend(&source, 1.0 - progress, destination, progress * weight)
+        if let (Some(destination), Some(progress)) = (&destination, progress) {
+            query = blend(&source, 1.0 - progress, destination, progress)
                 .unwrap_or_else(|| source.clone());
         }
 
@@ -1959,6 +2118,14 @@ fn continue_queue(
             diagnostics.source_to_destination = cosine(&source, destination);
             diagnostics.query_to_destination = cosine(&query, destination);
         }
+        diagnostics.destination_components = components
+            .iter()
+            .map(|(reference, vector)| DestinationComponentDiagnostics {
+                entity_type: reference.entity_type.clone(),
+                entity_id: reference.entity_id.clone(),
+                similarity: vector.as_ref().and_then(|vector| cosine(&query, vector)),
+            })
+            .collect();
         namespaces.push(diagnostics);
         queries.push(NamespaceQuery {
             namespace,
@@ -2039,7 +2206,7 @@ fn validate_continuation_request(request: &ContinuationRequest) -> anyhow::Resul
     }
     validate_reference_list(&request.source_references, "source_references")?;
     validate_reference_list(&request.away, "away")?;
-    validate_reference_list(request.destination.as_slice(), "destination")?;
+    validate_reference_list(&request.destination, "destination")?;
     for (field, value) in [
         ("recency_weight", request.recency_weight),
         ("progress", request.progress),
@@ -2062,7 +2229,10 @@ fn validate_reference_list(references: &[RadioReference], field: &str) -> anyhow
         ));
     }
     for reference in references {
-        if !matches!(reference.entity_type.as_str(), "track" | "album" | "artist") {
+        if !matches!(
+            reference.entity_type.as_str(),
+            "track" | "album" | "artist" | "concept"
+        ) {
             return Err(invalid_request!(
                 "invalid continuation request: unsupported {field} entity_type '{}'",
                 reference.entity_type
@@ -2589,6 +2759,7 @@ mod tests {
                     aggregation: crate::config::AlbumEmbeddingAggregation::Median,
                 }],
             },
+            concepts: Default::default(),
         };
         store
             .upsert_entity_embedding(&embedding(
@@ -2954,6 +3125,7 @@ mod tests {
                 max_albums_per_run: 10,
                 specs: Vec::new(),
             },
+            concepts: Default::default(),
         };
         let audio_scene = |settings: &AudioEmbeddingsSettings| {
             radio_recipes_for_namespaces(&available_track_namespaces(Some(settings)))
@@ -2995,5 +3167,133 @@ mod tests {
             spec("ast.audioset.v2", true),
         ]);
         assert_eq!(track_namespace(Some(&unserved_default)), "ast.audioset.v2");
+    }
+
+    #[test]
+    fn continuation_destination_accepts_concepts_and_weighted_mixes() {
+        let (_dir, store) = continuation_store();
+        store
+            .upsert_entity_embedding(&embedding(
+                "concept",
+                "audioset:Jazz",
+                DEFAULT_TRACK_NAMESPACE,
+                vec![0.0, 1.0],
+            ))
+            .unwrap();
+        // A single concept behaves like any reference.
+        let to_concept = continue_queue(
+            &store,
+            None,
+            continuation(serde_json::json!({
+                "source_track_ids": ["a1"],
+                "destination": [{"entity_type": "concept", "entity_id": "audioset:Jazz"}],
+                "progress": 1.0,
+                "recency_weight": 0,
+            })),
+        )
+        .unwrap();
+        assert_eq!(to_concept.track_ids, vec!["b1"]);
+
+        // An equal mix of a1 [1,0] and the concept [0,1] points at c1; the unknown
+        // concept is skipped and reported without a similarity.
+        let mix = continue_queue(
+            &store,
+            None,
+            continuation(serde_json::json!({
+                "source_track_ids": ["b2"],
+                "destination": [
+                    {"entity_type": "track", "entity_id": "a1"},
+                    {"entity_type": "concept", "entity_id": "audioset:Jazz"},
+                    {"entity_type": "concept", "entity_id": "audioset:Missing"}
+                ],
+                "progress": 1.0,
+                "recency_weight": 0,
+            })),
+        )
+        .unwrap();
+        assert_eq!(mix.track_ids, vec!["c1"]);
+        let components = &mix.namespaces[0].destination_components;
+        assert_eq!(components.len(), 3);
+        assert_close(components[0].similarity, 0.707);
+        assert_close(components[1].similarity, 0.707);
+        assert_eq!(components[2].similarity, None);
+
+        // Weights shift the mix toward a component.
+        let weighted = continue_queue(
+            &store,
+            None,
+            continuation(serde_json::json!({
+                "source_track_ids": ["b2"],
+                "destination": [
+                    {"entity_type": "track", "entity_id": "a1", "weight": 4.0},
+                    {"entity_type": "concept", "entity_id": "audioset:Jazz", "weight": 1.0}
+                ],
+                "progress": 1.0,
+                "recency_weight": 0,
+            })),
+        )
+        .unwrap();
+        assert_eq!(weighted.track_ids, vec!["a2"]);
+    }
+
+    #[test]
+    fn continuation_destination_still_accepts_a_single_object() {
+        let request = continuation(serde_json::json!({
+            "destination": {"entity_type": "track", "entity_id": "b1"},
+        }));
+        assert_eq!(request.destination.len(), 1);
+        let request = continuation(serde_json::json!({ "destination": null }));
+        assert!(request.destination.is_empty());
+        let mut too_many = continuation(serde_json::json!({ "source_track_ids": ["a1"] }));
+        too_many.destination = (0..9)
+            .map(|index| RadioReference {
+                entity_type: "concept".into(),
+                entity_id: format!("c{index}"),
+                weight: None,
+            })
+            .collect();
+        let (_dir, store) = continuation_store();
+        assert!(is_invalid_request(
+            &continue_queue(&store, None, too_many).unwrap_err()
+        ));
+    }
+
+    #[test]
+    fn concepts_are_listed_once_filtered_and_ordered() {
+        let meta = |family: &str, label: &str, count: u64| {
+            serde_json::json!({"family": family, "label": label, "example_count": count})
+        };
+        let rows = vec![
+            ("composed:1810s".to_string(), "ns.b".to_string(), meta("composed", "Composed in the 1810s", 40)),
+            ("composed:990s".to_string(), "ns.b".to_string(), meta("composed", "Composed in the 990s", 31)),
+            ("audioset:Jazz".to_string(), "ns.b".to_string(), meta("sound_genre", "Jazz", 1)),
+            ("audioset:Jazz".to_string(), "ns.a".to_string(), meta("sound_genre", "Jazz", 200)),
+            ("audioset:Piano".to_string(), "ns.a".to_string(), meta("instrument", "Piano", 150)),
+            ("genre:jazz fusion".to_string(), "ns.a".to_string(), meta("genre_tag", "jazz fusion", 60)),
+        ];
+        let all = summarize_concepts(
+            rows.clone(),
+            "ns.a",
+            &ConceptsQuery { q: None, family: None, limit: None },
+        );
+        assert_eq!(
+            all.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+            vec!["audioset:Jazz", "audioset:Piano", "genre:jazz fusion", "composed:990s", "composed:1810s"]
+        );
+        // Metadata comes from the preferred namespace.
+        assert_eq!(all[0].example_count, 200);
+        let jazz = summarize_concepts(
+            rows.clone(),
+            "ns.a",
+            &ConceptsQuery { q: Some(" JAZZ ".into()), family: None, limit: None },
+        );
+        assert_eq!(jazz.len(), 2);
+        let tags = summarize_concepts(
+            rows,
+            "ns.a",
+            &ConceptsQuery { q: None, family: Some("genre_tag".into()), limit: Some(1) },
+        );
+        assert_eq!(tags.len(), 1);
+        assert_eq!(tags[0].label, "jazz fusion");
     }
 }

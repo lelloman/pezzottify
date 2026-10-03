@@ -342,6 +342,9 @@ impl EnrichmentStore for SqliteEnrichmentStore {
     fn get_work_resolution(&self, track_id: &str) -> Result<Option<super::WorkResolution>> {
         self.read_work_resolution(track_id)
     }
+    fn list_track_composition_years(&self) -> Result<Vec<(String, i32, i32)>> {
+        self.read_track_composition_years()
+    }
     fn list_work_track_ids(
         &self,
         work_id: &str,
