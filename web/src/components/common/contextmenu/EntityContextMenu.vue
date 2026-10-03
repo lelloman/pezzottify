@@ -1,5 +1,5 @@
 <template>
-  <ContextMenu ref="contextMenu" :items="menuItems" />
+  <ContextMenu ref="contextMenu" :items="visibleMenuItems" />
   <RadioBuilderModal
     v-if="entity"
     :isOpen="showRadioBuilder"
@@ -16,7 +16,8 @@
 
 <script setup>
 // Right-click menu for albums and artists (tracks use TrackContextMenu).
-import { markRaw, ref } from "vue";
+import { computed, markRaw, ref } from "vue";
+import { MAX_COMPONENTS } from "@/utils/gravity";
 import ContextMenu from "@/components/common/contextmenu/ContextMenu.vue";
 import RadioBuilderModal from "@/components/common/RadioBuilderModal.vue";
 import DestinationStepsPrompt from "@/components/common/DestinationStepsPrompt.vue";
@@ -59,7 +60,25 @@ const menuItems = ref([
       if (entity.value) showDestinationPrompt.value = true;
     },
   },
+  {
+    icon: markRaw(SteeringWheelIcon),
+    name: "Add to playback destination",
+    // Only offered when a destination mix exists and has room.
+    visible: () => {
+      const destination = playback.currentGravity?.destination;
+      return Boolean(
+        destination?.length && destination.length < MAX_COMPONENTS,
+      );
+    },
+    action: () => {
+      if (entity.value) playback.addGravityDestinationComponent(entity.value);
+    },
+  },
 ]);
+
+const visibleMenuItems = computed(() =>
+  menuItems.value.filter((item) => !item.visible || item.visible()),
+);
 
 const openMenu = (event, entityType, entityId, label = null) => {
   entity.value = {

@@ -61,6 +61,21 @@
             <SteeringWheelIcon class="steerButtonIcon" />
             Steer here
           </button>
+          <button
+            v-if="canAddToDestinationMix"
+            class="advancedRadioButton steerButton"
+            title="Add this artist to the current destination mix"
+            @click.stop="
+              playback.addGravityDestinationComponent({
+                entity_type: 'artist',
+                entity_id: artistId,
+                label: artist.name,
+              })
+            "
+          >
+            <SteeringWheelIcon class="steerButtonIcon" />
+            Add to mix
+          </button>
         </div>
       </div>
       <EnrichmentStatusIndicator
@@ -106,6 +121,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { MAX_COMPONENTS } from "@/utils/gravity";
 import { chooseArtistCoverImageUrl } from "@/utils";
 import { useUserStore } from "@/store/user.js";
 import { useStaticsStore } from "@/store/statics.js";
@@ -139,6 +155,10 @@ const userStore = useUserStore();
 const staticsStore = useStaticsStore();
 const remoteStore = useRemoteStore();
 const playback = usePlaybackStore();
+const canAddToDestinationMix = computed(() => {
+  const destination = playback.currentGravity?.destination;
+  return Boolean(destination?.length && destination.length < MAX_COMPONENTS);
+});
 const bioTextRef = ref(null);
 const bioExpanded = ref(false);
 const bioOverflows = ref(false);

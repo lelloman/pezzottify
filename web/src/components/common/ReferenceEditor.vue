@@ -22,6 +22,9 @@
         <option v-for="type in ENTITY_TYPES" :key="type" :value="type">
           {{ type }}
         </option>
+        <option v-if="reference.entity_type === 'concept'" value="concept">
+          concept
+        </option>
       </select>
       <span
         v-if="reference.label"
