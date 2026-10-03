@@ -69,12 +69,20 @@ class PlaybackGravity @Inject constructor(
 }
 
 /**
- * Sets [reference] as destination. Explore mode deliberately avoids the closest matches and would
- * never arrive, so it falls back to the default mode when a destination is set.
+ * Sets the destination mix. Explore mode deliberately avoids the closest matches and would never
+ * arrive, so it falls back to the default mode whenever a destination is set.
  */
-fun Gravity.steeringToward(reference: GravityReference, stepsTotal: Int): Gravity {
-    val next = withDestination(reference, stepsTotal)
-    return if (next.knobs.mode == MODE_EXPLORE) next.withKnobs(next.knobs.copy(mode = null)) else next
-}
+fun Gravity.steeringToward(components: List<GravityReference>, stepsTotal: Int): Gravity =
+    withDestination(components, stepsTotal).withoutExplore()
+
+fun Gravity.steeringToward(reference: GravityReference, stepsTotal: Int): Gravity =
+    steeringToward(listOf(reference), stepsTotal)
+
+/** Adds a component to the destination mix (starting one if there is none). */
+fun Gravity.steeringAlsoToward(reference: GravityReference): Gravity =
+    withDestinationComponentAdded(reference).withoutExplore()
+
+private fun Gravity.withoutExplore(): Gravity =
+    if (destination != null && knobs.mode == MODE_EXPLORE) withKnobs(knobs.copy(mode = null)) else this
 
 const val MODE_EXPLORE = "explore"

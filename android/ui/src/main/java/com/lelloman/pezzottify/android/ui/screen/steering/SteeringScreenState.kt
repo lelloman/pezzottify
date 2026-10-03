@@ -8,6 +8,8 @@ data class SteeringReference(
     val entityType: String,
     val entityId: String,
     val label: String,
+    /** Concept family (e.g. `instrument`) when [entityType] is `concept`. */
+    val family: String? = null,
 )
 
 sealed interface SteeringSource {
@@ -15,13 +17,29 @@ sealed interface SteeringSource {
     data class References(val references: List<SteeringReference>) : SteeringSource
 }
 
-data class SteeringDestination(
+data class SteeringDestinationComponent(
     val reference: SteeringReference,
+    val weight: Float,
+    /** Cosine similarity of the last continuation query to this component, if known. */
+    val similarity: Float?,
+)
+
+/** The destination mix: 1..[SteeringScreenViewModel.MAX_REFERENCES] weighted components. */
+data class SteeringDestination(
+    val components: List<SteeringDestinationComponent>,
     val progress: Float,
-    /** Cosine similarity of the last continuation query to the destination, if known. */
+    /** Cosine similarity of the last continuation query to the whole mix, if known. */
     val queryToDestination: Float?,
-    /** Cosine similarity of the source to the destination, if known. */
+    /** Cosine similarity of the source to the whole mix, if known. */
     val sourceToDestination: Float?,
+) {
+    val isFull: Boolean get() = components.size >= SteeringScreenViewModel.MAX_REFERENCES
+}
+
+/** Concepts of one family, in server order. */
+data class SteeringConceptGroup(
+    val family: String,
+    val concepts: List<SteeringReference>,
 )
 
 data class SteeringCriterion(
@@ -55,6 +73,9 @@ data class SteeringSearch(
     val isSearching: Boolean = false,
     val results: List<SteeringReference> = emptyList(),
     val isError: Boolean = false,
+    /** Concepts matching [query] (all of them when it is blank), grouped by family. */
+    val concepts: List<SteeringConceptGroup> = emptyList(),
+    val isLoadingConcepts: Boolean = false,
 )
 
 data class SteeringScreenState(

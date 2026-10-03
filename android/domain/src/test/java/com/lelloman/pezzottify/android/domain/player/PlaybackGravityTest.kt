@@ -79,7 +79,7 @@ class PlaybackGravityTest {
     fun `steering toward a destination drops explore mode`() {
         val gravity = Gravity(knobs = GravityKnobs(mode = MODE_EXPLORE), stepsDone = 3)
             .steeringToward(artist, 12)
-        assertThat(gravity.destination).isEqualTo(artist)
+        assertThat(gravity.destination).containsExactly(artist)
         assertThat(gravity.stepsTotal).isEqualTo(12)
         assertThat(gravity.stepsDone).isEqualTo(0)
         assertThat(gravity.knobs.mode).isNull()
@@ -97,8 +97,40 @@ class PlaybackGravityTest {
         val applied = SetPlaybackDestination(playbackGravity, statics)("artist", "a1", 8)
 
         assertThat(applied).isTrue()
-        assertThat(sent.captured.destination).isEqualTo(GravityReference("artist", "a1", "Resolved"))
+        assertThat(sent.captured.destination).containsExactly(GravityReference("artist", "a1", "Resolved"))
         assertThat(sent.captured.stepsTotal).isEqualTo(8)
+    }
+
+    @Test
+    fun `adding to the destination grows the mix, keeps progress and drops explore`() = runTest {
+        val jazz = GravityReference("concept", "audioset:Jazz", "Jazz")
+        playlist.value = PlaybackPlaylist(
+            PlaybackPlaylistContext.UserMix,
+            listOf("t1"),
+            gravity = Gravity(knobs = GravityKnobs(mode = MODE_EXPLORE)).steeringToward(artist, 10).copy(stepsDone = 4),
+        )
+        val sent = slot<Gravity>()
+        every { player.setGravity(capture(sent)) } returns Unit
+        val useCase = SetPlaybackDestination(playbackGravity, mockk(relaxed = true))
+
+        assertThat(useCase.hasDestination()).isTrue()
+        assertThat(useCase.add("concept", "audioset:Jazz", "Jazz")).isTrue()
+
+        assertThat(sent.captured.destination).containsExactly(artist, jazz).inOrder()
+        assertThat(sent.captured.stepsDone).isEqualTo(4)
+        assertThat(sent.captured.knobs.mode).isNull()
+    }
+
+    @Test
+    fun `adding without a destination starts a single component mix`() = runTest {
+        playlist.value = PlaybackPlaylist(PlaybackPlaylistContext.UserMix, listOf("t1"))
+        val sent = slot<Gravity>()
+        every { player.setGravity(capture(sent)) } returns Unit
+        val useCase = SetPlaybackDestination(playbackGravity, mockk(relaxed = true))
+
+        assertThat(useCase.hasDestination()).isFalse()
+        assertThat(useCase.add("concept", "recorded:1960s", "Recorded in the 1960s")).isTrue()
+        assertThat(sent.captured.destination!!.single().entityId).isEqualTo("recorded:1960s")
     }
 
     @Test

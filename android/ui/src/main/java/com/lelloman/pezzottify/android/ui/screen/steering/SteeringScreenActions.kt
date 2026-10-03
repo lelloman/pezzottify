@@ -4,6 +4,8 @@ interface SteeringScreenActions {
     fun setSmartContinuationEnabled(enabled: Boolean)
     fun setStepsRemaining(remaining: Int)
     fun clearDestination()
+    fun setDestinationComponentWeight(reference: SteeringReference, weight: Float)
+    fun removeDestinationComponent(reference: SteeringReference)
     fun resetSourceToQueue()
     fun removeSourceReference(reference: SteeringReference)
     fun setRecencyWeight(value: Float)

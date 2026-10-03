@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui.screen.queue
 
 import com.lelloman.pezzottify.android.ui.component.destination.DestinationRequest
 import com.lelloman.pezzottify.android.ui.component.destination.PlaybackDestinationDialog
+import com.lelloman.pezzottify.android.ui.component.destination.rememberHasPlaybackDestination
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -110,6 +111,7 @@ private fun QueueScreenContent(
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     var destinationRequest by remember { mutableStateOf<DestinationRequest?>(null) }
     PlaybackDestinationDialog(destinationRequest) { destinationRequest = null }
+    val hasPlaybackDestination = rememberHasPlaybackDestination()
 
     // Collect like state for the selected track
     selectedTrackItem?.let { trackItem ->
@@ -226,6 +228,11 @@ private fun QueueScreenContent(
             },
             onSetDestination = {
                 destinationRequest = DestinationRequest("track", track.id, track.name)
+            },
+            onAddToDestination = if (hasPlaybackDestination) {
+                { destinationRequest = DestinationRequest("track", track.id, track.name, addToMix = true) }
+            } else {
+                null
             },
             onPlay = {
                 selectedTrackIndex?.let { index ->

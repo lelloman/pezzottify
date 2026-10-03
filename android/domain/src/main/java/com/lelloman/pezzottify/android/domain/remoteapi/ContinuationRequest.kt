@@ -15,7 +15,8 @@ data class ContinuationRequest(
     val recencyWeight: Double? = null,
     val excludeTrackIds: List<String> = emptyList(),
     val count: Int = 1,
-    val destination: ContinuationReference? = null,
+    /** The destination mix, 1..8 components; null when not steering. */
+    val destination: List<ContinuationReference>? = null,
     val progress: Double? = null,
     val criteria: List<Criterion>? = null,
     val diversity: Double? = null,

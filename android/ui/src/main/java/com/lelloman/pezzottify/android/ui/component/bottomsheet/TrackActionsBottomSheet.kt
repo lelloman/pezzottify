@@ -37,6 +37,7 @@ fun TrackActionsBottomSheet(
     onPlaySingle: (() -> Unit)? = null,
     onRadio: (() -> Unit)? = null,
     onSetDestination: (() -> Unit)? = null,
+    onAddToDestination: (() -> Unit)? = null,
     onRemoveFromPlaylist: (() -> Unit)? = null,
     onViewTrack: (() -> Unit)? = null,
     onViewAlbum: (() -> Unit)? = null,
@@ -109,6 +110,17 @@ fun TrackActionsBottomSheet(
                     label = stringResource(R.string.set_as_playback_destination),
                     onClick = {
                         destinationAction()
+                        onDismiss()
+                    }
+                )
+            }
+
+            onAddToDestination?.let { addAction ->
+                ActionItem(
+                    iconRes = R.drawable.ic_steering_wheel_24,
+                    label = stringResource(R.string.add_to_playback_destination),
+                    onClick = {
+                        addAction()
                         onDismiss()
                     }
                 )

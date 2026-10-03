@@ -2,9 +2,19 @@ package com.lelloman.pezzottify.android.domain.player
 
 import com.lelloman.pezzottify.android.domain.remoteapi.ContinuationReference
 import com.lelloman.pezzottify.android.domain.remoteapi.ContinuationRequest
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.nullable
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonEncoder
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 
@@ -12,18 +22,21 @@ import kotlinx.serialization.json.jsonObject
  * Smart-continuation "gravity" state of a playback playlist.
  *
  * The Source centre of gravity is the set of user-chosen tracks (queue minus [autoTrackIds]) or,
- * after arrival at a destination, an explicit list of references. The optional Destination pulls
- * the continuation query toward another entity over [stepsTotal] auto-appended tracks.
+ * after arrival at a destination, an explicit list of references. The optional Destination is a
+ * weighted mix of 1..[MAX_COMPONENTS] catalog items or concepts that pulls the continuation query
+ * toward it over [stepsTotal] auto-appended tracks.
  *
  * This object travels verbatim inside `context.gravity` on the playback-session WebSocket and is
  * persisted with the playlist, so every field has a default and the wire keys are snake_case.
  */
 @Serializable
 data class Gravity(
-    val v: Int = 1,
+    val v: Int = VERSION,
     val source: GravitySource = GravitySource(),
     @SerialName("auto_track_ids") val autoTrackIds: List<String> = emptyList(),
-    val destination: GravityReference? = null,
+    // v1 stored a single object here; it is not migrated and reads as no destination.
+    @Serializable(with = DestinationMixSerializer::class)
+    val destination: List<GravityReference>? = null,
     @SerialName("steps_total") val stepsTotal: Int = DEFAULT_STEPS_TOTAL,
     @SerialName("steps_done") val stepsDone: Int = 0,
     val knobs: GravityKnobs = GravityKnobs(),
@@ -56,20 +69,56 @@ data class Gravity(
     @Suppress("UNUSED_PARAMETER")
     fun removed(trackId: String): Gravity = this
 
+    /** The whole destination mix becomes the new Source. */
     fun arrived(): Gravity {
         val target = destination ?: return this
         return copy(
-            source = GravitySource(kind = GravitySource.KIND_REFERENCES, references = listOf(target.copy(weight = 1.0))),
+            source = GravitySource(kind = GravitySource.KIND_REFERENCES, references = target.take(MAX_COMPONENTS)),
             destination = null,
             stepsDone = 0,
         )
     }
 
-    fun withDestination(reference: GravityReference?, stepsTotal: Int? = null): Gravity = copy(
-        destination = reference,
+    /** Replaces the destination mix (null or empty clears it) and restarts the step count. */
+    fun withDestination(components: List<GravityReference>?, stepsTotal: Int? = null): Gravity = copy(
+        destination = components?.distinctBy { it.key }?.take(MAX_COMPONENTS)?.ifEmpty { null },
         stepsDone = 0,
         stepsTotal = (stepsTotal ?: this.stepsTotal).coerceAtLeast(1),
     )
+
+    /** A single-component destination. */
+    fun withDestination(component: GravityReference, stepsTotal: Int? = null): Gravity =
+        withDestination(listOf(component), stepsTotal)
+
+    /**
+     * Adds [component] to the mix, replacing a component for the same entity. Progress is kept.
+     * A full mix ([MAX_COMPONENTS]) is left unchanged.
+     */
+    fun withDestinationComponentAdded(component: GravityReference): Gravity {
+        val current = destination ?: return withDestination(listOf(component))
+        val index = current.indexOfFirst { it.key == component.key }
+        val next = when {
+            index >= 0 -> current.toMutableList().also { it[index] = component }
+            current.size >= MAX_COMPONENTS -> return this
+            else -> current + component
+        }
+        return copy(destination = next)
+    }
+
+    /** Removes one component; removing the last one clears the destination. */
+    fun withDestinationComponentRemoved(entityType: String, entityId: String): Gravity {
+        val current = destination ?: return this
+        val next = current.filterNot { it.entityType == entityType && it.entityId == entityId }
+        return if (next.isEmpty()) copy(destination = null, stepsDone = 0) else copy(destination = next)
+    }
+
+    fun withDestinationComponentWeight(entityType: String, entityId: String, weight: Double): Gravity {
+        val current = destination ?: return this
+        val safe = if (weight.isFinite()) weight.coerceIn(MIN_COMPONENT_WEIGHT, MAX_COMPONENT_WEIGHT) else 1.0
+        return copy(destination = current.map {
+            if (it.entityType == entityType && it.entityId == entityId) it.copy(weight = safe) else it
+        })
+    }
 
     fun withSource(source: GravitySource): Gravity = copy(source = source)
 
@@ -100,7 +149,7 @@ data class Gravity(
             recencyWeight = knobs.recencyWeight,
             excludeTrackIds = (tracksIds + autoTrackIds).distinct(),
             count = count,
-            destination = target?.toContinuationReference(),
+            destination = target?.map { it.toContinuationReference() },
             progress = if (target != null) progress() else null,
             criteria = knobs.criteria?.map { ContinuationRequest.Criterion(it.namespace, it.weight) },
             diversity = knobs.diversity,
@@ -111,6 +160,10 @@ data class Gravity(
     }
 
     companion object {
+        const val VERSION = 2
+        const val MAX_COMPONENTS = 8
+        const val MIN_COMPONENT_WEIGHT = 0.05
+        const val MAX_COMPONENT_WEIGHT = 4.0
         const val DEFAULT_STEPS_TOTAL = 20
         const val AUTO_IDS_CAP = 1000
         const val SOURCE_SAMPLE_CAP = 200
@@ -148,6 +201,39 @@ data class GravityReference(
     val weight: Double = 1.0,
 ) {
     fun toContinuationReference() = ContinuationReference(entityType, entityId, weight)
+
+    /** Identity of the referenced entity, ignoring label and weight. */
+    val key: String get() = "$entityType:$entityId"
+
+    companion object {
+        const val TYPE_CONCEPT = "concept"
+    }
+}
+
+/**
+ * The destination mix: a JSON array of references. Anything else (a v1 single object, garbage)
+ * decodes as null instead of failing, so the rest of a persisted or synced gravity survives.
+ */
+internal object DestinationMixSerializer : KSerializer<List<GravityReference>?> {
+    private val delegate = ListSerializer(GravityReference.serializer()).nullable
+    override val descriptor: SerialDescriptor = delegate.descriptor
+
+    override fun deserialize(decoder: Decoder): List<GravityReference>? {
+        val json = decoder as? JsonDecoder ?: return delegate.deserialize(decoder)
+        val element = json.decodeJsonElement()
+        if (element !is JsonArray) return null
+        return runCatching { json.json.decodeFromJsonElement(ListSerializer(GravityReference.serializer()), element) }
+            .getOrNull()
+            ?.ifEmpty { null }
+    }
+
+    override fun serialize(encoder: Encoder, value: List<GravityReference>?) {
+        val json = encoder as? JsonEncoder ?: return delegate.serialize(encoder, value)
+        json.encodeJsonElement(
+            if (value == null) JsonNull
+            else json.json.encodeToJsonElement(ListSerializer(GravityReference.serializer()), value)
+        )
+    }
 }
 
 @Serializable
@@ -183,4 +269,13 @@ data class GravityNamespaceDiagnostics(
     @SerialName("source_to_destination") val sourceToDestination: Double? = null,
     @SerialName("query_to_source") val queryToSource: Double? = null,
     @SerialName("query_to_destination") val queryToDestination: Double? = null,
+    @SerialName("destination_components") val destinationComponents: List<GravityComponentDiagnostics> = emptyList(),
+)
+
+/** How close the last continuation query was to one destination component. */
+@Serializable
+data class GravityComponentDiagnostics(
+    @SerialName("entity_type") val entityType: String,
+    @SerialName("entity_id") val entityId: String,
+    val similarity: Double? = null,
 )

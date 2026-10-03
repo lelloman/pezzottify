@@ -8,7 +8,8 @@ import com.lelloman.pezzottify.android.domain.player.GravityKnobs
 import com.lelloman.pezzottify.android.domain.player.GravityReference
 import com.lelloman.pezzottify.android.domain.player.GravitySource
 import com.lelloman.pezzottify.android.domain.player.PlaybackGravityState
-import com.lelloman.pezzottify.android.domain.player.steeringToward
+import com.lelloman.pezzottify.android.domain.player.steeringAlsoToward
+import com.lelloman.pezzottify.android.domain.remoteapi.response.Concept
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RadioOptions
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -30,6 +31,9 @@ class SteeringScreenViewModel @Inject constructor(
     private val radioOptions = MutableStateFlow<RadioOptions?>(null)
     private val search = MutableStateFlow<SteeringSearch?>(null)
     private var searchJob: Job? = null
+
+    /** Loaded once, on first search, and filtered locally: the whole list is a few hundred items. */
+    private var concepts: List<Concept>? = null
 
     val state: StateFlow<SteeringScreenState> = combine(
         interactor.getGravityState(),
@@ -54,6 +58,16 @@ class SteeringScreenViewModel @Inject constructor(
 
     override fun clearDestination() {
         interactor.updateGravity { it.withDestination(null) }
+    }
+
+    override fun setDestinationComponentWeight(reference: SteeringReference, weight: Float) {
+        interactor.updateGravity {
+            it.withDestinationComponentWeight(reference.entityType, reference.entityId, weight.toDouble())
+        }
+    }
+
+    override fun removeDestinationComponent(reference: SteeringReference) {
+        interactor.updateGravity { it.withDestinationComponentRemoved(reference.entityType, reference.entityId) }
     }
 
     override fun resetSourceToQueue() {
@@ -100,15 +114,30 @@ class SteeringScreenViewModel @Inject constructor(
 
     override fun openSearch(target: SteeringSearchTarget) {
         searchJob?.cancel()
-        search.value = SteeringSearch(target = target)
+        val loaded = concepts
+        search.value = SteeringSearch(
+            target = target,
+            concepts = loaded?.let { groupConcepts(it, "") }.orEmpty(),
+            isLoadingConcepts = loaded == null,
+        )
+        if (loaded == null) {
+            viewModelScope.launch {
+                val fetched = interactor.getConcepts()
+                if (fetched != null) concepts = fetched
+                search.value = search.value?.let {
+                    it.copy(isLoadingConcepts = false, concepts = groupConcepts(fetched.orEmpty(), it.query))
+                }
+            }
+        }
     }
 
     override fun updateSearchQuery(query: String) {
         val current = search.value ?: return
-        search.value = current.copy(query = query, isError = false)
+        val grouped = groupConcepts(concepts.orEmpty(), query)
+        search.value = current.copy(query = query, isError = false, concepts = grouped)
         searchJob?.cancel()
         if (query.isBlank()) {
-            search.value = current.copy(query = query, results = emptyList(), isSearching = false)
+            search.value = current.copy(query = query, results = emptyList(), isSearching = false, concepts = grouped)
             return
         }
         searchJob = viewModelScope.launch {
@@ -128,10 +157,8 @@ class SteeringScreenViewModel @Inject constructor(
         closeSearch()
         val gravityReference = reference.toGravityReference()
         when (target) {
-            SteeringSearchTarget.Destination -> {
-                val steps = state.value.stepsTotal
-                interactor.updateGravity { it.steeringToward(gravityReference, steps) }
-            }
+            // Picking for the destination grows the mix; a full mix is left unchanged.
+            SteeringSearchTarget.Destination -> interactor.updateGravity { it.steeringAlsoToward(gravityReference) }
 
             SteeringSearchTarget.Away -> updateKnobs { knobs ->
                 if (knobs.away.any { it.matches(reference) } || knobs.away.size >= MAX_REFERENCES) knobs
@@ -193,9 +220,18 @@ class SteeringScreenViewModel @Inject constructor(
             )
         }
         val firstNamespace = gravity.lastDiagnostics?.namespaces?.firstOrNull()
-        val destination = gravity.destination?.let {
+        val componentSimilarity = firstNamespace?.destinationComponents
+            ?.associate { "${it.entityType}:${it.entityId}" to it.similarity }
+            .orEmpty()
+        val destination = gravity.destination?.let { components ->
             SteeringDestination(
-                reference = it.toUi(),
+                components = components.map {
+                    SteeringDestinationComponent(
+                        reference = it.toUi(),
+                        weight = it.weight.toFloat(),
+                        similarity = componentSimilarity[it.key]?.toFloat(),
+                    )
+                },
                 progress = gravity.progress().toFloat(),
                 queryToDestination = firstNamespace?.queryToDestination?.toFloat(),
                 sourceToDestination = firstNamespace?.sourceToDestination?.toFloat(),
@@ -252,6 +288,9 @@ class SteeringScreenViewModel @Inject constructor(
 
         /** Artists, albums and tracks matching [query]; null when the search failed. */
         suspend fun searchReferences(query: String): List<SteeringReference>?
+
+        /** Every steering concept; null when loading failed. */
+        suspend fun getConcepts(): List<Concept>?
     }
 
     companion object {
@@ -261,9 +300,41 @@ class SteeringScreenViewModel @Inject constructor(
     }
 }
 
-private fun GravityReference.toUi() = SteeringReference(entityType, entityId, label ?: entityId)
+private fun GravityReference.toUi() = SteeringReference(
+    entityType = entityType,
+    entityId = entityId,
+    label = label ?: entityId,
+    family = if (entityType == GravityReference.TYPE_CONCEPT) conceptFamily(entityId) else null,
+)
 
 private fun SteeringReference.toGravityReference() = GravityReference(entityType, entityId, label)
+
+/** Concept ids are `prefix:value`; AudioSet ids do not encode their family, the server labels do. */
+private fun conceptFamily(conceptId: String): String? = when (conceptId.substringBefore(':')) {
+    "genre" -> Concept.FAMILY_GENRE_TAG
+    "recorded" -> Concept.FAMILY_RECORDED
+    "composed" -> Concept.FAMILY_COMPOSED
+    else -> null
+}
+
+internal fun groupConcepts(concepts: List<Concept>, query: String): List<SteeringConceptGroup> {
+    val needle = query.trim()
+    return concepts
+        .filter { needle.isEmpty() || it.label.contains(needle, ignoreCase = true) }
+        .groupBy { it.family }
+        .entries
+        .sortedBy { (family, _) ->
+            Concept.FAMILY_ORDER.indexOf(family).let { if (it < 0) Int.MAX_VALUE else it }
+        }
+        .map { (family, items) ->
+            SteeringConceptGroup(
+                family = family,
+                concepts = items.map {
+                    SteeringReference(GravityReference.TYPE_CONCEPT, it.id, it.label, family)
+                },
+            )
+        }
+}
 
 private fun GravityReference.matches(reference: SteeringReference) =
     entityType == reference.entityType && entityId == reference.entityId

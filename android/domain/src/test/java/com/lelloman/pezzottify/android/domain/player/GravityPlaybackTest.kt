@@ -170,9 +170,9 @@ class GravityPlaybackTest {
         runCurrent()
         // Two suggestions were appended, so progress advanced 0 -> 0.5 and then arrived.
         assertThat(requests).hasSize(2)
-        assertThat(requests[0].destination?.entityId).isEqualTo("a1")
+        assertThat(requests[0].destination?.single()?.entityId).isEqualTo("a1")
         assertThat(requests[0].progress).isEqualTo(0.0)
-        assertThat(requests[1].destination?.entityId).isEqualTo("a1")
+        assertThat(requests[1].destination?.single()?.entityId).isEqualTo("a1")
         assertThat(requests[1].progress).isWithin(1e-9).of(0.5)
         val arrived = player.playbackPlaylist.value!!.gravity!!
         assertThat(arrived.destination).isNull()
