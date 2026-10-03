@@ -4,8 +4,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -17,7 +20,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.lelloman.pezzottify.android.ui.R
 
@@ -40,7 +45,8 @@ fun SetDestinationDialog(
         title = {
             Text(
                 text = stringResource(R.string.steering_steps_title),
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
             )
         },
         text = {
@@ -58,12 +64,17 @@ fun SetDestinationDialog(
                     singleLine = true,
                     isError = steps == null,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    textStyle = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                    ),
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
         },
         confirmButton = {
-            TextButton(
+            Button(
                 onClick = {
                     steps?.let {
                         onConfirm(it)
@@ -71,12 +82,13 @@ fun SetDestinationDialog(
                     }
                 },
                 enabled = steps != null,
+                shape = CircleShape,
             ) {
                 Text(stringResource(R.string.steering_set))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, shape = CircleShape) {
                 Text(stringResource(R.string.cancel))
             }
         },

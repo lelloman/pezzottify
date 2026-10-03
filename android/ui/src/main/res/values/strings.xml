@@ -669,5 +669,9 @@
     <string name="steering_family_genre_tag">Genre tags</string>
     <string name="steering_family_recorded">Recorded in</string>
     <string name="steering_family_composed">Composed in</string>
+    <string name="steering_your_queue">Your queue</string>
+    <string name="steering_mix_title">A mix of %1$d</string>
+    <string name="steering_search_catalog">Artists, albums and tracks</string>
+    <string name="steering_search_concepts">Concepts</string>
     <string name="app_updates">App updates</string>
 </resources>
