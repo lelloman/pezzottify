@@ -617,6 +617,13 @@ impl AppConfig {
                     specs: album_specs,
                 };
 
+                let concepts_file = ae.concepts.clone().unwrap_or_default();
+                let concepts = ConceptEmbeddingsSettings {
+                    enabled: concepts_file.enabled.unwrap_or(true),
+                    interval_hours: concepts_file.interval_hours.unwrap_or(168).max(1),
+                    jitter_minutes: concepts_file.jitter_minutes.unwrap_or(120),
+                };
+
                 Some(AudioEmbeddingsSettings {
                     enabled: true,
                     simple_ai_base_url,
@@ -627,6 +634,7 @@ impl AppConfig {
                     request_timeout_secs: ae.request_timeout_secs.unwrap_or(300),
                     specs,
                     album_derivations,
+                    concepts,
                 })
             }
             _ => None,
@@ -1003,6 +1011,25 @@ pub struct AudioEmbeddingsSettings {
     pub request_timeout_secs: u64,
     pub specs: Vec<AudioEmbeddingSpec>,
     pub album_derivations: AlbumEmbeddingDerivationsSettings,
+    pub concepts: ConceptEmbeddingsSettings,
+}
+
+/// Settings for the weekly steering concept materialization.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConceptEmbeddingsSettings {
+    pub enabled: bool,
+    pub interval_hours: u64,
+    pub jitter_minutes: u64,
+}
+
+impl Default for ConceptEmbeddingsSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            interval_hours: 168,
+            jitter_minutes: 120,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1024,12 +1051,12 @@ impl AudioEmbeddingSpec {
             },
             Self {
                 model: "ast-audioset".to_string(),
-                namespace: "ast.audioset.v1".to_string(),
+                namespace: "ast.audioset.v2".to_string(),
                 serve: true,
             },
             Self {
                 model: "ast-audioset".to_string(),
-                namespace: "ast.instruments.v1".to_string(),
+                namespace: "ast.instruments.v2".to_string(),
                 serve: true,
             },
         ]

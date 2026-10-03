@@ -376,6 +376,7 @@ mod tests {
                 max_albums_per_run: 1000,
                 specs: AlbumEmbeddingDerivationSpec::defaults(),
             },
+            concepts: Default::default(),
         }
     }
 

@@ -339,6 +339,19 @@ pub struct AudioEmbeddingsConfig {
     pub specs: Option<Vec<AudioEmbeddingSpecConfig>>,
     /// Derived album embedding synchronization settings.
     pub album_derivations: Option<AlbumEmbeddingDerivationsConfig>,
+    /// Steering concept materialization settings.
+    pub concepts: Option<ConceptEmbeddingsConfig>,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct ConceptEmbeddingsConfig {
+    /// Whether steering concepts are materialized. Defaults to true.
+    pub enabled: Option<bool>,
+    /// Interval in hours between scheduled runs. Defaults to 168 (weekly).
+    pub interval_hours: Option<u64>,
+    /// Positive random jitter added to each scheduled interval. Defaults to 120.
+    pub jitter_minutes: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

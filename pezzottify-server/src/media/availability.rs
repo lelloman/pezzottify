@@ -328,6 +328,22 @@ impl CatalogStore for MediaCatalogView {
     ) -> Result<crate::catalog_store::EntityEmbedding> {
         self.inner.upsert_entity_embedding(_embedding)
     }
+    fn list_entity_vectors(
+        &self,
+        entity_type: &str,
+        namespace: &str,
+    ) -> Result<Vec<(String, Vec<f32>)>> {
+        self.inner.list_entity_vectors(entity_type, namespace)
+    }
+    fn list_entity_embedding_metadata(
+        &self,
+        entity_type: &str,
+    ) -> Result<Vec<(String, String, serde_json::Value)>> {
+        self.inner.list_entity_embedding_metadata(entity_type)
+    }
+    fn list_concept_track_facts(&self) -> Result<Vec<crate::catalog_store::ConceptTrackFacts>> {
+        self.inner.list_concept_track_facts()
+    }
     fn get_entity_embedding(
         &self,
         _entity_type: &str,

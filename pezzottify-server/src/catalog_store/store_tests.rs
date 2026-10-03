@@ -1433,4 +1433,82 @@ mod tests {
             .unwrap();
         assert_eq!(still_available, 5000);
     }
+
+    #[test]
+    fn concept_track_facts_date_recordings_by_earliest_isrc_release() {
+        let (store, _dir) = create_test_store();
+        let artist = Artist {
+            id: "artist-1".into(),
+            name: "Artist".into(),
+            genres: vec!["hard bop".into(), "jazz".into()],
+            followers_total: 0,
+            popularity: 50,
+            available: true,
+        };
+        store.create_artist(&artist).unwrap();
+        let album = |id: &str, date: &str| Album {
+            id: id.into(),
+            name: id.into(),
+            album_type: AlbumType::Album,
+            label: None,
+            release_date: Some(date.into()),
+            release_date_precision: Some("day".into()),
+            external_id_upc: None,
+            popularity: 50,
+            album_availability: AlbumAvailability::Complete,
+        };
+        store.create_album(&album("original", "1965-03-01"), &["artist-1".into()]).unwrap();
+        store.create_album(&album("reissue", "2010-01-01"), &["artist-1".into()]).unwrap();
+        let track = |id: &str, album_id: &str, isrc: Option<&str>| Track {
+            id: id.into(),
+            name: id.into(),
+            album_id: album_id.into(),
+            disc_number: 1,
+            track_number: 1,
+            duration_ms: 1000,
+            explicit: false,
+            popularity: 50,
+            language: None,
+            external_id_isrc: isrc.map(Into::into),
+            audio_uri: None,
+            availability: TrackAvailability::Unavailable,
+        };
+        // Only the reissue is playable, but the recording dates from 1965.
+        store.create_track(&track("orig", "original", Some("ISRC1")), &["artist-1".into()]).unwrap();
+        store.create_track(&track("re", "reissue", Some("ISRC1")), &["artist-1".into()]).unwrap();
+        store.create_track(&track("solo", "reissue", None), &["artist-1".into()]).unwrap();
+        store.set_track_audio_uri("re", "re.ogg").unwrap();
+        store.set_track_audio_uri("solo", "solo.ogg").unwrap();
+
+        let mut facts = store.list_concept_track_facts().unwrap();
+        facts.sort_by(|a, b| a.track_id.cmp(&b.track_id));
+        assert_eq!(facts.len(), 2);
+        assert_eq!(facts[0].track_id, "re");
+        assert_eq!(facts[0].recording_year, Some(1965));
+        assert_eq!(facts[0].artist_id.as_deref(), Some("artist-1"));
+        let mut genres = facts[0].genres.clone();
+        genres.sort();
+        assert_eq!(genres, vec!["hard bop", "jazz"]);
+        // Without an ISRC the track's own album date is used.
+        assert_eq!(facts[1].recording_year, Some(2010));
+
+        store
+            .upsert_entity_embedding(&EntityEmbeddingUpsert {
+                entity_type: "concept".into(),
+                entity_id: "audioset:Jazz".into(),
+                namespace: "ns".into(),
+                vector: vec![0.25, 0.5],
+                dtype: "float32".into(),
+                metadata: serde_json::json!({"family": "sound_genre", "label": "Jazz"}),
+                model: serde_json::json!({}),
+            })
+            .unwrap();
+        assert_eq!(
+            store.list_entity_vectors("concept", "ns").unwrap(),
+            vec![("audioset:Jazz".to_string(), vec![0.25, 0.5])]
+        );
+        let metadata = store.list_entity_embedding_metadata("concept").unwrap();
+        assert_eq!(metadata.len(), 1);
+        assert_eq!(metadata[0].2["label"], "Jazz");
+    }
 }
