@@ -178,6 +178,14 @@ internal interface RetrofitApiClient {
         @Header("Authorization") authToken: String,
     ): Response<com.lelloman.pezzottify.android.domain.remoteapi.response.RadioOptions>
 
+    @GET("/v1/content/concepts")
+    suspend fun getConcepts(
+        @Header("Authorization") authToken: String,
+        @retrofit2.http.Query("q") query: String?,
+        @retrofit2.http.Query("family") family: String?,
+        @retrofit2.http.Query("limit") limit: Int,
+    ): Response<com.lelloman.pezzottify.android.domain.remoteapi.response.ConceptsResponse>
+
     @GET("/v1/content/radio/{entityType}/{entityId}")
     suspend fun getRadioTrackIds(
         @Header("Authorization") authToken: String,

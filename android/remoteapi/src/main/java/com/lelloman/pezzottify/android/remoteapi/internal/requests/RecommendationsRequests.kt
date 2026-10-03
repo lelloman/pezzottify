@@ -29,8 +29,9 @@ data class ContinuationRecommendationsRequest(
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     @SerialName("recency_weight")
     val recencyWeight: Double? = null,
+    /** The destination mix; omitted when not steering. */
     @EncodeDefault(EncodeDefault.Mode.NEVER)
-    val destination: ContinuationReferenceRequest? = null,
+    val destination: List<ContinuationReferenceRequest>? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val progress: Double? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER)
@@ -81,6 +82,17 @@ data class ContinuationNamespaceResponse(
     val queryToSource: Double? = null,
     @SerialName("query_to_destination")
     val queryToDestination: Double? = null,
+    @SerialName("destination_components")
+    val destinationComponents: List<ContinuationComponentResponse> = emptyList(),
+)
+
+@Serializable
+data class ContinuationComponentResponse(
+    @SerialName("entity_type")
+    val entityType: String,
+    @SerialName("entity_id")
+    val entityId: String,
+    val similarity: Double? = null,
 )
 
 @Serializable

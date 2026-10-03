@@ -356,12 +356,31 @@ class PlaybackSessionHandlerTest {
         testScheduler.runCurrent()
         capturedMessageHandler.onMessage("playback.command", """{
             "command":"setGravity", "payload": {
-                "gravity":{"v":1,"source":{"kind":"queue"},"auto_track_ids":["s1"],"destination":{"entity_type":"artist","entity_id":"a1","label":"A"},"steps_total":7,"steps_done":2,"knobs":{"recency_weight":null,"criteria":null,"diversity":null,"randomness":null,"mode":null,"away":[]},"last_diagnostics":null}
+                "gravity":{"v":2,"source":{"kind":"queue"},"auto_track_ids":["s1"],"destination":[{"entity_type":"artist","entity_id":"a1","label":"A"},{"entity_type":"concept","entity_id":"audioset:Jazz","label":"Jazz","weight":0.5}],"steps_total":7,"steps_done":2,"knobs":{"recency_weight":null,"criteria":null,"diversity":null,"randomness":null,"mode":null,"away":[]},"last_diagnostics":null}
             }
         }""")
         testScheduler.runCurrent()
         verify { player.setGravity(match {
-            it.destination?.entityId == "a1" && it.stepsTotal == 7 && it.stepsDone == 2 && it.autoTrackIds == listOf("s1")
+            it.destination?.map { ref -> ref.entityId } == listOf("a1", "audioset:Jazz") &&
+                it.destination?.last()?.weight == 0.5 &&
+                it.stepsTotal == 7 && it.stepsDone == 2 && it.autoTrackIds == listOf("s1")
+        }) }
+    }
+
+    @Test
+    fun `setGravity command with a v1 single destination keeps the rest of the state`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+        capturedMessageHandler.onMessage("playback.command", """{
+            "command":"setGravity", "payload": {
+                "gravity":{"v":1,"source":{"kind":"queue"},"auto_track_ids":["s1"],"destination":{"entity_type":"artist","entity_id":"a1","label":"A"},"steps_total":7,"steps_done":2,"knobs":{"recency_weight":0.4,"away":[]},"last_diagnostics":null}
+            }
+        }""")
+        testScheduler.runCurrent()
+        verify { player.setGravity(match {
+            it.destination == null && it.stepsTotal == 7 && it.autoTrackIds == listOf("s1") &&
+                it.knobs.recencyWeight == 0.4
         }) }
     }
 

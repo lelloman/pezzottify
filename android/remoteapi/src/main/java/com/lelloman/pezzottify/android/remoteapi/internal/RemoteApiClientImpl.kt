@@ -493,7 +493,7 @@ internal class RemoteApiClientImpl(
                 sourceReferences = request.sourceReferences.map { it.toWire() },
                 recentTrackIds = request.recentTrackIds,
                 recencyWeight = request.recencyWeight,
-                destination = request.destination?.toWire(),
+                destination = request.destination?.map { it.toWire() },
                 progress = request.progress,
                 criteria = request.criteria?.map {
                     com.lelloman.pezzottify.android.remoteapi.internal.requests.ContinuationCriterionRequest(it.namespace, it.weight)
@@ -519,6 +519,13 @@ internal class RemoteApiClientImpl(
                                     sourceToDestination = it.sourceToDestination,
                                     queryToSource = it.queryToSource,
                                     queryToDestination = it.queryToDestination,
+                                    destinationComponents = it.destinationComponents.map { component ->
+                                        com.lelloman.pezzottify.android.domain.player.GravityComponentDiagnostics(
+                                            entityType = component.entityType,
+                                            entityId = component.entityId,
+                                            similarity = component.similarity,
+                                        )
+                                    },
                                 )
                             },
                             at = System.currentTimeMillis(),
@@ -574,6 +581,22 @@ internal class RemoteApiClientImpl(
         catchingNetworkError {
             getRetrofit()
                 .getRadioOptions(authToken = authToken)
+                .returnFromRetrofitResponse()
+        }
+
+    override suspend fun getConcepts(
+        query: String?,
+        family: String?,
+        limit: Int,
+    ): RemoteApiResponse<com.lelloman.pezzottify.android.domain.remoteapi.response.ConceptsResponse> =
+        catchingNetworkError {
+            getRetrofit()
+                .getConcepts(
+                    authToken = authToken,
+                    query = query?.trim()?.ifEmpty { null },
+                    family = family,
+                    limit = limit.coerceIn(1, 500),
+                )
                 .returnFromRetrofitResponse()
         }
 

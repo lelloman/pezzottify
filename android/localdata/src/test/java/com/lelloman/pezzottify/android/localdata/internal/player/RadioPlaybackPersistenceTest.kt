@@ -55,7 +55,13 @@ class RadioPlaybackPersistenceTest {
             context = PlaybackPlaylistContext.UserMix,
             tracksIds = listOf("one", "two", "s1"),
             gravity = Gravity()
-                .withDestination(GravityReference("artist", "a1", label = "A"), stepsTotal = 9)
+                .withDestination(
+                    listOf(
+                        GravityReference("artist", "a1", label = "A"),
+                        GravityReference("concept", "composed:1810s", label = "Composed in the 1810s", weight = 0.5),
+                    ),
+                    stepsTotal = 9,
+                )
                 .appendedAuto(listOf("s1"))
                 .withKnobs(GravityKnobs(recencyWeight = 0.4, mode = "similar")),
         )
@@ -75,5 +81,20 @@ class RadioPlaybackPersistenceTest {
         assertThat(restored).isNotNull()
         assertThat(restored!!.playlist.tracksIds).containsExactly("one", "two").inOrder()
         assertThat(restored.playlist.gravity).isNull()
+    }
+
+    @Test fun `saved v1 gravity loses only its single destination`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val legacy = """{"context":{"type":"com.lelloman.pezzottify.android.localdata.internal.player.PersistableContext.UserMix"},"tracksIds":["one","s1"],"currentTrackIndex":1,"positionMs":5,"isPlaying":false,"savedAtMs":${System.currentTimeMillis()},"gravity":{"v":1,"source":{"kind":"queue"},"auto_track_ids":["s1"],"destination":{"entity_type":"artist","entity_id":"a1","label":"A"},"steps_total":9,"steps_done":3,"knobs":{"recency_weight":0.4,"away":[]}}}"""
+        context.getSharedPreferences("PlaybackStateStore", Context.MODE_PRIVATE).edit()
+            .putString("saved_state", legacy).commit()
+        val restored = PlaybackStateStoreImpl(context, dispatcher).loadState()
+        assertThat(restored).isNotNull()
+        val gravity = restored!!.playlist.gravity!!
+        assertThat(gravity.destination).isNull()
+        assertThat(gravity.autoTrackIds).containsExactly("s1")
+        assertThat(gravity.stepsTotal).isEqualTo(9)
+        assertThat(gravity.knobs.recencyWeight).isEqualTo(0.4)
     }
 }

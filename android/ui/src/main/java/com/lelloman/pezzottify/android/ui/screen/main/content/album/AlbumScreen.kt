@@ -2,6 +2,7 @@ package com.lelloman.pezzottify.android.ui.screen.main.content.album
 
 import com.lelloman.pezzottify.android.ui.component.destination.DestinationRequest
 import com.lelloman.pezzottify.android.ui.component.destination.PlaybackDestinationDialog
+import com.lelloman.pezzottify.android.ui.component.destination.rememberHasPlaybackDestination
 import androidx.compose.animation.core.LinearEasing
 import com.lelloman.pezzottify.android.ui.screen.main.MainScreenScaffold
 import androidx.compose.animation.core.RepeatMode
@@ -179,6 +180,7 @@ private fun AlbumScreenContent(
 
     var destinationRequest by remember { mutableStateOf<DestinationRequest?>(null) }
     PlaybackDestinationDialog(destinationRequest) { destinationRequest = null }
+    val hasPlaybackDestination = rememberHasPlaybackDestination()
 
     // Track actions bottom sheet
     selectedTrack?.let { track ->
@@ -188,6 +190,11 @@ private fun AlbumScreenContent(
             onDismiss = { selectedTrack = null },
             onSetDestination = {
                 destinationRequest = DestinationRequest("track", track.id, track.name)
+            },
+            onAddToDestination = if (hasPlaybackDestination) {
+                { destinationRequest = DestinationRequest("track", track.id, track.name, addToMix = true) }
+            } else {
+                null
             },
             onPlay = {
                 actions.clickOnTrack(track.id)
@@ -231,6 +238,11 @@ private fun AlbumScreenContent(
             },
             onSetDestination = {
                 destinationRequest = DestinationRequest("album", state.album.id, state.album.name)
+            },
+            onAddToDestination = if (hasPlaybackDestination) {
+                { destinationRequest = DestinationRequest("album", state.album.id, state.album.name, addToMix = true) }
+            } else {
+                null
             },
             onAddToQueue = {
                 actions.addAlbumToQueue(state.album.id)

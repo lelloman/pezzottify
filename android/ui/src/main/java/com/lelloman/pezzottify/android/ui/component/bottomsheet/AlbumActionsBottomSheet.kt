@@ -36,6 +36,7 @@ fun AlbumActionsBottomSheet(
     onPlay: () -> Unit,
     onRadio: (() -> Unit)? = null,
     onSetDestination: (() -> Unit)? = null,
+    onAddToDestination: (() -> Unit)? = null,
     onAddToQueue: () -> Unit,
     onAddToPlaylist: () -> Unit,
 ) {
@@ -92,6 +93,17 @@ fun AlbumActionsBottomSheet(
                     label = stringResource(R.string.set_as_playback_destination),
                     onClick = {
                         destinationAction()
+                        onDismiss()
+                    }
+                )
+            }
+
+            onAddToDestination?.let { addAction ->
+                AlbumActionItem(
+                    iconRes = R.drawable.ic_steering_wheel_24,
+                    label = stringResource(R.string.add_to_playback_destination),
+                    onClick = {
+                        addAction()
                         onDismiss()
                     }
                 )

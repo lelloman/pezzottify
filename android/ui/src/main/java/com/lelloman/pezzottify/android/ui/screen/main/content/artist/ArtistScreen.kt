@@ -4,6 +4,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import com.lelloman.pezzottify.android.ui.component.destination.DestinationRequest
 import com.lelloman.pezzottify.android.ui.component.destination.PlaybackDestinationDialog
+import com.lelloman.pezzottify.android.ui.component.destination.rememberHasPlaybackDestination
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -391,6 +392,7 @@ fun ArtistLoadedScreen(
 
         var destinationRequest by remember { mutableStateOf<DestinationRequest?>(null) }
         PlaybackDestinationDialog(destinationRequest) { destinationRequest = null }
+        val hasPlaybackDestination = rememberHasPlaybackDestination()
 
         ContentOverflowMenu(
             tint = lerp(MaterialTheme.colorScheme.onSurface, Color.White, imageAlpha),
@@ -408,6 +410,15 @@ fun ArtistLoadedScreen(
                     destinationRequest = DestinationRequest("artist", artist.id, artist.name)
                 },
             )
+            if (hasPlaybackDestination) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.add_to_playback_destination)) },
+                    onClick = {
+                        dismiss()
+                        destinationRequest = DestinationRequest("artist", artist.id, artist.name, addToMix = true)
+                    },
+                )
+            }
         }
 
         ContentPlaybackActions(

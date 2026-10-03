@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -49,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -216,12 +218,20 @@ private fun DestinationCard(state: SteeringScreenState, actions: SteeringScreenA
             }
             return@SectionCard
         }
-        Text(
-            text = "${entityTypeLabel(destination.reference.entityType)} · ${destination.reference.label}",
-            style = MaterialTheme.typography.bodyLarge,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
+        if (destination.components.size > 1) {
+            Text(
+                text = stringResource(R.string.steering_destination_mix),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        destination.components.forEach { component ->
+            DestinationComponentRow(
+                component = component,
+                showWeight = destination.components.size > 1,
+                actions = actions,
+            )
+        }
         LinearProgressIndicator(
             progress = { destination.progress },
             modifier = Modifier.fillMaxWidth(),
@@ -233,7 +243,7 @@ private fun DestinationCard(state: SteeringScreenState, actions: SteeringScreenA
         )
         destination.queryToDestination?.let { similarity ->
             Text(
-                text = stringResource(R.string.steering_match, (similarity.coerceIn(0f, 1f) * 100).roundToInt()),
+                text = stringResource(R.string.steering_match, percent(similarity)),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -261,8 +271,11 @@ private fun DestinationCard(state: SteeringScreenState, actions: SteeringScreenA
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { actions.openSearch(SteeringSearchTarget.Destination) }) {
-                Text(stringResource(R.string.steering_change_destination))
+            OutlinedButton(
+                onClick = { actions.openSearch(SteeringSearchTarget.Destination) },
+                enabled = !destination.isFull,
+            ) {
+                Text(stringResource(R.string.steering_add_to_mix))
             }
             TextButton(onClick = actions::clearDestination) {
                 Text(stringResource(R.string.steering_clear_destination))
@@ -270,6 +283,71 @@ private fun DestinationCard(state: SteeringScreenState, actions: SteeringScreenA
         }
     }
 }
+
+@Composable
+private fun DestinationComponentRow(
+    component: SteeringDestinationComponent,
+    showWeight: Boolean,
+    actions: SteeringScreenActions,
+) {
+    val reference = component.reference
+    var dragWeight by remember(component.weight) { mutableFloatStateOf(component.weight) }
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = reference.label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                val detail = buildString {
+                    append(referenceKindLabel(reference))
+                    component.similarity?.let { append(" · ").append(stringResourceMatch(it)) }
+                }
+                Text(
+                    text = detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = { actions.removeDestinationComponent(reference) }) {
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.steering_remove))
+            }
+        }
+        if (showWeight) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.steering_weight),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Slider(
+                    value = dragWeight,
+                    onValueChange = { dragWeight = it },
+                    onValueChangeFinished = { actions.setDestinationComponentWeight(reference, dragWeight) },
+                    valueRange = MIN_COMPONENT_WEIGHT..MAX_COMPONENT_WEIGHT,
+                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                )
+                Text(
+                    text = "%.1f".format(dragWeight),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun stringResourceMatch(similarity: Float): String =
+    stringResource(R.string.steering_component_match, percent(similarity))
+
+private fun percent(similarity: Float): Int = (similarity.coerceIn(0f, 1f) * 100).roundToInt()
+
+// The slider is linear; weights are relative within the mix, so 0.1..2 covers "a hint" to "double".
+private const val MIN_COMPONENT_WEIGHT = 0.1f
+private const val MAX_COMPONENT_WEIGHT = 2f
 
 @Composable
 private fun KnobsCard(state: SteeringScreenState, actions: SteeringScreenActions) {
@@ -373,7 +451,7 @@ private fun ReferenceChips(references: List<SteeringReference>, onRemove: (Steer
                 onClick = { onRemove(reference) },
                 label = {
                     Text(
-                        text = "${entityTypeLabel(reference.entityType)} · ${reference.label}",
+                        text = "${referenceKindLabel(reference)} · ${reference.label}",
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -410,42 +488,72 @@ private fun ReferenceSearchSheet(search: SteeringSearch, actions: SteeringScreen
                 )
 
                 search.isError -> SheetMessage(stringResource(R.string.steering_search_error))
-                search.query.isNotBlank() && search.results.isEmpty() ->
+                search.query.isNotBlank() && search.results.isEmpty() && search.concepts.isEmpty() &&
+                    !search.isLoadingConcepts ->
                     SheetMessage(stringResource(R.string.steering_search_empty))
 
-                else -> LazyColumn(modifier = Modifier.height(360.dp)) {
+                else -> LazyColumn(modifier = Modifier.height(420.dp)) {
                     items(search.results, key = { "${it.entityType}:${it.entityId}" }) { reference ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { actions.pickSearchResult(reference) }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                painter = painterResource(entityTypeIcon(reference.entityType)),
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        SearchResultRow(reference, actions)
+                    }
+                    if (search.isLoadingConcepts) {
+                        item(key = "concepts-loading") { SheetMessage(stringResource(R.string.steering_concepts_loading)) }
+                    }
+                    search.concepts.forEach { group ->
+                        item(key = "family-${group.family}") {
+                            Text(
+                                text = conceptFamilyLabel(group.family),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
                             )
-                            Spacer(Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = reference.label,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    text = entityTypeLabel(reference.entityType),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
+                        }
+                        items(group.concepts, key = { "concept:${it.entityId}" }) { reference ->
+                            SearchResultRow(reference, actions)
                         }
                     }
                 }
             }
             Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun SearchResultRow(reference: SteeringReference, actions: SteeringScreenActions) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { actions.pickSearchResult(reference) }
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (reference.entityType == CONCEPT) {
+            Icon(
+                painter = rememberVectorPainter(Icons.Outlined.Lightbulb),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Icon(
+                painter = painterResource(entityTypeIcon(reference.entityType)),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = reference.label,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = referenceKindLabel(reference),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -460,11 +568,27 @@ private fun SheetMessage(text: String) {
     )
 }
 
+private const val CONCEPT = "concept"
+
+/** "Artist", "Album", "Track", or the concept family ("Instrument", "Recorded in", ...). */
 @Composable
-private fun entityTypeLabel(entityType: String): String = when (entityType) {
+private fun referenceKindLabel(reference: SteeringReference): String = when (reference.entityType) {
     "artist" -> stringResource(R.string.steering_entity_artist)
     "album" -> stringResource(R.string.steering_entity_album)
+    CONCEPT -> reference.family?.let { conceptFamilyLabel(it) } ?: stringResource(R.string.steering_entity_concept)
     else -> stringResource(R.string.steering_entity_track)
+}
+
+@Composable
+private fun conceptFamilyLabel(family: String): String = when (family) {
+    "sound_genre" -> stringResource(R.string.steering_family_sound_genre)
+    "instrument" -> stringResource(R.string.steering_family_instrument)
+    "vocals" -> stringResource(R.string.steering_family_vocals)
+    "mood" -> stringResource(R.string.steering_family_mood)
+    "genre_tag" -> stringResource(R.string.steering_family_genre_tag)
+    "recorded" -> stringResource(R.string.steering_family_recorded)
+    "composed" -> stringResource(R.string.steering_family_composed)
+    else -> stringResource(R.string.steering_entity_concept)
 }
 
 private fun entityTypeIcon(entityType: String): Int = when (entityType) {
