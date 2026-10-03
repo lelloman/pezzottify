@@ -1,88 +1,292 @@
-.steeringCard {
+/* Shared look of the steering page: quiet sections, pill buttons, Spotify-like sliders. */
+
+.steeringSection {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 16px;
-  border: 1px solid var(--surface-border);
-  border-radius: 8px;
-  background: var(--surface-panel);
-  color: var(--text-base);
-  color-scheme: dark;
+  gap: 16px;
+  min-width: 0;
+  padding: 24px;
+  border-radius: var(--radius-xl);
+  background: rgba(255, 255, 255, 0.035);
 }
 
-.cardHeader {
+.sectionHeader {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 12px;
 }
 
-.cardTitle {
-  color: #9eddb7;
-  font-size: 0.82rem;
-  font-weight: 900;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.cardHint {
+.sectionTitle {
   margin: 0;
-  color: var(--text-subdued);
-  font-size: 0.85rem;
-  line-height: 1.4;
-}
-
-.textButton,
-.cardButton {
-  min-height: 32px;
-  border-radius: var(--radius-md);
-  background: var(--bg-highlight);
   color: var(--text-bright);
-  padding: 0 12px;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  letter-spacing: -0.02em;
 }
 
-.textButton:hover:not(:disabled),
-.cardButton:hover:not(:disabled) {
-  background: var(--bg-press);
+.sectionHint {
+  margin: -8px 0 0;
+  color: var(--text-subdued);
+  font-size: var(--text-sm);
+  line-height: 1.45;
 }
 
-.cardButton.primary {
-  background: var(--accent-color);
-  font-weight: var(--font-semibold);
+.mutedHint {
+  margin: 0;
+  color: var(--text-subtle);
+  font-size: var(--text-xs);
+  line-height: 1.45;
 }
 
-.cardButton.primary:hover:not(:disabled) {
-  background: var(--spotify-green-hover);
-}
-
-button:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-
-.fieldRow {
+.actionRow {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
 }
 
-.numberInput {
-  width: 90px;
-  min-height: 32px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-highlight);
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 18px;
+  border: 1px solid var(--surface-border-strong);
+  border-radius: var(--radius-full);
+  background: transparent;
   color: var(--text-bright);
-  padding: 4px 8px;
-  outline: none;
+  font-size: var(--text-sm);
+  font-weight: var(--font-bold);
+  cursor: pointer;
+  transition:
+    transform var(--transition-fast),
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
-.numberInput:focus {
-  border-color: var(--spotify-green);
+.pill:hover:not(:disabled) {
+  border-color: var(--text-bright);
+  transform: scale(1.03);
 }
 
-input[type="range"],
-input[type="checkbox"] {
-  accent-color: var(--spotify-green);
+.pill:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pill.primary {
+  border-color: transparent;
+  background: var(--spotify-green);
+  color: #000;
+}
+
+.pill.primary:hover:not(:disabled) {
+  background: var(--spotify-green-hover);
+}
+
+.pill.large {
+  min-height: 48px;
+  padding: 0 28px;
+  font-size: var(--text-md);
+}
+
+.textLink {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-subdued);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+}
+
+.textLink:hover:not(:disabled) {
+  color: var(--text-bright);
+  text-decoration: underline;
+}
+
+.textLink:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* "Get there in [-] 12 [+] tracks" */
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-subdued);
+  font-size: var(--text-sm);
+}
+
+.stepperControl {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.stepperControl button {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-bright);
+  font-size: 1.1rem;
+  font-weight: var(--font-bold);
+  cursor: pointer;
+}
+
+.stepperControl button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.stepperControl button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.stepperControl input {
+  width: 46px;
+  border: none;
+  background: transparent;
+  color: var(--text-bright);
+  font-size: var(--text-md);
+  font-weight: var(--font-bold);
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.stepperControl input::-webkit-outer-spin-button,
+.stepperControl input::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+/* Spotify-style range: thin track, accent fill up to the value, round thumb. */
+.steerRange {
+  --fill: 50%;
+  width: 100%;
+  height: 16px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.steerRange::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(
+    to right,
+    var(--text-bright) var(--fill),
+    rgba(255, 255, 255, 0.25) var(--fill)
+  );
+}
+
+.steerRange:hover::-webkit-slider-runnable-track,
+.steerRange:focus-visible::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    to right,
+    var(--spotify-green) var(--fill),
+    rgba(255, 255, 255, 0.25) var(--fill)
+  );
+}
+
+.steerRange::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  appearance: none;
+  -webkit-appearance: none;
+  transform: scale(0);
+  transition: transform var(--transition-fast);
+}
+
+.steerRange:hover::-webkit-slider-thumb,
+.steerRange:focus-visible::-webkit-slider-thumb,
+.steerRange:active::-webkit-slider-thumb {
+  transform: scale(1);
+}
+
+.steerRange::-moz-range-track {
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.steerRange::-moz-range-progress {
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--text-bright);
+}
+
+.steerRange:hover::-moz-range-progress {
+  background: var(--spotify-green);
+}
+
+.steerRange::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.chipList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quietDisclosure > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-subdued);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  list-style: none;
+}
+
+.quietDisclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.quietDisclosure > summary::before {
+  content: "›";
+  display: inline-block;
+  font-size: 1.1rem;
+  transition: transform var(--transition-fast);
+}
+
+.quietDisclosure[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.quietDisclosure > summary:hover {
+  color: var(--text-bright);
+}
+
+@media (max-width: 600px) {
+  .steeringSection {
+    padding: 18px 16px;
+  }
+
+  .sectionTitle {
+    font-size: var(--text-xl);
+  }
 }
