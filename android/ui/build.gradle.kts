@@ -75,6 +75,10 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.ui.test.junit4)
+    // Robolectric Compose tests launch ComponentActivity, which only ui-test-manifest
+    // declares. debugImplementation covers testDebugUnitTest; this covers the release
+    // unit-test variant without adding the test activity to release builds.
+    testImplementation(libs.androidx.ui.test.manifest)
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
