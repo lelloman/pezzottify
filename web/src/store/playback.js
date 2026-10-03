@@ -1468,15 +1468,49 @@ export const usePlaybackStore = defineStore("playback", () => {
     applyGravity(transform(current));
   };
 
-  const setGravityDestination = async (reference, stepsTotal) => {
-    if (!reference?.entity_type || !reference?.entity_id) return;
+  // Concepts carry their own label; catalog items are resolved like radio seeds.
+  const labelledComponent = async (reference) => {
+    if (!reference?.entity_type || !reference?.entity_id) return null;
     const label =
       reference.label ||
-      (await resolveRadioSeedLabel(reference.entity_type, reference.entity_id));
+      (reference.entity_type === "concept"
+        ? reference.entity_id
+        : await resolveRadioSeedLabel(
+            reference.entity_type,
+            reference.entity_id,
+          ));
+    return { ...reference, label };
+  };
+
+  // Replace the destination with one component or a mix of components.
+  const setGravityDestination = async (components, stepsTotal) => {
+    const list = Array.isArray(components) ? components : [components];
+    const labelled = (await Promise.all(list.map(labelledComponent))).filter(
+      Boolean,
+    );
+    if (!labelled.length) return;
     updateGravity((current) =>
-      gravity.setDestination(current, { ...reference, label }, stepsTotal),
+      gravity.setDestination(current, labelled, stepsTotal),
     );
   };
+
+  const addGravityDestinationComponent = async (reference) => {
+    const component = await labelledComponent(reference);
+    if (!component) return;
+    updateGravity((current) =>
+      gravity.addDestinationComponent(current, component),
+    );
+  };
+
+  const removeGravityDestinationComponent = (entity) =>
+    updateGravity((current) =>
+      gravity.removeDestinationComponent(current, entity),
+    );
+
+  const setGravityDestinationComponentWeight = (entity, weight) =>
+    updateGravity((current) =>
+      gravity.setDestinationComponentWeight(current, entity, weight),
+    );
 
   const clearGravityDestination = () =>
     updateGravity((current) => gravity.setDestination(current, null));
@@ -1573,6 +1607,9 @@ export const usePlaybackStore = defineStore("playback", () => {
     currentGravity,
     applyGravity,
     setGravityDestination,
+    addGravityDestinationComponent,
+    removeGravityDestinationComponent,
+    setGravityDestinationComponentWeight,
     clearGravityDestination,
     setGravityKnobs,
     setGravityStepsTotal,

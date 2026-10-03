@@ -3,7 +3,7 @@
     <header class="cardHeader">
       <span class="cardTitle">Destination</span>
       <button
-        v-if="destination"
+        v-if="components.length"
         type="button"
         class="textButton"
         @click="playback.clearGravityDestination()"
@@ -12,13 +12,60 @@
       </button>
     </header>
 
-    <template v-if="destination">
-      <div class="destinationIdentity">
-        <span class="destinationType">{{ destination.entity_type }}</span>
-        <RouterLink class="destinationLabel" :to="destinationRoute">
-          {{ destination.label || destination.entity_id }}
-        </RouterLink>
-      </div>
+    <template v-if="components.length">
+      <ul class="mixList">
+        <li
+          v-for="component in components"
+          :key="componentKey(component)"
+          class="mixComponent"
+        >
+          <div class="componentHeader">
+            <span class="componentBadge">{{ componentBadge(component) }}</span>
+            <RouterLink
+              v-if="component.entity_type !== 'concept'"
+              class="componentLabel"
+              :to="`/${component.entity_type}/${component.entity_id}`"
+            >
+              {{ component.label || component.entity_id }}
+            </RouterLink>
+            <span v-else class="componentLabel">
+              {{ component.label || component.entity_id }}
+            </span>
+            <span
+              class="componentCloseness"
+              :title="'How close the last pick aimed at this part of the mix'"
+            >
+              {{ closenessFor(component) }}
+            </span>
+            <button
+              type="button"
+              class="removeButton"
+              :aria-label="`Remove ${component.label || component.entity_id}`"
+              @click="playback.removeGravityDestinationComponent(component)"
+            >
+              ×
+            </button>
+          </div>
+          <label v-if="components.length > 1" class="weightRow">
+            <span>Weight</span>
+            <input
+              type="range"
+              min="0.1"
+              max="2"
+              step="0.1"
+              :value="component.weight ?? 1"
+              :aria-label="`Weight of ${component.label || component.entity_id}`"
+              @change="
+                playback.setGravityDestinationComponentWeight(
+                  component,
+                  Number($event.target.value),
+                )
+              "
+            />
+            <span class="weightValue">{{ shareOf(component) }}%</span>
+          </label>
+        </li>
+      </ul>
 
       <div
         class="progressTrack"
@@ -65,14 +112,29 @@
         />
       </label>
       <p class="cardHint">
-        When it arrives, the destination becomes the new source.
+        When it arrives, the whole mix becomes the new source.
+      </p>
+
+      <details
+        v-if="components.length < MAX_COMPONENTS"
+        class="destinationPicker"
+      >
+        <summary>Add to the mix</summary>
+        <ReferencePicker
+          placeholder="Search an artist, album or track to add"
+          @select="addComponent"
+        />
+      </details>
+      <p v-else class="cardHint">
+        A mix holds at most {{ MAX_COMPONENTS }} parts.
       </p>
     </template>
 
     <template v-else>
       <p class="cardHint">
-        Pick where the queue should drift to. Each track smart continuation adds
-        moves the suggestions a step closer.
+        Pick where the queue should drift to: an artist, album, track, a concept
+        like a genre, instrument, mood or decade, or a mix of several. Each
+        track smart continuation adds moves the suggestions a step closer.
       </p>
       <label class="fieldRow">
         <span>Steps</span>
@@ -84,20 +146,11 @@
           max="500"
         />
       </label>
-    </template>
-
-    <details v-if="destination" class="destinationPicker">
-      <summary>Change destination</summary>
       <ReferencePicker
         placeholder="Search a destination artist, album or track"
-        @select="setDestination"
+        @select="startDestination"
       />
-    </details>
-    <ReferencePicker
-      v-else
-      placeholder="Search a destination artist, album or track"
-      @select="setDestination"
-    />
+    </template>
   </section>
 </template>
 
@@ -105,7 +158,8 @@
 import { computed, ref, watch } from "vue";
 import ReferencePicker from "./ReferencePicker.vue";
 import { usePlaybackStore } from "@/store/playback";
-import { progress } from "@/utils/gravity";
+import { MAX_COMPONENTS, progress } from "@/utils/gravity";
+import { componentBadge } from "@/utils/concepts";
 
 const props = defineProps({
   gravity: {
@@ -116,10 +170,7 @@ const props = defineProps({
 
 const playback = usePlaybackStore();
 
-const destination = computed(() => props.gravity.destination);
-const destinationRoute = computed(
-  () => `/${destination.value.entity_type}/${destination.value.entity_id}`,
-);
+const components = computed(() => props.gravity.destination || []);
 const progressPercent = computed(() =>
   Math.round(progress(props.gravity) * 100),
 );
@@ -129,6 +180,25 @@ const remaining = computed(() =>
 const diagnostics = computed(
   () => props.gravity.last_diagnostics?.namespaces?.[0] ?? null,
 );
+
+const componentKey = (component) =>
+  `${component.entity_type}:${component.entity_id}`;
+
+const totalWeight = computed(() =>
+  components.value.reduce((sum, component) => sum + (component.weight ?? 1), 0),
+);
+const shareOf = (component) =>
+  Math.round(((component.weight ?? 1) / (totalWeight.value || 1)) * 100);
+
+const closenessFor = (component) => {
+  const match = diagnostics.value?.destination_components?.find(
+    (entry) =>
+      entry.entity_type === component.entity_type &&
+      entry.entity_id === component.entity_id,
+  );
+  if (!match || match.similarity == null) return "";
+  return percent(match.similarity);
+};
 
 const newSteps = ref(props.gravity.steps_total);
 watch(
@@ -144,42 +214,104 @@ const percent = (value) =>
 const updateRemaining = (value) => {
   const parsed = Math.floor(Number(value));
   if (!Number.isFinite(parsed) || parsed < 0) return;
-  // Zero remaining arrives immediately: the destination becomes the source.
+  // Zero remaining arrives immediately: the mix becomes the source.
   playback.setGravityStepsTotal(props.gravity.steps_done + parsed);
 };
 
-const setDestination = (reference) => {
-  const steps = destination.value
-    ? Math.max(1, remaining.value)
-    : Math.max(1, Math.floor(Number(newSteps.value) || 1));
+const startDestination = (reference) => {
+  const steps = Math.max(1, Math.floor(Number(newSteps.value) || 1));
   playback.setGravityDestination(reference, steps);
+};
+
+const addComponent = (reference) => {
+  playback.addGravityDestinationComponent(reference);
 };
 </script>
 
 <style scoped>
 @import "./steeringCard.css";
 
-.destinationIdentity {
+.mixList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mixComponent {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: var(--bg-highlight);
+}
+
+.componentHeader {
   display: flex;
   align-items: baseline;
   gap: 10px;
   min-width: 0;
 }
 
-.destinationType {
+.componentBadge {
+  flex: none;
   color: var(--text-subdued);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   text-transform: uppercase;
 }
 
-.destinationLabel {
+.componentLabel {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   color: var(--text-bright);
-  font-size: 1.25rem;
+  font-size: 1.05rem;
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.componentCloseness {
+  flex: none;
+  color: #9eddb7;
+  font-size: 0.82rem;
+}
+
+.removeButton {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-subdued);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.removeButton:hover {
+  background: var(--bg-press);
+  color: var(--text-bright);
+}
+
+.weightRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-subdued);
+  font-size: 0.82rem;
+}
+
+.weightRow input {
+  flex: 1;
+  min-width: 0;
+}
+
+.weightValue {
+  width: 40px;
+  text-align: right;
 }
 
 .progressTrack {

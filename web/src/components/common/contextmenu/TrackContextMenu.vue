@@ -1,5 +1,5 @@
 <template>
-  <ContextMenu ref="contextMenu" :items="menuItems" />
+  <ContextMenu ref="contextMenu" :items="visibleMenuItems" />
   <RadioBuilderModal
     :isOpen="showRadioBuilder"
     seedEntityType="track"
@@ -16,7 +16,8 @@
 <script setup>
 import PlusIcon from "@/components/icons/PlusIcon.vue";
 import ContextMenu from "@/components/common/contextmenu/ContextMenu.vue";
-import { ref, markRaw } from "vue";
+import { computed, ref, markRaw } from "vue";
+import { MAX_COMPONENTS } from "@/utils/gravity";
 import PlaylistPlusIcon from "@/components/icons/PlaylistPlusIcon.vue";
 import RadioIcon from "@/components/icons/RadioIcon.vue";
 import { useUserStore } from "@/store/user";
@@ -69,6 +70,10 @@ const makeAddToPlaylistSubMenu = () => {
       userStore.addTracksToPlaylist(playlist.id, [trackId.value], () => {}),
   }));
 };
+
+const visibleMenuItems = computed(() =>
+  menuItems.value.filter((item) => !item.visible || item.visible()),
+);
 
 const menuItems = ref([
   {
@@ -129,6 +134,24 @@ menuItems.value.push({
         entity_type: "track",
         entity_id: trackId.value,
       };
+    }
+  },
+});
+
+menuItems.value.push({
+  icon: markRaw(SteeringWheelIcon),
+  name: "Add to playback destination",
+  // Only offered when a destination mix exists and has room.
+  visible: () => {
+    const destination = playback.currentGravity?.destination;
+    return Boolean(destination?.length && destination.length < MAX_COMPONENTS);
+  },
+  action: () => {
+    if (trackId.value) {
+      playback.addGravityDestinationComponent({
+        entity_type: "track",
+        entity_id: trackId.value,
+      });
     }
   },
 });

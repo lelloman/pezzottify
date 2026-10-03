@@ -8,9 +8,11 @@ export const SOURCE_SAMPLE_CAP = 200;
 export const RECENT_COUNT = 5;
 export const LEGACY_CONTEXT_COUNT = 10;
 export const DEFAULT_STEPS_TOTAL = 20;
+export const MAX_COMPONENTS = 8;
+export const GRAVITY_VERSION = 2;
 
 export const GRAVITY_DEFAULTS = Object.freeze({
-  v: 1,
+  v: GRAVITY_VERSION,
   source: Object.freeze({ kind: "queue" }),
   auto_track_ids: Object.freeze([]),
   destination: null,
@@ -39,12 +41,44 @@ export function create(overrides = {}) {
   };
 }
 
+const sameEntity = (a, b) =>
+  a.entity_type === b.entity_type && a.entity_id === b.entity_id;
+
+function cleanComponent(component) {
+  const weight = Number(component.weight);
+  return {
+    entity_type: component.entity_type,
+    entity_id: component.entity_id,
+    label: component.label ?? component.entity_id,
+    weight: Number.isFinite(weight) && weight > 0 ? weight : 1,
+    // UI-only hint for concepts; the server ignores it.
+    ...(component.family ? { family: component.family } : {}),
+  };
+}
+
+// A destination is null or a mix of 1..MAX_COMPONENTS components. Anything else
+// (including a v1 single-object destination) is dropped rather than migrated.
+function normalizeDestination(destination) {
+  if (!Array.isArray(destination)) return null;
+  const components = [];
+  for (const component of destination) {
+    if (!component?.entity_type || !component?.entity_id) continue;
+    if (components.some((existing) => sameEntity(existing, component)))
+      continue;
+    components.push(cleanComponent(component));
+    if (components.length >= MAX_COMPONENTS) break;
+  }
+  return components.length ? components : null;
+}
+
 // Fill missing keys on a persisted or remote object without losing what it carries.
 export function normalize(gravity) {
   if (!gravity || typeof gravity !== "object") return create();
   return {
     ...create(),
     ...gravity,
+    v: GRAVITY_VERSION,
+    destination: normalizeDestination(gravity.destination),
     source: gravity.source?.kind ? gravity.source : { kind: "queue" },
     auto_track_ids: Array.isArray(gravity.auto_track_ids)
       ? gravity.auto_track_ids
@@ -69,7 +103,9 @@ export function arrive(gravity) {
     ...gravity,
     source: {
       kind: "references",
-      references: [{ ...gravity.destination, weight: 1 }],
+      references: gravity.destination
+        .slice(0, MAX_COMPONENTS)
+        .map((component) => ({ ...component })),
     },
     destination: null,
     steps_done: 0,
@@ -104,18 +140,62 @@ export function noteRemoved(gravity) {
   return gravity;
 }
 
-export function setDestination(gravity, reference, stepsTotal) {
+// Replace the whole destination mix. Accepts one component, an array, or null.
+export function setDestination(gravity, components, stepsTotal) {
+  const list =
+    components == null
+      ? null
+      : Array.isArray(components)
+        ? components
+        : [components];
   return {
     ...gravity,
-    destination: reference
-      ? {
-          entity_type: reference.entity_type,
-          entity_id: reference.entity_id,
-          label: reference.label ?? reference.entity_id,
-        }
-      : null,
+    destination: normalizeDestination(list),
     steps_done: 0,
     steps_total: Math.max(1, Math.floor(stepsTotal ?? gravity.steps_total)),
+  };
+}
+
+// Add a component to the mix, or update its weight/label if it is already there.
+// Changing the mix keeps the progress already made toward it.
+export function addDestinationComponent(gravity, component) {
+  if (!component?.entity_type || !component?.entity_id) return gravity;
+  const current = gravity.destination || [];
+  const index = current.findIndex((existing) =>
+    sameEntity(existing, component),
+  );
+  let next;
+  if (index >= 0) {
+    next = current.map((existing, i) =>
+      i === index ? cleanComponent({ ...existing, ...component }) : existing,
+    );
+  } else {
+    if (current.length >= MAX_COMPONENTS) return gravity;
+    next = [...current, cleanComponent(component)];
+  }
+  return { ...gravity, destination: normalizeDestination(next) };
+}
+
+export function removeDestinationComponent(gravity, entity) {
+  if (!gravity.destination) return gravity;
+  const remaining = gravity.destination.filter(
+    (component) => !sameEntity(component, entity),
+  );
+  if (!remaining.length) return setDestination(gravity, null);
+  return { ...gravity, destination: remaining };
+}
+
+export function setDestinationComponentWeight(gravity, entity, weight) {
+  if (!gravity.destination) return gravity;
+  const value = Number(weight);
+  if (!Number.isFinite(value) || value <= 0) return gravity;
+  return {
+    ...gravity,
+    destination: gravity.destination.map((component) =>
+      sameEntity(component, entity)
+        ? { ...component, weight: value }
+        : component,
+    ),
   };
 }
 
@@ -202,10 +282,13 @@ export function buildContinuationRequest(
     g.knobs;
   if (recency_weight != null) request.recency_weight = recency_weight;
   if (g.destination) {
-    request.destination = {
-      entity_type: g.destination.entity_type,
-      entity_id: g.destination.entity_id,
-    };
+    request.destination = g.destination.map(
+      ({ entity_type, entity_id, weight }) => ({
+        entity_type,
+        entity_id,
+        weight: weight ?? 1,
+      }),
+    );
     request.progress = progress(g);
   }
   if (criteria?.length) request.criteria = criteria;
