@@ -44,6 +44,9 @@ data class DeviceInfo(
 
 interface RemoteApiClient {
 
+    suspend fun downloadLyrics(entityType: String, id: String): RemoteApiResponse<LyricsDownloadResponse>
+
+
     suspend fun login(
         userHandle: String,
         password: String,

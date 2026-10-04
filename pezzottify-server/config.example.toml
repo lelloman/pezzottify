@@ -269,3 +269,8 @@ enabled = true
 # vapid_subject = "mailto:admin@example.com"
 # Accept http:// endpoints, for local testing only (default: false)
 # allow_insecure_endpoints = false
+
+# Fetch lyrics for the most popular available tracks daily. Successful results are cached.
+# Missing lyrics retry after 30 days; provider errors retry after one hour.
+[background_jobs.lyrics]
+batch_size = 100 # Set to 0 to disable the daily batch; manual downloads stay available.

@@ -688,4 +688,7 @@
     <string name="push_status_registered">Using %1$s</string>
     <string name="push_status_failed_with">Couldn\'t register with %1$s. Notifications arrive with background sync</string>
     <string name="push_status_failed">Couldn\'t register. Notifications arrive with background sync</string>
+    <string name="download_lyrics">Download lyrics</string>
+    <string name="lyrics_download_started">Lyrics fetching started. Already downloaded lyrics will be reused.</string>
+    <string name="lyrics_download_failed">Could not start lyrics fetching. Check availability and try again shortly.</string>
 </resources>

@@ -688,4 +688,7 @@
     <string name="push_status_registered">Tramite %1$s</string>
     <string name="push_status_failed_with">Registrazione con %1$s non riuscita. Le notifiche arrivano con la sincronizzazione in background</string>
     <string name="push_status_failed">Registrazione non riuscita. Le notifiche arrivano con la sincronizzazione in background</string>
+    <string name="download_lyrics">Scarica testi</string>
+    <string name="lyrics_download_started">Ricerca dei testi avviata. I testi già scaricati verranno riutilizzati.</string>
+    <string name="lyrics_download_failed">Impossibile avviare la ricerca dei testi. Controlla la disponibilità e riprova tra poco.</string>
 </resources>

@@ -18,6 +18,87 @@ mod tests {
     }
 
     #[test]
+    fn lyrics_candidates_rank_available_tracks_and_respect_retry_windows() {
+        let (store, _dir) = create_test_store();
+        {
+            let conn = store.write_conn.lock().unwrap();
+            conn.execute_batch("INSERT INTO albums (id, name, album_type, label, popularity, release_date, release_date_precision)
+                VALUES ('album', 'Album', 'album', '', 0, '2026', 'year');").unwrap();
+            for (id, popularity, available) in [
+                ("missing", 100, 0),
+                ("top", 99, 1),
+                ("middle", 80, 1),
+                ("last", 50, 1),
+            ] {
+                conn.execute("INSERT INTO tracks (id, name, album_rowid, track_number, popularity, disc_number, duration_ms, explicit, track_available)
+                    VALUES (?1, ?1, 1, 1, ?2, 1, 1000, 0, ?3)", params![id, popularity, available]).unwrap();
+            }
+        }
+        assert_eq!(store.lyrics_candidates(2, 100).unwrap(), ["top", "middle"]);
+        assert!(store.lyrics_candidates(0, 100).unwrap().is_empty());
+        let mut lyrics = crate::lyrics::TrackLyrics {
+            track_id: "top".into(),
+            provider: "lrclib".into(),
+            provider_id: Some(42),
+            status: "found".into(),
+            plain_lyrics: Some("Line".into()),
+            synced_lyrics: Some("[00:01.00]Line".into()),
+            fetched_at: 100,
+            retry_at: 0,
+        };
+        store.save_track_lyrics(&lyrics).unwrap();
+        assert_eq!(
+            store
+                .get_track_lyrics("top")
+                .unwrap()
+                .unwrap()
+                .synced_lyrics,
+            lyrics.synced_lyrics
+        );
+        assert_eq!(
+            store.lyrics_candidates(10, 100).unwrap(),
+            ["middle", "last"]
+        );
+        lyrics.track_id = "middle".into();
+        lyrics.status = "not_found".into();
+        lyrics.retry_at = 200;
+        store.save_track_lyrics(&lyrics).unwrap();
+        assert_eq!(store.lyrics_candidates(10, 100).unwrap(), ["last"]);
+        assert_eq!(
+            store.lyrics_candidates(10, 200).unwrap(),
+            ["middle", "last"]
+        );
+        lyrics.status = "instrumental".into();
+        store.save_track_lyrics(&lyrics).unwrap();
+        assert_eq!(store.lyrics_candidates(10, 300).unwrap(), ["last"]);
+        lyrics.track_id = "last".into();
+        lyrics.status = "error".into();
+        lyrics.retry_at = 500;
+        store.save_track_lyrics(&lyrics).unwrap();
+        assert!(store.lyrics_candidates(10, 499).unwrap().is_empty());
+        assert_eq!(store.lyrics_candidates(10, 500).unwrap(), ["last"]);
+    }
+
+    #[test]
+    fn lyrics_migration_preserves_existing_catalog() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        CATALOG_VERSIONED_SCHEMAS[9].create(&conn).unwrap();
+        conn.execute("INSERT INTO artists (id, name, followers_total, popularity) VALUES ('artist','Artist',0,50)", []).unwrap();
+        migrate_if_needed(&mut conn).unwrap();
+        let name: String = conn
+            .query_row("SELECT name FROM artists WHERE id='artist'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(name, "Artist");
+        conn.execute(
+            "INSERT INTO track_lyrics VALUES ('track','not_found','{}',100)",
+            [],
+        )
+        .unwrap();
+    }
+
+    #[test]
     fn rejects_newer_catalog_version_without_changing_database() {
         let mut conn = Connection::open_in_memory().unwrap();
         CATALOG_VERSIONED_SCHEMAS.last().unwrap().create(&conn).unwrap();

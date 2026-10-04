@@ -12,6 +12,7 @@ pub mod download_manager;
 pub mod downloader;
 pub mod enrichment_store;
 pub mod ingestion;
+pub mod lyrics;
 pub mod mcp;
 pub mod media;
 pub mod notifications;

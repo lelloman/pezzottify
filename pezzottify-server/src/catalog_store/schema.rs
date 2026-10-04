@@ -436,9 +436,25 @@ const ARTIST_IMAGES_TABLE: Table = Table {
 // Versioned Schema Definition
 // =============================================================================
 
-/// Spotify catalog schema.
-///
-/// This schema matches the Spotify metadata dump structure.
+/// Cached lyrics and eligibility for subsequent provider lookups.
+const TRACK_LYRICS_TABLE: Table = Table {
+    name: "track_lyrics",
+    columns: &[
+        sqlite_column!(
+            "track_id",
+            &SqlType::Text,
+            is_primary_key = true,
+            non_null = true
+        ),
+        sqlite_column!("status", &SqlType::Text, non_null = true),
+        sqlite_column!("result_json", &SqlType::Text, non_null = true),
+        sqlite_column!("retry_at", &SqlType::Integer, non_null = true),
+    ],
+    indices: &[],
+    unique_constraints: &[],
+};
+
+/// Spotify catalog schema and Pezzottify enrichment tables.
 pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
     VersionedSchema {
         version: 0,
@@ -782,6 +798,35 @@ pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
                      CAST(strftime('%s', 'now') AS INTEGER));",
             )?;
             create_catalog_stats_triggers(tx)?;
+            Ok(())
+        }),
+    },
+    VersionedSchema {
+        version: 10,
+        tables: &[
+            ARTISTS_TABLE,
+            ALBUMS_TABLE,
+            TRACKS_TABLE,
+            TRACK_ARTISTS_TABLE,
+            ARTIST_ALBUMS_TABLE,
+            ARTIST_GENRES_TABLE,
+            ALBUM_IMAGES_TABLE,
+            ARTIST_IMAGES_TABLE,
+            RELATED_ARTISTS_TABLE,
+            ENTITY_EMBEDDINGS_TABLE,
+            ARTIST_ENRICHMENT_QUEUE_TABLE,
+            CATALOG_STATS_TABLE,
+            TRACK_LYRICS_TABLE,
+        ],
+        migration: Some(|tx: &rusqlite::Connection| {
+            tx.execute_batch(
+                "CREATE TABLE track_lyrics (
+                track_id TEXT PRIMARY KEY NOT NULL,
+                status TEXT NOT NULL,
+                result_json TEXT NOT NULL,
+                retry_at INTEGER NOT NULL
+            );",
+            )?;
             Ok(())
         }),
     },

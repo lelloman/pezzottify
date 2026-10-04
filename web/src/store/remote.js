@@ -357,6 +357,15 @@ export const useRemoteStore = defineStore("remote", () => {
     return response.data?.concepts || [];
   };
 
+  const downloadLyrics = async (entityType, id) => {
+    const response = await axios.post(
+      `/v1/content/lyrics/${encodeURIComponent(entityType)}/${encodeURIComponent(id)}/download`,
+      {},
+      { timeout: 20000 },
+    );
+    return response.data;
+  };
+
   const fetchContinuationRecommendations = async (request) => {
     try {
       const response = await axios.post(
@@ -1466,6 +1475,7 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchGenreTracks,
     fetchGenreRadio,
     fetchContinuationRecommendations,
+    downloadLyrics,
     fetchConcepts,
     fetchArtistGreatestHits,
     fetchWorkVersions,

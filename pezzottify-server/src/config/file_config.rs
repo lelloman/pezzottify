@@ -95,6 +95,7 @@ pub struct DownloadManagerConfig {
 #[derive(Debug, Deserialize, Default, Clone)]
 #[serde(default)]
 pub struct BackgroundJobsConfig {
+    pub lyrics: Option<LyricsJobConfig>,
     pub popular_content: Option<PopularContentJobConfig>,
     pub catalog_availability_stats: Option<CatalogAvailabilityStatsJobConfig>,
     pub whatsnew_batch: Option<IntervalJobConfig>,
@@ -521,4 +522,10 @@ lastfm_api_key = "key"
         std::fs::write(dir.path().join("b.toml"), "port = 1\n").unwrap();
         assert!(FileConfig::load(&config).is_err());
     }
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct LyricsJobConfig {
+    pub batch_size: Option<usize>,
 }

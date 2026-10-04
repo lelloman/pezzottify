@@ -156,6 +156,13 @@ internal interface RetrofitApiClient {
         @Query("offset") offset: Int = 0,
     ): Response<GenreTracksResponse>
 
+    @POST("/v1/content/lyrics/{entityType}/{id}/download")
+    suspend fun downloadLyrics(
+        @Header("Authorization") authToken: String,
+        @Path("entityType") entityType: String,
+        @Path("id") id: String,
+    ): Response<com.lelloman.pezzottify.android.domain.remoteapi.LyricsDownloadResponse>
+
     @POST("/v1/content/recommendations/continuation")
     suspend fun getContinuationRecommendations(
         @Header("Authorization") authToken: String,

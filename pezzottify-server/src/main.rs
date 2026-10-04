@@ -328,6 +328,14 @@ async fn run() -> Result<()> {
         job_context,
     );
 
+    scheduler
+        .register_job(Arc::new(
+            pezzottify_server::background_jobs::jobs::LyricsDownloadJob::new(
+                app_config.background_jobs.lyrics.clone(),
+            ),
+        ))
+        .await;
+
     // Register jobs
     scheduler
         .register_job(Arc::new(PopularContentJob::from_settings(

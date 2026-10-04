@@ -52,6 +52,17 @@ pub struct AlbumEmbeddingCoverage {
 
 /// Trait for catalog storage backends.
 pub trait CatalogStore: Send + Sync {
+    /// Available tracks without cached lyrics whose retry cooldown has elapsed.
+    fn lyrics_candidates(&self, _limit: usize, _now: i64) -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+    fn get_track_lyrics(&self, _id: &str) -> Result<Option<crate::lyrics::TrackLyrics>> {
+        Ok(None)
+    }
+    fn save_track_lyrics(&self, _lyrics: &crate::lyrics::TrackLyrics) -> Result<()> {
+        anyhow::bail!("Lyrics persistence is unsupported by this catalog")
+    }
+
     // =========================================================================
     // Basic Entity Retrieval
     // =========================================================================
