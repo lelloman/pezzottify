@@ -86,7 +86,9 @@ impl WorkPresentation {
     /// presentation string uses.
     pub(crate) fn composition_year_range(evidence: &serde_json::Value) -> Option<(i32, i32)> {
         let text = Self::from_evidence(evidence).composition_year?;
-        let mut parts = text.split('–').filter_map(|part| part.trim().parse::<i32>().ok());
+        let mut parts = text
+            .split('–')
+            .filter_map(|part| part.trim().parse::<i32>().ok());
         let first = parts.next()?;
         let last = parts.next().unwrap_or(first);
         Some((first.min(last), first.max(last)))
@@ -880,7 +882,9 @@ impl SqliteEnrichmentStore {
              JOIN work_source_evidence_v1 e ON e.work_id = r.work_id AND e.provider = 'musicbrainz'
              WHERE r.work_id IS NOT NULL",
         )?;
-        let rows = stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
         let mut years = Vec::new();
         for row in rows {
             let (track_id, evidence) = row?;

@@ -7,7 +7,9 @@ mod dispatcher;
 mod sender;
 mod vapid;
 
-pub use sender::{validate_endpoint, validate_keys, DeliveryOutcome, RegistrationError, WakeupOptions};
+pub use sender::{
+    validate_endpoint, validate_keys, DeliveryOutcome, RegistrationError, WakeupOptions,
+};
 pub use vapid::VapidKeys;
 
 use crate::config::PushSettings;

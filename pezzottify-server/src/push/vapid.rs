@@ -129,7 +129,13 @@ mod tests {
         let bytes = URL_SAFE_NO_PAD.decode(keys.public_key()).unwrap();
         assert_eq!(bytes.len(), 65);
         assert_eq!(bytes[0], 0x04);
-        assert_eq!(URL_SAFE_NO_PAD.decode(keys.private_key_b64()).unwrap().len(), 32);
+        assert_eq!(
+            URL_SAFE_NO_PAD
+                .decode(keys.private_key_b64())
+                .unwrap()
+                .len(),
+            32
+        );
     }
 
     #[test]
@@ -141,7 +147,10 @@ mod tests {
         let path = dir.path().join("pkcs8.pem");
         std::fs::write(&path, pkcs8.as_bytes()).unwrap();
         let keys = VapidKeys::load_or_generate(&path).unwrap();
-        assert_eq!(keys.public_key(), VapidKeys::from_secret(&secret).public_key());
+        assert_eq!(
+            keys.public_key(),
+            VapidKeys::from_secret(&secret).public_key()
+        );
 
         let bad = dir.path().join("bad.pem");
         std::fs::write(&bad, "not a key").unwrap();

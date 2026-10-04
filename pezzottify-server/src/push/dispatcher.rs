@@ -1,6 +1,6 @@
 //! Per-user coalescing of wake-ups and delivery to every registration.
 
-use super::sender::{send_wakeup, DeliveryOutcome, WakeupOptions};
+use super::sender::{send_wakeup, DeliveryOutcome, PushTarget, WakeupOptions};
 use super::{VapidKeys, WakeKind};
 use crate::server::websocket::connection::ConnectionManager;
 use crate::user::{FullUserStore, PushDeliveryRecord};
@@ -174,9 +174,11 @@ pub(crate) async fn deliver_to_user(delivery: &Delivery, user_id: usize, seq: i6
             &delivery.client,
             &delivery.vapid,
             &delivery.subject,
-            &registration.endpoint,
-            &registration.p256dh,
-            &registration.auth,
+            PushTarget {
+                endpoint: &registration.endpoint,
+                p256dh: &registration.p256dh,
+                auth: &registration.auth,
+            },
             payload.as_bytes(),
             options,
         )
@@ -186,11 +188,21 @@ pub(crate) async fn deliver_to_user(delivery: &Delivery, user_id: usize, seq: i6
         let log_outcome = outcome.clone();
         let result = tokio::task::spawn_blocking(move || match outcome {
             DeliveryOutcome::Delivered => store
-                .record_push_delivery(&endpoint, true, chrono::Utc::now().timestamp(), MAX_FAILURE_SECS)
+                .record_push_delivery(
+                    &endpoint,
+                    true,
+                    chrono::Utc::now().timestamp(),
+                    MAX_FAILURE_SECS,
+                )
                 .map(|_| false),
             DeliveryOutcome::Gone => store.remove_push_endpoint(&endpoint),
             DeliveryOutcome::Failed(_) => store
-                .record_push_delivery(&endpoint, false, chrono::Utc::now().timestamp(), MAX_FAILURE_SECS)
+                .record_push_delivery(
+                    &endpoint,
+                    false,
+                    chrono::Utc::now().timestamp(),
+                    MAX_FAILURE_SECS,
+                )
                 .map(|record| record == PushDeliveryRecord::Removed),
         })
         .await;
@@ -226,12 +238,24 @@ mod tests {
         let start = Instant::now();
         let mut coalescer = Coalescer::new();
         coalescer.push(1, 10, WakeKind::Notification, start);
-        coalescer.push(1, 12, WakeKind::Notification, start + Duration::from_millis(500));
-        coalescer.push(1, 11, WakeKind::Notification, start + Duration::from_millis(900));
+        coalescer.push(
+            1,
+            12,
+            WakeKind::Notification,
+            start + Duration::from_millis(500),
+        );
+        coalescer.push(
+            1,
+            11,
+            WakeKind::Notification,
+            start + Duration::from_millis(900),
+        );
         coalescer.push(2, 5, WakeKind::Notification, start + Duration::from_secs(1));
         assert_eq!(coalescer.next_due(), Some(start + Duration::from_secs(2)));
 
-        assert!(coalescer.take_due(start + Duration::from_millis(1999)).is_empty());
+        assert!(coalescer
+            .take_due(start + Duration::from_millis(1999))
+            .is_empty());
         assert_eq!(
             coalescer.take_due(start + Duration::from_secs(2)),
             vec![(1, 12, WakeKind::Notification)]
@@ -244,7 +268,12 @@ mod tests {
         assert_eq!(coalescer.next_due(), None);
 
         // A new event after release opens a fresh window.
-        coalescer.push(1, 13, WakeKind::Notification, start + Duration::from_secs(4));
+        coalescer.push(
+            1,
+            13,
+            WakeKind::Notification,
+            start + Duration::from_secs(4),
+        );
         assert_eq!(coalescer.next_due(), Some(start + Duration::from_secs(6)));
     }
 
@@ -254,10 +283,17 @@ mod tests {
         let mut coalescer = Coalescer::new();
         // Continuous editing: one change every 5 s keeps folding into the same window.
         for i in 0..12 {
-            coalescer.push(1, i, WakeKind::Sync, start + Duration::from_secs(5 * i as u64));
+            coalescer.push(
+                1,
+                i,
+                WakeKind::Sync,
+                start + Duration::from_secs(5 * i as u64),
+            );
         }
         assert_eq!(coalescer.next_due(), Some(start + SYNC_WINDOW));
-        assert!(coalescer.take_due(start + Duration::from_secs(59)).is_empty());
+        assert!(coalescer
+            .take_due(start + Duration::from_secs(59))
+            .is_empty());
         assert_eq!(
             coalescer.take_due(start + SYNC_WINDOW),
             vec![(1, 11, WakeKind::Sync)]
@@ -272,7 +308,12 @@ mod tests {
         let start = Instant::now();
         let mut coalescer = Coalescer::new();
         coalescer.push(1, 1, WakeKind::Sync, start);
-        coalescer.push(1, 2, WakeKind::Notification, start + Duration::from_secs(10));
+        coalescer.push(
+            1,
+            2,
+            WakeKind::Notification,
+            start + Duration::from_secs(10),
+        );
         assert_eq!(coalescer.next_due(), Some(start + Duration::from_secs(12)));
         // A later sync change folds in without delaying or downgrading it.
         coalescer.push(1, 3, WakeKind::Sync, start + Duration::from_secs(11));
@@ -352,7 +393,9 @@ mod tests {
                     }
                 };
                 log.lock().unwrap().push(Received { head, body });
-                let response = format!("HTTP/1.1 {status} X\r\ncontent-length: 0\r\nconnection: close\r\n\r\n");
+                let response = format!(
+                    "HTTP/1.1 {status} X\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+                );
                 socket.write_all(response.as_bytes()).await.unwrap();
             }
         });
@@ -378,8 +421,11 @@ mod tests {
     fn user_store() -> (Arc<SqliteUserStore>, tempfile::TempDir, usize) {
         let dir = tempfile::tempdir().unwrap();
         let store = Arc::new(
-            SqliteUserStore::new(dir.path().join("user.db"), &crate::backup::DbRegistry::new())
-                .unwrap(),
+            SqliteUserStore::new(
+                dir.path().join("user.db"),
+                &crate::backup::DbRegistry::new(),
+            )
+            .unwrap(),
         );
         let user = store.create_user("listener").unwrap();
         (store, dir, user)
@@ -425,16 +471,26 @@ mod tests {
 
         for status in [404, 410] {
             let (url, _) = push_service(vec![status]).await;
-            store.upsert_push_registration(user, &url, &p256dh, &auth, None).unwrap();
+            store
+                .upsert_push_registration(user, &url, &p256dh, &auth, None)
+                .unwrap();
             deliver_to_user(&delivery, user, 1, WakeKind::Notification).await;
-            assert!(store.list_push_registrations(user).unwrap().is_empty(), "HTTP {status}");
+            assert!(
+                store.list_push_registrations(user).unwrap().is_empty(),
+                "HTTP {status}"
+            );
         }
 
         let (url, _) = push_service(vec![500]).await;
-        store.upsert_push_registration(user, &url, &p256dh, &auth, None).unwrap();
+        store
+            .upsert_push_registration(user, &url, &p256dh, &auth, None)
+            .unwrap();
         deliver_to_user(&delivery, user, 1, WakeKind::Notification).await;
         let registration = &store.list_push_registrations(user).unwrap()[0];
-        assert!(registration.first_failure_at.is_some(), "a 500 keeps the registration");
+        assert!(
+            registration.first_failure_at.is_some(),
+            "a 500 keeps the registration"
+        );
     }
 
     #[tokio::test]
@@ -460,7 +516,13 @@ mod tests {
 
         // An ordinary change opens a one-minute sync window...
         store
-            .append_event(user, &UserEvent::NotificationRead { notification_id: "n".into(), read_at: 1 })
+            .append_event(
+                user,
+                &UserEvent::NotificationRead {
+                    notification_id: "n".into(),
+                    read_at: 1,
+                },
+            )
             .unwrap();
         // ...which the notifications shorten: one push, carrying the latest seq.
         let notification = crate::notifications::Notification {
@@ -473,7 +535,12 @@ mod tests {
             created_at: 1,
         };
         store
-            .append_event(user, &UserEvent::NotificationCreated { notification: notification.clone() })
+            .append_event(
+                user,
+                &UserEvent::NotificationCreated {
+                    notification: notification.clone(),
+                },
+            )
             .unwrap();
         let last = store
             .append_event(user, &UserEvent::NotificationCreated { notification })
@@ -486,7 +553,8 @@ mod tests {
         }
         let requests = received.lock().unwrap().clone();
         assert_eq!(requests.len(), 1);
-        let plain = ece::decrypt(&keypair.raw_components().unwrap(), &auth, &requests[0].body).unwrap();
+        let plain =
+            ece::decrypt(&keypair.raw_components().unwrap(), &auth, &requests[0].body).unwrap();
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(&plain).unwrap()["seq"],
             serde_json::json!(last.seq)
@@ -507,8 +575,12 @@ mod tests {
             device_name: None,
             os_info: None,
         };
-        let online = store.register_or_update_device(&device("phone-online")).unwrap();
-        store.register_or_update_device(&device("phone-asleep")).unwrap();
+        let online = store
+            .register_or_update_device(&device("phone-online"))
+            .unwrap();
+        store
+            .register_or_update_device(&device("phone-asleep"))
+            .unwrap();
         let (online_url, online_received) = push_service(vec![201]).await;
         let (asleep_url, asleep_received) = push_service(vec![201]).await;
         store
@@ -524,7 +596,10 @@ mod tests {
 
         deliver_to_user(&delivery, user, 7, WakeKind::Sync).await;
 
-        assert!(online_received.lock().unwrap().is_empty(), "live WebSocket: no push");
+        assert!(
+            online_received.lock().unwrap().is_empty(),
+            "live WebSocket: no push"
+        );
         let request = asleep_received.lock().unwrap()[0].clone();
         let head = request.head.to_ascii_lowercase();
         assert!(head.contains("urgency: low"));

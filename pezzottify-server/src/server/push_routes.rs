@@ -37,28 +37,26 @@ struct UnregisterBody {
 }
 
 pub(crate) fn push_routes() -> Router<ServerState> {
-    Router::new()
-        .route("/vapid", get(get_vapid))
-        .route(
-            "/registrations",
-            put(put_registration).delete(delete_registration),
-        )
+    Router::new().route("/vapid", get(get_vapid)).route(
+        "/registrations",
+        put(put_registration).delete(delete_registration),
+    )
 }
 
-fn service(state: &ServerState) -> Result<&Arc<PushService>, Response> {
-    state
-        .push
-        .as_ref()
-        .ok_or_else(|| ApiError::push_disabled().into_response())
+fn service(state: &ServerState) -> Result<&Arc<PushService>, ApiError> {
+    state.push.as_ref().ok_or_else(ApiError::push_disabled)
 }
 
-async fn get_vapid(Extract(_session): Extract<Session>, State(state): State<ServerState>) -> Response {
+async fn get_vapid(
+    Extract(_session): Extract<Session>,
+    State(state): State<ServerState>,
+) -> Response {
     match service(&state) {
         Ok(push) => Json(VapidResponse {
             public_key: push.public_key().to_string(),
         })
         .into_response(),
-        Err(response) => response,
+        Err(error) => error.into_response(),
     }
 }
 
@@ -69,7 +67,7 @@ async fn put_registration(
 ) -> Response {
     let push = match service(&state) {
         Ok(push) => push,
-        Err(response) => return response,
+        Err(error) => return error.into_response(),
     };
     if let Err(error) = validate_endpoint(&body.endpoint, push.settings().allow_insecure_endpoints)
         .and_then(|_| validate_keys(&body.p256dh, &body.auth))
@@ -106,8 +104,8 @@ async fn delete_registration(
     State(state): State<ServerState>,
     Json(body): Json<UnregisterBody>,
 ) -> Response {
-    if let Err(response) = service(&state) {
-        return response;
+    if let Err(error) = service(&state) {
+        return error.into_response();
     }
     let user_id = session.user_id;
     match state

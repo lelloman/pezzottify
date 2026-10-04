@@ -11,10 +11,10 @@ use tracing_subscriber::EnvFilter;
 
 // Import modules from the library crate
 use pezzottify_server::background_jobs::jobs::{
-    AlbumEmbeddingSyncJob, AudioAnalysisJob, CatalogAvailabilityStatsJob, ConceptEmbeddingSyncJob,
-    CatalogCardinalityStatsJob, DevicePruningJob, FeaturedAlbumsJob, IngestionCleanupJob,
-    MetadataEnrichmentJob, PopularContentJob, ProxyRetentionJob, RelatedArtistsEnrichmentJob,
-    TrackEmbeddingSyncJob, WhatsNewBatchJob,
+    AlbumEmbeddingSyncJob, AudioAnalysisJob, CatalogAvailabilityStatsJob,
+    CatalogCardinalityStatsJob, ConceptEmbeddingSyncJob, DevicePruningJob, FeaturedAlbumsJob,
+    IngestionCleanupJob, MetadataEnrichmentJob, PopularContentJob, ProxyRetentionJob,
+    RelatedArtistsEnrichmentJob, TrackEmbeddingSyncJob, WhatsNewBatchJob,
 };
 use pezzottify_server::background_jobs::{create_scheduler, GuardedSearchVault, JobContext};
 use pezzottify_server::backup::DbRegistry;

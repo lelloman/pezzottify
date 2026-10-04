@@ -305,10 +305,12 @@ impl TestServer {
             agent: pezzottify_server::config::AgentSettings::default(),
             ingestion,
             audio_embeddings: None,
-            push: options.push_enabled.then(|| pezzottify_server::config::PushSettings {
-                allow_insecure_endpoints: true,
-                ..pezzottify_server::config::PushSettings::with_defaults(temp_db_dir.path())
-            }),
+            push: options
+                .push_enabled
+                .then(|| pezzottify_server::config::PushSettings {
+                    allow_insecure_endpoints: true,
+                    ..pezzottify_server::config::PushSettings::with_defaults(temp_db_dir.path())
+                }),
         };
 
         // Create user manager
