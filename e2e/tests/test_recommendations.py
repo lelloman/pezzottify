@@ -17,7 +17,9 @@ class TestRecommendationsApi:
             try:
                 await api.login(TEST_USER, TEST_PASS, device_uuid="recommend-continuation")
                 data = await api.continuation_recommendations([TRACK_1_ID], count=5)
-                assert data == {"track_ids": []}
+                # The response also carries diagnostics (recency_weight, progress,
+                # namespaces); only the picked tracks are part of this contract.
+                assert data["track_ids"] == []
             finally:
                 await api.close()
 
