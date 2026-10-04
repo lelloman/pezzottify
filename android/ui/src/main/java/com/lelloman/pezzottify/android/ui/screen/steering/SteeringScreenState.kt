@@ -101,7 +101,7 @@ data class SteeringScreenState(
     val smartContinuationEnabled: Boolean = false,
     val source: SteeringSource = SteeringSource.Queue(0, 0),
     val destination: SteeringDestination? = null,
-    val stepsTotal: Int = 20,
+    val stepsTotal: Int = 10,
     val stepsDone: Int = 0,
     val knobs: SteeringKnobs = SteeringKnobs(),
     val search: SteeringSearch? = null,
