@@ -14,6 +14,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.RadioOptions
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -144,20 +145,30 @@ class SteeringScreenViewModel @Inject constructor(
         val current = search.value ?: return
         val grouped = groupConcepts(concepts.orEmpty(), query)
         search.value = current.copy(query = query, isError = false, concepts = grouped)
+        // Cancelling the previous search also closes its HTTP stream, so the server stops
+        // searching for letters the user has already typed past.
         searchJob?.cancel()
-        if (query.isBlank()) {
+        if (query.trim().length < MIN_SEARCH_QUERY_LENGTH) {
             search.value = current.copy(query = query, results = emptyList(), isSearching = false, concepts = grouped)
             return
         }
         searchJob = viewModelScope.launch {
             delay(SEARCH_DEBOUNCE_MS)
-            search.value = search.value?.copy(isSearching = true)
-            val results = interactor.searchReferences(query)
-            search.value = search.value?.copy(
-                isSearching = false,
-                results = results.orEmpty(),
-                isError = results == null,
-            )
+            search.value = search.value?.copy(isSearching = true, results = emptyList())
+            try {
+                interactor.searchReferences(query.trim()).collect { results ->
+                    search.value = search.value?.copy(results = results)
+                }
+                search.value = search.value?.copy(isSearching = false)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Keep whatever arrived before the failure; only an empty result is an error.
+                search.value = search.value?.copy(
+                    isSearching = false,
+                    isError = search.value?.results.isNullOrEmpty(),
+                )
+            }
         }
     }
 
@@ -301,8 +312,11 @@ class SteeringScreenViewModel @Inject constructor(
         fun updateGravity(transform: (Gravity) -> Gravity)
         suspend fun getRadioOptions(): RadioOptions?
 
-        /** Artists, albums and tracks matching [query]; null when the search failed. */
-        suspend fun searchReferences(query: String): List<SteeringReference>?
+        /**
+         * Artists, albums and tracks matching [query], re-emitted as more results stream in.
+         * Fails with an exception when the search fails.
+         */
+        fun searchReferences(query: String): Flow<List<SteeringReference>>
 
         /** Every steering concept; null when loading failed. */
         suspend fun getConcepts(): List<Concept>?
@@ -314,7 +328,7 @@ class SteeringScreenViewModel @Inject constructor(
     companion object {
         const val DEFAULT_NAMESPACE = "musicfm.mean.v1"
         const val MAX_REFERENCES = 8
-        private const val SEARCH_DEBOUNCE_MS = 300L
+        private const val SEARCH_DEBOUNCE_MS = 500L
         private const val QUEUE_PREVIEW_TRACKS = 12
     }
 }

@@ -17,14 +17,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import java.io.IOException
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SteeringScreenViewModelTest {
@@ -229,9 +233,66 @@ class SteeringScreenViewModelTest {
         advanceUntilIdle()
 
         viewModel.openSearch(SteeringSearchTarget.Destination)
-        viewModel.updateSearchQuery("x")
+        viewModel.updateSearchQuery("xy")
         advanceUntilIdle()
         assertThat(viewModel.state.value.search?.isError).isTrue()
+    }
+
+    @Test
+    fun `a single character shows a hint and does not search`() = runTest {
+        interactor.state.value = queue(Gravity())
+        val viewModel = SteeringScreenViewModel(interactor)
+        advanceUntilIdle()
+
+        viewModel.openSearch(SteeringSearchTarget.Destination)
+        viewModel.updateSearchQuery(" a ")
+        advanceUntilIdle()
+        val search = viewModel.state.value.search!!
+        assertThat(search.isQueryTooShort).isTrue()
+        assertThat(search.isSearching).isFalse()
+        assertThat(interactor.searchedQueries).isEmpty()
+    }
+
+    @Test
+    fun `search waits for typing to pause and only runs the latest query`() = runTest {
+        interactor.state.value = queue(Gravity())
+        val viewModel = SteeringScreenViewModel(interactor)
+        advanceUntilIdle()
+
+        viewModel.openSearch(SteeringSearchTarget.Destination)
+        viewModel.updateSearchQuery("mi")
+        advanceTimeBy(300)
+        viewModel.updateSearchQuery("mil")
+        advanceTimeBy(499)
+        assertThat(interactor.searchedQueries).isEmpty()
+        advanceTimeBy(2)
+        runCurrent()
+        assertThat(interactor.searchedQueries).containsExactly("mil")
+    }
+
+    @Test
+    fun `results stream in and survive a later failure`() = runTest {
+        interactor.state.value = queue(Gravity())
+        val first = listOf(SteeringReference("artist", "a1", "Miles Davis"))
+        val more = first + SteeringReference("album", "al1", "Kind of Blue", detail = "Miles Davis")
+        interactor.stream = { flow { emit(first); emit(more) } }
+        val viewModel = SteeringScreenViewModel(interactor)
+        advanceUntilIdle()
+
+        viewModel.openSearch(SteeringSearchTarget.Destination)
+        viewModel.updateSearchQuery("miles")
+        advanceUntilIdle()
+        var search = viewModel.state.value.search!!
+        assertThat(search.results).isEqualTo(more)
+        assertThat(search.isSearching).isFalse()
+
+        interactor.stream = { flow { emit(first); throw IOException("stream closed") } }
+        viewModel.updateSearchQuery("miles davis")
+        advanceUntilIdle()
+        search = viewModel.state.value.search!!
+        assertThat(search.results).isEqualTo(first)
+        assertThat(search.isError).isFalse()
+        assertThat(search.isSearching).isFalse()
     }
 
     @Test
@@ -325,6 +386,9 @@ class SteeringScreenViewModelTest {
         val smartEnabled = MutableStateFlow(true)
         var options: RadioOptions? = null
         var results: List<SteeringReference>? = emptyList()
+        val searchedQueries = mutableListOf<String>()
+        /** Overrides [results] when set. */
+        var stream: ((String) -> Flow<List<SteeringReference>>)? = null
         var concepts: List<Concept>? = emptyList()
         var conceptLoads = 0
 
@@ -342,7 +406,11 @@ class SteeringScreenViewModelTest {
         }
 
         override suspend fun getRadioOptions(): RadioOptions? = options
-        override suspend fun searchReferences(query: String): List<SteeringReference>? = results
+        override fun searchReferences(query: String): Flow<List<SteeringReference>> {
+            searchedQueries += query
+            stream?.let { return it(query) }
+            return flow { emit(results ?: throw IOException("search failed")) }
+        }
         override suspend fun getConcepts(): List<Concept>? {
             conceptLoads++
             return concepts

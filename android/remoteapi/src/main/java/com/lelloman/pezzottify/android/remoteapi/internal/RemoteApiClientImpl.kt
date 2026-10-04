@@ -64,6 +64,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -817,9 +821,40 @@ internal class RemoteApiClientImpl(
             .build()
 
         val client = okHttpClientFactory.createBuilder(baseUrl).build()
-        val response = client.newCall(request).execute()
+        val call = client.newCall(request)
+        // execute() and readLine() block and ignore coroutine cancellation, so a collector
+        // that stops listening (e.g. the user typed another letter) would keep the request
+        // open and the server would keep searching. Cancel the HTTP call instead, which
+        // unblocks the read with an IOException.
+        coroutineScope {
+            val cancelCallOnCancellation = launch {
+                try {
+                    awaitCancellation()
+                } finally {
+                    call.cancel()
+                }
+            }
+            try {
+                readStreamingSearch(call, this@flow)
+            } catch (e: java.io.IOException) {
+                // The read fails with "Socket closed" when the call was cancelled above:
+                // surface that as the cancellation it is, not as a search failure.
+                ensureActive()
+                throw e
+            } finally {
+                cancelCallOnCancellation.cancel()
+            }
+        }
+    }.flowOn(Dispatchers.IO)
+
+    private suspend fun readStreamingSearch(
+        call: okhttp3.Call,
+        collector: kotlinx.coroutines.flow.FlowCollector<SearchSection>,
+    ) {
+        val response = call.execute()
 
         if (!response.isSuccessful) {
+            response.close()
             throw Exception("SSE request failed: ${response.code}")
         }
 
@@ -837,7 +872,7 @@ internal class RemoteApiClientImpl(
                     if (jsonData.isNotEmpty()) {
                         try {
                             val section = jsonConverter.decodeFromString<SearchSection>(jsonData)
-                            emit(section)
+                            collector.emit(section)
 
                             // Stop reading when done
                             if (section is SearchSection.Done) {
@@ -854,7 +889,7 @@ internal class RemoteApiClientImpl(
             reader.close()
             body.close()
         }
-    }.flowOn(Dispatchers.IO)
+    }
 
     private suspend fun <T> catchingNetworkError(block: suspend () -> RemoteApiResponse<T>): RemoteApiResponse<T> =
         try {
