@@ -3362,4 +3362,106 @@ mod tests {
             assert!(liked.contains(&format!("track-{index}")));
         }
     }
+
+    // ---- UnifiedPush registrations ----
+
+    #[test]
+    fn push_registrations_upsert_move_evict_and_delete() {
+        use crate::user::user_store::PushRegistrationStore;
+        let (store, _dir) = create_tmp_store();
+        let alice = store.create_user("alice").unwrap();
+        let bob = store.create_user("bob").unwrap();
+
+        store
+            .upsert_push_registration(alice, "https://push.example/a", "k1", "a1", Some("dev-1"))
+            .unwrap();
+        // Same endpoint again: keys refreshed, still one registration.
+        store
+            .upsert_push_registration(alice, "https://push.example/a", "k2", "a2", None)
+            .unwrap();
+        let regs = store.list_push_registrations(alice).unwrap();
+        assert_eq!(regs.len(), 1);
+        assert_eq!((regs[0].p256dh.as_str(), regs[0].auth.as_str()), ("k2", "a2"));
+        assert_eq!(regs[0].device_id, None);
+
+        // The device switched account: the endpoint moves to bob.
+        store
+            .upsert_push_registration(bob, "https://push.example/a", "k3", "a3", None)
+            .unwrap();
+        assert!(store.list_push_registrations(alice).unwrap().is_empty());
+        assert_eq!(store.list_push_registrations(bob).unwrap().len(), 1);
+
+        // Only the owner can delete; deleting is reported.
+        assert!(!store.delete_push_registration(alice, "https://push.example/a").unwrap());
+        assert!(store.delete_push_registration(bob, "https://push.example/a").unwrap());
+        assert!(store.list_push_registrations(bob).unwrap().is_empty());
+
+        // At most MAX registrations per user: the oldest is evicted.
+        let max = crate::user::MAX_PUSH_REGISTRATIONS_PER_USER;
+        for index in 0..=max {
+            store
+                .upsert_push_registration(alice, &format!("https://push.example/{index:02}"), "k", "a", None)
+                .unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        let regs = store.list_push_registrations(alice).unwrap();
+        assert_eq!(regs.len(), max);
+        assert!(regs.iter().all(|reg| reg.endpoint != "https://push.example/00"));
+
+        // A gone endpoint is removed regardless of owner.
+        assert!(store.remove_push_endpoint(&format!("https://push.example/{max:02}")).unwrap());
+        assert_eq!(store.list_push_registrations(alice).unwrap().len(), max - 1);
+    }
+
+    #[test]
+    fn push_delivery_failures_expire_registrations() {
+        use crate::user::user_store::PushRegistrationStore;
+        use crate::user::PushDeliveryRecord;
+        let (store, _dir) = create_tmp_store();
+        let user = store.create_user("carol").unwrap();
+        let endpoint = "https://push.example/c";
+        store.upsert_push_registration(user, endpoint, "k", "a", None).unwrap();
+        let week = 7 * 24 * 3600;
+
+        assert_eq!(store.record_push_delivery(endpoint, false, 1_000, week).unwrap(), PushDeliveryRecord::Kept);
+        assert_eq!(store.list_push_registrations(user).unwrap()[0].first_failure_at, Some(1_000));
+        // A success ends the failure run.
+        store.record_push_delivery(endpoint, true, 2_000, week).unwrap();
+        let reg = &store.list_push_registrations(user).unwrap()[0];
+        assert_eq!((reg.first_failure_at, reg.last_success_at), (None, Some(2_000)));
+        // A run that started a week ago removes the registration.
+        store.record_push_delivery(endpoint, false, 3_000, week).unwrap();
+        assert_eq!(
+            store.record_push_delivery(endpoint, false, 3_000 + week - 1, week).unwrap(),
+            PushDeliveryRecord::Kept
+        );
+        assert_eq!(
+            store.record_push_delivery(endpoint, false, 3_000 + week, week).unwrap(),
+            PushDeliveryRecord::Removed
+        );
+        assert!(store.list_push_registrations(user).unwrap().is_empty());
+    }
+
+    #[test]
+    fn event_listener_sees_appends_from_every_clone() {
+        use crate::user::sync_events::UserEvent;
+        use crate::user::user_store::UserEventStore;
+        use std::sync::{Arc, Mutex};
+        let (store, _dir) = create_tmp_store();
+        let user = store.create_user("dave").unwrap();
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let sink = seen.clone();
+        assert!(UserEventStore::set_event_listener(
+            &store,
+            Arc::new(move |user_id, stored| sink.lock().unwrap().push((user_id, stored.seq)))
+        ));
+        let clone = store.clone();
+        let event = UserEvent::NotificationRead {
+            notification_id: "n1".into(),
+            read_at: 1,
+        };
+        let first = store.append_event(user, &event).unwrap();
+        let second = clone.append_event(user, &event).unwrap();
+        assert_eq!(*seen.lock().unwrap(), vec![(user, first.seq), (user, second.seq)]);
+    }
 }

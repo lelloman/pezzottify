@@ -25,11 +25,13 @@ pub use crate::notifications::{
 };
 pub use user_models::{
     BandwidthSummary, BandwidthUsage, CategoryBandwidth, DailyListeningStats, LikedContentType,
-    ListeningEvent, ListeningSummary, TrackListeningStats, UserListeningHistoryEntry, UserPlaylist,
+    ListeningEvent, ListeningSummary, PushDeliveryRecord, PushRegistration, TrackListeningStats,
+    UserListeningHistoryEntry, UserPlaylist,
 };
 pub use user_store::{
-    DeviceStore, FullUserStore, UserAuthCredentialsStore, UserAuthTokenStore, UserBandwidthStore,
-    UserEventStore, UserListeningStore, UserSettingsStore, UserStore,
+    DeviceStore, EventListener, FullUserStore, PushRegistrationStore, UserAuthCredentialsStore,
+    UserAuthTokenStore, UserBandwidthStore, UserEventStore, UserListeningStore, UserSettingsStore,
+    UserStore, MAX_PUSH_REGISTRATIONS_PER_USER,
 };
 
 #[cfg(test)]

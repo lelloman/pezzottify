@@ -6,7 +6,7 @@ pub use file_config::{
     AudioEmbeddingsConfig, AuditLogCleanupJobConfig, BackgroundJobsConfig,
     CatalogAvailabilityStatsJobConfig, CatalogStoreConfig, DevicePruningJobConfig,
     DownloadManagerConfig, FileConfig, IngestionCleanupJobConfig, IngestionConfig,
-    IntervalJobConfig, MetadataEnrichmentJobConfig, OidcConfig, PopularContentJobConfig,
+    IntervalJobConfig, MetadataEnrichmentJobConfig, OidcConfig, PopularContentJobConfig, PushConfig,
     RelatedArtistsConfig, SearchConfig, StreamingSearchConfig as StreamingSearchFileConfig,
 };
 
@@ -125,6 +125,28 @@ pub struct AppConfig {
     pub related_artists: Option<RelatedArtistsSettings>,
     pub audio_analysis: Option<AudioAnalysisSettings>,
     pub audio_embeddings: Option<AudioEmbeddingsSettings>,
+    pub push: Option<PushSettings>,
+}
+
+/// Resolved UnifiedPush settings. See docs/unifiedpush.md.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PushSettings {
+    pub vapid_private_key_file: PathBuf,
+    pub vapid_subject: String,
+    pub allow_insecure_endpoints: bool,
+}
+
+impl PushSettings {
+    pub const DEFAULT_SUBJECT: &'static str = "mailto:pezzottify@localhost";
+
+    /// Settings with the default key location inside `db_dir`.
+    pub fn with_defaults(db_dir: &std::path::Path) -> Self {
+        Self {
+            vapid_private_key_file: db_dir.join("vapid_private_key.pem"),
+            vapid_subject: Self::DEFAULT_SUBJECT.to_string(),
+            allow_insecure_endpoints: false,
+        }
+    }
 }
 
 impl AppConfig {
@@ -564,6 +586,21 @@ impl AppConfig {
             })
         });
 
+        let push = match file.push {
+            Some(push) if push.enabled.unwrap_or(true) => {
+                let defaults = PushSettings::with_defaults(&db_dir);
+                Some(PushSettings {
+                    vapid_private_key_file: push
+                        .vapid_private_key_file
+                        .map(PathBuf::from)
+                        .unwrap_or(defaults.vapid_private_key_file),
+                    vapid_subject: push.vapid_subject.unwrap_or(defaults.vapid_subject),
+                    allow_insecure_endpoints: push.allow_insecure_endpoints.unwrap_or(false),
+                })
+            }
+            _ => None,
+        };
+
         let audio_embeddings = match file.audio_embeddings {
             Some(ae) if ae.enabled.unwrap_or(false) => {
                 let api_key = ae
@@ -667,6 +704,7 @@ impl AppConfig {
             related_artists,
             audio_analysis,
             audio_embeddings,
+            push,
         })
     }
 

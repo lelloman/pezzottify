@@ -1,4 +1,9 @@
 impl user_store::UserEventStore for SqliteUserStore {
+    fn set_event_listener(&self, listener: user_store::EventListener) -> bool {
+        *self.event_listener.write().unwrap() = Some(listener);
+        true
+    }
+
     fn append_event(
         &self,
         user_id: usize,

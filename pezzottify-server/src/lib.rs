@@ -16,6 +16,7 @@ pub mod mcp;
 pub mod media;
 pub mod notifications;
 pub mod oidc;
+pub mod push;
 pub mod related_artists;
 pub mod search;
 pub mod server;

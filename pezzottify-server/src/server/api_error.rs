@@ -105,6 +105,14 @@ impl ApiError {
         }
     }
 
+    pub fn push_disabled() -> Self {
+        Self::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "push_disabled",
+            "Push notifications are not enabled on this server",
+        )
+    }
+
     fn database_unavailable() -> Self {
         let mut error = Self::new(
             StatusCode::SERVICE_UNAVAILABLE,

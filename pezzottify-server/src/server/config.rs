@@ -45,6 +45,8 @@ pub struct ServerConfig {
     pub ingestion: IngestionSettings,
     /// Optional audio embedding synchronization configuration.
     pub audio_embeddings: Option<AudioEmbeddingsSettings>,
+    /// UnifiedPush wake-ups; `None` disables push (routes answer 503).
+    pub push: Option<crate::config::PushSettings>,
 }
 
 impl Default for ServerConfig {
@@ -70,6 +72,7 @@ impl Default for ServerConfig {
             agent: AgentSettings::default(),
             ingestion: IngestionSettings::default(),
             audio_embeddings: None,
+            push: None,
         }
     }
 }
