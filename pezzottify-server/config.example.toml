@@ -2,6 +2,12 @@
 # Copy this file to config.toml and customize for your deployment.
 # Values here override CLI arguments.
 
+# Optional: further TOML files merged on top of this one, in order (paths relative
+# to this file). Tables merge key by key; other values replace. Useful to keep
+# secrets (oidc.client_secret, API keys) out of a committed config file.
+# Included files cannot include others.
+# include = "secrets.toml"
+
 # Core settings
 db_dir = "/data/db"
 media_path = "/data/media"

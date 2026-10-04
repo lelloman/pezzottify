@@ -404,9 +404,121 @@ pub struct AlbumEmbeddingDerivationSpecConfig {
 }
 
 impl FileConfig {
+    /// Load a config file. A top-level `include` (a path or a list of paths, relative to
+    /// the file's directory) names further TOML files merged on top, in order: tables
+    /// merge key by key and any other value replaces the base one. This keeps secrets in
+    /// a separate, uncommitted file. Included files cannot include others.
     pub fn load(path: &Path) -> Result<Self> {
-        let content = std::fs::read_to_string(path)
-            .with_context(|| format!("Failed to read config file: {:?}", path))?;
-        toml::from_str(&content).with_context(|| format!("Failed to parse config file: {:?}", path))
+        let mut table = read_table(path)?;
+        let includes = match table.remove("include") {
+            None => Vec::new(),
+            Some(toml::Value::String(include)) => vec![include],
+            Some(toml::Value::Array(includes)) => includes
+                .into_iter()
+                .map(|include| match include {
+                    toml::Value::String(include) => Ok(include),
+                    other => anyhow::bail!("`include` entries must be strings, got {other}"),
+                })
+                .collect::<Result<_>>()?,
+            Some(other) => {
+                anyhow::bail!("`include` must be a path or a list of paths, got {other}")
+            }
+        };
+        let base_dir = path.parent().unwrap_or_else(|| Path::new("."));
+        for include in includes {
+            let include_path = base_dir.join(include);
+            let overlay = read_table(&include_path)?;
+            if overlay.contains_key("include") {
+                anyhow::bail!("Included config file {include_path:?} cannot include other files");
+            }
+            merge_tables(&mut table, overlay);
+        }
+        toml::Value::Table(table)
+            .try_into()
+            .with_context(|| format!("Failed to parse config file: {:?}", path))
+    }
+}
+
+fn read_table(path: &Path) -> Result<toml::Table> {
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("Failed to read config file: {:?}", path))?;
+    toml::from_str(&content).with_context(|| format!("Failed to parse config file: {:?}", path))
+}
+
+fn merge_tables(base: &mut toml::Table, overlay: toml::Table) {
+    for (key, value) in overlay {
+        match (base.get_mut(&key), value) {
+            (Some(toml::Value::Table(base_table)), toml::Value::Table(overlay_table)) => {
+                merge_tables(base_table, overlay_table)
+            }
+            (_, value) => {
+                base.insert(key, value);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn includes_merge_on_top_of_the_base_file() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("config.toml"),
+            r#"
+port = 3001
+include = "secrets.toml"
+
+[oidc]
+provider_url = "https://auth.example.org"
+client_id = "pezzottify"
+redirect_uri = "https://pezzottify.example.org/callback"
+
+[related_artists]
+enabled = true
+"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("secrets.toml"),
+            r#"
+[oidc]
+client_secret = "s3cret"
+
+[related_artists]
+lastfm_api_key = "key"
+"#,
+        )
+        .unwrap();
+
+        let config = FileConfig::load(&dir.path().join("config.toml")).unwrap();
+
+        assert_eq!(config.port, Some(3001));
+        let oidc = config.oidc.unwrap();
+        assert_eq!(oidc.provider_url, "https://auth.example.org");
+        assert_eq!(oidc.client_id, "pezzottify");
+        assert_eq!(oidc.client_secret, "s3cret");
+        let related = config.related_artists.unwrap();
+        assert_eq!(related.enabled, Some(true));
+        assert_eq!(related.lastfm_api_key.as_deref(), Some("key"));
+    }
+
+    #[test]
+    fn include_errors_are_reported() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join("config.toml");
+
+        std::fs::write(&config, "include = \"missing.toml\"\n").unwrap();
+        assert!(FileConfig::load(&config).is_err());
+
+        std::fs::write(&config, "include = 3\n").unwrap();
+        assert!(FileConfig::load(&config).is_err());
+
+        std::fs::write(&config, "include = [\"a.toml\"]\n").unwrap();
+        std::fs::write(dir.path().join("a.toml"), "include = \"b.toml\"\n").unwrap();
+        std::fs::write(dir.path().join("b.toml"), "port = 1\n").unwrap();
+        assert!(FileConfig::load(&config).is_err());
     }
 }
