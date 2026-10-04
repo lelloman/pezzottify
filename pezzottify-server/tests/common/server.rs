@@ -30,10 +30,16 @@ pub struct TestServerBuilder {
     scheduler_config: Option<pezzottify_server::background_jobs::JobSchedulerConfig>,
     scheduler_jobs: Vec<Arc<dyn pezzottify_server::background_jobs::BackgroundJob>>,
     push_enabled: bool,
+    frontend_dir_path: Option<String>,
 }
 
 #[allow(dead_code)] // Each integration-test crate uses a different subset of builder options.
 impl TestServerBuilder {
+    pub fn with_frontend(mut self, path: &std::path::Path) -> Self {
+        self.frontend_dir_path = Some(path.to_str().expect("UTF-8 fixture path").to_owned());
+        self
+    }
+
     pub fn with_request_logging(mut self, level: RequestsLoggingLevel) -> Self {
         self.requests_logging_level = Some(level);
         self
@@ -288,7 +294,7 @@ impl TestServer {
                 .requests_logging_level
                 .unwrap_or(RequestsLoggingLevel::None),
             content_cache_age_sec: 0, // Disable caching in tests
-            frontend_dir_path: None,
+            frontend_dir_path: options.frontend_dir_path,
             disable_password_auth: options.disable_password_auth,
             secure_session_cookies: false,
             session_cookie_max_age_secs: 7 * 24 * 60 * 60,

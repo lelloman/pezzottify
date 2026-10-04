@@ -448,9 +448,9 @@ pub(super) fn assemble_app(
     let home_router = match config.frontend_dir_path.as_ref() {
         Some(frontend_path) => {
             let index_path = std::path::Path::new(frontend_path).join("index.html");
-            let static_files_service = ServeDir::new(frontend_path)
+            let static_files_service = StaticDir::new(frontend_path)
                 .append_index_html_on_directories(true)
-                .fallback(ServeFile::new(index_path));
+                .fallback_file(index_path);
             Router::new().fallback_service(static_files_service)
         }
         None => Router::new()

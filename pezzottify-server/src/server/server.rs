@@ -33,7 +33,7 @@ use crate::{
         FullUserStore, Permission, UserRole,
     },
 };
-use tower_http::services::{ServeDir, ServeFile};
+use simple_server::web::static_files::StaticDir;
 
 use serde::{Deserialize, Serialize};
 use simple_server::web::{
