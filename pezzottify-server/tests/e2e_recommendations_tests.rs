@@ -2,9 +2,7 @@
 
 mod common;
 
-use common::{
-    TestClient, TestServer, TRACK_1_ID, TRACK_2_ID, TRACK_3_ID, TRACK_4_ID, TRACK_5_ID,
-};
+use common::{TestClient, TestServer, TRACK_1_ID, TRACK_2_ID, TRACK_3_ID, TRACK_4_ID, TRACK_5_ID};
 use reqwest::{header, StatusCode};
 use serde_json::{json, Value};
 
@@ -135,13 +133,19 @@ async fn continuation_destination_progress_reports_diagnostics() {
     };
     let arrived = at(1.0).await.json::<Value>().await.unwrap();
     assert_eq!(arrived["track_ids"], json!([TRACK_4_ID]));
-    assert!(approx(&arrived["namespaces"][0]["query_to_destination"], 1.0));
+    assert!(approx(
+        &arrived["namespaces"][0]["query_to_destination"],
+        1.0
+    ));
 
     let halfway = at(0.5).await.json::<Value>().await.unwrap();
     assert_eq!(halfway["track_ids"], json!([TRACK_3_ID]));
     assert!(approx(&halfway["progress"], 0.5));
     assert!(approx(&halfway["namespaces"][0]["query_to_source"], 0.707));
-    assert!(approx(&halfway["namespaces"][0]["source_to_destination"], 0.0));
+    assert!(approx(
+        &halfway["namespaces"][0]["source_to_destination"],
+        0.0
+    ));
 }
 
 #[tokio::test]
@@ -193,7 +197,10 @@ async fn concepts_require_authentication_and_list_as_json() {
     let client = TestClient::authenticated(server.base_url.clone()).await;
     let response = client
         .client
-        .get(format!("{}/v1/content/concepts?q=jazz&limit=5", server.base_url))
+        .get(format!(
+            "{}/v1/content/concepts?q=jazz&limit=5",
+            server.base_url
+        ))
         .send()
         .await
         .unwrap();
@@ -203,7 +210,10 @@ async fn concepts_require_authentication_and_list_as_json() {
         "no-store, max-age=0"
     );
     // Concepts are materialized by the weekly job; a fresh catalog has none.
-    assert_eq!(response.json::<Value>().await.unwrap(), json!({ "concepts": [] }));
+    assert_eq!(
+        response.json::<Value>().await.unwrap(),
+        json!({ "concepts": [] })
+    );
 }
 
 #[tokio::test]
@@ -224,7 +234,9 @@ async fn continuation_accepts_destination_mixes_and_concept_references() {
     assert_eq!(response.status(), StatusCode::OK);
     let body = response.json::<Value>().await.unwrap();
     assert_eq!(body["track_ids"], json!([TRACK_4_ID]));
-    let components = body["namespaces"][0]["destination_components"].as_array().unwrap();
+    let components = body["namespaces"][0]["destination_components"]
+        .as_array()
+        .unwrap();
     assert_eq!(components.len(), 2);
     assert!(approx(&components[0]["similarity"], 1.0));
     // The concept has no vector in this catalog, so it is reported without a similarity.

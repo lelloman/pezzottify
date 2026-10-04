@@ -55,8 +55,8 @@ pub fn validate_endpoint(endpoint: &str, allow_insecure: bool) -> Result<(), Reg
     if endpoint.is_empty() || endpoint.len() > MAX_ENDPOINT_LEN {
         return Err(RegistrationError::Endpoint("must be 1..2048 bytes"));
     }
-    let url = reqwest::Url::parse(endpoint)
-        .map_err(|_| RegistrationError::Endpoint("not a URL"))?;
+    let url =
+        reqwest::Url::parse(endpoint).map_err(|_| RegistrationError::Endpoint("not a URL"))?;
     match url.scheme() {
         "https" => {}
         "http" if allow_insecure => {}
@@ -77,7 +77,9 @@ pub fn validate_keys(p256dh: &str, auth: &str) -> Result<(), RegistrationError> 
     let decode = |value: &str| URL_SAFE_NO_PAD.decode(value.trim_end_matches('='));
     let point = decode(p256dh).map_err(|_| RegistrationError::Keys("p256dh is not base64url"))?;
     if point.len() != 65 || point[0] != 0x04 {
-        return Err(RegistrationError::Keys("p256dh must be an uncompressed P-256 point"));
+        return Err(RegistrationError::Keys(
+            "p256dh must be an uncompressed P-256 point",
+        ));
     }
     let secret = decode(auth).map_err(|_| RegistrationError::Keys("auth is not base64url"))?;
     if secret.len() != 16 {
@@ -95,29 +97,42 @@ pub enum DeliveryOutcome {
     Failed(String),
 }
 
+/// Where a wake-up goes: a UnifiedPush endpoint and its Web Push keys.
+#[derive(Debug, Clone, Copy)]
+pub struct PushTarget<'a> {
+    pub endpoint: &'a str,
+    /// Base64url P-256 public key of the receiving app.
+    pub p256dh: &'a str,
+    /// Base64url authentication secret.
+    pub auth: &'a str,
+}
+
 /// Encrypt `payload` for one registration, sign with VAPID and POST it.
 pub async fn send_wakeup(
     client: &reqwest::Client,
     vapid: &VapidKeys,
     subject: &str,
-    endpoint: &str,
-    p256dh: &str,
-    auth: &str,
+    target: PushTarget<'_>,
     payload: &[u8],
     options: WakeupOptions,
 ) -> DeliveryOutcome {
     let subscription = SubscriptionInfo::new(
-        endpoint,
-        p256dh.trim_end_matches('='),
-        auth.trim_end_matches('='),
+        target.endpoint,
+        target.p256dh.trim_end_matches('='),
+        target.auth.trim_end_matches('='),
     );
     let message = (|| {
-        let mut signature = VapidSignatureBuilder::from_base64(vapid.private_key_b64(), &subscription)?;
+        let mut signature =
+            VapidSignatureBuilder::from_base64(vapid.private_key_b64(), &subscription)?;
         signature.add_claim("sub", subject);
         let mut builder = WebPushMessageBuilder::new(&subscription);
         builder.set_payload(ContentEncoding::Aes128Gcm, payload);
         builder.set_ttl(options.ttl_secs);
-        builder.set_urgency(if options.low_urgency { Urgency::Low } else { Urgency::Normal });
+        builder.set_urgency(if options.low_urgency {
+            Urgency::Low
+        } else {
+            Urgency::Normal
+        });
         builder.set_vapid_signature(signature.build()?);
         builder.build()
     })();

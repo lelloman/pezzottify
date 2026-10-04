@@ -6,8 +6,9 @@ pub use file_config::{
     AudioEmbeddingsConfig, AuditLogCleanupJobConfig, BackgroundJobsConfig,
     CatalogAvailabilityStatsJobConfig, CatalogStoreConfig, DevicePruningJobConfig,
     DownloadManagerConfig, FileConfig, IngestionCleanupJobConfig, IngestionConfig,
-    IntervalJobConfig, MetadataEnrichmentJobConfig, OidcConfig, PopularContentJobConfig, PushConfig,
-    RelatedArtistsConfig, SearchConfig, StreamingSearchConfig as StreamingSearchFileConfig,
+    IntervalJobConfig, MetadataEnrichmentJobConfig, OidcConfig, PopularContentJobConfig,
+    PushConfig, RelatedArtistsConfig, SearchConfig,
+    StreamingSearchConfig as StreamingSearchFileConfig,
 };
 
 use crate::server::RequestsLoggingLevel;
@@ -1144,12 +1145,28 @@ const KNOWN_ALBUM_DERIVATIONS: &[(&str, &str, Option<f32>)] = &[
     ("musicfm.mean.v1", "album.musicfm.median.v1", None),
     ("ast.audioset.v1", "album.ast.median.v1", None),
     ("ast.audioset.v1", "album.ast.essence.q25.v1", Some(0.25)),
-    ("ast.instruments.v1", "album.ast_instruments.median.v1", None),
-    ("ast.instruments.v1", "album.ast_instruments.essence.q25.v1", Some(0.25)),
+    (
+        "ast.instruments.v1",
+        "album.ast_instruments.median.v1",
+        None,
+    ),
+    (
+        "ast.instruments.v1",
+        "album.ast_instruments.essence.q25.v1",
+        Some(0.25),
+    ),
     ("ast.audioset.v2", "album.ast.median.v2", None),
     ("ast.audioset.v2", "album.ast.essence.q25.v2", Some(0.25)),
-    ("ast.instruments.v2", "album.ast_instruments.median.v2", None),
-    ("ast.instruments.v2", "album.ast_instruments.essence.q25.v2", Some(0.25)),
+    (
+        "ast.instruments.v2",
+        "album.ast_instruments.median.v2",
+        None,
+    ),
+    (
+        "ast.instruments.v2",
+        "album.ast_instruments.essence.q25.v2",
+        Some(0.25),
+    ),
 ];
 
 impl AlbumEmbeddingDerivationSpec {
@@ -1707,7 +1724,10 @@ mod tests {
             .iter()
             .map(|spec| spec.target_namespace.as_str())
             .collect::<Vec<_>>();
-        assert_eq!(targets, vec!["album.ast.median.v2", "album.ast.essence.q25.v2"]);
+        assert_eq!(
+            targets,
+            vec!["album.ast.median.v2", "album.ast.essence.q25.v2"]
+        );
     }
 
     #[test]

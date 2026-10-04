@@ -46,46 +46,136 @@ const AUDIOSET_CONCEPTS: &[(&str, &[&str])] = &[
     (
         "sound_genre",
         &[
-            "Pop music", "Hip hop music", "Rock music", "Heavy metal", "Punk rock", "Grunge",
-            "Progressive rock", "Rock and roll", "Psychedelic rock", "Rhythm and blues",
-            "Soul music", "Reggae", "Country", "Swing music", "Bluegrass", "Funk",
-            "Folk music", "Middle Eastern music", "Jazz", "Disco", "Classical music", "Opera",
-            "Electronic music", "House music", "Techno", "Dubstep", "Drum and bass",
-            "Electronica", "Electronic dance music", "Ambient music", "Trance music",
-            "Music of Latin America", "Salsa music", "Flamenco", "Blues", "Music for children",
-            "New-age music", "Vocal music", "A capella", "Music of Africa", "Afrobeat",
-            "Christian music", "Gospel music", "Music of Asia", "Carnatic music",
-            "Music of Bollywood", "Ska", "Traditional music", "Independent music",
-            "Theme music", "Soundtrack music", "Lullaby", "Video game music",
-            "Christmas music", "Dance music",
+            "Pop music",
+            "Hip hop music",
+            "Rock music",
+            "Heavy metal",
+            "Punk rock",
+            "Grunge",
+            "Progressive rock",
+            "Rock and roll",
+            "Psychedelic rock",
+            "Rhythm and blues",
+            "Soul music",
+            "Reggae",
+            "Country",
+            "Swing music",
+            "Bluegrass",
+            "Funk",
+            "Folk music",
+            "Middle Eastern music",
+            "Jazz",
+            "Disco",
+            "Classical music",
+            "Opera",
+            "Electronic music",
+            "House music",
+            "Techno",
+            "Dubstep",
+            "Drum and bass",
+            "Electronica",
+            "Electronic dance music",
+            "Ambient music",
+            "Trance music",
+            "Music of Latin America",
+            "Salsa music",
+            "Flamenco",
+            "Blues",
+            "Music for children",
+            "New-age music",
+            "Vocal music",
+            "A capella",
+            "Music of Africa",
+            "Afrobeat",
+            "Christian music",
+            "Gospel music",
+            "Music of Asia",
+            "Carnatic music",
+            "Music of Bollywood",
+            "Ska",
+            "Traditional music",
+            "Independent music",
+            "Theme music",
+            "Soundtrack music",
+            "Lullaby",
+            "Video game music",
+            "Christmas music",
+            "Dance music",
         ],
     ),
     (
         "instrument",
         &[
-            "Guitar", "Electric guitar", "Bass guitar", "Acoustic guitar",
-            "Steel guitar, slide guitar", "Banjo", "Sitar", "Mandolin", "Zither", "Ukulele",
-            "Piano", "Electric piano", "Organ", "Electronic organ", "Hammond organ",
-            "Synthesizer", "Harpsichord", "Drum kit", "Drum machine", "Snare drum", "Timpani",
-            "Tabla", "Marimba, xylophone", "Glockenspiel", "Vibraphone", "Steelpan",
-            "Orchestra", "Brass instrument", "French horn", "Trumpet", "Trombone",
-            "String section", "Violin, fiddle", "Cello", "Double bass", "Flute", "Saxophone",
-            "Clarinet", "Harp", "Harmonica", "Accordion", "Bagpipes", "Didgeridoo", "Theremin",
+            "Guitar",
+            "Electric guitar",
+            "Bass guitar",
+            "Acoustic guitar",
+            "Steel guitar, slide guitar",
+            "Banjo",
+            "Sitar",
+            "Mandolin",
+            "Zither",
+            "Ukulele",
+            "Piano",
+            "Electric piano",
+            "Organ",
+            "Electronic organ",
+            "Hammond organ",
+            "Synthesizer",
+            "Harpsichord",
+            "Drum kit",
+            "Drum machine",
+            "Snare drum",
+            "Timpani",
+            "Tabla",
+            "Marimba, xylophone",
+            "Glockenspiel",
+            "Vibraphone",
+            "Steelpan",
+            "Orchestra",
+            "Brass instrument",
+            "French horn",
+            "Trumpet",
+            "Trombone",
+            "String section",
+            "Violin, fiddle",
+            "Cello",
+            "Double bass",
+            "Flute",
+            "Saxophone",
+            "Clarinet",
+            "Harp",
+            "Harmonica",
+            "Accordion",
+            "Bagpipes",
+            "Didgeridoo",
+            "Theremin",
             "Scratching (performance technique)",
         ],
     ),
     (
         "vocals",
         &[
-            "Choir", "Male singing", "Female singing", "Child singing", "Rapping", "Chant",
-            "Yodeling", "Beatboxing",
+            "Choir",
+            "Male singing",
+            "Female singing",
+            "Child singing",
+            "Rapping",
+            "Chant",
+            "Yodeling",
+            "Beatboxing",
         ],
     ),
     (
         "mood",
         &[
-            "Happy music", "Funny music", "Sad music", "Tender music", "Exciting music",
-            "Angry music", "Scary music",
+            "Happy music",
+            "Funny music",
+            "Sad music",
+            "Tender music",
+            "Exciting music",
+            "Angry music",
+            "Scary music",
         ],
     ),
 ];
@@ -249,8 +339,7 @@ fn composed_concepts(
     // of its span that falls in that decade.
     let mut by_decade: BTreeMap<i32, Vec<(&str, f32)>> = BTreeMap::new();
     for (track_id, first, last) in composition_years {
-        if !artist_of.contains_key(track_id.as_str()) || last - first > MAX_COMPOSITION_SPAN_YEARS
-        {
+        if !artist_of.contains_key(track_id.as_str()) || last - first > MAX_COMPOSITION_SPAN_YEARS {
             continue;
         }
         let span = (last - first + 1) as f32;
@@ -393,7 +482,9 @@ impl ConceptEmbeddingSyncJob {
 
         let facts = ctx
             .catalog_db
-            .run_blocking(DbPriority::Background, |store| store.list_concept_track_facts())
+            .run_blocking(DbPriority::Background, |store| {
+                store.list_concept_track_facts()
+            })
             .map_err(|e| fail(format!("Failed to read track facts: {e}")))?;
         let audioset_vectors = ctx
             .catalog_db
@@ -447,7 +538,9 @@ impl ConceptEmbeddingSyncJob {
         for concept in &concepts {
             *families.entry(concept.family).or_default() += 1;
         }
-        audit.log_progress(json!({ "phase": "selected", "concepts": concepts.len(), "families": families }));
+        audit.log_progress(
+            json!({ "phase": "selected", "concepts": concepts.len(), "families": families }),
+        );
 
         let computed_at = chrono::Utc::now().timestamp();
         let mut stored: HashSet<(String, String)> = HashSet::new();
@@ -574,7 +667,11 @@ impl BackgroundJob for ConceptEmbeddingSyncJob {
         self.execute_inner(ctx)
     }
 
-    fn execute_with_params(&self, ctx: &JobContext, _params: Option<Value>) -> Result<(), JobError> {
+    fn execute_with_params(
+        &self,
+        ctx: &JobContext,
+        _params: Option<Value>,
+    ) -> Result<(), JobError> {
         self.execute_inner(ctx)
     }
 }
@@ -623,7 +720,13 @@ mod tests {
         let jazz = concepts.iter().find(|c| c.id == "audioset:Jazz").unwrap();
         assert_eq!(jazz.family, "sound_genre");
         // The star artist ranks first but contributes at most 5 examples.
-        assert_eq!(jazz.examples.iter().filter(|(id, _)| id.starts_with("star")).count(), 5);
+        assert_eq!(
+            jazz.examples
+                .iter()
+                .filter(|(id, _)| id.starts_with("star"))
+                .count(),
+            5
+        );
         assert!(jazz.examples[0].0.starts_with("star"));
         assert_eq!(jazz.examples.len(), MAX_EXAMPLES.min(5 + 80));
         // Piano: only the star's 10 tracks are confident, capped to 5 -> below the minimum.
@@ -637,10 +740,20 @@ mod tests {
         let mut facts = Vec::new();
         for index in 0..60 {
             let year = if index < 35 { 1965 } else { 1885 };
-            facts.push(fact(&format!("t{index}"), &format!("a{index}"), Some(year), &["shoegaze"]));
+            facts.push(fact(
+                &format!("t{index}"),
+                &format!("a{index}"),
+                Some(year),
+                &["shoegaze"],
+            ));
         }
         for index in 0..20 {
-            facts.push(fact(&format!("r{index}"), &format!("b{index}"), Some(2001), &["rare"]));
+            facts.push(fact(
+                &format!("r{index}"),
+                &format!("b{index}"),
+                Some(2001),
+                &["rare"],
+            ));
         }
         let concepts = select_concepts(&ConceptInputs {
             facts: &facts,
@@ -681,7 +794,10 @@ mod tests {
         let tens = concepts.iter().find(|c| c.id == "composed:1810s").unwrap();
         let twenties = concepts.iter().find(|c| c.id == "composed:1820s").unwrap();
         assert!(tens.examples.iter().all(|(_, w)| (w - 0.5).abs() < 1e-6));
-        assert!(twenties.examples.iter().all(|(_, w)| (w - 0.5).abs() < 1e-6));
+        assert!(twenties
+            .examples
+            .iter()
+            .all(|(_, w)| (w - 0.5).abs() < 1e-6));
         assert!(tens.examples.iter().all(|(id, _)| id != "vague"));
         assert_eq!(tens.label, "Composed in the 1810s");
     }

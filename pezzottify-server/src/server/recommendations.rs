@@ -602,7 +602,12 @@ fn summarize_concepts(
             example_count: metadata["example_count"].as_u64().unwrap_or(0),
             id,
         })
-        .filter(|concept| query.family.as_deref().is_none_or(|family| concept.family == family))
+        .filter(|concept| {
+            query
+                .family
+                .as_deref()
+                .is_none_or(|family| concept.family == family)
+        })
         .filter(|concept| {
             needle
                 .as_deref()
@@ -2020,8 +2025,8 @@ fn continue_queue(
         .recency_weight
         .unwrap_or(CONTINUATION_DEFAULT_RECENCY_WEIGHT)
         .clamp(0.0, 1.0);
-    let progress = (!request.destination.is_empty())
-        .then(|| request.progress.unwrap_or(0.0).clamp(0.0, 1.0));
+    let progress =
+        (!request.destination.is_empty()).then(|| request.progress.unwrap_or(0.0).clamp(0.0, 1.0));
     let source_ids = sample_evenly(&request.source_track_ids, CONTINUATION_SOURCE_SAMPLE);
 
     let mut queries = Vec::with_capacity(criteria.len());
@@ -2102,8 +2107,9 @@ fn continue_queue(
             let mut pushed = query.clone();
             let dim = pushed.len();
             for reference in &request.away {
-                if let Some(vector) = reference_vector(catalog_store, settings, reference, &namespace)?
-                    .and_then(normalised)
+                if let Some(vector) =
+                    reference_vector(catalog_store, settings, reference, &namespace)?
+                        .and_then(normalised)
                 {
                     add_scaled_vector(&mut pushed, &vector, -reference.weight.unwrap_or(1.0), dim);
                 }
@@ -2168,8 +2174,15 @@ fn select_continuation(
     recent: &[String],
 ) -> anyhow::Result<Vec<String>> {
     let oversample = (count * 16).clamp(CONTINUATION_OVERSAMPLE_MIN, CONTINUATION_OVERSAMPLE_MAX);
-    let candidates =
-        score_radio_candidates(catalog_store, queries, mode, oversample, &exclude, true, None)?;
+    let candidates = score_radio_candidates(
+        catalog_store,
+        queries,
+        mode,
+        oversample,
+        &exclude,
+        true,
+        None,
+    )?;
     let ranked = rank_radio_candidates(catalog_store, candidates, None, randomness)?;
 
     let mut result = Vec::with_capacity(count + recent.len());
@@ -2845,9 +2858,7 @@ mod tests {
             store
                 .create_track(&resolved.track, &[artist_id.into()])
                 .unwrap();
-            store
-                .set_track_audio_uri(track_id, "audio.ogg")
-                .unwrap();
+            store.set_track_audio_uri(track_id, "audio.ogg").unwrap();
             store
                 .upsert_entity_embedding(&embedding(
                     "track",
@@ -3260,38 +3271,78 @@ mod tests {
 
     #[test]
     fn concepts_are_listed_once_filtered_and_ordered() {
-        let meta = |family: &str, label: &str, count: u64| {
-            serde_json::json!({"family": family, "label": label, "example_count": count})
-        };
+        let meta = |family: &str, label: &str, count: u64| serde_json::json!({"family": family, "label": label, "example_count": count});
         let rows = vec![
-            ("composed:1810s".to_string(), "ns.b".to_string(), meta("composed", "Composed in the 1810s", 40)),
-            ("composed:990s".to_string(), "ns.b".to_string(), meta("composed", "Composed in the 990s", 31)),
-            ("audioset:Jazz".to_string(), "ns.b".to_string(), meta("sound_genre", "Jazz", 1)),
-            ("audioset:Jazz".to_string(), "ns.a".to_string(), meta("sound_genre", "Jazz", 200)),
-            ("audioset:Piano".to_string(), "ns.a".to_string(), meta("instrument", "Piano", 150)),
-            ("genre:jazz fusion".to_string(), "ns.a".to_string(), meta("genre_tag", "jazz fusion", 60)),
+            (
+                "composed:1810s".to_string(),
+                "ns.b".to_string(),
+                meta("composed", "Composed in the 1810s", 40),
+            ),
+            (
+                "composed:990s".to_string(),
+                "ns.b".to_string(),
+                meta("composed", "Composed in the 990s", 31),
+            ),
+            (
+                "audioset:Jazz".to_string(),
+                "ns.b".to_string(),
+                meta("sound_genre", "Jazz", 1),
+            ),
+            (
+                "audioset:Jazz".to_string(),
+                "ns.a".to_string(),
+                meta("sound_genre", "Jazz", 200),
+            ),
+            (
+                "audioset:Piano".to_string(),
+                "ns.a".to_string(),
+                meta("instrument", "Piano", 150),
+            ),
+            (
+                "genre:jazz fusion".to_string(),
+                "ns.a".to_string(),
+                meta("genre_tag", "jazz fusion", 60),
+            ),
         ];
         let all = summarize_concepts(
             rows.clone(),
             "ns.a",
-            &ConceptsQuery { q: None, family: None, limit: None },
+            &ConceptsQuery {
+                q: None,
+                family: None,
+                limit: None,
+            },
         );
         assert_eq!(
             all.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
-            vec!["audioset:Jazz", "audioset:Piano", "genre:jazz fusion", "composed:990s", "composed:1810s"]
+            vec![
+                "audioset:Jazz",
+                "audioset:Piano",
+                "genre:jazz fusion",
+                "composed:990s",
+                "composed:1810s"
+            ]
         );
         // Metadata comes from the preferred namespace.
         assert_eq!(all[0].example_count, 200);
         let jazz = summarize_concepts(
             rows.clone(),
             "ns.a",
-            &ConceptsQuery { q: Some(" JAZZ ".into()), family: None, limit: None },
+            &ConceptsQuery {
+                q: Some(" JAZZ ".into()),
+                family: None,
+                limit: None,
+            },
         );
         assert_eq!(jazz.len(), 2);
         let tags = summarize_concepts(
             rows,
             "ns.a",
-            &ConceptsQuery { q: None, family: Some("genre_tag".into()), limit: Some(1) },
+            &ConceptsQuery {
+                q: None,
+                family: Some("genre_tag".into()),
+                limit: Some(1),
+            },
         );
         assert_eq!(tags.len(), 1);
         assert_eq!(tags[0].label, "jazz fusion");

@@ -26,7 +26,9 @@ async fn push_service() -> (String, Arc<Mutex<Vec<Vec<u8>>>>) {
     let log = bodies.clone();
     tokio::spawn(async move {
         loop {
-            let Ok((mut socket, _)) = listener.accept().await else { return };
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return;
+            };
             let log = log.clone();
             tokio::spawn(async move {
                 let mut buffer = Vec::new();
@@ -41,7 +43,10 @@ async fn push_service() -> (String, Arc<Mutex<Vec<Vec<u8>>>>) {
                         let head = String::from_utf8_lossy(&buffer[..split]).to_ascii_lowercase();
                         let length = head
                             .lines()
-                            .find_map(|l| l.strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap()))
+                            .find_map(|l| {
+                                l.strip_prefix("content-length:")
+                                    .map(|v| v.trim().parse::<usize>().unwrap())
+                            })
                             .unwrap_or(0);
                         while buffer.len() < split + 4 + length {
                             let read = socket.read(&mut chunk).await.unwrap_or(0);
@@ -50,7 +55,9 @@ async fn push_service() -> (String, Arc<Mutex<Vec<Vec<u8>>>>) {
                             }
                             buffer.extend_from_slice(&chunk[..read]);
                         }
-                        log.lock().unwrap().push(buffer[split + 4..split + 4 + length].to_vec());
+                        log.lock()
+                            .unwrap()
+                            .push(buffer[split + 4..split + 4 + length].to_vec());
                         let _ = socket
                             .write_all(b"HTTP/1.1 201 Created\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
                             .await;
@@ -83,7 +90,10 @@ async fn push_routes_require_configuration_and_authentication() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
-    assert_eq!(response.json::<Value>().await.unwrap()["code"], "push_disabled");
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["code"],
+        "push_disabled"
+    );
 }
 
 #[tokio::test]
@@ -92,7 +102,15 @@ async fn registrations_can_be_created_validated_and_removed() {
     let client = TestClient::authenticated(server.base_url.clone()).await;
     let url = |path: &str| format!("{}/v1/push{}", server.base_url, path);
 
-    let vapid: Value = client.client.get(url("/vapid")).send().await.unwrap().json().await.unwrap();
+    let vapid: Value = client
+        .client
+        .get(url("/vapid"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
     let public_key = vapid["public_key"].as_str().unwrap();
     assert_eq!(public_key.len(), 87);
     assert_eq!(URL_SAFE_NO_PAD.decode(public_key).unwrap()[0], 0x04);
@@ -100,9 +118,10 @@ async fn registrations_can_be_created_validated_and_removed() {
     let (_keypair, _auth, p256dh, auth) = receiver_keys();
     let endpoint = "http://127.0.0.1:9/up/registration";
     let put = |body: Value| client.client.put(url("/registrations")).json(&body).send();
-    let response = put(json!({"endpoint": endpoint, "p256dh": p256dh, "auth": auth, "device_id": "phone"}))
-        .await
-        .unwrap();
+    let response =
+        put(json!({"endpoint": endpoint, "p256dh": p256dh, "auth": auth, "device_id": "phone"}))
+            .await
+            .unwrap();
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
     let user_id = server.user_store.get_user_id(TEST_USER).unwrap().unwrap();
     let registrations = server.user_store.list_push_registrations(user_id).unwrap();
@@ -110,13 +129,25 @@ async fn registrations_can_be_created_validated_and_removed() {
     assert_eq!(registrations[0].device_id.as_deref(), Some("phone"));
 
     for (body, why) in [
-        (json!({"endpoint": "ftp://push.example/x", "p256dh": p256dh, "auth": auth}), "scheme"),
-        (json!({"endpoint": endpoint, "p256dh": "short", "auth": auth}), "p256dh"),
-        (json!({"endpoint": endpoint, "p256dh": p256dh, "auth": "c2hvcnQ"}), "auth"),
+        (
+            json!({"endpoint": "ftp://push.example/x", "p256dh": p256dh, "auth": auth}),
+            "scheme",
+        ),
+        (
+            json!({"endpoint": endpoint, "p256dh": "short", "auth": auth}),
+            "p256dh",
+        ),
+        (
+            json!({"endpoint": endpoint, "p256dh": p256dh, "auth": "c2hvcnQ"}),
+            "auth",
+        ),
     ] {
         let response = put(body).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{why}");
-        assert_eq!(response.json::<Value>().await.unwrap()["code"], "invalid_push_registration");
+        assert_eq!(
+            response.json::<Value>().await.unwrap()["code"],
+            "invalid_push_registration"
+        );
     }
 
     let response = client
@@ -127,7 +158,11 @@ async fn registrations_can_be_created_validated_and_removed() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
-    assert!(server.user_store.list_push_registrations(user_id).unwrap().is_empty());
+    assert!(server
+        .user_store
+        .list_push_registrations(user_id)
+        .unwrap()
+        .is_empty());
 }
 
 #[tokio::test]
@@ -158,7 +193,10 @@ async fn notification_events_wake_registered_devices() {
         .unwrap();
     let stored = server
         .user_store
-        .append_event(user_id, &pezzottify_server::user::UserEvent::NotificationCreated { notification })
+        .append_event(
+            user_id,
+            &pezzottify_server::user::UserEvent::NotificationCreated { notification },
+        )
         .unwrap();
 
     for _ in 0..100 {
