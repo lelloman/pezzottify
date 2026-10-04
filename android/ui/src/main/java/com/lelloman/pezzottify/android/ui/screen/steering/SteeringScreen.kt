@@ -1007,23 +1007,30 @@ private fun SearchSheetContent(search: SteeringSearch, actions: SteeringScreenAc
         )
         Spacer(Modifier.height(12.dp))
         when {
-            search.isSearching -> CircularProgressIndicator(
-                modifier = Modifier.align(Alignment.CenterHorizontally).padding(16.dp),
-            )
-
             search.isError -> SheetMessage(stringResource(R.string.steering_search_error))
-            search.query.isNotBlank() && search.results.isEmpty() && search.concepts.isEmpty() &&
-                !search.isLoadingConcepts ->
+            !search.isSearching && !search.isQueryTooShort && search.query.isNotBlank() &&
+                search.results.isEmpty() && search.concepts.isEmpty() && !search.isLoadingConcepts ->
                 SheetMessage(stringResource(R.string.steering_search_empty))
 
             else -> LazyColumn(
                 modifier = Modifier.height(480.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                if (search.results.isNotEmpty()) {
+                if (search.isQueryTooShort) {
+                    item(key = "min-chars") { SheetMessage(stringResource(R.string.steering_search_min_chars)) }
+                }
+                if (search.results.isNotEmpty() || search.isSearching) {
                     item(key = "catalog-header") { SheetHeading(stringResource(R.string.steering_search_catalog)) }
-                    items(search.results, key = { "${it.entityType}:${it.entityId}" }) { reference ->
-                        SearchResultRow(reference, actions)
+                }
+                // Results stream in (best matches first) while the search is still running.
+                items(search.results, key = { "${it.entityType}:${it.entityId}" }) { reference ->
+                    SearchResultRow(reference, actions)
+                }
+                if (search.isSearching) {
+                    item(key = "searching") {
+                        Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
                     }
                 }
                 if (search.isLoadingConcepts) {
@@ -1093,7 +1100,7 @@ private fun SearchResultRow(reference: SteeringReference, actions: SteeringScree
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            MutedText(referenceKindLabel(reference))
+            MutedText(listOfNotNull(referenceKindLabel(reference), reference.detail).joinToString(" · "))
         }
     }
 }

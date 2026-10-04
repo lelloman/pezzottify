@@ -10,6 +10,8 @@ data class SteeringReference(
     val label: String,
     /** Concept family (e.g. `instrument`) when [entityType] is `concept`. */
     val family: String? = null,
+    /** Secondary line in search results, e.g. the artists of an album or track. */
+    val detail: String? = null,
 )
 
 sealed interface SteeringSource {
@@ -84,7 +86,14 @@ data class SteeringSearch(
     /** Concepts matching [query] (all of them when it is blank), grouped by family. */
     val concepts: List<SteeringConceptGroup> = emptyList(),
     val isLoadingConcepts: Boolean = false,
-)
+) {
+    /** The catalog is only searched from [MIN_SEARCH_QUERY_LENGTH] characters. */
+    val isQueryTooShort: Boolean
+        get() = query.isNotBlank() && query.trim().length < MIN_SEARCH_QUERY_LENGTH
+}
+
+/** Shorter queries are very expensive on a large catalog index and rarely useful. */
+const val MIN_SEARCH_QUERY_LENGTH = 2
 
 data class SteeringScreenState(
     val availability: SteeringAvailability = SteeringAvailability.Loading,

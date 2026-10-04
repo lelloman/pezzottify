@@ -1813,6 +1813,7 @@ class InteractorsModule {
         updateSmartContinuationSetting: UpdateSmartContinuationSetting,
         remoteApiClient: RemoteApiClient,
         contentResolver: com.lelloman.pezzottify.android.ui.content.ContentResolver,
+        performStreamingSearch: PerformStreamingSearch,
     ): com.lelloman.pezzottify.android.ui.screen.steering.SteeringScreenViewModel.Interactor =
         object : com.lelloman.pezzottify.android.ui.screen.steering.SteeringScreenViewModel.Interactor {
             private fun <T> resolved(content: com.lelloman.pezzottify.android.ui.content.Content<T>): T? =
@@ -1851,26 +1852,21 @@ class InteractorsModule {
             override suspend fun getConcepts() =
                 (remoteApiClient.getConcepts(limit = 500) as? RemoteApiResponse.Success)?.data?.concepts
 
-            override suspend fun searchReferences(
+            // Same streaming search as the main Search screen: ranked primary matches first,
+            // and results arrive progressively instead of after one slow request.
+            override fun searchReferences(
                 query: String,
-            ): List<com.lelloman.pezzottify.android.ui.screen.steering.SteeringReference>? =
-                when (val response = remoteApiClient.search(
-                    query,
-                    listOf(
-                        RemoteApiClient.SearchFilter.Artist,
-                        RemoteApiClient.SearchFilter.Album,
-                        RemoteApiClient.SearchFilter.Track,
-                    ),
-                )) {
-                    is RemoteApiResponse.Error -> null
-                    is RemoteApiResponse.Success -> response.data.take(30).map { result ->
-                        com.lelloman.pezzottify.android.ui.screen.steering.SteeringReference(
-                            entityType = result.itemType.name.lowercase(),
-                            entityId = result.itemId,
-                            label = result.matchableText,
-                        )
+            ): Flow<List<com.lelloman.pezzottify.android.ui.screen.steering.SteeringReference>> =
+                kotlinx.coroutines.flow.flow {
+                    val sections = mutableListOf<com.lelloman.pezzottify.android.domain.remoteapi.response.SearchSection>()
+                    performStreamingSearch(query).collect { section ->
+                        if (section is com.lelloman.pezzottify.android.domain.remoteapi.response.SearchSection.Done) {
+                            return@collect
+                        }
+                        sections += section
+                        emit(com.lelloman.pezzottify.android.ui.screen.steering.steeringReferencesFrom(sections))
                     }
-                }
+                }.distinctUntilChanged()
         }
 
     @Provides

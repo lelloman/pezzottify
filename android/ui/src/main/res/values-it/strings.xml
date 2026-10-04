@@ -649,6 +649,7 @@
     <string name="steering_listen_instruments">Strumenti</string>
     <string name="steering_search_hint">Cerca artisti, album, brani, concetti</string>
     <string name="steering_search_error">Ricerca non riuscita</string>
+    <string name="steering_search_min_chars">Scrivi almeno 2 caratteri</string>
     <string name="steering_search_empty">Nessun risultato</string>
     <string name="steering_entity_artist">Artista</string>
     <string name="steering_entity_album">Album</string>
