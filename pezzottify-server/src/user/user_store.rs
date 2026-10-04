@@ -354,11 +354,21 @@ pub trait DeviceStore: Send + Sync {
 use super::sync_events::{StoredEvent, UserEvent};
 use crate::notifications::NotificationStore;
 
+/// Called after an event is durably appended through `append_event`.
+pub type EventListener = std::sync::Arc<dyn Fn(usize, &StoredEvent) + Send + Sync>;
+
 /// Trait for sync event storage operations
 pub trait UserEventStore: Send + Sync {
     /// Appends an event to the user's event log.
     /// Returns the stored event with sequence number and server timestamp.
     fn append_event(&self, user_id: usize, event: &UserEvent) -> Result<StoredEvent>;
+
+    /// Register a listener called after each `append_event` commit. Returns false
+    /// when the store does not support listeners.
+    fn set_event_listener(&self, listener: EventListener) -> bool {
+        let _ = listener;
+        false
+    }
 
     /// Gets events since a given sequence number.
     /// Returns events with seq > since_seq, ordered by seq ascending.
@@ -478,6 +488,58 @@ pub trait UserEventStore: Send + Sync {
     }
 }
 
+/// Maximum UnifiedPush registrations kept per user; the oldest is evicted.
+pub const MAX_PUSH_REGISTRATIONS_PER_USER: usize = 20;
+
+/// UnifiedPush/Web Push registrations. See docs/unifiedpush.md.
+pub trait PushRegistrationStore: Send + Sync {
+    /// Insert or update the registration for `endpoint`, owned by `user_id`. An
+    /// endpoint owned by another user is moved to `user_id`. Keeps at most
+    /// [`MAX_PUSH_REGISTRATIONS_PER_USER`] registrations per user.
+    fn upsert_push_registration(
+        &self,
+        user_id: usize,
+        endpoint: &str,
+        p256dh: &str,
+        auth: &str,
+        device_id: Option<&str>,
+    ) -> Result<()> {
+        let _ = (user_id, endpoint, p256dh, auth, device_id);
+        anyhow::bail!("Push registrations are not supported")
+    }
+
+    /// Delete `endpoint` if it belongs to `user_id`. Returns whether it existed.
+    fn delete_push_registration(&self, user_id: usize, endpoint: &str) -> Result<bool> {
+        let _ = (user_id, endpoint);
+        anyhow::bail!("Push registrations are not supported")
+    }
+
+    /// Registrations of `user_id`, oldest first.
+    fn list_push_registrations(&self, user_id: usize) -> Result<Vec<super::PushRegistration>> {
+        let _ = user_id;
+        Ok(Vec::new())
+    }
+
+    /// Remove `endpoint` regardless of owner (the push service reported it gone).
+    fn remove_push_endpoint(&self, endpoint: &str) -> Result<bool> {
+        let _ = endpoint;
+        anyhow::bail!("Push registrations are not supported")
+    }
+
+    /// Record a delivery attempt. A failure starts (or continues) a failure run;
+    /// once the run is at least `max_failure_secs` old the registration is removed.
+    fn record_push_delivery(
+        &self,
+        endpoint: &str,
+        delivered: bool,
+        now: i64,
+        max_failure_secs: i64,
+    ) -> Result<super::PushDeliveryRecord> {
+        let _ = (endpoint, delivered, now, max_failure_secs);
+        anyhow::bail!("Push registrations are not supported")
+    }
+}
+
 /// Combined trait for user storage with bandwidth, listening tracking, settings, devices, events, and notifications
 pub trait FullUserStore:
     UserStore
@@ -487,6 +549,7 @@ pub trait FullUserStore:
     + DeviceStore
     + UserEventStore
     + NotificationStore
+    + PushRegistrationStore
 {
 }
 
@@ -498,7 +561,8 @@ impl<
             + UserSettingsStore
             + DeviceStore
             + UserEventStore
-            + NotificationStore,
+            + NotificationStore
+            + PushRegistrationStore,
     > FullUserStore for T
 {
 }

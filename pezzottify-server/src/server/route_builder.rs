@@ -474,6 +474,12 @@ pub(super) fn assemble_app(
         .nest("/v1/sync", sync_routes)
         .nest("/v1/download", download_routes)
         .nest("/v1/ingestion", ingestion_routes)
+        .nest(
+            "/v1/push",
+            super::super::push_routes::push_routes()
+                .layer(user_limit(WRITE_PER_MINUTE).layer())
+                .with_state(state.clone()),
+        )
         .nest("/v1", ws_routes)
         .nest("/v1", mcp_routes);
 

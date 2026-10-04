@@ -140,6 +140,8 @@ pub struct ServerState {
     pub mcp_state: GuardedMcpState,
     pub organic_indexer: OptionalOrganicIndexer,
     pub download_manager: OptionalDownloadManager,
+    /// UnifiedPush wake-ups, present when `[push]` is configured.
+    pub push: Option<std::sync::Arc<crate::push::PushService>>,
     pub media: GuardedMediaManager,
     pub ingestion_manager: OptionalIngestionManager,
     pub enrichment_store: OptionalEnrichmentStore,

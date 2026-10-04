@@ -29,6 +29,7 @@ pub struct TestServerBuilder {
     scheduler_store: Option<Arc<dyn ServerStore>>,
     scheduler_config: Option<pezzottify_server::background_jobs::JobSchedulerConfig>,
     scheduler_jobs: Vec<Arc<dyn pezzottify_server::background_jobs::BackgroundJob>>,
+    push_enabled: bool,
 }
 
 #[allow(dead_code)] // Each integration-test crate uses a different subset of builder options.
@@ -60,6 +61,13 @@ impl TestServerBuilder {
 
     pub fn with_strict_authorization_header(mut self) -> Self {
         self.strict_authorization_header = true;
+        self
+    }
+
+    /// Enable UnifiedPush with a VAPID key in the temp database directory. Plain
+    /// `http://` endpoints are accepted so tests can push to a local receiver.
+    pub fn with_push(mut self) -> Self {
+        self.push_enabled = true;
         self
     }
 
@@ -297,6 +305,10 @@ impl TestServer {
             agent: pezzottify_server::config::AgentSettings::default(),
             ingestion,
             audio_embeddings: None,
+            push: options.push_enabled.then(|| pezzottify_server::config::PushSettings {
+                allow_insecure_endpoints: true,
+                ..pezzottify_server::config::PushSettings::with_defaults(temp_db_dir.path())
+            }),
         };
 
         // Create user manager

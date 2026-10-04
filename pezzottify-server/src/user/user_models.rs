@@ -200,3 +200,27 @@ pub struct PopularContent {
     pub albums: Vec<PopularAlbum>,
     pub artists: Vec<PopularArtist>,
 }
+
+/// A device's UnifiedPush/Web Push registration. See docs/unifiedpush.md.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PushRegistration {
+    pub user_id: usize,
+    pub endpoint: String,
+    /// Base64url P-256 public key of the receiving app (`PublicKeySet.pubKey`).
+    pub p256dh: String,
+    /// Base64url authentication secret (`PublicKeySet.auth`).
+    pub auth: String,
+    pub device_id: Option<String>,
+    pub created_at: i64,
+    pub last_success_at: Option<i64>,
+    /// Start of the current run of failed deliveries, if any.
+    pub first_failure_at: Option<i64>,
+}
+
+/// Outcome of recording a delivery attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PushDeliveryRecord {
+    Kept,
+    /// The registration had been failing for too long and was removed.
+    Removed,
+}

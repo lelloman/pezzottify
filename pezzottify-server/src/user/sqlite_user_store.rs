@@ -718,6 +718,39 @@ const USER_NOTIFICATIONS_TABLE_V_11: Table = Table {
     indices: &[("idx_notifications_user_created", "user_id, created_at DESC")],
 };
 
+/// V 16
+/// UnifiedPush/Web Push registrations, one per push endpoint.
+const PUSH_REGISTRATIONS_TABLE_V_16: Table = Table {
+    name: "push_registrations",
+    columns: &[
+        sqlite_column!(
+            "endpoint",
+            &SqlType::Text,
+            is_primary_key = true,
+            is_unique = true
+        ),
+        sqlite_column!(
+            "user_id",
+            &SqlType::Integer,
+            non_null = true,
+            foreign_key = Some(&ForeignKey {
+                foreign_table: "user",
+                foreign_column: "id",
+                on_delete: ForeignKeyOnChange::Cascade,
+            })
+        ),
+        sqlite_column!("p256dh", &SqlType::Text, non_null = true),
+        sqlite_column!("auth", &SqlType::Text, non_null = true),
+        sqlite_column!("device_id", &SqlType::Text),
+        sqlite_column!("created_at", &SqlType::Integer, non_null = true),
+        sqlite_column!("updated_at", &SqlType::Integer, non_null = true),
+        sqlite_column!("last_success_at", &SqlType::Integer),
+        sqlite_column!("first_failure_at", &SqlType::Integer),
+    ],
+    unique_constraints: &[],
+    indices: &[("idx_push_registrations_user", "user_id, created_at")],
+};
+
 /// V 8
 /// Auth token table with device_id foreign key
 const AUTH_TOKEN_TABLE_V_8: Table = Table {
@@ -1185,6 +1218,33 @@ pub const VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             Ok(())
         }),
     },
+    // V16: UnifiedPush registrations.
+    VersionedSchema {
+        version: 16,
+        tables: &[
+            USER_TABLE_V_12,
+            LIKED_CONTENT_TABLE_V_2,
+            AUTH_TOKEN_TABLE_V_15,
+            USER_PASSWORD_CREDENTIALS_V_0,
+            USER_PLAYLIST_TABLE_V_3,
+            USER_PLAYLIST_TRACKS_TABLE_V_3,
+            USER_ROLE_TABLE_V_4,
+            USER_EXTRA_PERMISSION_TABLE_V_4,
+            BANDWIDTH_USAGE_TABLE_V_5,
+            LISTENING_EVENTS_TABLE_V_6,
+            USER_SETTINGS_TABLE_V_7,
+            DEVICE_TABLE_V_8,
+            USER_EVENTS_TABLE_V_14,
+            USER_NOTIFICATIONS_TABLE_V_11,
+            DEVICE_SHARE_POLICY_TABLE_V_13,
+            DEVICE_SHARE_RULE_TABLE_V_13,
+            PUSH_REGISTRATIONS_TABLE_V_16,
+        ],
+        migration: Some(|conn: &Connection| {
+            PUSH_REGISTRATIONS_TABLE_V_16.create(conn)?;
+            Ok(())
+        }),
+    },
 ];
 
 /// A random A-z0-9 string
@@ -1199,6 +1259,8 @@ fn random_string(len: usize) -> String {
 #[derive(Clone)]
 pub struct SqliteUserStore {
     conn: Arc<Mutex<Connection>>,
+    /// Shared by clones so a listener set on one handle sees every append.
+    event_listener: Arc<std::sync::RwLock<Option<user_store::EventListener>>>,
 }
 
 impl SqliteUserStore {
@@ -1253,6 +1315,7 @@ impl SqliteUserStore {
 
         Ok(SqliteUserStore {
             conn: Arc::new(Mutex::new(conn)),
+            event_listener: Arc::new(std::sync::RwLock::new(None)),
         })
     }
 
@@ -1397,8 +1460,13 @@ impl SqliteUserStore {
         let tx = conn.transaction()?;
         let stored = Self::append_event_tx(&tx, user_id, event, None, 0)?;
         tx.commit()?;
+        drop(conn);
 
         record_db_query("append_event", start.elapsed());
+        let listener = self.event_listener.read().unwrap().clone();
+        if let Some(listener) = listener {
+            listener(user_id, &stored);
+        }
         Ok(stored)
     }
 
@@ -1511,3 +1579,4 @@ include!("sqlite_settings.rs");
 include!("sqlite_devices.rs");
 include!("sqlite_events.rs");
 include!("sqlite_notifications.rs");
+include!("sqlite_push.rs");

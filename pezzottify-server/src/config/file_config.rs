@@ -39,6 +39,22 @@ pub struct FileConfig {
     pub related_artists: Option<RelatedArtistsConfig>,
     pub audio_analysis: Option<AudioAnalysisConfig>,
     pub audio_embeddings: Option<AudioEmbeddingsConfig>,
+    pub push: Option<PushConfig>,
+}
+
+/// UnifiedPush / Web Push wake-ups. Push is enabled when this section exists.
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct PushConfig {
+    /// Defaults to true when the `[push]` section is present.
+    pub enabled: Option<bool>,
+    /// PEM P-256 private key used for VAPID. Defaults to
+    /// `<db_dir>/vapid_private_key.pem`, generated on first start.
+    pub vapid_private_key_file: Option<String>,
+    /// VAPID `sub` claim. Defaults to `mailto:pezzottify@localhost`.
+    pub vapid_subject: Option<String>,
+    /// Accept `http://` push endpoints. Local testing only.
+    pub allow_insecure_endpoints: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]

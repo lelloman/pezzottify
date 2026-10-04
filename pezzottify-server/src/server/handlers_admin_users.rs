@@ -1147,6 +1147,7 @@ impl ServerState {
             mcp_state,
             organic_indexer,
             download_manager: None, // Will be set by make_app if download manager is enabled
+            push: None,             // Will be set by make_app if push is configured
             media,
             ingestion_manager: None, // Will be set by make_app if ingestion is enabled
             enrichment_store,

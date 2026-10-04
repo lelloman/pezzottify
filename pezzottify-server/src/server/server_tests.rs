@@ -897,6 +897,8 @@ mod tests {
         }
     }
 
+    impl crate::user::PushRegistrationStore for InMemoryUserStore {}
+
     impl crate::user::UserEventStore for InMemoryUserStore {
         fn append_event(
             &self,

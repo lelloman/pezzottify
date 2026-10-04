@@ -10,6 +10,7 @@ mod ingestion_routes;
 pub mod lifecycle;
 pub mod metrics;
 mod password_work;
+mod push_routes;
 mod recommendations;
 mod report_admission;
 mod report_routes;

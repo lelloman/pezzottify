@@ -19,6 +19,9 @@ tracing-log = "0.2"
 mime_guess = "2"
 anyhow = "1.0.75"
 base64 = "0.22"
+# UnifiedPush/Web Push: RFC 8291 payload encryption and RFC 8292 VAPID signatures.
+web-push = { version = "0.11", default-features = false }
+p256 = { version = "0.13", features = ["ecdsa", "pem", "pkcs8"] }
 bytes = "1"
 libc = "0.2"
 ctrlc = "3.4"
@@ -77,6 +80,8 @@ log = "0.4"
 reqwest = { version = "0.12", features = ["json", "cookies"] }
 tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
 http = "1.0"
+# Decrypts Web Push payloads in push tests.
+ece = "2.4"
 
 [[bin]]
 name = "pezzottify-server"

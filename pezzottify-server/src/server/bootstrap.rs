@@ -202,6 +202,21 @@ async fn make_app_with_executor(
         })?;
     }
 
+    // UnifiedPush wake-ups (docs/unifiedpush.md)
+    if let Some(settings) = config.push.clone() {
+        match crate::push::PushService::start(settings, user_store.clone()) {
+            Ok(push) => {
+                if push.install_listener(user_store.as_ref()) {
+                    info!("UnifiedPush enabled");
+                } else {
+                    warn!("UnifiedPush enabled, but the user store cannot report new events");
+                }
+                state.push = Some(push);
+            }
+            Err(error) => error!("UnifiedPush disabled: {error:#}"),
+        }
+    }
+
     // Initialize download manager if enabled
     if config.download_manager.enabled {
         info!("Initializing download manager...");
@@ -389,6 +404,7 @@ pub async fn prepare_server(
     agent: crate::config::AgentSettings,
     ingestion: crate::config::IngestionSettings,
     audio_embeddings: Option<crate::config::AudioEmbeddingsSettings>,
+    push: Option<crate::config::PushSettings>,
     db_registry: Arc<crate::backup::DbRegistry>,
     enrichment_store: OptionalEnrichmentStore,
     db_executor: crate::db_executor::DbExecutor,
@@ -422,6 +438,7 @@ pub async fn prepare_server(
         agent,
         ingestion,
         audio_embeddings,
+        push,
     };
 
     let app = make_app_with_executor(

@@ -249,3 +249,17 @@ min_age_secs = 300
 interval_hours = 24
 # Number of days to retain audit log entries (default: 90)
 retention_days = 90
+
+# UnifiedPush (Web Push) wake-ups for Android devices; see docs/unifiedpush.md.
+# Omit the section to disable push: the /v1/push routes then answer 503.
+[push]
+# Set to false to keep the section but disable push (default: true)
+enabled = true
+# P-256 VAPID private key (SEC1 or PKCS#8 PEM). Generated on first start if missing.
+# Default: <db_dir>/vapid_private_key.pem. Keep it stable: changing it invalidates
+# every device registration.
+# vapid_private_key_file = "/data/db/vapid_private_key.pem"
+# Contact URI sent in the VAPID claims (default: "mailto:pezzottify@localhost")
+# vapid_subject = "mailto:admin@example.com"
+# Accept http:// endpoints, for local testing only (default: false)
+# allow_insecure_endpoints = false
