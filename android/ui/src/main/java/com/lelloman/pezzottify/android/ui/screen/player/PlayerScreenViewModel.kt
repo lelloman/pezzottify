@@ -59,7 +59,10 @@ class PlayerScreenViewModel @Inject constructor(
             interactor.getPlaybackState().collect { playbackState ->
                 val currentState = mutableState.value
                 mutableState.value = when (playbackState) {
-                    null, is Interactor.PlaybackState.Idle -> {
+                    // Metadata can disappear briefly between tracks or while the queue
+                    // reloads. Keep the content composed until the next track is ready.
+                    null -> currentState
+                    is Interactor.PlaybackState.Idle -> {
                         currentState.copy(isLoading = true)
                     }
                     is Interactor.PlaybackState.Loaded -> {

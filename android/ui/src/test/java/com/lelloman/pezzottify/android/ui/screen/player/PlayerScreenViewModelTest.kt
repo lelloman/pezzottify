@@ -223,6 +223,68 @@ class PlayerScreenViewModelTest {
     }
 
     @Test
+    fun `track transition preserves content until new metadata arrives`() = runTest {
+        createViewModel()
+        fakeInteractor.playbackStateFlow.value = createPlaybackState(
+            trackId = "track-1",
+            albumImageUrl = "http://cdn.com/first.jpg",
+            isPlaying = true,
+        )
+        advanceUntilIdle()
+        val previousState = viewModel.state.value
+
+        fakeInteractor.playbackStateFlow.value = null
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.isLoading).isFalse()
+        assertThat(viewModel.state.value).isEqualTo(previousState)
+
+        fakeInteractor.playbackStateFlow.value = createPlaybackState(
+            trackId = "track-2",
+            trackName = "Next Track",
+            albumId = "album-2",
+            albumName = "Next Album",
+            albumImageUrl = "http://cdn.com/second.jpg",
+            artists = listOf(ArtistInfo("artist-2", "Next Artist")),
+            trackDurationSec = 240,
+            isPlaying = true,
+        )
+        advanceUntilIdle()
+
+        with(viewModel.state.value) {
+            assertThat(isLoading).isFalse()
+            assertThat(trackId).isEqualTo("track-2")
+            assertThat(trackName).isEqualTo("Next Track")
+            assertThat(albumId).isEqualTo("album-2")
+            assertThat(albumName).isEqualTo("Next Album")
+            assertThat(albumImageUrl).isEqualTo("http://cdn.com/second.jpg")
+            assertThat(artists).containsExactly(ArtistInfo("artist-2", "Next Artist"))
+            assertThat(trackDurationSec).isEqualTo(240)
+        }
+    }
+
+    @Test
+    fun `missing initial metadata keeps loading`() = runTest {
+        createViewModel()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.isLoading).isTrue()
+        assertThat(viewModel.state.value.trackId).isEmpty()
+    }
+
+    @Test
+    fun `explicit idle after playback shows loading`() = runTest {
+        createViewModel()
+        fakeInteractor.playbackStateFlow.value = createPlaybackState(trackId = "track-1")
+        advanceUntilIdle()
+
+        fakeInteractor.playbackStateFlow.value = PlayerScreenViewModel.Interactor.PlaybackState.Idle
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.isLoading).isTrue()
+    }
+
+    @Test
     fun `idle playback state shows loading`() = runTest {
         createViewModel()
         advanceUntilIdle()
