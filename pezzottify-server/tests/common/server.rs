@@ -187,6 +187,9 @@ pub struct TestServer {
     #[allow(dead_code)]
     pub server_store: Arc<dyn ServerStore>,
 
+    #[allow(dead_code)]
+    pub catalog_store: Arc<SqliteCatalogStore>,
+
     // Private fields - keep resources alive until drop
     _temp_catalog_dir: TempDir,
     _temp_db_dir: TempDir,
@@ -366,6 +369,7 @@ impl TestServer {
                 (None, None, None, None)
             };
 
+        let catalog_store_for_test = catalog_store.clone();
         let app = make_app(
             config,
             catalog_store,
@@ -400,6 +404,7 @@ impl TestServer {
             port,
             user_store: user_store_for_test,
             server_store: server_store_for_test,
+            catalog_store: catalog_store_for_test,
             _temp_catalog_dir: temp_catalog_dir,
             _temp_db_dir: temp_db_dir,
             _shutdown_tx: Some(shutdown_tx),

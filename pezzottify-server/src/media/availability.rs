@@ -49,6 +49,16 @@ impl MediaCatalogView {
     }
 }
 impl CatalogStore for MediaCatalogView {
+    fn lyrics_candidates(&self, limit: usize, now: i64) -> Result<Vec<String>> {
+        self.inner.lyrics_candidates(limit, now)
+    }
+    fn get_track_lyrics(&self, id: &str) -> Result<Option<crate::lyrics::TrackLyrics>> {
+        self.inner.get_track_lyrics(id)
+    }
+    fn save_track_lyrics(&self, lyrics: &crate::lyrics::TrackLyrics) -> Result<()> {
+        self.inner.save_track_lyrics(lyrics)
+    }
+
     fn get_artist_json(&self, id: &str) -> Result<Option<serde_json::Value>> {
         self.inner.get_artist_json(id)
     }

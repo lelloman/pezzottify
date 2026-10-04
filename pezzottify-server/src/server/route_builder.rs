@@ -83,18 +83,23 @@ pub(super) fn content_read_routes(
         .merge(cacheable_catalog_routes)
         .merge(embeddings::read_routes())
         .merge(recommendation_routes())
+        .merge(crate::server::lyrics::read_routes())
         .layer(limits.content_read.layer())
         .with_state(state.clone());
 
     let search_routes = make_search_routes(state.clone()).layer(limits.search.layer());
 
-    let protected_content =
-        stream_routes
-            .merge(catalog_routes)
-            .route_layer(middleware::from_fn_with_state(
-                state.clone(),
-                require_access_catalog,
-            ));
+    let protected_content = stream_routes
+        .merge(catalog_routes)
+        .merge(
+            crate::server::lyrics::write_routes()
+                .layer(limits.write.layer())
+                .with_state(state.clone()),
+        )
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_access_catalog,
+        ));
 
     protected_content.merge(search_routes)
 }

@@ -1,4 +1,5 @@
 <template>
+  <LyricsDownloadNotice ref="lyricsNotice" />
   <ContextMenu ref="contextMenu" :items="visibleMenuItems" />
   <RadioBuilderModal
     v-if="entity"
@@ -15,6 +16,8 @@
 </template>
 
 <script setup>
+import LyricsDownloadNotice from "@/components/common/LyricsDownloadNotice.vue";
+import DownloadIcon from "@/components/icons/DownloadIcon.vue";
 // Right-click menu for albums and artists (tracks use TrackContextMenu).
 import { computed, markRaw, ref } from "vue";
 import { MAX_COMPONENTS } from "@/utils/gravity";
@@ -28,12 +31,19 @@ import { usePlaybackStore } from "@/store/playback";
 const playback = usePlaybackStore();
 
 const contextMenu = ref(null);
+const lyricsNotice = ref(null);
 // { entity_type: "album" | "artist", entity_id, label? }
 const entity = ref(null);
 const showRadioBuilder = ref(false);
 const showDestinationPrompt = ref(false);
 
 const menuItems = ref([
+  {
+    icon: markRaw(DownloadIcon),
+    name: "Download lyrics",
+    visible: () => entity.value?.entity_type === "album",
+    action: () => lyricsNotice.value.download("album", entity.value?.entity_id),
+  },
   {
     icon: markRaw(RadioIcon),
     name: "Listen to radio",

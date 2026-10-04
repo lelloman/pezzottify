@@ -93,6 +93,36 @@ impl SqliteCatalogStore {
 
 
 impl CatalogStore for SqliteCatalogStore {
+    fn lyrics_candidates(&self, limit: usize, now: i64) -> Result<Vec<String>> {
+        let read = self.get_read_conn();
+        let conn = read.lock().unwrap();
+        let mut stmt = conn.prepare_cached("SELECT t.id FROM tracks t
+            LEFT JOIN track_lyrics l ON l.track_id = t.id
+            WHERE t.track_available = 1 AND (l.track_id IS NULL OR
+                (l.status IN ('not_found', 'error') AND l.retry_at <= ?1))
+            ORDER BY t.popularity DESC, t.id ASC LIMIT ?2")?;
+        let result = stmt.query_map(params![now, limit as i64], |row| row.get(0))?
+            .collect::<rusqlite::Result<Vec<String>>>()?;
+        Ok(result)
+    }
+    fn get_track_lyrics(&self, id: &str) -> Result<Option<crate::lyrics::TrackLyrics>> {
+        let read = self.get_read_conn();
+        let conn = read.lock().unwrap();
+        let raw: Option<String> = conn.query_row(
+            "SELECT result_json FROM track_lyrics WHERE track_id = ?1", [id], |row| row.get(0)
+        ).optional()?;
+        raw.map(|raw| serde_json::from_str(&raw).map_err(Into::into)).transpose()
+    }
+    fn save_track_lyrics(&self, lyrics: &crate::lyrics::TrackLyrics) -> Result<()> {
+        self.write_conn.lock().unwrap().execute(
+            "INSERT INTO track_lyrics (track_id, status, result_json, retry_at) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(track_id) DO UPDATE SET status=excluded.status,
+             result_json=excluded.result_json, retry_at=excluded.retry_at",
+            params![lyrics.track_id, lyrics.status, serde_json::to_string(lyrics)?, lyrics.retry_at]
+        )?;
+        Ok(())
+    }
+
     fn get_artist_json(&self, id: &str) -> Result<Option<serde_json::Value>> {
         self.get_artist(id)
             .map(|opt| opt.map(|a| serde_json::to_value(a).unwrap()))

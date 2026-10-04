@@ -8,6 +8,7 @@ pub(crate) mod filesystem_work;
 mod http_layers;
 mod ingestion_routes;
 pub mod lifecycle;
+mod lyrics;
 pub mod metrics;
 mod password_work;
 mod push_routes;

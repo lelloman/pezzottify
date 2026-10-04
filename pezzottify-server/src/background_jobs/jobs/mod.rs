@@ -44,3 +44,6 @@ pub use proxy_retention::ProxyRetentionJob;
 pub use related_artists_enrichment::RelatedArtistsEnrichmentJob;
 pub use track_embedding_sync::TrackEmbeddingSyncJob;
 pub use whatsnew_batch::WhatsNewBatchJob;
+
+pub mod lyrics_download;
+pub use lyrics_download::LyricsDownloadJob;

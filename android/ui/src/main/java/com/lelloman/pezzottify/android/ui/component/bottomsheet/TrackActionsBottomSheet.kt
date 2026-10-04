@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
+import com.lelloman.pezzottify.android.ui.component.lyrics.lyricsDownloadAction
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +45,7 @@ fun TrackActionsBottomSheet(
     isLiked: Boolean? = null,
     onToggleLike: (() -> Unit)? = null,
 ) {
+    val downloadLyrics = lyricsDownloadAction("track", track.id)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -59,6 +61,12 @@ fun TrackActionsBottomSheet(
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 8.dp),
                 color = MaterialTheme.colorScheme.outlineVariant
+            )
+
+            ActionItem(
+                iconRes = R.drawable.baseline_music_note_24,
+                label = stringResource(R.string.download_lyrics),
+                onClick = { downloadLyrics(); onDismiss() },
             )
 
             // Actions

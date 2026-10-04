@@ -1073,3 +1073,36 @@ route templates plus one `<unmatched>` fallback, query strings and path paramete
 and non-standard HTTP methods share the `OTHER` label. Bandwidth metrics use the fixed endpoint
 categories and never expose user identifiers. Per-user bandwidth analytics remain in the
 access-controlled application database and admin APIs rather than Prometheus labels.
+
+### Lyrics downloads
+
+Lyrics are fetched from LRCLIB and stored per track in the catalog database. The
+`lyrics_download` background job runs daily, selecting up to
+`background_jobs.lyrics.batch_size` available tracks in descending catalog
+popularity (track ID breaks ties). The default batch is 100; set it to 0 to disable
+automatic acquisition. The job is also available in the background-job admin UI.
+
+Successful and instrumental results are reused. Missing lyrics become eligible
+again after 30 days, provider/network errors after one hour. A provider failure
+stops the current batch so an outage does not mark other tracks as missing. The
+fetcher checks the title, primary artist and recording duration before storing
+plain lyrics and/or synchronized LRC text.
+
+Authenticated users with catalog access can start an immediate download through
+**Download lyrics** in web track/album context menus and Android track/album
+menus. Album requests cover available tracks. These requests bypass the daily
+batch and negative-result cooldown, but reuse successful results. They run on the
+server after a `202 Accepted` response; acceptance does not mean lyrics exist.
+Concurrent requests share provider pacing and recheck the cache before fetching.
+Up to four user requests run at once; a busy server returns `429`. Requests are
+cancelled during server shutdown and can be submitted again after restart.
+
+- `POST /v1/content/lyrics/track/{id}/download`
+- `POST /v1/content/lyrics/album/{id}/download`
+- `GET /v1/content/track/{id}/lyrics`: stored result, or `null` if never fetched.
+
+The read response records `status` (`found`, `instrumental`, `not_found`, `error`),
+`provider`, `provider_id`, `plain_lyrics`, `synced_lyrics`, `fetched_at`, and
+`retry_at`. Download requests follow the usual write rate limit and CSRF checks.
+This adds acquisition and storage; a playback lyrics viewer can consume the read
+endpoint separately.

@@ -530,6 +530,11 @@ internal class RemoteApiClientImpl(
                 .returnFromRetrofitResponse()
         }
 
+    override suspend fun downloadLyrics(entityType: String, id: String): RemoteApiResponse<com.lelloman.pezzottify.android.domain.remoteapi.LyricsDownloadResponse> =
+        catchingNetworkError {
+            getRetrofit().downloadLyrics(authToken, entityType, id).returnFromRetrofitResponse()
+        }
+
     override suspend fun getContinuationRecommendations(
         request: com.lelloman.pezzottify.android.domain.remoteapi.ContinuationRequest,
     ): RemoteApiResponse<com.lelloman.pezzottify.android.domain.remoteapi.ContinuationResult> =

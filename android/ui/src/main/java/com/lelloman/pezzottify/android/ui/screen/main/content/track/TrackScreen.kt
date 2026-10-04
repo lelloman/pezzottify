@@ -24,6 +24,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import com.lelloman.pezzottify.android.ui.component.lyrics.lyricsDownloadAction
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -356,6 +357,12 @@ private fun TrackLoadedScreen(
             modifier = Modifier.align(Alignment.TopEnd)
                 .padding(top = statusBarHeight + 8.dp, end = 8.dp),
         ) { dismiss ->
+            val downloadLyrics = lyricsDownloadAction("track", track.id)
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.download_lyrics)) },
+                onClick = { dismiss(); downloadLyrics() },
+            )
+
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.play_single_track)) },
                 enabled = track.isPlayable,

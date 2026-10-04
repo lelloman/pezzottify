@@ -379,6 +379,14 @@ impl AppConfig {
         };
 
         let background_jobs = BackgroundJobsSettings {
+            lyrics: LyricsJobSettings {
+                batch_size: bg_jobs_file
+                    .lyrics
+                    .unwrap_or_default()
+                    .batch_size
+                    .unwrap_or(100)
+                    .min(10_000),
+            },
             popular_content,
             catalog_availability_stats,
             whatsnew_batch,
@@ -804,6 +812,7 @@ impl Default for DownloadManagerSettings {
 
 #[derive(Debug, Clone, Default)]
 pub struct BackgroundJobsSettings {
+    pub lyrics: LyricsJobSettings,
     pub popular_content: PopularContentJobSettings,
     pub catalog_availability_stats: CatalogAvailabilityStatsJobSettings,
     pub whatsnew_batch: IntervalJobSettings,
@@ -1859,5 +1868,16 @@ mod tests {
             config.download_queue_db_path(),
             temp_dir.path().join("download_queue.db")
         );
+    }
+}
+
+/// Daily lyrics batch; zero disables automatic fetching while preserving manual requests.
+#[derive(Debug, Clone)]
+pub struct LyricsJobSettings {
+    pub batch_size: usize,
+}
+impl Default for LyricsJobSettings {
+    fn default() -> Self {
+        Self { batch_size: 100 }
     }
 }

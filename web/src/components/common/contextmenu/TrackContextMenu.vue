@@ -1,4 +1,5 @@
 <template>
+  <LyricsDownloadNotice ref="lyricsNotice" />
   <ContextMenu ref="contextMenu" :items="visibleMenuItems" />
   <RadioBuilderModal
     :isOpen="showRadioBuilder"
@@ -14,6 +15,8 @@
 </template>
 
 <script setup>
+import LyricsDownloadNotice from "@/components/common/LyricsDownloadNotice.vue";
+import DownloadIcon from "@/components/icons/DownloadIcon.vue";
 import PlusIcon from "@/components/icons/PlusIcon.vue";
 import ContextMenu from "@/components/common/contextmenu/ContextMenu.vue";
 import { computed, ref, markRaw } from "vue";
@@ -44,6 +47,7 @@ const props = defineProps({
 });
 
 const contextMenu = ref(null);
+const lyricsNotice = ref(null);
 const userStore = useUserStore();
 const playback = usePlaybackStore();
 
@@ -76,6 +80,11 @@ const visibleMenuItems = computed(() =>
 );
 
 const menuItems = ref([
+  {
+    icon: markRaw(DownloadIcon),
+    name: "Download lyrics",
+    action: () => lyricsNotice.value.download("track", trackId.value),
+  },
   {
     icon: markRaw(PlusIcon),
     name: "Add to playlist",
