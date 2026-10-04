@@ -16,7 +16,9 @@ jobs:
   unit-tests:
     name: Build & Unit Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The complete Paravoid packaging step shrinks the payload with R8, which took the
+    # job past 30 minutes.
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: android
@@ -95,3 +97,4 @@ jobs:
             -PparavoidTrustPolicy="$RUNNER_TEMP/paravoid-keys/trust.json" \
             -PparavoidReleaseKey="$RUNNER_TEMP/paravoid-keys/release.der"
           python3 check-paravoid-complete.py
+          python3 check-paravoid-services.py app/build/outputs/paravoid/paravoidAndroidPhoneDebug
