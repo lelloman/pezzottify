@@ -123,8 +123,8 @@
         </span>
       </div>
       <div class="steeringGrid">
-        <GravityDestinationCard ref="destinationCard" :gravity="gravity" />
         <GravitySourceCard :gravity="gravity" :tracksIds="tracksIds" />
+        <GravityDestinationCard ref="destinationCard" :gravity="gravity" />
       </div>
       <GravityJourneyCard :gravity="gravity" />
     </template>
@@ -446,7 +446,7 @@ const openDestinationPicker = async () => {
 
 .steeringGrid {
   display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
   gap: 24px;
   align-items: start;
 }
