@@ -146,7 +146,7 @@ private fun PushNotificationsRowPreview() {
             state = PushState(
                 enabled = true,
                 status = PushStatus.Registered(ntfy),
-                distributors = listOf(ntfy, PushDistributor("com.lelloman.store", "LelloStore")),
+                distributors = listOf(ntfy, PushDistributor("org.unifiedpush.distributor.nextpush", "NextPush")),
             ),
             onEnabledChanged = {},
             onChooseDistributor = {},
