@@ -11,7 +11,7 @@ handler.
 The migration targets public `lelloman-simple-server =0.1.3` with `static-files`.
 The reviewed library implementation is `dbc7f68`; the full library checks pass
 625 test executions, strict Clippy and rustdoc, and its publication dry run passes.
-The canary is being tested with a command-line Cargo patch to the reviewed source;
+The canary was tested with a command-line Cargo patch to the reviewed source;
 no override is committed. Publication and registry lockfile verification must
 finish before integrating this branch into dev.
 
@@ -29,10 +29,25 @@ unsupported methods, protected API access and successful login. It passes agains
 both the prior implementation and the shared implementation. Baseline auth and
 permission suites pass 44 tests. All-target/all-feature checking passes.
 
-The first broad fast-feature unit run passed 1,170 tests with two ignored, but
-`test_failed_job_records_error` failed its 200 ms execution assumption while other
-builds/tests were running. An isolated retry passes. HTTP integration suites are
-still being completed; this record must be finalized before integration.
+Verification with the temporary source override:
 
-The migration worktree starts at dev `21641eec`. Concurrent unrelated changes in
-the original checkout, including test-fixture formatting, must be preserved.
+- Full fast-feature unit run: 1,170 passed, two ignored, one scheduler timing
+  failure (`test_failed_job_records_error`, 200 ms execution assumption). The
+  isolated retry passes; no scheduler implementation/test changes were made.
+- All 34 integration suites: 342 passed, 32 existing ignores. The first 11 suites
+  passed 145 tests before external removal of the build directory interrupted
+  execution. The remaining 23 suites were rebuilt in a separate temporary
+  directory and passed 197 tests on the combined CI-fix branch.
+- Combined branch frontend/auth/permissions retry: all 45 passed.
+- Combined branch formatting, strict production Clippy and locked all-target/
+  all-feature checking pass. Integration fixture dead-code warnings and the
+  existing num-bigint-dig future-compatibility warning remain.
+
+The registry package has not yet been published or consumed. This branch remains
+prepared, not integrated: the lockfile reflects the temporary source override.
+Release approval is required before generating and testing the final registry
+lockfile and rebasing dev onto this branch.
+
+The migration worktree started at dev `21641eec` and was refreshed onto the
+concurrent CI fix `bf9912ae` and Python E2E fix `dc803924`. Their changes are
+preserved. The original checkout remains on dev without this pending migration.
