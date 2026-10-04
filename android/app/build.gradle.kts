@@ -356,6 +356,13 @@ dependencies {
     kapt(libs.hilt.compiler)
 
     implementation(libs.androidx.work.runtime)
+    // The connector depends on the JVM `tink` artifact, which duplicates tink-android
+    // (already pulled in by encrypted preferences). Use tink-android at the version the
+    // connector needs instead.
+    implementation(libs.unifiedpush.connector) {
+        exclude(group = "com.google.crypto.tink", module = "tink")
+    }
+    implementation(libs.tink.android)
 
     implementation(libs.coil)
     implementation(libs.coil.network)

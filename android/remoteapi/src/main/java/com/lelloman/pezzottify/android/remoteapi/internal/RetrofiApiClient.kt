@@ -49,6 +49,7 @@ import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.HTTP
 import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.PUT
@@ -257,6 +258,23 @@ internal interface RetrofitApiClient {
         @Header("Authorization") authToken: String,
         @Query("since") since: Long,
     ): Response<CatalogSyncResponse>
+
+    @GET("/v1/push/vapid")
+    suspend fun getPushVapidKey(
+        @Header("Authorization") authToken: String,
+    ): Response<com.lelloman.pezzottify.android.remoteapi.internal.requests.PushVapidKeyResponse>
+
+    @PUT("/v1/push/registrations")
+    suspend fun putPushRegistration(
+        @Header("Authorization") authToken: String,
+        @Body request: com.lelloman.pezzottify.android.remoteapi.internal.requests.PushRegistrationRequest,
+    ): Response<Unit>
+
+    @HTTP(method = "DELETE", path = "/v1/push/registrations", hasBody = true)
+    suspend fun deletePushRegistration(
+        @Header("Authorization") authToken: String,
+        @Body request: com.lelloman.pezzottify.android.remoteapi.internal.requests.PushRegistrationDeleteRequest,
+    ): Response<Unit>
 
     @PUT("/v1/user/settings")
     suspend fun updateUserSettings(

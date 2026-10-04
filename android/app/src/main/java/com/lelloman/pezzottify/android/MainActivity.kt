@@ -45,6 +45,15 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var oidcCallbackHandler: OidcCallbackHandler
 
+    @Inject
+    lateinit var pushRegistration: com.lelloman.pezzottify.android.domain.push.PushRegistration
+
+    override fun onResume() {
+        super.onResume()
+        // Picks up distributor installs/removals and retries a failed registration.
+        pushRegistration.refresh()
+    }
+
     private val markAsReadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -31,4 +31,6 @@
         <item quantity="one">%d brano</item>
         <item quantity="other">%d brani</item>
     </plurals>
+    <string name="notification_channel_sync_name">Sincronizzazione</string>
+    <string name="notification_sync_title">Sincronizzazione in corso</string>
 </resources>

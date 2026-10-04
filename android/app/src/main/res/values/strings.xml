@@ -33,4 +33,6 @@
     </plurals>
 
     <!-- Local Player -->
+    <string name="notification_channel_sync_name">Sync</string>
+    <string name="notification_sync_title">Syncing</string>
 </resources>

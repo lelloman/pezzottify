@@ -207,6 +207,24 @@ interface RemoteApiClient {
     ): RemoteApiResponse<com.lelloman.pezzottify.android.domain.remoteapi.response.ConceptsResponse>
 
     /**
+     * UnifiedPush (docs/unifiedpush.md). The server's VAPID public key, base64url
+     * uncompressed P-256. A server with push disabled answers
+     * [RemoteApiResponse.Error.Unknown] with `httpStatus = 503`.
+     */
+    suspend fun getPushVapidKey(): RemoteApiResponse<String>
+
+    /** Upsert this device's UnifiedPush registration, keyed by [endpoint]. */
+    suspend fun putPushRegistration(
+        endpoint: String,
+        p256dh: String,
+        auth: String,
+        deviceId: String?,
+    ): RemoteApiResponse<Unit>
+
+    /** Remove a UnifiedPush registration owned by the current user. */
+    suspend fun deletePushRegistration(endpoint: String): RemoteApiResponse<Unit>
+
+    /**
      * Get devices registered for the current user.
      */
     suspend fun getDevices(): RemoteApiResponse<com.lelloman.pezzottify.android.domain.remoteapi.response.DevicesResponse>

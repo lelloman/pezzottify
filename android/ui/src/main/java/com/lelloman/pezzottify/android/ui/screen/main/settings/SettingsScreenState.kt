@@ -14,6 +14,7 @@ data class SettingsScreenState(
     val isCacheEnabled: Boolean = true,
     val storageInfo: StorageInfo? = null,
     val notifyWhatsNewEnabled: Boolean = false,
+    val pushState: com.lelloman.pezzottify.android.domain.push.PushState? = null,
     val smartContinuationEnabled: Boolean = false,
     val keepRadioOnQueueEdit: Boolean = true,
     val proxyModeEnabled: Boolean = true,

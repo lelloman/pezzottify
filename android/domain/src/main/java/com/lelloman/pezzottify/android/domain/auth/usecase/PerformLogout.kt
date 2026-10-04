@@ -36,6 +36,8 @@ class PerformLogout @Inject internal constructor(
     loggerFactory: LoggerFactory,
     private val assistantSessionCleaner: com.lelloman.pezzottify.android.domain.auth.AssistantSessionCleaner =
         com.lelloman.pezzottify.android.domain.auth.AssistantSessionCleaner {},
+    private val pushRegistration: com.lelloman.pezzottify.android.domain.push.PushRegistration =
+        com.lelloman.pezzottify.android.domain.push.NoPushRegistration,
 ) : UseCase() {
 
     private val logger: Logger by loggerFactory
@@ -59,6 +61,13 @@ class PerformLogout @Inject internal constructor(
         syncManager.cleanup()
         logger.debug("invoke() resetting catalog sync manager")
         catalogSyncManager.reset()
+        // Remove the push registration while the credential still authenticates the request.
+        logger.debug("invoke() unregistering push")
+        try {
+            pushRegistration.unregisterForLogout()
+        } catch (e: Exception) {
+            logger.error("invoke() push unregistration failed", e)
+        }
         logger.debug("invoke() calling remote logout")
         remoteApiClient.logout()
         // Keep the credential available until the server has received the logout request.
