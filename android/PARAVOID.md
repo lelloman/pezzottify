@@ -1,8 +1,9 @@
 # Paravoid Android integration
 
 The Android app uses the Paravoid source revision pinned in `../paravoid.rev`,
-not a published release. The current pin is `55f64af` (embedded-bootstrap
-update gating, policy schedules reaching existing installs, and dependency
+not a published release. The current pin is `170fac4` (automatic update checks
+scheduled at their persisted deadline, embedded-bootstrap update gating,
+policy schedules reaching existing installs, and dependency
 consumer rules for payload R8); no public Paravoid version has been released yet.
 It adds the `paravoidPackaging` dimension: `normal` and `paravoidAndroid`.
 Paravoid phone/debug and phone/paravoidTestRelease are enabled by default; the
