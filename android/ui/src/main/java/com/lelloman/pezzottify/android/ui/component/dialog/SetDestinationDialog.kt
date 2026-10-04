@@ -26,7 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.lelloman.pezzottify.android.ui.R
 
-const val DEFAULT_DESTINATION_STEPS = 20
+const val DEFAULT_DESTINATION_STEPS = 10
 private const val MAX_DESTINATION_STEPS = 500
 
 /** Asks over how many suggested tracks the queue should drift toward [label]. */

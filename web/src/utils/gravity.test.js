@@ -42,7 +42,7 @@ test("create returns the documented defaults and independent copies", () => {
     source: { kind: "queue" },
     auto_track_ids: [],
     destination: null,
-    steps_total: 20,
+    steps_total: 10,
     steps_done: 0,
     knobs: {
       recency_weight: null,

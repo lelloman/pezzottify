@@ -16,7 +16,7 @@ class GravityTest {
         assertThat(gravity.source).isEqualTo(GravitySource(kind = "queue"))
         assertThat(gravity.autoTrackIds).isEmpty()
         assertThat(gravity.destination).isNull()
-        assertThat(gravity.stepsTotal).isEqualTo(20)
+        assertThat(gravity.stepsTotal).isEqualTo(10)
         assertThat(gravity.stepsDone).isEqualTo(0)
         assertThat(gravity.knobs).isEqualTo(GravityKnobs())
         assertThat(gravity.knobs.recencyWeight).isNull()

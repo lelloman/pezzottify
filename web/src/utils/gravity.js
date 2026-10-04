@@ -7,7 +7,7 @@ export const AUTO_IDS_CAP = 1000;
 export const SOURCE_SAMPLE_CAP = 200;
 export const RECENT_COUNT = 5;
 export const LEGACY_CONTEXT_COUNT = 10;
-export const DEFAULT_STEPS_TOTAL = 20;
+export const DEFAULT_STEPS_TOTAL = 10;
 export const MAX_COMPONENTS = 8;
 export const GRAVITY_VERSION = 2;
 

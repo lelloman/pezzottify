@@ -346,7 +346,7 @@ class PlaybackSessionHandlerTest {
         val context = payload["context"] as Map<String, Any?>
         val gravity = context["gravity"] as JsonObject
         assertThat(gravity["auto_track_ids"].toString()).isEqualTo("[\"track-3\"]")
-        assertThat(gravity["steps_total"].toString()).isEqualTo("20")
+        assertThat(gravity["steps_total"].toString()).isEqualTo("10")
     }
 
     @Test

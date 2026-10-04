@@ -164,7 +164,7 @@ data class Gravity(
         const val MAX_COMPONENTS = 8
         const val MIN_COMPONENT_WEIGHT = 0.05
         const val MAX_COMPONENT_WEIGHT = 4.0
-        const val DEFAULT_STEPS_TOTAL = 20
+        const val DEFAULT_STEPS_TOTAL = 10
         const val AUTO_IDS_CAP = 1000
         const val SOURCE_SAMPLE_CAP = 200
         const val RECENT_COUNT = 5
