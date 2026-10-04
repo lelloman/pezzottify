@@ -33,6 +33,8 @@
     </plurals>
 
     <!-- Local Player -->
+    <string name="notification_channel_push_tests_name">Test notifications</string>
+    <string name="notification_channel_push_tests_description">Test notifications sent by a server administrator</string>
     <string name="notification_channel_sync_name">Sync</string>
     <string name="notification_sync_title">Syncing</string>
 </resources>

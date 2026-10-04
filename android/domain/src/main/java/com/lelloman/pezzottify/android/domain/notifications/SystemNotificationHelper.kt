@@ -47,4 +47,10 @@ interface SystemNotificationHelper {
      * @param notificationIds The internal notification IDs associated with these downloads
      */
     fun showDownloadsCompletedNotification(downloads: List<DownloadCompletedData>, notificationIds: List<String>)
+
+    /**
+     * Show a test notification sent by a server administrator over push
+     * (docs/unifiedpush.md, "Test notifications").
+     */
+    fun showTestPushNotification(title: String, body: String)
 }

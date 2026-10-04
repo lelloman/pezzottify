@@ -217,6 +217,17 @@ pub struct PushRegistration {
     pub first_failure_at: Option<i64>,
 }
 
+/// A push registration with its owner and device, for the admin listing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PushRegistrationOverview {
+    pub registration: PushRegistration,
+    pub user_handle: Option<String>,
+    /// Row id of the registering device, when it is still known.
+    pub device_row_id: Option<usize>,
+    pub device_name: Option<String>,
+    pub device_type: Option<String>,
+}
+
 /// Outcome of recording a delivery attempt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PushDeliveryRecord {

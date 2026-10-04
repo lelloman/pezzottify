@@ -134,6 +134,11 @@ const router = createRouter({
           name: "admin-ingestion",
           meta: { requiresAuth: true, section: "ingestion" },
         },
+        {
+          path: "push",
+          name: "admin-push",
+          meta: { requiresAuth: true, section: "push" },
+        },
       ],
     },
 

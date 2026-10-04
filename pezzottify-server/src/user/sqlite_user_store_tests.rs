@@ -3414,6 +3414,36 @@ mod tests {
     }
 
     #[test]
+    fn all_push_registrations_list_owner_and_device() {
+        use crate::user::device::{DeviceRegistration, DeviceType};
+        use crate::user::user_store::{DeviceStore, PushRegistrationStore};
+        let (store, _dir) = create_tmp_store();
+        let alice = store.create_user("alice").unwrap();
+        let bob = store.create_user("bob").unwrap();
+        let device = store
+            .register_or_update_device(&DeviceRegistration {
+                device_uuid: "uuid-phone".into(),
+                device_type: DeviceType::Android,
+                device_name: Some("Pixel".into()),
+                os_info: None,
+            })
+            .unwrap();
+        store.upsert_push_registration(alice, "https://push.example/a", "k", "a", Some("uuid-phone")).unwrap();
+        store.upsert_push_registration(bob, "https://push.example/b", "k", "a", Some("unknown")).unwrap();
+
+        let all = store.list_all_push_registrations().unwrap();
+        assert_eq!(all.len(), 2);
+        let phone = all.iter().find(|o| o.registration.user_id == alice).unwrap();
+        assert_eq!(phone.user_handle.as_deref(), Some("alice"));
+        assert_eq!(phone.device_row_id, Some(device));
+        assert_eq!(phone.device_name.as_deref(), Some("Pixel"));
+        assert_eq!(phone.device_type.as_deref(), Some("android"));
+        let other = all.iter().find(|o| o.registration.user_id == bob).unwrap();
+        assert_eq!(other.user_handle.as_deref(), Some("bob"));
+        assert_eq!((other.device_row_id, other.device_name.as_deref()), (None, None));
+    }
+
+    #[test]
     fn push_delivery_failures_expire_registrations() {
         use crate::user::user_store::PushRegistrationStore;
         use crate::user::PushDeliveryRecord;

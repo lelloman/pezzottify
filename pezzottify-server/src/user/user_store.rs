@@ -520,6 +520,11 @@ pub trait PushRegistrationStore: Send + Sync {
         Ok(Vec::new())
     }
 
+    /// Every registration with its owner and device, newest first (admin view).
+    fn list_all_push_registrations(&self) -> Result<Vec<super::PushRegistrationOverview>> {
+        Ok(Vec::new())
+    }
+
     /// Remove `endpoint` regardless of owner (the push service reported it gone).
     fn remove_push_endpoint(&self, endpoint: &str) -> Result<bool> {
         let _ = endpoint;

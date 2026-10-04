@@ -7,14 +7,16 @@ mod dispatcher;
 mod sender;
 mod vapid;
 
+pub use dispatcher::endpoint_host;
 pub use sender::{
-    validate_endpoint, validate_keys, DeliveryOutcome, RegistrationError, WakeupOptions,
+    validate_endpoint, validate_keys, DeliveryOutcome, PushUrgency, RegistrationError,
+    WakeupOptions,
 };
 pub use vapid::VapidKeys;
 
 use crate::config::PushSettings;
 use crate::server::websocket::connection::ConnectionManager;
-use crate::user::{FullUserStore, UserEvent};
+use crate::user::{FullUserStore, PushRegistration, UserEvent};
 use anyhow::Result;
 use std::sync::Arc;
 use std::time::Duration;
@@ -51,6 +53,7 @@ pub fn wakes_devices(event: &UserEvent) -> bool {
 pub struct PushService {
     settings: PushSettings,
     vapid: VapidKeys,
+    delivery: Arc<dispatcher::Delivery>,
     requests: mpsc::UnboundedSender<(usize, i64, WakeKind)>,
 }
 
@@ -78,10 +81,11 @@ impl PushService {
             subject: settings.vapid_subject.clone(),
             connections,
         });
-        tokio::spawn(dispatcher::run(receiver, delivery));
+        tokio::spawn(dispatcher::run(receiver, delivery.clone()));
         Ok(Arc::new(Self {
             settings,
             vapid,
+            delivery,
             requests,
         }))
     }
@@ -102,11 +106,65 @@ impl PushService {
         }))
     }
 
+    /// Send an admin test notification straight to one registration, bypassing
+    /// coalescing and the WebSocket check, and record the outcome like a wake-up.
+    pub async fn send_test(
+        &self,
+        registration: &PushRegistration,
+        title: &str,
+        body: &str,
+    ) -> DeliveryOutcome {
+        let payload = test_payload(title, body, chrono::Utc::now().timestamp());
+        let outcome = sender::send_wakeup(
+            &self.delivery.client,
+            &self.delivery.vapid,
+            &self.delivery.subject,
+            sender::PushTarget {
+                endpoint: &registration.endpoint,
+                p256dh: &registration.p256dh,
+                auth: &registration.auth,
+            },
+            payload.as_bytes(),
+            WakeupOptions::TEST,
+        )
+        .await;
+        dispatcher::record_outcome(
+            &self.delivery,
+            registration.user_id,
+            &registration.endpoint,
+            &outcome,
+            "admin test",
+        )
+        .await;
+        outcome
+    }
+
     pub fn public_key(&self) -> &str {
         self.vapid.public_key()
     }
 
     pub fn settings(&self) -> &PushSettings {
         &self.settings
+    }
+}
+
+/// Body of an admin test notification. See docs/unifiedpush.md.
+fn test_payload(title: &str, body: &str, sent_at: i64) -> String {
+    serde_json::json!({ "type": "test", "title": title, "body": body, "sent_at": sent_at })
+        .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_payload_shape() {
+        let payload: serde_json::Value =
+            serde_json::from_str(&test_payload("Hi", "There", 7)).unwrap();
+        assert_eq!(
+            payload,
+            serde_json::json!({"type": "test", "title": "Hi", "body": "There", "sent_at": 7})
+        );
     }
 }

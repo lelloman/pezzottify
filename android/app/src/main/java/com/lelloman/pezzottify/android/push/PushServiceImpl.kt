@@ -6,8 +6,9 @@ import org.unifiedpush.android.connector.data.PushEndpoint
 import org.unifiedpush.android.connector.data.PushMessage
 
 /**
- * Receives UnifiedPush events from the distributor. Messages carry no user content: any
- * message just wakes the app to run its sync catch-up (docs/unifiedpush.md).
+ * Receives UnifiedPush events from the distributor. Messages carry no user content: they
+ * wake the app to run its sync catch-up, except admin test notifications, which are shown
+ * (docs/unifiedpush.md).
  */
 class PushServiceImpl : PushService() {
 
@@ -18,7 +19,7 @@ class PushServiceImpl : PushService() {
     }
 
     override fun onMessage(message: PushMessage, instance: String) {
-        registration.onMessage()
+        registration.onMessage(message.content)
     }
 
     override fun onRegistrationFailed(reason: FailedReason, instance: String) {

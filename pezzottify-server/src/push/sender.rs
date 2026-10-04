@@ -17,20 +17,34 @@ pub const PUSH_TTL_SECS: u32 = 86_400;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WakeupOptions {
     pub ttl_secs: u32,
-    pub low_urgency: bool,
+    pub urgency: PushUrgency,
     pub topic: Option<&'static str>,
+}
+
+/// RFC 8030 5.3 urgency of a push message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PushUrgency {
+    Low,
+    Normal,
+    High,
 }
 
 impl WakeupOptions {
     pub const NOTIFICATION: Self = Self {
         ttl_secs: PUSH_TTL_SECS,
-        low_urgency: false,
+        urgency: PushUrgency::Normal,
         topic: None,
     };
     pub const SYNC: Self = Self {
         ttl_secs: 3_600,
-        low_urgency: true,
+        urgency: PushUrgency::Low,
         topic: Some("sync"),
+    };
+    /// Admin test notifications: delivered now or not at all.
+    pub const TEST: Self = Self {
+        ttl_secs: 300,
+        urgency: PushUrgency::High,
+        topic: None,
     };
 }
 
@@ -128,10 +142,10 @@ pub async fn send_wakeup(
         let mut builder = WebPushMessageBuilder::new(&subscription);
         builder.set_payload(ContentEncoding::Aes128Gcm, payload);
         builder.set_ttl(options.ttl_secs);
-        builder.set_urgency(if options.low_urgency {
-            Urgency::Low
-        } else {
-            Urgency::Normal
+        builder.set_urgency(match options.urgency {
+            PushUrgency::Low => Urgency::Low,
+            PushUrgency::Normal => Urgency::Normal,
+            PushUrgency::High => Urgency::High,
         });
         builder.set_vapid_signature(signature.build()?);
         builder.build()
