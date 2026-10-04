@@ -17,6 +17,10 @@ interface SettingsScreenActions {
 
     fun setNotifyWhatsNewEnabled(enabled: Boolean)
 
+    fun setPushEnabled(enabled: Boolean) {}
+
+    fun choosePushDistributor(packageName: String) {}
+
     fun setSmartContinuationEnabled(enabled: Boolean)
     fun setKeepRadioOnQueueEdit(enabled: Boolean)
 

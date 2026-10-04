@@ -168,6 +168,14 @@ private fun SettingsScreenInternal(
                 onEnabledChanged = actions::setNotifyWhatsNewEnabled
             )
 
+            currentState.pushState?.let { pushState ->
+                PushNotificationsRow(
+                    state = pushState,
+                    onEnabledChanged = actions::setPushEnabled,
+                    onChooseDistributor = actions::choosePushDistributor,
+                )
+            }
+
             HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
 
             PlaybackSettingsSection(

@@ -677,4 +677,15 @@
     <string name="app_updates">Aggiornamenti app</string>
     <string name="app_updates_description">Cerca e installa gli aggiornamenti</string>
     <string name="app_updates_description_with_version">Versione %1$s · Cerca e installa gli aggiornamenti</string>
+    <string name="push_notifications">Notifiche push</string>
+    <string name="push_choose_app">Scegli l\'app push</string>
+    <string name="push_status_logged_out">Accedi per ricevere le notifiche push</string>
+    <string name="push_status_off">Disattivate. Le notifiche arrivano con la sincronizzazione in background</string>
+    <string name="push_status_no_distributor">Nessuna app UnifiedPush installata. Le notifiche arrivano con la sincronizzazione in background</string>
+    <string name="push_status_choose">Sono installate più app push. Scegline una</string>
+    <string name="push_status_server_unsupported">Non abilitate sul server. Le notifiche arrivano con la sincronizzazione in background</string>
+    <string name="push_status_registering">Connessione a %1$s…</string>
+    <string name="push_status_registered">Tramite %1$s</string>
+    <string name="push_status_failed_with">Registrazione con %1$s non riuscita. Le notifiche arrivano con la sincronizzazione in background</string>
+    <string name="push_status_failed">Registrazione non riuscita. Le notifiche arrivano con la sincronizzazione in background</string>
 </resources>

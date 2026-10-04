@@ -87,6 +87,11 @@ class SettingsScreenViewModel @Inject constructor(
                 }
             }
             launch {
+                interactor.observePushState().collect { pushState ->
+                    mutableState.update { it.copy(pushState = pushState) }
+                }
+            }
+            launch {
                 interactor.observeKeepRadioOnQueueEdit().collect { enabled ->
                     mutableState.update { it.copy(keepRadioOnQueueEdit = enabled) }
                 }
@@ -177,6 +182,14 @@ class SettingsScreenViewModel @Inject constructor(
         viewModelScope.launch {
             interactor.setCacheEnabled(enabled)
         }
+    }
+
+    override fun setPushEnabled(enabled: Boolean) {
+        interactor.setPushEnabled(enabled)
+    }
+
+    override fun choosePushDistributor(packageName: String) {
+        interactor.choosePushDistributor(packageName)
     }
 
     override fun setNotifyWhatsNewEnabled(enabled: Boolean) {
@@ -355,6 +368,11 @@ class SettingsScreenViewModel @Inject constructor(
         fun getBaseUrl(): String
         suspend fun setBaseUrl(url: String): SetBaseUrlResult
         fun observeCanReportBug(): kotlinx.coroutines.flow.Flow<Boolean>
+        // UnifiedPush wake-ups (docs/unifiedpush.md)
+        fun observePushState(): kotlinx.coroutines.flow.Flow<com.lelloman.pezzottify.android.domain.push.PushState> =
+            kotlinx.coroutines.flow.emptyFlow()
+        fun setPushEnabled(enabled: Boolean) {}
+        fun choosePushDistributor(packageName: String) {}
         // Cache management
         suspend fun getCacheStats(): CacheStats
         suspend fun trimStaticsCache()

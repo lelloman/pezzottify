@@ -255,6 +255,29 @@ class SettingsScreenViewModelTest {
         assertThat(viewModel.state.value.storageInfo).isEqualTo(storageInfo)
     }
 
+    @Test
+    fun `push state follows the registration and actions are forwarded`() = runTest {
+        createViewModel()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.pushState?.status)
+            .isEqualTo(com.lelloman.pezzottify.android.domain.push.PushStatus.NoDistributor)
+
+        val ntfy = com.lelloman.pezzottify.android.domain.push.PushDistributor("io.heckel.ntfy", "ntfy")
+        fakeInteractor.pushStateFlow.value = com.lelloman.pezzottify.android.domain.push.PushState(
+            enabled = true,
+            status = com.lelloman.pezzottify.android.domain.push.PushStatus.Registered(ntfy),
+            distributors = listOf(ntfy),
+        )
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.pushState?.status)
+            .isEqualTo(com.lelloman.pezzottify.android.domain.push.PushStatus.Registered(ntfy))
+
+        viewModel.setPushEnabled(false)
+        viewModel.choosePushDistributor("io.heckel.ntfy")
+        assertThat(fakeInteractor.pushEnabledCalls).containsExactly(false)
+        assertThat(fakeInteractor.chosenDistributors).containsExactly("io.heckel.ntfy")
+    }
+
     private class FakeInteractor : SettingsScreenViewModel.Interactor {
         private var _themeMode = ThemeMode.Default
         private var _colorPalette = ColorPalette.Default
@@ -266,6 +289,19 @@ class SettingsScreenViewModelTest {
         private var _logFilesSize = ""
         private var _baseUrl = ""
         private var _smartContinuationEnabled = false
+
+        val pushStateFlow = MutableStateFlow(
+            com.lelloman.pezzottify.android.domain.push.PushState(
+                enabled = true,
+                status = com.lelloman.pezzottify.android.domain.push.PushStatus.NoDistributor,
+                distributors = emptyList(),
+            )
+        )
+        val pushEnabledCalls = mutableListOf<Boolean>()
+        val chosenDistributors = mutableListOf<String>()
+        override fun observePushState() = pushStateFlow
+        override fun setPushEnabled(enabled: Boolean) { pushEnabledCalls += enabled }
+        override fun choosePushDistributor(packageName: String) { chosenDistributors += packageName }
 
         val themeModeFlow = MutableStateFlow(ThemeMode.Default)
         val colorPaletteFlow = MutableStateFlow(ColorPalette.Default)

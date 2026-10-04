@@ -27,3 +27,10 @@
 -keep class com.fasterxml.jackson.dataformat.yaml.YAMLFactory { <init>(); }
 -keep class com.fasterxml.jackson.dataformat.yaml.YAMLMapper { <init>(); }
 -keep class com.fasterxml.jackson.databind.ObjectMapper { <init>(); }
+
+# UnifiedPush connector -> tink-android: Tink's shaded protobuf reads message fields by
+# reflection. tink-android ships this rule in META-INF/proguard; kept here explicitly too
+# so a missed consumer rule cannot break Web Push decryption in the shrunk payload.
+-keepclassmembers class * extends com.google.crypto.tink.shaded.protobuf.GeneratedMessageLite {
+  <fields>;
+}

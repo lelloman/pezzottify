@@ -504,7 +504,15 @@ class InteractorsModule {
         configStore: ConfigStore,
         permissionsStore: PermissionsStore,
         cacheManager: com.lelloman.pezzottify.android.domain.cache.CacheManager,
+        pushRegistration: com.lelloman.pezzottify.android.domain.push.PushRegistration,
     ): SettingsScreenViewModel.Interactor = object : SettingsScreenViewModel.Interactor {
+        override fun observePushState() = pushRegistration.state
+
+        override fun setPushEnabled(enabled: Boolean) = pushRegistration.setEnabled(enabled)
+
+        override fun choosePushDistributor(packageName: String) =
+            pushRegistration.chooseDistributor(packageName)
+
         override fun getThemeMode(): UiThemeMode = userSettingsStore.themeMode.value.toThemeMode()
 
         override fun getColorPalette(): UiColorPalette = userSettingsStore.colorPalette.value.toColorPalette()

@@ -473,6 +473,53 @@ internal class RemoteApiClientImpl(
                 .returnFromRetrofitResponse()
         }
 
+    // UnifiedPush: 503 means push is disabled on the server; keep the status so callers
+    // can tell it apart from transient failures.
+    private fun <T> Response<T>.pushResponse(): RemoteApiResponse<T> =
+        if (code() == 503) {
+            RemoteApiResponse.Error.Unknown("Push disabled on server", httpStatus = 503)
+        } else {
+            returnFromRetrofitResponse()
+        }
+
+    override suspend fun getPushVapidKey(): RemoteApiResponse<String> = catchingNetworkError {
+        when (val response = getRetrofit().getPushVapidKey(authToken).pushResponse()) {
+            is RemoteApiResponse.Success -> RemoteApiResponse.Success(response.data.publicKey)
+            is RemoteApiResponse.Error -> response
+        }
+    }
+
+    override suspend fun putPushRegistration(
+        endpoint: String,
+        p256dh: String,
+        auth: String,
+        deviceId: String?,
+    ): RemoteApiResponse<Unit> = catchingNetworkError {
+        getRetrofit()
+            .putPushRegistration(
+                authToken,
+                com.lelloman.pezzottify.android.remoteapi.internal.requests.PushRegistrationRequest(
+                    endpoint = endpoint,
+                    p256dh = p256dh,
+                    auth = auth,
+                    deviceId = deviceId,
+                ),
+            )
+            .pushResponse()
+    }
+
+    override suspend fun deletePushRegistration(endpoint: String): RemoteApiResponse<Unit> =
+        catchingNetworkError {
+            getRetrofit()
+                .deletePushRegistration(
+                    authToken,
+                    com.lelloman.pezzottify.android.remoteapi.internal.requests.PushRegistrationDeleteRequest(
+                        endpoint
+                    ),
+                )
+                .pushResponse()
+        }
+
     override suspend fun updateUserSettings(settings: List<UserSetting>): RemoteApiResponse<Unit> =
         catchingNetworkError {
             getRetrofit()
