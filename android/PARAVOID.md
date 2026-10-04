@@ -1,7 +1,8 @@
 # Paravoid Android integration
 
 The Android app uses the Paravoid source revision pinned in `../paravoid.rev`,
-not a published release. The current pin is `1fee1e8` (retrying transient update
+not a published release. The current pin is `32461c8` (recovering exhausted
+contention retries on fresh trusted local hints with rate limiting, retrying transient update
 contention, recovering saved unavailable errors and resetting stale contention
 state when the installed update scope changes, automatic update checks
 scheduled at their persisted deadline, embedded-bootstrap update gating,
