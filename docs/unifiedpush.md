@@ -3,8 +3,7 @@
 Pezzottify supports [UnifiedPush](https://unifiedpush.org) so the server can wake the
 Android app when something notification-worthy happens, instead of waiting for the
 next periodic background sync. Any UnifiedPush distributor works (ntfy, NextPush,
-LelloStore once it implements the distributor protocol). Pezzottify has no code
-specific to a distributor.
+...). Pezzottify has no code specific to a distributor.
 
 ## Design: a push is a wake-up, not the notification
 
