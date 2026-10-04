@@ -8,12 +8,13 @@ and unsupported methods return 405. API route registration and middleware order
 are unchanged. An absent frontend configuration still uses the existing home
 handler.
 
-The migration targets public `lelloman-simple-server =0.1.3` with `static-files`.
+The migration consumes public `lelloman-simple-server =0.1.3` with `static-files`.
 The reviewed library implementation is `dbc7f68`; the full library checks pass
 625 test executions, strict Clippy and rustdoc, and its publication dry run passes.
-The canary was tested with a command-line Cargo patch to the reviewed source;
-no override is committed. Publication and registry lockfile verification must
-finish before integrating this branch into dev.
+The initial canary was tested with a command-line Cargo patch to the reviewed
+source. Version 0.1.3 is now published on crates.io; final verification uses the
+registry package without an override. The committed lockfile records its public
+source and SHA256 `0c3c1347b1c85484b5d4ba18cd6d886688b8a1dc2d94d84bc596a6abec128ddb`.
 
 Direct runtime dependencies on `hyper`, `tower-http` and `tower` are removed.
 Tower is a dev dependency for existing ServiceExt tests. Axum was already absent
@@ -43,11 +44,17 @@ Verification with the temporary source override:
   all-feature checking pass. Integration fixture dead-code warnings and the
   existing num-bigint-dig future-compatibility warning remain.
 
-The registry package has not yet been published or consumed. This branch remains
-prepared, not integrated: the lockfile reflects the temporary source override.
-Release approval is required before generating and testing the final registry
-lockfile and rebasing dev onto this branch.
+Registry verification after publication:
 
-The migration worktree started at dev `21641eec` and was refreshed onto the
-concurrent CI fix `bf9912ae` and Python E2E fix `dc803924`. Their changes are
-preserved. The original checkout remains on dev without this pending migration.
+- 45 frontend/auth/permission tests pass with `--locked`, without a Cargo patch.
+- Formatting, strict production Clippy and locked all-target/all-feature checks
+  pass on the committed migration source.
+- Public archive checksum and embedded source commit independently match the
+  reviewed release. Direct runtime Axum/Hyper/Tower HTTP dependencies are absent;
+  Tower remains dev-only for test utilities.
+
+The migration worktree started at dev `21641eec` and retained subsequent CI and
+Python E2E fixes. Its final base is `9f644b79`, including the async-trait update
+and Android CI changes. Integration rebases dev onto the committed worktree
+branch and preserves unrelated active Push edits. The temporary worktree and
+branch are removed after ancestry/tree verification.
