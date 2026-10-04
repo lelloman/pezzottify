@@ -72,9 +72,15 @@
           @keydown.esc="clear"
         />
       </label>
-      <p v-if="isLoading" class="pickerHint">Searching…</p>
+      <p v-if="tooShort" class="pickerHint">Type at least 2 characters</p>
+      <p v-else-if="isLoading && !results.length" class="pickerHint">
+        Searching…
+      </p>
       <p v-else-if="error" class="pickerHint" role="alert">{{ error }}</p>
-      <p v-else-if="query.trim() && !results.length" class="pickerHint">
+      <p
+        v-else-if="searched && !isLoading && !results.length"
+        class="pickerHint"
+      >
         No artists, albums or tracks found.
       </p>
       <ul v-if="results.length" class="pickerResults">
@@ -102,8 +108,13 @@
 
 <script setup>
 import { computed, onUnmounted, ref, watch } from "vue";
-import axios from "axios";
 import { debounce } from "lodash-es";
+import { streamingSearch } from "@/services/streamingSearch";
+import {
+  canSearch,
+  sectionsToReferences,
+  SEARCH_DEBOUNCE_MS,
+} from "@/utils/steeringSearch";
 import { useRemoteStore } from "@/store/remote";
 import { groupConcepts, matchesConceptQuery } from "@/utils/concepts";
 import { tileColor } from "@/utils/steeringArt";
@@ -176,71 +187,73 @@ const selectConcept = (concept) => {
   });
 };
 
-const SEARCH_LIMIT = 12;
-const TYPES = { Artist: "artist", Album: "album", Track: "track" };
-
 const query = ref("");
 const results = ref([]);
 const isLoading = ref(false);
+const searched = ref(false);
 const error = ref("");
-let abortController = null;
+const tooShort = computed(() => {
+  const trimmed = query.value.trim();
+  return trimmed.length > 0 && !canSearch(trimmed);
+});
 
-const artistNames = (result) =>
-  (result.artists_ids_names || [])
-    .map((entry) => (Array.isArray(entry) ? entry[1] : entry?.name))
-    .filter(Boolean)
-    .join(", ");
-
-// Only artists, albums and tracks can be steering references.
-const toReference = (result) => {
-  const entityType = TYPES[result.type];
-  if (!entityType || !result.id) return null;
-  return {
-    entity_type: entityType,
-    entity_id: result.id,
-    label: result.name || result.id,
-    detail: entityType === "artist" ? "" : artistNames(result),
-  };
+// Abort function of the running stream. Closing it drops the connection, so the
+// server stops streaming sections for a query nobody will read.
+let abortStream = null;
+const stopStream = () => {
+  abortStream?.();
+  abortStream = null;
 };
 
-const search = debounce(async (text) => {
-  abortController?.abort();
-  abortController = new AbortController();
+// Same streaming search as the main search screen; references update as each
+// section arrives, primary match first.
+const search = debounce((text) => {
+  stopStream();
+  const sections = [];
   isLoading.value = true;
+  searched.value = false;
   error.value = "";
-  try {
-    const response = await axios.post(
-      "/v1/content/search",
-      {
-        query: text,
-        resolve: true,
-        limit: SEARCH_LIMIT,
-        search_mode: "expanded",
-      },
-      { signal: abortController.signal, timeout: 20000 },
-    );
-    const payload = Array.isArray(response.data) ? response.data : [];
-    results.value = payload.map(toReference).filter(Boolean);
-  } catch (err) {
-    if (axios.isCancel?.(err) || err?.name === "CanceledError") return;
-    console.error("Steering reference search failed:", err);
-    error.value = "Search failed. Try again.";
-    results.value = [];
-  } finally {
-    isLoading.value = false;
-  }
-}, 350);
+  results.value = [];
+  let abort = null;
+  const isCurrent = () => abortStream === abort;
+  abort = streamingSearch(
+    text,
+    (section) => {
+      if (!isCurrent()) return;
+      sections.push(section);
+      results.value = sectionsToReferences(sections);
+    },
+    (err) => {
+      if (!isCurrent()) return;
+      console.error("Steering reference search failed:", err);
+      error.value = "Search failed. Try again.";
+      results.value = [];
+      isLoading.value = false;
+      searched.value = true;
+      abortStream = null;
+    },
+    () => {
+      if (!isCurrent()) return;
+      isLoading.value = false;
+      searched.value = true;
+      abortStream = null;
+    },
+  );
+  abortStream = abort;
+}, SEARCH_DEBOUNCE_MS);
 
 watch(query, (text) => {
   const trimmed = text.trim();
-  if (!trimmed) {
-    search.cancel();
-    abortController?.abort();
+  search.cancel();
+  stopStream();
+  error.value = "";
+  if (!canSearch(trimmed)) {
     results.value = [];
     isLoading.value = false;
-    error.value = "";
+    searched.value = false;
     return;
   }
+  isLoading.value = true;
   search(trimmed);
 });
 
@@ -259,7 +272,7 @@ const select = (result) => {
 
 onUnmounted(() => {
   search.cancel();
-  abortController?.abort();
+  stopStream();
 });
 </script>
 
