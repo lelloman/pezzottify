@@ -309,18 +309,22 @@ test("smart continuation anchors on user-chosen tracks and excludes its own sugg
   const { store, smartRequests, storage } = harness();
   store.setPlaylistFromTrackIds(["u0", "u1", "u2"], 2);
   await flush();
-  assert.ok(smartRequests.length >= 1);
+  assert.equal(smartRequests.length, 1);
   assert.deepEqual(smartRequests[0], {
     context_track_ids: ["u0", "u1", "u2"],
     recent_track_ids: ["u0", "u1", "u2"],
     exclude_track_ids: ["u0", "u1", "u2"],
-    count: 3,
+    count: 1,
     source_track_ids: ["u0", "u1", "u2"],
   });
   assert.ok(store.currentPlaylist.tracksIds.includes("smart-track-1"));
   assert.ok(
     store.currentPlaylist.gravity.auto_track_ids.includes("smart-track-1"),
   );
+  store.loadTrackIndex(3);
+  await flush();
+  assert.equal(smartRequests.length, 2);
+  assert.equal(smartRequests[1].count, 1);
   // The follow-up request keeps the source on the user's tracks and excludes the suggestion.
   const followUp = smartRequests.at(-1);
   assert.deepEqual(followUp.source_track_ids, ["u0", "u1", "u2"]);
@@ -464,7 +468,10 @@ test("arriving at the destination turns it into the source and stores diagnostic
   });
   assert.equal(gravityState.last_diagnostics.recency_weight, 0.2);
   assert.ok(Number.isFinite(gravityState.last_diagnostics.at));
-  assert.ok(smartRequests.length >= 2);
+  assert.equal(smartRequests.length, 1);
+  store.loadTrackIndex(3);
+  await flush();
+  assert.equal(smartRequests.length, 2);
   assert.deepEqual(smartRequests.at(-1).source_references, [
     { entity_type: "artist", entity_id: "a1", weight: 1 },
   ]);
