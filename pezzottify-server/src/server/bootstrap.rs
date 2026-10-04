@@ -204,7 +204,11 @@ async fn make_app_with_executor(
 
     // UnifiedPush wake-ups (docs/unifiedpush.md)
     if let Some(settings) = config.push.clone() {
-        match crate::push::PushService::start(settings, user_store.clone()) {
+        match crate::push::PushService::start(
+            settings,
+            user_store.clone(),
+            Some(state.ws_connection_manager.clone()),
+        ) {
             Ok(push) => {
                 if push.install_listener(user_store.as_ref()) {
                     info!("UnifiedPush enabled");

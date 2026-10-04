@@ -49,12 +49,29 @@ routes share the per-user write rate limit.
 
 ### Sending
 
-When a user event that warrants a notification is appended
-(`notification_created`, `whatsnew_batch_closed`), the server sends one wake-up to
-each of the user's registrations, debounced per user (2 s) so bursts coalesce:
+Every user event can wake the user's other devices, at two speeds:
+
+| Events | Window | Urgency | TTL | Topic |
+| --- | --- | --- | --- | --- |
+| `notification_created`, `whatsnew_batch_closed` | 2 s | normal | 86400 | - |
+| everything else (likes, playlists, settings, permissions, download requests and status, notification read) | 60 s | low | 3600 | `sync` |
+| `download_progress_updated` | never | | | |
+
+A window opens with the first event and every event during it folds in, so
+continuous editing on one device wakes the others at most once a minute rather
+than once per change (a pure debounce would starve during long edits). A
+notification arriving during an open sync window shortens it to 2 s and is sent
+with notification settings. Download progress is excluded: it repeats for the
+whole download and completion has its own notification.
+
+Devices with a live WebSocket are skipped: they already received the events.
+This uses the registration's `device_id` (the device UUID) and the WebSocket
+connection list.
 
 - `POST <endpoint>`, `Content-Encoding: aes128gcm` (RFC 8291), VAPID
-  `Authorization: vapid t=..., k=...`, `TTL: 86400`, `Urgency: normal`.
+  `Authorization: vapid t=..., k=...`, `TTL` and `Urgency` as above, and
+  `Topic: sync` for sync wake-ups so a push service can replace an undelivered
+  one with the newer one (RFC 8030 section 5.4).
 - Payload (encrypted): `{"type":"sync","seq":<latest user event sequence>}`.
 - `404`/`410`: the registration is deleted. Other failures are logged and counted;
   a registration failing for 7 consecutive days is deleted.

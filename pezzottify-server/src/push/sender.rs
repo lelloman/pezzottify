@@ -11,6 +11,29 @@ pub const MAX_ENDPOINT_LEN: usize = 2048;
 /// Undelivered wake-ups are useless after a day: the app syncs on its own by then.
 pub const PUSH_TTL_SECS: u32 = 86_400;
 
+/// How a wake-up is sent: notification-worthy events are normal urgency and kept a
+/// day; background sync wake-ups are low urgency, kept an hour, and share a topic so
+/// a push service can replace an undelivered one with the newer one (RFC 8030 5.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WakeupOptions {
+    pub ttl_secs: u32,
+    pub low_urgency: bool,
+    pub topic: Option<&'static str>,
+}
+
+impl WakeupOptions {
+    pub const NOTIFICATION: Self = Self {
+        ttl_secs: PUSH_TTL_SECS,
+        low_urgency: false,
+        topic: None,
+    };
+    pub const SYNC: Self = Self {
+        ttl_secs: 3_600,
+        low_urgency: true,
+        topic: Some("sync"),
+    };
+}
+
 /// Why a registration was rejected.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RegistrationError {
@@ -81,6 +104,7 @@ pub async fn send_wakeup(
     p256dh: &str,
     auth: &str,
     payload: &[u8],
+    options: WakeupOptions,
 ) -> DeliveryOutcome {
     let subscription = SubscriptionInfo::new(
         endpoint,
@@ -92,8 +116,8 @@ pub async fn send_wakeup(
         signature.add_claim("sub", subject);
         let mut builder = WebPushMessageBuilder::new(&subscription);
         builder.set_payload(ContentEncoding::Aes128Gcm, payload);
-        builder.set_ttl(PUSH_TTL_SECS);
-        builder.set_urgency(Urgency::Normal);
+        builder.set_ttl(options.ttl_secs);
+        builder.set_urgency(if options.low_urgency { Urgency::Low } else { Urgency::Normal });
         builder.set_vapid_signature(signature.build()?);
         builder.build()
     })();
@@ -107,6 +131,9 @@ pub async fn send_wakeup(
         .header("TTL", message.ttl.to_string());
     if let Some(urgency) = message.urgency {
         request = request.header("Urgency", urgency.to_string());
+    }
+    if let Some(topic) = options.topic {
+        request = request.header("Topic", topic);
     }
     if let Some(payload) = message.payload {
         request = request
