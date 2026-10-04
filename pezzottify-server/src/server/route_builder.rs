@@ -293,6 +293,7 @@ pub(super) fn admin_routes(state: &ServerState, limits: &RouteLimits) -> Router 
             "/embeddings/coverage",
             get(admin_get_audio_embedding_coverage),
         )
+        .merge(super::super::push_routes::admin_push_routes())
         .layer(limits.write.layer())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),

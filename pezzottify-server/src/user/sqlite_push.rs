@@ -74,6 +74,38 @@ impl user_store::PushRegistrationStore for SqliteUserStore {
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
+    fn list_all_push_registrations(&self) -> Result<Vec<PushRegistrationOverview>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare_cached(
+            "SELECT p.user_id, p.endpoint, p.p256dh, p.auth, p.device_id, p.created_at,
+                    p.last_success_at, p.first_failure_at, u.handle, d.id, d.device_name,
+                    d.device_type
+             FROM push_registrations p
+             LEFT JOIN user u ON u.id = p.user_id
+             LEFT JOIN device d ON d.device_uuid = p.device_id
+             ORDER BY p.created_at DESC, p.endpoint",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(PushRegistrationOverview {
+                registration: PushRegistration {
+                    user_id: row.get::<_, i64>(0)? as usize,
+                    endpoint: row.get(1)?,
+                    p256dh: row.get(2)?,
+                    auth: row.get(3)?,
+                    device_id: row.get(4)?,
+                    created_at: row.get(5)?,
+                    last_success_at: row.get(6)?,
+                    first_failure_at: row.get(7)?,
+                },
+                user_handle: row.get(8)?,
+                device_row_id: row.get::<_, Option<i64>>(9)?.map(|id| id as usize),
+                device_name: row.get(10)?,
+                device_type: row.get(11)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
     fn remove_push_endpoint(&self, endpoint: &str) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
         let removed = conn.execute(

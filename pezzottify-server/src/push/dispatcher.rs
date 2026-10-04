@@ -183,50 +183,75 @@ pub(crate) async fn deliver_to_user(delivery: &Delivery, user_id: usize, seq: i6
             options,
         )
         .await;
-        let store = delivery.store.clone();
-        let endpoint = registration.endpoint.clone();
-        let log_outcome = outcome.clone();
-        let result = tokio::task::spawn_blocking(move || match outcome {
-            DeliveryOutcome::Delivered => store
-                .record_push_delivery(
-                    &endpoint,
-                    true,
-                    chrono::Utc::now().timestamp(),
-                    MAX_FAILURE_SECS,
-                )
-                .map(|_| false),
-            DeliveryOutcome::Gone => store.remove_push_endpoint(&endpoint),
-            DeliveryOutcome::Failed(_) => store
-                .record_push_delivery(
-                    &endpoint,
-                    false,
-                    chrono::Utc::now().timestamp(),
-                    MAX_FAILURE_SECS,
-                )
-                .map(|record| record == PushDeliveryRecord::Removed),
-        })
+        record_outcome(
+            delivery,
+            user_id,
+            &registration.endpoint,
+            &outcome,
+            &format!("seq {seq}"),
+        )
         .await;
-        let host = reqwest::Url::parse(&registration.endpoint)
-            .ok()
-            .and_then(|url| url.host_str().map(str::to_string))
-            .unwrap_or_default();
-        match (&log_outcome, result) {
-            (DeliveryOutcome::Delivered, _) => {
-                debug!("Push: woke user {user_id} via {host} (seq {seq})")
-            }
-            (DeliveryOutcome::Gone, Ok(Ok(_))) => {
-                info!("Push: endpoint on {host} is gone; registration removed (user {user_id})")
-            }
-            (DeliveryOutcome::Failed(reason), Ok(Ok(true))) => warn!(
-                "Push: endpoint on {host} failed for 7 days ({reason}); registration removed (user {user_id})"
-            ),
-            (DeliveryOutcome::Failed(reason), _) => {
-                warn!("Push: delivery to {host} failed for user {user_id}: {reason}")
-            }
-            (_, Ok(Err(error))) => warn!("Push: cannot record delivery: {error:#}"),
-            (_, Err(error)) => warn!("Push: delivery bookkeeping panicked: {error}"),
-        }
     }
+}
+
+/// Store the outcome of one delivery (success, failure run, or removal of a gone
+/// endpoint) and log it. Returns whether the registration was removed.
+pub(crate) async fn record_outcome(
+    delivery: &Delivery,
+    user_id: usize,
+    endpoint: &str,
+    outcome: &DeliveryOutcome,
+    what: &str,
+) -> bool {
+    let store = delivery.store.clone();
+    let owned_endpoint = endpoint.to_string();
+    let stored_outcome = outcome.clone();
+    let result = tokio::task::spawn_blocking(move || match stored_outcome {
+        DeliveryOutcome::Delivered => store
+            .record_push_delivery(
+                &owned_endpoint,
+                true,
+                chrono::Utc::now().timestamp(),
+                MAX_FAILURE_SECS,
+            )
+            .map(|_| false),
+        DeliveryOutcome::Gone => store.remove_push_endpoint(&owned_endpoint),
+        DeliveryOutcome::Failed(_) => store
+            .record_push_delivery(
+                &owned_endpoint,
+                false,
+                chrono::Utc::now().timestamp(),
+                MAX_FAILURE_SECS,
+            )
+            .map(|record| record == PushDeliveryRecord::Removed),
+    })
+    .await;
+    let host = endpoint_host(endpoint);
+    match (outcome, &result) {
+        (DeliveryOutcome::Delivered, _) => {
+            debug!("Push: woke user {user_id} via {host} ({what})")
+        }
+        (DeliveryOutcome::Gone, Ok(Ok(_))) => {
+            info!("Push: endpoint on {host} is gone; registration removed (user {user_id})")
+        }
+        (DeliveryOutcome::Failed(reason), Ok(Ok(true))) => warn!(
+            "Push: endpoint on {host} failed for 7 days ({reason}); registration removed (user {user_id})"
+        ),
+        (DeliveryOutcome::Failed(reason), _) => {
+            warn!("Push: delivery to {host} failed for user {user_id}: {reason}")
+        }
+        (_, Ok(Err(error))) => warn!("Push: cannot record delivery: {error:#}"),
+        (_, Err(error)) => warn!("Push: delivery bookkeeping panicked: {error}"),
+    }
+    matches!(result, Ok(Ok(true)))
+}
+
+/// Host part of an endpoint, safe to log or show: the path is the capability.
+pub fn endpoint_host(endpoint: &str) -> String {
+    reqwest::Url::parse(endpoint)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_string))
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -459,6 +484,36 @@ mod tests {
         let registration = &store.list_push_registrations(user).unwrap()[0];
         assert!(registration.last_success_at.is_some());
         assert_eq!(registration.first_failure_at, None);
+    }
+
+    #[tokio::test]
+    async fn test_options_are_high_urgency_and_short_lived() {
+        let (url, received) = push_service(vec![201]).await;
+        let (keypair, auth) = ece::generate_keypair_and_auth_secret().unwrap();
+        let p256dh = URL_SAFE_NO_PAD.encode(keypair.pub_as_raw().unwrap());
+        let auth = URL_SAFE_NO_PAD.encode(auth);
+        let dir = tempfile::tempdir().unwrap();
+        let vapid = VapidKeys::load_or_generate(&dir.path().join("vapid.pem")).unwrap();
+
+        let outcome = send_wakeup(
+            &reqwest::Client::new(),
+            &vapid,
+            "mailto:test@example.org",
+            PushTarget {
+                endpoint: &url,
+                p256dh: &p256dh,
+                auth: &auth,
+            },
+            b"{}",
+            WakeupOptions::TEST,
+        )
+        .await;
+
+        assert_eq!(outcome, DeliveryOutcome::Delivered);
+        let head = received.lock().unwrap()[0].head.to_ascii_lowercase();
+        assert!(head.contains("ttl: 300"));
+        assert!(head.contains("urgency: high"));
+        assert!(!head.contains("topic:"));
     }
 
     #[tokio::test]

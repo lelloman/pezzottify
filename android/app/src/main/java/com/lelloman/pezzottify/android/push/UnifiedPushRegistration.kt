@@ -4,6 +4,7 @@ import com.lelloman.pezzottify.android.domain.app.AppInitializer
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.device.DeviceInfoProvider
+import com.lelloman.pezzottify.android.domain.notifications.SystemNotificationHelper
 import com.lelloman.pezzottify.android.domain.push.PushDistributor
 import com.lelloman.pezzottify.android.domain.push.PushRegistration
 import com.lelloman.pezzottify.android.domain.push.PushState
@@ -40,6 +41,7 @@ class UnifiedPushRegistration @Inject constructor(
     private val authStore: AuthStore,
     private val remoteApiClient: RemoteApiClient,
     private val deviceInfoProvider: DeviceInfoProvider,
+    private val notifications: SystemNotificationHelper,
     @Named(PUSH_SCOPE) private val scope: CoroutineScope,
     loggerFactory: LoggerFactory,
 ) : PushRegistration, AppInitializer {
@@ -126,8 +128,11 @@ class UnifiedPushRegistration @Inject constructor(
         }
     }
 
-    fun onMessage() {
-        scheduler.schedulePushSync()
+    fun onMessage(content: ByteArray) {
+        when (val payload = PushPayload.parse(content)) {
+            is PushPayload.Test -> notifications.showTestPushNotification(payload.title, payload.body)
+            PushPayload.Wake -> scheduler.schedulePushSync()
+        }
     }
 
     fun onUnregistered() {

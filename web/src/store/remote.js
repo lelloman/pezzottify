@@ -745,6 +745,36 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  const fetchPushRegistrations = async () => {
+    try {
+      const response = await axios.get("/v1/admin/push/registrations");
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch push registrations:", error);
+      return null;
+    }
+  };
+
+  // Resolves to { outcome: "delivered" | "gone" | "failed", detail } or { error }.
+  const sendTestPushNotification = async (
+    registrationId,
+    { title, body } = {},
+  ) => {
+    try {
+      const response = await axios.post(
+        `/v1/admin/push/registrations/${encodeURIComponent(registrationId)}/test`,
+        { title: title || null, body: body || null },
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Failed to send test push notification:", error);
+      return {
+        error:
+          error.response?.data?.message || "Failed to send test notification",
+      };
+    }
+  };
+
   const triggerBackgroundJob = async (jobId, params = null) => {
     try {
       const body = params ? { params } : {};
@@ -1473,6 +1503,8 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchStorageReport,
     fetchBackgroundJobs,
     fetchAudioEmbeddingCoverage,
+    fetchPushRegistrations,
+    sendTestPushNotification,
     triggerBackgroundJob,
     cancelBackgroundJob,
     fetchJobAuditLog,

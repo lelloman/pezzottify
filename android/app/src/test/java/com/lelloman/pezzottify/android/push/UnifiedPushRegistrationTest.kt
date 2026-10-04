@@ -4,6 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.device.DeviceInfoProvider
+import com.lelloman.pezzottify.android.domain.notifications.SystemNotificationHelper
 import com.lelloman.pezzottify.android.domain.push.PushDistributor
 import com.lelloman.pezzottify.android.domain.push.PushStatus
 import com.lelloman.pezzottify.android.domain.remoteapi.DeviceInfo
@@ -15,6 +16,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
@@ -66,6 +68,7 @@ class UnifiedPushRegistrationTest {
     private val scheduler = FakeScheduler()
     private val authState = MutableStateFlow<AuthState>(loggedIn())
     private val remote = mockk<RemoteApiClient>()
+    private val notifications = mockk<SystemNotificationHelper>(relaxed = true)
     private val scope = TestScope(UnconfinedTestDispatcher())
     private lateinit var registration: UnifiedPushRegistration
 
@@ -86,7 +89,7 @@ class UnifiedPushRegistrationTest {
         coEvery { remote.putPushRegistration(any(), any(), any(), any()) } returns RemoteApiResponse.Success(Unit)
         coEvery { remote.deletePushRegistration(any()) } returns RemoteApiResponse.Success(Unit)
         registration = UnifiedPushRegistration(
-            client, prefs, scheduler, authStore, remote, device, scope, loggerFactory,
+            client, prefs, scheduler, authStore, remote, device, notifications, scope, loggerFactory,
         )
     }
 
@@ -201,8 +204,34 @@ class UnifiedPushRegistrationTest {
 
     @Test
     fun `a push message schedules a sync`() {
-        registration.onMessage()
-        assertThat(scheduler.syncs).isEqualTo(1)
+        registration.onMessage("""{"type":"sync","seq":3}""".toByteArray())
+        registration.onMessage("not json".toByteArray())
+        registration.onMessage(ByteArray(0))
+        assertThat(scheduler.syncs).isEqualTo(3)
+        verify(exactly = 0) { notifications.showTestPushNotification(any(), any()) }
+    }
+
+    @Test
+    fun `a test message shows a notification instead of syncing`() {
+        registration.onMessage(
+            """{"type":"test","title":" Hello ","body":"From admin","sent_at":1}""".toByteArray()
+        )
+        verify { notifications.showTestPushNotification("Hello", "From admin") }
+        assertThat(scheduler.syncs).isEqualTo(0)
+    }
+
+    @Test
+    fun `test payloads fall back to defaults and are capped`() {
+        assertThat(PushPayload.parse("""{"type":"test"}""".toByteArray()))
+            .isEqualTo(PushPayload.Test(PushPayload.DEFAULT_TEST_TITLE, ""))
+        val long = PushPayload.parse(
+            """{"type":"test","title":"${"t".repeat(150)}","body":"${"b".repeat(400)}"}""".toByteArray()
+        ) as PushPayload.Test
+        assertThat(long.title.length).isEqualTo(100)
+        assertThat(long.body.length).isEqualTo(300)
+        assertThat(PushPayload.parse("""{"type":"test","title":{"x":1}}""".toByteArray()))
+            .isEqualTo(PushPayload.Test(PushPayload.DEFAULT_TEST_TITLE, ""))
+        assertThat(PushPayload.parse("[1]".toByteArray())).isEqualTo(PushPayload.Wake)
     }
 
     @Test

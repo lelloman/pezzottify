@@ -39,6 +39,7 @@ import DownloadManager from "@/components/admin/DownloadManager.vue";
 import BatchManager from "@/components/admin/BatchManager.vue";
 import BugReports from "@/components/admin/BugReports.vue";
 import IngestionManager from "@/components/admin/IngestionManager.vue";
+import PushNotifications from "@/components/admin/PushNotifications.vue";
 import { wsConnectionStatus, wsServerVersion } from "@/services/websocket";
 
 const route = useRoute();
@@ -119,6 +120,13 @@ const allSections = [
     permission: "EditCatalog",
     component: IngestionManager,
     route: "/admin/ingestion",
+  },
+  {
+    id: "push",
+    label: "Push",
+    permission: "ServerAdmin",
+    component: PushNotifications,
+    route: "/admin/push",
   },
 ];
 

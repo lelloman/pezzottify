@@ -92,3 +92,32 @@ there); otherwise the endpoints return `503` and nothing is sent.
 - Settings → Notifications shows the push status (distributor in use, none
   installed, or off) and lets the user pick a distributor when several exist.
 - Adding the service changes the manifest, so it ships in a new Paravoid shell APK.
+
+## Test notifications (admin)
+
+Administrators (`ServerAdmin` permission) can list every push registration and send
+a test notification to any one of them from the web admin panel (Admin → Push).
+A test goes straight to that endpoint: it creates no stored notification and no sync
+event, so it checks the push path (server → distributor → device → app) alone.
+
+Registrations are addressed by `id`, the first 16 hex characters of the SHA-256 of
+the endpoint. The endpoint itself is a push capability and is never returned; only
+its host is.
+
+| Method/path | Body | Response |
+| --- | --- | --- |
+| `GET /v1/admin/push/registrations` | - | `{"enabled": bool, "registrations": [{"id", "user_id", "user_handle", "device_uuid", "device_name", "device_type", "endpoint_host", "created_at", "last_success_at", "first_failure_at", "connected"}]}` |
+| `POST /v1/admin/push/registrations/{id}/test` | `{"title"?, "body"?}` | `{"outcome": "delivered" \| "gone" \| "failed", "detail": string \| null}` |
+
+- `enabled` is false (with an empty list) when push is not configured; the test
+  route then returns `503 push_disabled`. An unknown `id` returns `404`.
+- `connected` tells whether that device currently has a live WebSocket.
+- `title` is at most 100 characters (default "Test notification"), `body` at most
+  300 (default "Sent from the Pezzottify admin panel").
+- The test payload is `{"type":"test","title","body","sent_at":<epoch seconds>}`,
+  sent with `Urgency: high` and `TTL: 300`: a test should arrive now or not at all.
+  `gone` (404/410) removes the registration, as for wake-ups.
+
+On Android, a message whose `type` is `test` shows a system notification with that
+title and body. Any other message (including `sync` and unparseable ones) runs the
+sync catch-up as before.

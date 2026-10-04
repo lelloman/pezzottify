@@ -213,3 +213,148 @@ async fn notification_events_wake_registered_devices() {
         json!({"type": "sync", "seq": stored.seq})
     );
 }
+
+#[tokio::test]
+async fn admin_test_notifications_report_disabled_push() {
+    let server = TestServer::spawn().await;
+    let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
+    let list: Value = admin
+        .client
+        .get(format!("{}/v1/admin/push/registrations", server.base_url))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(list, json!({"enabled": false, "registrations": []}));
+    let response = admin
+        .client
+        .post(format!(
+            "{}/v1/admin/push/registrations/0123456789abcdef/test",
+            server.base_url
+        ))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn admins_list_registrations_and_send_test_notifications() {
+    let server = TestServer::builder().with_push().spawn().await;
+    let device_uuid = "6f1c2a7e-3b9d-4c55-9a10-2f7d8e4b1c01";
+    let user = TestClient::authenticated_with_device(server.base_url.clone(), device_uuid).await;
+    let (endpoint, bodies) = push_service().await;
+    let (keypair, auth, p256dh, auth_b64) = receiver_keys();
+    let response = user
+        .client
+        .put(format!("{}/v1/push/registrations", server.base_url))
+        .json(
+            &json!({"endpoint": endpoint, "p256dh": p256dh, "auth": auth_b64,
+                      "device_id": device_uuid}),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    let list_url = format!("{}/v1/admin/push/registrations", server.base_url);
+
+    // Server admin only.
+    let response = user.client.get(&list_url).send().await.unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
+    let list: Value = admin
+        .client
+        .get(&list_url)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(list["enabled"], true);
+    let registrations = list["registrations"].as_array().unwrap();
+    assert_eq!(registrations.len(), 1);
+    let registration = &registrations[0];
+    assert_eq!(registration["user_handle"], TEST_USER);
+    assert_eq!(registration["device_uuid"], device_uuid);
+    assert_eq!(
+        registration["device_name"],
+        format!("Test Client {device_uuid}")
+    );
+    assert_eq!(registration["endpoint_host"], "127.0.0.1");
+    assert_eq!(registration["connected"], false);
+    assert!(registration.get("endpoint").is_none());
+    assert!(
+        !list.to_string().contains("/up/e2e"),
+        "endpoint path leaked"
+    );
+    let id = registration["id"].as_str().unwrap();
+    assert_eq!(id.len(), 16);
+
+    let test_url = format!("{}/v1/admin/push/registrations/{id}/test", server.base_url);
+    let response = user
+        .client
+        .post(&test_url)
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    let response = admin
+        .client
+        .post(&test_url)
+        .json(&json!({"title": "x".repeat(101)}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["code"],
+        "invalid_test_notification"
+    );
+
+    let response = admin
+        .client
+        .post(format!(
+            "{}/v1/admin/push/registrations/0123456789abcdef/test",
+            server.base_url
+        ))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+    let result: Value = admin
+        .client
+        .post(&test_url)
+        .json(&json!({"title": " Hello ", "body": ""}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(result, json!({"outcome": "delivered", "detail": null}));
+    let received = bodies.lock().unwrap().clone();
+    assert_eq!(received.len(), 1, "sent synchronously, once");
+    let plain = ece::decrypt(&keypair.raw_components().unwrap(), &auth, &received[0]).unwrap();
+    let payload: Value = serde_json::from_slice(&plain).unwrap();
+    assert_eq!(payload["type"], "test");
+    assert_eq!(payload["title"], "Hello");
+    assert_eq!(payload["body"], "Sent from the Pezzottify admin panel");
+    assert!(payload["sent_at"].as_i64().unwrap() > 0);
+
+    // The delivery is recorded like a wake-up.
+    let user_id = server.user_store.get_user_id(TEST_USER).unwrap().unwrap();
+    assert!(
+        server.user_store.list_push_registrations(user_id).unwrap()[0]
+            .last_success_at
+            .is_some()
+    );
+}
