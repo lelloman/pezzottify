@@ -583,7 +583,7 @@ export const usePlaybackStore = defineStore("playback", () => {
 
     const tracksIds = currentPlaylist.value.tracksIds || [];
     const remaining = tracksIds.length - currentTrackIndex.value - 1;
-    if (tracksIds.length === 0 || remaining > 1 || remaining < 0) {
+    if (tracksIds.length === 0 || remaining !== 0) {
       return;
     }
 
@@ -591,12 +591,12 @@ export const usePlaybackStore = defineStore("playback", () => {
     if (smartContinuationInFlightSignature.value === signature) return;
     smartContinuationInFlightSignature.value = signature;
 
-    // Anchor on the user-chosen tracks (gravity) and keep three tracks ahead when possible.
+    // Anchor on the user-chosen tracks (gravity) and keep one track queued ahead.
     const request = gravity.buildContinuationRequest(
       gravityOf(currentPlaylist.value),
       tracksIds,
       currentTrackIndex.value,
-      3 - remaining,
+      1,
     );
     let nextTrackIds = [];
     let diagnostics = null;

@@ -150,7 +150,7 @@ class PlayerImpl(
         val trackIndex = state.trackIndex ?: return
         if (!state.enabled) return
         val remaining = playlist.tracksIds.lastIndex - trackIndex
-        if (playlist.tracksIds.isEmpty() || remaining !in 0..1) return
+        if (playlist.tracksIds.isEmpty() || remaining != 0) return
 
         val signature = "$trackIndex:${playlist.tracksIds.joinToString(",")}"
         if (smartContinuationInFlightSignature == signature) return
@@ -160,7 +160,7 @@ class PlayerImpl(
         smartContinuationRequestJob = coroutineScope.launch(Dispatchers.Main) {
             // Anchor on the user-chosen tracks, not on the queue tail the server itself appended.
             val request = playlist.gravityOrDefault()!!
-                .buildContinuationRequest(playlist.tracksIds, trackIndex, 3 - remaining)
+                .buildContinuationRequest(playlist.tracksIds, trackIndex, 1)
             var nextTrackIds = emptyList<String>()
             var diagnostics: GravityDiagnostics? = null
             for (attempt in 0..2) {
