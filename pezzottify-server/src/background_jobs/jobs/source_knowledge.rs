@@ -449,6 +449,8 @@ fn normalize(s: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
         .to_lowercase()
+        // Treat typographic apostrophes as equivalent without dropping punctuation.
+        .replace(['‘', '’'], "'")
 }
 
 fn corroborates(candidate: &Value, context: &Value, kind: &str) -> bool {
@@ -606,14 +608,20 @@ mod tests {
     async fn source_knowledge_http_musicbrainz_corroborates_and_reuses_identity() {
         use simple_server::web::{routing::get, Json, Query, Router};
         const ID: &str = "00000000-0000-0000-0000-000000000001";
-        let record = || json!({"id":ID,"title":"Song","isrcs":["USAAA1200001"],"artist-credit":[{"artist":{"name":"Artist"}}]});
+        let record = || json!({"id":ID,"title":"If It’s Magic","isrcs":["USAAA1200001"],"artist-credit":[{"artist":{"name":"Artist"}}]});
         let app = Router::new()
             .route(
                 "/recording",
                 get(
                     move |Query(q): Query<std::collections::HashMap<String, String>>| async move {
-                        assert_eq!(q["query"], "isrc:USAAA1200001");
-                        Json(json!({"count":1,"recordings":[record()]}))
+                        if q["query"] == "isrc:USAAA1200002" {
+                            let mut other = record();
+                            other["id"] = json!("00000000-0000-0000-0000-000000000002");
+                            Json(json!({"count":2,"recordings":[record(),other]}))
+                        } else {
+                            assert_eq!(q["query"], "isrc:USAAA1200001");
+                            Json(json!({"count":1,"recordings":[record()]}))
+                        }
                     },
                 ),
             )
@@ -630,7 +638,7 @@ mod tests {
         let addr = upstream_server.address().unwrap();
         let mut client = ReferenceClient::new().unwrap();
         client.mb = format!("http://{addr}");
-        let context = json!({"track":{"name":"Song","external_id_isrc":"USAAA1200001"},"artists":[{"artist":{"name":"Artist"}}]});
+        let context = json!({"track":{"name":"If It's Magic","external_id_isrc":"USAAA1200001"},"artists":[{"artist":{"name":"Artist"}}]});
         assert_eq!(
             client
                 .music_entity("track", &context, None)
@@ -648,6 +656,13 @@ mod tests {
         wrong["artists"][0]["artist"]["name"] = json!("Namesake");
         assert!(client
             .music_entity("track", &wrong, None)
+            .await
+            .unwrap()
+            .is_none());
+        let mut ambiguous = context.clone();
+        ambiguous["track"]["external_id_isrc"] = json!("USAAA1200002");
+        assert!(client
+            .music_entity("track", &ambiguous, None)
             .await
             .unwrap()
             .is_none());
@@ -683,5 +698,35 @@ mod tests {
             &context,
             "track"
         ));
+    }
+
+    #[test]
+    fn source_knowledge_corroborates_typographic_apostrophes() {
+        for kind in ["track", "album"] {
+            for (local, remote) in [
+                (
+                    "Love's In Need Of Love Today",
+                    "Love’s in Need of Love Today",
+                ),
+                ("If It's Magic", "If It’s Magic"),
+                ("Isn't She Lovely", "Isn’t She Lovely"),
+                ("‘Quoted’ Title", "'Quoted' Title"),
+            ] {
+                let mut context = json!({"artists":[{"name":"Artist's Name"}]});
+                context[kind] = json!({"name":local});
+                let candidate =
+                    json!({"title":remote,"artist-credit":[{"artist":{"name":"Artist’s Name"}}]});
+                assert!(corroborates(&candidate, &context, kind), "{kind}: {local}");
+
+                // Apostrophes remain significant, and edition suffixes still differ.
+                for different in [
+                    local.replace(['‘', '’', '\''], ""),
+                    format!("{local} (Live)"),
+                ] {
+                    context[kind]["name"] = json!(different);
+                    assert!(!corroborates(&candidate, &context, kind));
+                }
+            }
+        }
     }
 }
