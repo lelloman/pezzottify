@@ -1,3 +1,4 @@
+import java.net.URI
 import java.util.Properties
 
 plugins {
@@ -322,6 +323,18 @@ android.defaultConfig {
 
     // Server config from local.properties
     val defaultBaseUrl = connectionProperties.getProperty("server.baseUrl", localProperties.getProperty("server.baseUrl", "http://10.0.2.2:3001"))
+    if (paravoidProduction) {
+        fun isHttpsUrl(value: String): Boolean = runCatching {
+            val uri = URI(value)
+            uri.scheme == "https" && !uri.host.isNullOrBlank() && uri.userInfo == null
+        }.getOrDefault(false)
+        require(isHttpsUrl(oidcIssuerUrl) && oidcClientId.isNotBlank()) {
+            "Paravoid production requires an HTTPS oidc.issuerUrl and non-empty oidc.clientId in local.properties or -PconnectionPropertiesFile"
+        }
+        require(isHttpsUrl(defaultBaseUrl)) {
+            "Paravoid production requires an HTTPS server.baseUrl in local.properties or -PconnectionPropertiesFile; the emulator default cannot be published"
+        }
+    }
     buildConfigField("String", "DEFAULT_BASE_URL", "\"$defaultBaseUrl\"")
 
     // Assistant provider policy. "user" keeps provider selection in runtime settings;
