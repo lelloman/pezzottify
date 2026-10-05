@@ -56,6 +56,15 @@
     </div>
     <template v-if="hasPlayback">
       <div class="trackInfoRow">
+        <button
+          type="button"
+          class="expandPlayer"
+          aria-label="Open full-screen player and lyrics"
+          title="Now playing and lyrics"
+          @click="showNowPlaying = true"
+        >
+          ↗
+        </button>
         <MultiSourceImage
           :urls="imageUrls"
           :lazy="false"
@@ -183,6 +192,11 @@
       </div>
     </template>
   </footer>
+  <NowPlaying
+    v-if="showNowPlaying && hasPlayback"
+    :imageUrls="imageUrls"
+    @close="showNowPlaying = false"
+  />
 </template>
 
 <script setup>
@@ -208,6 +222,9 @@ import DeviceSelector from "./DeviceSelector.vue";
 import AiContinuationIcon from "./icons/AiContinuationIcon.vue";
 import SteeringWheelIcon from "./icons/SteeringWheelIcon.vue";
 import { useUserStore } from "@/store/user";
+import NowPlaying from "./NowPlaying.vue";
+
+const showNowPlaying = ref(false);
 
 const ControlIconButton = {
   props: ["icon", "action", "big"],
@@ -444,6 +461,25 @@ watch(
 
 <style scoped>
 @import "@/assets/icons.css";
+
+.expandPlayer {
+  flex-shrink: 0;
+  width: 32px;
+  height: 36px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-base);
+  cursor: pointer;
+  font-size: 1.25rem;
+}
+.expandPlayer:hover {
+  background: var(--surface-hover);
+}
+.expandPlayer:focus-visible {
+  outline: 2px solid var(--spotify-green);
+  outline-offset: 2px;
+}
 
 .radioCreationStatus {
   grid-column: 1 / -1;
