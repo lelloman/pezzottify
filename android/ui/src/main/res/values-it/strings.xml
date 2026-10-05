@@ -691,4 +691,9 @@
     <string name="download_lyrics">Scarica testi</string>
     <string name="lyrics_download_started">Ricerca dei testi avviata. I testi già scaricati verranno riutilizzati.</string>
     <string name="lyrics_download_failed">Impossibile avviare la ricerca dei testi. Controlla la disponibilità e riprova tra poco.</string>
+    <string name="player_lyrics">Testo</string>
+    <string name="player_lyrics_follow">Segui il verso attuale</string>
+    <string name="player_lyrics_synced">LRCLIB · Testo sincronizzato</string>
+    <string name="player_lyrics_plain">LRCLIB · Testo</string>
+    <string name="player_lyrics_seek">Vai a questo verso</string>
 </resources>

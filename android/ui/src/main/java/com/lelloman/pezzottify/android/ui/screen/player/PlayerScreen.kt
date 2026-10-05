@@ -5,6 +5,9 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.key
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -80,6 +83,11 @@ fun PlayerScreen(navController: NavController) {
     val viewModel = hiltViewModel<PlayerScreenViewModel>()
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val lyricsModel = hiltViewModel<PlayerLyricsViewModel>()
+    val lyrics by lyricsModel.state.collectAsState()
+    LaunchedEffect(state.trackId, state.isLoading) {
+        lyricsModel.load(if (state.isLoading) "" else state.trackId)
+    }
 
     // Collect toast events from the ViewModel
     LaunchedEffect(viewModel) {
@@ -93,6 +101,7 @@ fun PlayerScreen(navController: NavController) {
         actions = viewModel,
         navController = navController,
         snackbarHostState = snackbarHostState,
+        lyrics = lyrics,
     )
 }
 
@@ -105,6 +114,7 @@ private fun PlayerScreenContent(
     actions: PlayerScreenActions,
     navController: NavController,
     snackbarHostState: SnackbarHostState,
+    lyrics: PlayerLyricsState,
 ) {
     var dismissOffsetY by remember { mutableFloatStateOf(0f) }
     var isDraggingToDismiss by remember { mutableStateOf(false) }
@@ -145,29 +155,6 @@ private fun PlayerScreenContent(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.scrim.copy(alpha = backgroundAlpha * 0.32f))
-            .pointerInput(Unit) {
-                detectVerticalDragGestures(
-                    onDragStart = { isDraggingToDismiss = true },
-                    onDragEnd = {
-                        isDraggingToDismiss = false
-                        val dismissThresholdPx = screenHeightPx * DISMISS_THRESHOLD
-                        if (dismissOffsetY > dismissThresholdPx) {
-                            dismiss()
-                        } else {
-                            animateSnapBack()
-                        }
-                    },
-                    onDragCancel = {
-                        isDraggingToDismiss = false
-                        animateSnapBack()
-                    },
-                    onVerticalDrag = { _, dragAmount ->
-                        // Only allow dragging down (positive direction)
-                        val newOffset = dismissOffsetY + dragAmount
-                        dismissOffsetY = newOffset.coerceAtLeast(0f)
-                    }
-                )
-            }
     ) {
         Scaffold(
             modifier = Modifier
@@ -181,6 +168,24 @@ private fun PlayerScreenContent(
             },
             topBar = {
                 TopAppBar(
+                    // Keep dismiss gestures on the header so lyric scrolling does not close the player.
+                    modifier = Modifier.pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onDragStart = { isDraggingToDismiss = true },
+                            onDragEnd = {
+                                isDraggingToDismiss = false
+                                if (dismissOffsetY > screenHeightPx * DISMISS_THRESHOLD) dismiss()
+                                else animateSnapBack()
+                            },
+                            onDragCancel = {
+                                isDraggingToDismiss = false
+                                animateSnapBack()
+                            },
+                            onVerticalDrag = { _, amount ->
+                                dismissOffsetY = (dismissOffsetY + amount).coerceAtLeast(0f)
+                            },
+                        )
+                    },
                     title = {
                         Column {
                             Text(
@@ -257,6 +262,7 @@ private fun PlayerScreenContent(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -337,8 +343,6 @@ private fun PlayerScreenContent(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                Spacer(modifier = Modifier.weight(1f))
-
                 // Volume control
                 VolumeControl(
                     volume = state.volume,
@@ -346,6 +350,13 @@ private fun PlayerScreenContent(
                     onVolumeChange = actions::setVolume,
                     onToggleMute = actions::toggleMute,
                 )
+
+                if (lyrics.trackId == state.trackId && lyrics.hasLyrics) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    key(state.trackId) {
+                        PlayerLyrics(lyrics, state.trackProgressSec, state.trackDurationSec, actions::seekToPercent)
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(24.dp))
             }
