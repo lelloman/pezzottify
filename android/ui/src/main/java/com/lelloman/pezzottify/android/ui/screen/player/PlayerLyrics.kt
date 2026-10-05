@@ -36,6 +36,8 @@ internal fun PlayerLyrics(
     lyrics: PlayerLyricsState,
     positionSec: Int,
     durationSec: Int,
+    modifier: Modifier = Modifier,
+    expanded: Boolean = false,
     onSeek: (Float) -> Unit,
 ) {
     val listState = rememberLazyListState()
@@ -51,7 +53,7 @@ internal fun PlayerLyrics(
         }
     }
     Column(
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(16.dp))
             .padding(16.dp),
     ) {
@@ -73,7 +75,9 @@ internal fun PlayerLyrics(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
         )
-        LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().height(360.dp)) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().then(
+            if (expanded) Modifier.weight(1f) else Modifier.height(360.dp)
+        )) {
             if (lyrics.lines.isNotEmpty()) {
                 itemsIndexed(lyrics.lines) { index, line ->
                     val active = index == activeIndex

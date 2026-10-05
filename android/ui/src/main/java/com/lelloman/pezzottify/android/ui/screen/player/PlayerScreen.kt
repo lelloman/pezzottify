@@ -48,6 +48,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -109,13 +110,18 @@ private const val DISMISS_THRESHOLD = 0.3f
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PlayerScreenContent(
+internal fun PlayerScreenContent(
     state: PlayerScreenState,
     actions: PlayerScreenActions,
     navController: NavController,
     snackbarHostState: SnackbarHostState,
     lyrics: PlayerLyricsState,
 ) {
+    var showLyrics by rememberSaveable { mutableStateOf(false) }
+    if (showLyrics) {
+        LyricsPlayerScreen(state, lyrics, actions, onBack = { showLyrics = false })
+        return
+    }
     var dismissOffsetY by remember { mutableFloatStateOf(0f) }
     var isDraggingToDismiss by remember { mutableStateOf(false) }
 
@@ -339,6 +345,8 @@ private fun PlayerScreenContent(
                     onSmartContinuation = actions::toggleSmartContinuation,
                     hasDestination = state.hasDestination,
                     onSteering = { navController.toSteering() },
+                    hasLyrics = lyrics.trackId == state.trackId && lyrics.hasLyrics,
+                    onLyrics = { showLyrics = true },
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -354,7 +362,7 @@ private fun PlayerScreenContent(
                 if (lyrics.trackId == state.trackId && lyrics.hasLyrics) {
                     Spacer(modifier = Modifier.height(24.dp))
                     key(state.trackId) {
-                        PlayerLyrics(lyrics, state.trackProgressSec, state.trackDurationSec, actions::seekToPercent)
+                        PlayerLyrics(lyrics, state.trackProgressSec, state.trackDurationSec, onSeek = actions::seekToPercent)
                     }
                 }
 
@@ -367,7 +375,7 @@ private fun PlayerScreenContent(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ProgressSection(
+internal fun ProgressSection(
     progressPercent: Float,
     progressSec: Int,
     durationSec: Int,
@@ -483,6 +491,8 @@ private fun PlaybackControls(
     onSmartContinuation: () -> Unit,
     hasDestination: Boolean = false,
     onSteering: () -> Unit = {},
+    hasLyrics: Boolean = false,
+    onLyrics: () -> Unit = {},
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -585,30 +595,36 @@ private fun PlaybackControls(
 
         // Secondary row, like Spotify's devices/queue row: smart continuation on the
         // left, steering on the right. Radio queues continue from their own seed.
-        if (showSmartContinuation) Row(
+        if (showSmartContinuation || hasLyrics) Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(
-                onClick = onSmartContinuation,
-                modifier = Modifier.size(48.dp),
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.baseline_playlist_add_24),
-                    contentDescription = stringResource(R.string.smart_continuation),
-                    modifier = Modifier.size(24.dp),
-                    tint = if (smartContinuationEnabled) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    }
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (hasLyrics) IconButton(onClick = onLyrics, modifier = Modifier.size(48.dp)) {
+                    Icon(painterResource(R.drawable.lyrics_24),
+                        contentDescription = stringResource(R.string.player_open_lyrics),
+                        tint = MaterialTheme.colorScheme.primary)
+                }
+                if (showSmartContinuation) IconButton(
+                    onClick = onSmartContinuation,
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.baseline_playlist_add_24),
+                        contentDescription = stringResource(R.string.smart_continuation),
+                        modifier = Modifier.size(24.dp),
+                        tint = if (smartContinuationEnabled) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        }
+                    )
+                }
             }
-
-            IconButton(
+            if (showSmartContinuation) IconButton(
                 onClick = onSteering,
                 modifier = Modifier.size(48.dp),
             ) {

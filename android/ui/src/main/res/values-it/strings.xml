@@ -696,4 +696,7 @@
     <string name="player_lyrics_synced">LRCLIB · Testo sincronizzato</string>
     <string name="player_lyrics_plain">LRCLIB · Testo</string>
     <string name="player_lyrics_seek">Vai a questo verso</string>
+    <string name="player_open_lyrics">Apri il lettore dei testi</string>
+    <string name="player_back_to_player">Torna al lettore</string>
+    <string name="player_lyrics_unavailable">Nessun testo disponibile per questo brano.</string>
 </resources>
