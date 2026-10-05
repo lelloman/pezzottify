@@ -109,6 +109,7 @@ pub struct BackgroundJobsConfig {
 #[derive(Debug, Deserialize, Default, Clone)]
 #[serde(default)]
 pub struct MetadataEnrichmentJobConfig {
+    pub manual_only: Option<bool>,
     pub interval_hours: Option<u64>,
     pub batch_size: Option<usize>,
     pub work_daily_enqueue_limit: Option<usize>,
@@ -256,6 +257,10 @@ pub struct AgentConfig {
 #[derive(Debug, Deserialize, Default, Clone)]
 #[serde(default)]
 pub struct AgentLlmConfig {
+    /// Optional model dedicated to bounded enrichment intervention.
+    pub intervention_model: Option<String>,
+    /// Reasoning policy for the intervention model (independent of extraction).
+    pub intervention_reasoning_effort: Option<String>,
     /// LLM provider: "ollama" (default), "openai" for OpenAI-compatible APIs.
     pub provider: Option<String>,
     /// Base URL for the LLM API (e.g., "http://localhost:11434" for Ollama,

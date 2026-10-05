@@ -38,10 +38,10 @@ fun EnrichmentStatusIndicator(
     modifier: Modifier = Modifier,
 ) {
     val normalizedStatus = status?.status ?: return
-    if (normalizedStatus !in setOf("queued", "running", "failed")) return
+    if (normalizedStatus !in setOf("queued", "running", "failed", "failed_enrichment")) return
 
     var showDialog by remember { mutableStateOf(false) }
-    val statusLabel = normalizedStatus.replaceFirstChar { it.titlecase(Locale.getDefault()) }
+    val statusLabel = if (normalizedStatus == "failed_enrichment") "Failed" else normalizedStatus.replaceFirstChar { it.titlecase(Locale.getDefault()) }
 
     AssistChip(
         onClick = { showDialog = true },
@@ -154,6 +154,7 @@ private fun EnrichmentFactRow(label: String, value: String) {
 private fun enrichmentStatusMessage(status: String): String = when (status) {
     "queued" -> "Pezzottify is waiting to generate richer metadata for this item."
     "running" -> "Pezzottify is currently generating richer metadata for this item."
+    "failed_enrichment" -> "Enrichment stopped. No automatic retries; an administrator can start a new attempt cycle."
     "failed" -> "Pezzottify tried to generate richer metadata for this item but the job failed."
     else -> "Pezzottify can generate richer metadata for catalog items in the background."
 }

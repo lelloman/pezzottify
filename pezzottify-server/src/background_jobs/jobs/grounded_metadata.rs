@@ -13,6 +13,18 @@ impl MetadataEnrichmentJob {
         provider: Option<&dyn LlmProvider>,
         item: &EnrichmentQueueItemV1,
     ) -> Result<(), ItemError> {
+        self.enrich_grounded_with_refresh(ctx, store, provider, item, false)
+            .await
+    }
+
+    pub(super) async fn enrich_grounded_with_refresh(
+        &self,
+        ctx: &JobContext,
+        store: &dyn EnrichmentStore,
+        provider: Option<&dyn LlmProvider>,
+        item: &EnrichmentQueueItemV1,
+        refresh_identity: bool,
+    ) -> Result<(), ItemError> {
         let client = ReferenceClient::new().map_err(retry)?;
         let id = &item.entity_id;
         let old_evidence = store
@@ -60,6 +72,9 @@ impl MetadataEnrichmentJob {
             }
         }
         let saved_id = |provider: &str| -> Option<&str> {
+            if refresh_identity {
+                return None;
+            }
             previous
                 .as_ref()?
                 .get("identity")?
@@ -141,6 +156,20 @@ impl MetadataEnrichmentJob {
             ));
         }
         if let Some(previous) = previous.as_ref() {
+            if refresh_identity {
+                if let Some(old_ids) = previous["identity"].as_array() {
+                    for old in old_ids {
+                        if matches!(old[0].as_str(), Some("wikidata" | "musicbrainz"))
+                            && !knowledge
+                                .ids
+                                .iter()
+                                .any(|(p, id, _)| old[0] == *p && old[1] == *id)
+                        {
+                            return Err(retry("Rediscovered identity differs from prior verified identity; manual review required"));
+                        }
+                    }
+                }
+            }
             preserve_verified(&mut knowledge, previous);
         }
         let mut used_llm = false;

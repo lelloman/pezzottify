@@ -1,0 +1,454 @@
+{
+  "provenance": {
+    "recording_url": "https://musicbrainz.org/recording/fb255dd2-d395-41b2-abfd-7bd6efdbb897",
+    "work_url": "https://musicbrainz.org/work/c7c50616-fab7-4e1b-8222-4f8f1a50e146",
+    "captured_date": "2026-10-05"
+  },
+  "context": {
+    "track": {
+      "id": "09dlwp5vIjt3kavZ1Dgc9d",
+      "name": "Two of a Mind - 2003 Remastered",
+      "external_id_isrc": "USBB10300135"
+    },
+    "artists": [
+      {
+        "artist": {
+          "name": "Paul Desmond"
+        }
+      },
+      {
+        "artist": {
+          "name": "Gerry Mulligan"
+        }
+      }
+    ],
+    "album": {
+      "name": "The Complete RCA Victor Recordings"
+    }
+  },
+  "recording": {
+    "artist-credit": [
+      {
+        "artist": {
+          "country": "US",
+          "disambiguation": "",
+          "id": "d5bf3447-c526-4f7c-9931-4b7c80fe34de",
+          "name": "Paul Desmond",
+          "sort-name": "Desmond, Paul",
+          "type": "Person",
+          "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df"
+        },
+        "joinphrase": " & ",
+        "name": "Paul Desmond"
+      },
+      {
+        "artist": {
+          "country": "US",
+          "disambiguation": "",
+          "id": "68f19808-1f7b-46d4-bd1d-71aaf0f6b267",
+          "name": "Gerry Mulligan",
+          "sort-name": "Mulligan, Gerry",
+          "type": "Person",
+          "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df"
+        },
+        "joinphrase": "",
+        "name": "Gerry Mulligan"
+      }
+    ],
+    "disambiguation": "",
+    "first-release-date": "1962",
+    "id": "fb255dd2-d395-41b2-abfd-7bd6efdbb897",
+    "isrcs": [
+      "USBB10300135"
+    ],
+    "length": 347693,
+    "relations": [
+      {
+        "artist": {
+          "country": "US",
+          "disambiguation": "US jazz bassist",
+          "id": "7ec27748-5886-464d-8e65-8f221f658ef3",
+          "name": "Joe Benjamin",
+          "sort-name": "Benjamin, Joe",
+          "type": "Person",
+          "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df"
+        },
+        "attribute-credits": {
+          "double bass": "bass"
+        },
+        "attribute-ids": {
+          "double bass": "7bd32b95-416f-4244-a98b-1311ec69c7db"
+        },
+        "attribute-values": {},
+        "attributes": [
+          "double bass"
+        ],
+        "begin": "1962-08-13",
+        "direction": "backward",
+        "end": "1962-08-13",
+        "ended": true,
+        "source-credit": "",
+        "target-credit": "",
+        "target-type": "artist",
+        "type": "instrument",
+        "type-id": "59054b12-01ac-43ee-a618-285fd397e461"
+      },
+      {
+        "artist": {
+          "country": "US",
+          "disambiguation": "",
+          "id": "d5bf3447-c526-4f7c-9931-4b7c80fe34de",
+          "name": "Paul Desmond",
+          "sort-name": "Desmond, Paul",
+          "type": "Person",
+          "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df"
+        },
+        "attribute-credits": {},
+        "attribute-ids": {
+          "alto saxophone": "9c977091-b27a-4a0e-b54e-b5ab89420e22"
+        },
+        "attribute-values": {},
+        "attributes": [
+          "alto saxophone"
+        ],
+        "begin": "1962-08-13",
+        "direction": "backward",
+        "end": "1962-08-13",
+        "ended": true,
+        "source-credit": "",
+        "target-credit": "",
+        "target-type": "artist",
+        "type": "instrument",
+        "type-id": "59054b12-01ac-43ee-a618-285fd397e461"
+      },
+      {
+        "artist": {
+          "country": "US",
+          "disambiguation": "American jazz drummer",
+          "id": "e5a7e88a-9c16-4a6b-829b-7ed30929ab44",
+          "name": "Mel Lewis",
+          "sort-name": "Lewis, Mel",
+          "type": "Person",
+          "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df"
+        },
+        "attribute-credits": {},
+        "attribute-ids": {
+          "drums (drum set)": "12092505-6ee1-46af-a15a-b5b468b6b155"
+        },
+        "attribute-values": {},
+        "attributes": [
+          "drums (drum set)"
+        ],
+        "begin": "1962-08-13",
+        "direction": "backward",
+        "end": "1962-08-13",
+        "ended": true,
+        "source-credit": "",
+        "target-credit": "",
+        "target-type": "artist",
+        "type": "instrument",
+        "type-id": "59054b12-01ac-43ee-a618-285fd397e461"
+      },
+      {
+        "artist": {
+          "country": "US",
+          "disambiguation": "",
+          "id": "68f19808-1f7b-46d4-bd1d-71aaf0f6b267",
+          "name": "Gerry Mulligan",
+          "sort-name": "Mulligan, Gerry",
+          "type": "Person",
+          "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df"
+        },
+        "attribute-credits": {},
+        "attribute-ids": {
+          "baritone saxophone": "d3a04358-70f8-4c43-b722-c3cf6cc218ae"
+        },
+        "attribute-values": {},
+        "attributes": [
+          "baritone saxophone"
+        ],
+        "begin": "1962-08-13",
+        "direction": "backward",
+        "end": "1962-08-13",
+        "ended": true,
+        "source-credit": "",
+        "target-credit": "",
+        "target-type": "artist",
+        "type": "instrument",
+        "type-id": "59054b12-01ac-43ee-a618-285fd397e461"
+      },
+      {
+        "artist": {
+          "country": "US",
+          "disambiguation": "US 1940–90s record producer",
+          "id": "a4f7c16a-77bf-433a-be6d-d91ae3b9a13f",
+          "name": "George Avakian",
+          "sort-name": "Avakian, George",
+          "type": "Person",
+          "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df"
+        },
+        "attribute-ids": {},
+        "attribute-values": {},
+        "attributes": [],
+        "begin": null,
+        "direction": "backward",
+        "end": null,
+        "ended": false,
+        "source-credit": "",
+        "target-credit": "",
+        "target-type": "artist",
+        "type": "producer",
+        "type-id": "5c0ceac3-feb4-41f0-868d-dc06f6e27fc0"
+      },
+      {
+        "artist": {
+          "country": null,
+          "disambiguation": "Robert Graham Prince; Jazz composer, arranger, conductor, producer",
+          "id": "0485c700-0717-46f9-8208-90c9916f8586",
+          "name": "Bob Prince",
+          "sort-name": "Prince, Bob",
+          "type": "Person",
+          "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df"
+        },
+        "attribute-ids": {},
+        "attribute-values": {},
+        "attributes": [],
+        "begin": null,
+        "direction": "backward",
+        "end": null,
+        "ended": false,
+        "source-credit": "",
+        "target-credit": "",
+        "target-type": "artist",
+        "type": "producer",
+        "type-id": "5c0ceac3-feb4-41f0-868d-dc06f6e27fc0"
+      },
+      {
+        "artist": {
+          "country": "US",
+          "disambiguation": "Jazz composer, arranger, conductor & producer",
+          "id": "f00cb836-755c-4d1e-9257-c1fbd1a82881",
+          "name": "Robert Prince",
+          "sort-name": "Prince, Robert",
+          "type": "Person",
+          "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df"
+        },
+        "attribute-ids": {},
+        "attribute-values": {},
+        "attributes": [],
+        "begin": null,
+        "direction": "backward",
+        "end": null,
+        "ended": false,
+        "source-credit": "",
+        "target-credit": "Bob Prince",
+        "target-type": "artist",
+        "type": "producer",
+        "type-id": "5c0ceac3-feb4-41f0-868d-dc06f6e27fc0"
+      },
+      {
+        "artist": {
+          "country": "US",
+          "disambiguation": "",
+          "id": "5c6bd976-fde6-4a1c-8798-2b73c17c578f",
+          "name": "Mickey Crofford",
+          "sort-name": "Crofford, Mickey",
+          "type": "Person",
+          "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df"
+        },
+        "attribute-ids": {},
+        "attribute-values": {},
+        "attributes": [],
+        "begin": null,
+        "direction": "backward",
+        "end": null,
+        "ended": false,
+        "source-credit": "",
+        "target-credit": "",
+        "target-type": "artist",
+        "type": "recording",
+        "type-id": "a01ee869-80a8-45ef-9447-c59e91aa7926"
+      },
+      {
+        "artist": {
+          "country": null,
+          "disambiguation": "engineer",
+          "id": "7297053f-7182-4c0f-95ad-66b4de2e0d03",
+          "name": "Ray Hall",
+          "sort-name": "Hall, Ray",
+          "type": "Person",
+          "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df"
+        },
+        "attribute-ids": {},
+        "attribute-values": {},
+        "attributes": [],
+        "begin": null,
+        "direction": "backward",
+        "end": null,
+        "ended": false,
+        "source-credit": "",
+        "target-credit": "",
+        "target-type": "artist",
+        "type": "recording",
+        "type-id": "a01ee869-80a8-45ef-9447-c59e91aa7926"
+      },
+      {
+        "artist": {
+          "country": "US",
+          "disambiguation": "US jazz engineer/producer",
+          "id": "09e13499-87bc-46a6-bca1-f3526fbb84d4",
+          "name": "Bob Simpson",
+          "sort-name": "Simpson, Bob",
+          "type": "Person",
+          "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df"
+        },
+        "attribute-ids": {},
+        "attribute-values": {},
+        "attributes": [],
+        "begin": null,
+        "direction": "backward",
+        "end": null,
+        "ended": false,
+        "source-credit": "",
+        "target-credit": "",
+        "target-type": "artist",
+        "type": "recording",
+        "type-id": "a01ee869-80a8-45ef-9447-c59e91aa7926"
+      },
+      {
+        "attribute-ids": {},
+        "attribute-values": {},
+        "attributes": [],
+        "begin": "1962-08-13",
+        "direction": "forward",
+        "end": "1962-08-13",
+        "ended": true,
+        "source-credit": "",
+        "target-credit": "",
+        "target-type": "work",
+        "type": "performance",
+        "type-id": "a3005666-a872-32c3-ad06-98af558e99b0",
+        "work": {
+          "attributes": [],
+          "disambiguation": "",
+          "id": "c7c50616-fab7-4e1b-8222-4f8f1a50e146",
+          "iswcs": [],
+          "language": "zxx",
+          "languages": [
+            "zxx"
+          ],
+          "relations": [
+            {
+              "artist": {
+                "country": "US",
+                "disambiguation": "",
+                "id": "d5bf3447-c526-4f7c-9931-4b7c80fe34de",
+                "name": "Paul Desmond",
+                "sort-name": "Desmond, Paul",
+                "type": "Person",
+                "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df"
+              },
+              "attribute-ids": {},
+              "attribute-values": {},
+              "attributes": [],
+              "begin": null,
+              "direction": "backward",
+              "end": null,
+              "ended": false,
+              "source-credit": "",
+              "target-credit": "",
+              "target-type": "artist",
+              "type": "composer",
+              "type-id": "d59d99ea-23d4-4a80-b066-edca32ee158f"
+            }
+          ],
+          "title": "Two of a Mind",
+          "type": null,
+          "type-id": null
+        }
+      }
+    ],
+    "title": "Two of a Mind",
+    "video": false
+  },
+  "work": {
+    "attributes": [],
+    "disambiguation": "",
+    "id": "c7c50616-fab7-4e1b-8222-4f8f1a50e146",
+    "iswcs": [],
+    "language": "zxx",
+    "languages": [
+      "zxx"
+    ],
+    "relations": [
+      {
+        "artist": {
+          "country": "US",
+          "disambiguation": "",
+          "id": "d5bf3447-c526-4f7c-9931-4b7c80fe34de",
+          "name": "Paul Desmond",
+          "sort-name": "Desmond, Paul",
+          "type": "Person",
+          "type-id": "b6e035f4-3ce9-331c-97df-83397230b0df"
+        },
+        "attribute-ids": {},
+        "attribute-values": {},
+        "attributes": [],
+        "begin": null,
+        "direction": "backward",
+        "end": null,
+        "ended": false,
+        "source-credit": "",
+        "target-credit": "",
+        "target-type": "artist",
+        "type": "composer",
+        "type-id": "d59d99ea-23d4-4a80-b066-edca32ee158f"
+      },
+      {
+        "attribute-ids": {},
+        "attribute-values": {},
+        "attributes": [],
+        "begin": "1962-08-13",
+        "direction": "backward",
+        "end": "1962-08-13",
+        "ended": true,
+        "recording": {
+          "disambiguation": "",
+          "id": "fb255dd2-d395-41b2-abfd-7bd6efdbb897",
+          "length": 347693,
+          "title": "Two of a Mind",
+          "video": false
+        },
+        "source-credit": "",
+        "target-credit": "",
+        "target-type": "recording",
+        "type": "performance",
+        "type-id": "a3005666-a872-32c3-ad06-98af558e99b0"
+      },
+      {
+        "attribute-ids": {},
+        "attribute-values": {},
+        "attributes": [],
+        "begin": "1962-08-13",
+        "direction": "backward",
+        "end": "1962-08-13",
+        "ended": true,
+        "recording": {
+          "disambiguation": "mono",
+          "id": "1e223b42-930f-4bf7-b12b-5a30521649bf",
+          "length": 344000,
+          "title": "Two of a Mind",
+          "video": false
+        },
+        "source-credit": "",
+        "target-credit": "",
+        "target-type": "recording",
+        "type": "performance",
+        "type-id": "a3005666-a872-32c3-ad06-98af558e99b0"
+      }
+    ],
+    "title": "Two of a Mind",
+    "type": null,
+    "type-id": null
+  }
+}

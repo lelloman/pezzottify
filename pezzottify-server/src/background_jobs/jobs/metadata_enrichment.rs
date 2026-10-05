@@ -29,6 +29,8 @@ use tracing::{info, warn};
 
 #[path = "grounded_metadata.rs"]
 mod grounded;
+#[path = "enrichment_intervention.rs"]
+mod intervention;
 
 const ENRICHMENT_STALE_AFTER_SECS: i64 = 90 * 24 * 60 * 60;
 const ALL_TIME_LISTENING_START_DATE: u32 = 0;
@@ -43,6 +45,15 @@ struct MetadataEnrichmentRunParams {
     entity_types: Option<Vec<String>>,
     /// Evaluate only these tracks, without claiming queues or writing Works.
     work_dry_run_track_ids: Option<Vec<String>>,
+    /// Explicit operator action: reopen a completed/terminal cycle.
+    retry_entities: Option<Vec<RetryEntity>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RetryEntity {
+    entity_type: String,
+    entity_id: String,
 }
 
 fn normalize_entity_types(entity_types: Option<Vec<String>>) -> Vec<String> {
@@ -476,7 +487,11 @@ impl BackgroundJob for MetadataEnrichmentJob {
     }
 
     fn schedule(&self) -> JobSchedule {
-        JobSchedule::Interval(Duration::from_secs(self.settings.interval_hours * 60 * 60))
+        if self.settings.manual_only {
+            JobSchedule::Manual
+        } else {
+            JobSchedule::Interval(Duration::from_secs(self.settings.interval_hours * 60 * 60))
+        }
     }
 
     fn execution_policy(&self) -> JobExecutionPolicy {
@@ -528,6 +543,32 @@ impl MetadataEnrichmentJob {
                 .map_err(|e| JobError::ExecutionFailed(format!("Invalid params: {e}")))?,
             None => MetadataEnrichmentRunParams::default(),
         };
+        if let Some(entities) = params.retry_entities {
+            if params.work_dry_run_track_ids.is_some()
+                || entities.is_empty()
+                || entities.len() > 50
+                || entities.iter().any(|e| {
+                    e.entity_id.trim().is_empty()
+                        || e.entity_id.len() > 200
+                        || !matches!(
+                            e.entity_type.as_str(),
+                            "artist" | "album" | "track" | "work_resolution"
+                        )
+                })
+            {
+                return Err(JobError::ExecutionFailed("retry_entities must contain 1–50 valid entities and cannot be combined with a dry run".into()));
+            }
+            let mut results = Vec::new();
+            for entity in entities {
+                let reopened = store
+                    .retry_enrichment_manually(&entity.entity_type, &entity.entity_id)
+                    .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+                results.push(serde_json::json!({"entity_type":entity.entity_type,"entity_id":entity.entity_id,"reopened":reopened}));
+            }
+            JobAuditLogger::new(ctx.server_db.clone(), self.id())
+                .log_completed(Some(serde_json::json!({"manual_retry":results})));
+            return Ok(());
+        }
         let batch_size = params.batch_size.unwrap_or(self.settings.batch_size).max(1);
         if let Some(ids) = params.work_dry_run_track_ids {
             if ids.is_empty()
@@ -547,23 +588,26 @@ impl MetadataEnrichmentJob {
                 .enable_all()
                 .build()
                 .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
-            let provider = build_provider(&self.agent);
+            let provider = build_intervention_provider(&self.agent);
             let audit = JobAuditLogger::new(ctx.server_db.clone(), self.id());
             audit.log_started(Some(
                 serde_json::json!({"work_dry_run":true,"track_ids":ids}),
             ));
             let mut results = Vec::new();
             for id in ids {
+                audit.log_progress(serde_json::json!({"phase":"work_research_started","work_dry_run":true,"track_id":id}));
                 let result = runtime.block_on(enrich_until_cancelled(
                     &ctx.cancellation_token,
                     store,
                     &[],
-                    self.evaluate_work(ctx, store, provider.as_ref(), &id),
+                    self.research_work(ctx, store, provider.as_ref(), &id),
                 ))?;
-                results.push(match result {
+                let report = match result {
                     Ok(evaluation) => serde_json::json!({"track_id":id,"evaluation":evaluation}),
                     Err(error) => serde_json::json!({"track_id":id,"error":format!("{error:?}")}),
-                });
+                };
+                audit.log_progress(serde_json::json!({"phase":"work_research_finished","work_dry_run":true,"result":report}));
+                results.push(report);
             }
             audit.log_completed(Some(
                 serde_json::json!({"work_dry_run":true,"results":results}),
@@ -650,21 +694,30 @@ impl MetadataEnrichmentJob {
         } else {
             None
         };
+        let intervention_provider = self
+            .agent
+            .enabled
+            .then(|| build_intervention_provider(&self.agent));
         let mut processed = 0usize;
         let mut retryable_failures = 0usize;
         let mut permanent_failures = 0usize;
+        let mut terminal_failures = 0usize;
         for (index, item) in batch.iter().enumerate() {
             let result = runtime.block_on(enrich_until_cancelled(
                 &ctx.cancellation_token,
                 store,
                 &batch[index..],
                 async {
-                    match provider.as_ref() {
-                        Some(provider) => {
-                            self.enrich_queue_item(ctx, store, provider.as_ref(), item)
-                                .await
-                        }
-                        None => self.enrich_queue_item_without_llm(ctx, store, item).await,
+                    let item = store
+                        .begin_enrichment_attempt(item.id)
+                        .map_err(|e| ItemError::retryable(e.to_string()))?;
+                    audit.log_progress(serde_json::json!({"phase":"enrichment_item_started","queue_id":item.id,"entity_type":item.entity_type,"entity_id":item.entity_id,"stage":item.stage,"cycle":item.cycle,"normal_attempts":item.normal_attempts,"agent_attempts":item.agent_attempts}));
+                    if item.stage.as_deref() == Some("agent") {
+                        self.intervene(ctx, store, intervention_provider.as_deref(), &item)
+                            .await
+                    } else {
+                        self.run_normal_attempt(ctx, store, provider.as_deref(), &item)
+                            .await
                     }
                 },
             ))?;
@@ -696,14 +749,27 @@ impl MetadataEnrichmentJob {
                     permanent_failures += 1;
                 }
             }
+            if let Some(q) = store
+                .get_enrichment_queue_item(&item.entity_type, &item.entity_id)
+                .map_err(|e| JobError::ExecutionFailed(e.to_string()))?
+            {
+                if q.status == "failed_enrichment" {
+                    terminal_failures += 1;
+                }
+                audit.log_progress(serde_json::json!({"phase":"enrichment_item_finished","queue_id":q.id,"entity_type":q.entity_type,"entity_id":q.entity_id,"status":q.status,"stage":q.stage,"cycle":q.cycle,"normal_attempts":q.normal_attempts,"agent_attempts":q.agent_attempts,"last_error":q.last_error}));
+            }
         }
 
         info!(
-            "Metadata enrichment processed {} queued items ({} retryable failures, {} permanent failures)",
+            "Metadata enrichment completed {} items successfully ({} retryable errors, {} permanent errors)",
             processed, retryable_failures, permanent_failures
         );
         audit.log_completed(Some(serde_json::json!({
             "processed": processed,
+            "attempted": processed + retryable_failures + permanent_failures,
+            "succeeded": processed,
+            "terminal_failures": terminal_failures,
+            "retry_scheduled": retryable_failures + permanent_failures - terminal_failures,
             "retryable_failures": retryable_failures,
             "permanent_failures": permanent_failures,
             "seeded": seeded,
@@ -712,6 +778,8 @@ impl MetadataEnrichmentJob {
             "requeued_stale_running": requeued_stale_running,
             "provider": provider.as_ref().map(|provider| provider.name()).unwrap_or("deterministic"),
             "model": provider.as_ref().map(|provider| provider.model()).unwrap_or("wikidata"),
+            "intervention_provider":intervention_provider.as_ref().map(|provider|provider.name()),
+            "intervention_model":intervention_provider.as_ref().map(|provider|provider.model()),
         })));
         Ok(())
     }
@@ -1249,6 +1317,19 @@ pub(super) fn build_provider(agent: &AgentSettings) -> Box<dyn LlmProvider> {
     }
 }
 
+pub(super) fn build_intervention_provider(agent: &AgentSettings) -> Box<dyn LlmProvider> {
+    let mut settings = agent.clone();
+    if let Some(model) = &agent.llm.intervention_model {
+        settings.llm.model = model.clone();
+        // Model-specific extraction controls must not leak into another backend.
+        settings.llm.reasoning_effort = agent.llm.intervention_reasoning_effort.clone();
+        settings.llm.thinking_budget_tokens = None;
+    } else if agent.llm.intervention_reasoning_effort.is_some() {
+        settings.llm.reasoning_effort = agent.llm.intervention_reasoning_effort.clone();
+    }
+    build_provider(&settings)
+}
+
 /// Never parse a partial answer (or reasoning-only response) as durable metadata.
 pub(super) fn require_complete_answer(
     response: &crate::agent::CompletionResponse,
@@ -1375,7 +1456,7 @@ async fn enrich_until_cancelled<T>(
         biased;
         _ = cancellation.cancelled() => {
             for item in unfinished {
-                store.fail_enrichment_queue_item(item.id, "Interrupted by shutdown", Some(0))
+                store.release_enrichment_claim(item.id, "Interrupted by shutdown")
                     .map_err(|error| JobError::ExecutionFailed(error.to_string()))?;
             }
             Err(JobError::Cancelled)
@@ -1467,6 +1548,21 @@ mod tests {
                 .unwrap(),
             42
         );
+    }
+
+    #[test]
+    fn metadata_enrichment_manual_only_disables_automatic_schedule() {
+        let settings = MetadataEnrichmentJobSettings {
+            manual_only: true,
+            ..Default::default()
+        };
+        let job = MetadataEnrichmentJob::from_settings(&settings, Default::default());
+        assert!(matches!(job.schedule(), JobSchedule::Manual));
+        assert!(matches!(
+            MetadataEnrichmentJob::from_settings(&Default::default(), Default::default())
+                .schedule(),
+            JobSchedule::Interval(_)
+        ));
     }
 
     #[test]
@@ -1654,6 +1750,7 @@ mod tests {
 
         let job = MetadataEnrichmentJob::from_settings(
             &MetadataEnrichmentJobSettings {
+                manual_only: false,
                 interval_hours: 6,
                 batch_size: 2,
                 retry_after_secs: 60,
@@ -1707,6 +1804,7 @@ mod tests {
         let (ctx, _user_store, enrichment_store) = test_job_context(&temp_dir);
         let job = MetadataEnrichmentJob::from_settings(
             &MetadataEnrichmentJobSettings {
+                manual_only: false,
                 interval_hours: 6,
                 batch_size: 2,
                 retry_after_secs: 60,

@@ -135,12 +135,13 @@ impl SqliteEnrichmentStore {
         entity_types: &[String],
     ) -> Result<Vec<EnrichmentQueueItemV1>> {
         let now = now_unix();
-        let conn = self.write_conn.lock().unwrap();
+        let mut conn = self.write_conn.lock().unwrap();
+        let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         let mut sql = String::from(
             "SELECT id, entity_type, entity_id, status, priority, reason, stage, attempts,
-                    created_at, updated_at, next_attempt_at, started_at, completed_at, last_error
+                    created_at, updated_at, next_attempt_at, started_at, completed_at, last_error, normal_attempts, agent_attempts, cycle
              FROM enrichment_queue_v1
-             WHERE status = 'queued' AND (next_attempt_at IS NULL OR next_attempt_at <= ?)",
+             WHERE status = 'queued' AND (normal_attempts < 12 OR agent_attempts < 3) AND (next_attempt_at IS NULL OR next_attempt_at <= ?)",
         );
         let valid_types = entity_types
             .iter()
@@ -164,7 +165,7 @@ impl SqliteEnrichmentStore {
         }
         values.push((limit as i64).into());
 
-        let mut stmt = conn.prepare(&sql)?;
+        let mut stmt = tx.prepare(&sql)?;
         let items = stmt
             .query_map(
                 rusqlite::params_from_iter(values.iter()),
@@ -174,21 +175,19 @@ impl SqliteEnrichmentStore {
         drop(stmt);
 
         for item in &items {
-            conn.execute(
-                "UPDATE enrichment_queue_v1 SET status = 'running', stage = 'running', attempts = attempts + 1,
-                        started_at = ?1, updated_at = ?1, last_error = NULL WHERE id = ?2",
+            tx.execute(
+                "UPDATE enrichment_queue_v1 SET status = 'running',
+                        started_at = ?1, updated_at = ?1 WHERE id = ?2",
                 params![now, item.id],
             )?;
         }
+        tx.commit()?;
         Ok(items
             .into_iter()
             .map(|mut item| {
                 item.status = "running".to_string();
-                item.stage = Some("running".to_string());
-                item.attempts += 1;
                 item.started_at = Some(now);
                 item.updated_at = now;
-                item.last_error = None;
                 item
             })
             .collect())
@@ -234,14 +233,14 @@ fn int_to_bool(v: Option<i32>) -> Option<bool> {
     v.map(|i| i != 0)
 }
 
-fn now_unix() -> i64 {
+pub(super) fn now_unix() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as i64
 }
 
-fn valid_entity_type(entity_type: &str) -> bool {
+pub(super) fn valid_entity_type(entity_type: &str) -> bool {
     matches!(
         entity_type,
         "artist" | "album" | "track" | "work_resolution"
@@ -292,6 +291,9 @@ fn queue_item_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<EnrichmentQu
         started_at: row.get(11)?,
         completed_at: row.get(12)?,
         last_error: row.get(13)?,
+        normal_attempts: row.get(14)?,
+        agent_attempts: row.get(15)?,
+        cycle: row.get(16)?,
     })
 }
 
@@ -862,22 +864,28 @@ impl EnrichmentStore for SqliteEnrichmentStore {
             return Ok(false);
         }
         let conn = self.write_conn.lock().unwrap();
-        conn.execute(
+        let changed = conn.execute(
             "INSERT INTO enrichment_queue_v1
-             (entity_type, entity_id, status, priority, reason, stage, attempts, created_at, updated_at, next_attempt_at, started_at, completed_at, last_error)
-             VALUES (?1, ?2, 'queued', ?3, ?4, 'queued', 0, ?5, ?5, NULL, NULL, NULL, NULL)
-             ON CONFLICT(entity_type, entity_id) DO UPDATE SET
-                status = CASE WHEN enrichment_queue_v1.status = 'running' THEN enrichment_queue_v1.status ELSE 'queued' END,
-                priority = MAX(enrichment_queue_v1.priority, excluded.priority),
-                reason = excluded.reason,
-                updated_at = excluded.updated_at,
-                next_attempt_at = NULL,
-                completed_at = NULL,
-                last_error = NULL
-             WHERE enrichment_queue_v1.status != 'running'",
+             (entity_type,entity_id,status,priority,reason,stage,created_at,updated_at)
+             VALUES (?1,?2,'queued',?3,?4,'normal',?5,?5)
+             ON CONFLICT(entity_type,entity_id) DO UPDATE SET
+                status='queued',priority=MAX(enrichment_queue_v1.priority,excluded.priority),
+                reason=excluded.reason,stage='normal',updated_at=excluded.updated_at,
+                next_attempt_at=NULL,completed_at=NULL,started_at=NULL,last_error=NULL,
+                normal_attempts=0,agent_attempts=0,cycle=enrichment_queue_v1.cycle+1
+             WHERE enrichment_queue_v1.status='completed'",
             params![entity_type, entity_id, priority, reason, now],
         )?;
-        Ok(true)
+        // Automatic discovery never clears backoff, revives terminal failures,
+        // or restarts an active cycle. Priority may still reflect new listens.
+        if changed == 0 {
+            conn.execute(
+                "UPDATE enrichment_queue_v1 SET priority=MAX(priority,?3)
+                WHERE entity_type=?1 AND entity_id=?2 AND status='queued'",
+                params![entity_type, entity_id, priority],
+            )?;
+        }
+        Ok(changed == 1)
     }
 
     fn get_enrichment_queue_item(
@@ -889,7 +897,7 @@ impl EnrichmentStore for SqliteEnrichmentStore {
         let result = conn
             .prepare_cached(
                 "SELECT id, entity_type, entity_id, status, priority, reason, stage, attempts,
-                    created_at, updated_at, next_attempt_at, started_at, completed_at, last_error
+                    created_at, updated_at, next_attempt_at, started_at, completed_at, last_error, normal_attempts, agent_attempts, cycle
              FROM enrichment_queue_v1 WHERE entity_type = ?1 AND entity_id = ?2",
             )?
             .query_row(params![entity_type, entity_id], queue_item_from_row)
@@ -909,34 +917,42 @@ impl EnrichmentStore for SqliteEnrichmentStore {
         self.claim_enrichment_queue_batch_matching(limit, entity_types)
     }
 
+    fn begin_enrichment_attempt(&self, id: i64) -> Result<EnrichmentQueueItemV1> {
+        self.begin_attempt(id)
+    }
+    fn enrichment_attempt_history(&self, id: i64) -> Result<Vec<serde_json::Value>> {
+        self.history(id)
+    }
+    fn record_enrichment_diagnostics(&self, id: i64, value: &serde_json::Value) -> Result<()> {
+        self.diagnostics(id, value)
+    }
+    fn release_enrichment_claim(&self, id: i64, reason: &str) -> Result<()> {
+        self.release_claim(id, reason)
+    }
+    fn retry_enrichment_manually(&self, kind: &str, id: &str) -> Result<bool> {
+        self.manual_retry(kind, id)
+    }
     fn requeue_stale_running_enrichment_queue_items(&self, stale_after_secs: i64) -> Result<usize> {
-        let now = now_unix();
-        let cutoff = now.saturating_sub(stale_after_secs.max(0));
-        let conn = self.write_conn.lock().unwrap();
-        let count = conn.execute(
-            "UPDATE enrichment_queue_v1
-             SET status = 'queued',
-                 stage = 'queued',
-                 updated_at = ?1,
-                 next_attempt_at = NULL,
-                 started_at = NULL,
-                 last_error = 'requeued after interrupted enrichment run'
-             WHERE status = 'running'
-               AND started_at IS NOT NULL
-               AND started_at <= ?2",
-            params![now, cutoff],
-        )?;
-        Ok(count)
+        let ids = {
+            let conn = self.read_conn.lock().unwrap();
+            let mut stmt = conn.prepare(
+                "SELECT id FROM enrichment_queue_v1 WHERE status='running'
+                AND started_at IS NOT NULL AND started_at<=?1",
+            )?;
+            let rows = stmt
+                .query_map([now_unix().saturating_sub(stale_after_secs.max(0))], |r| {
+                    r.get::<_, i64>(0)
+                })?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        for id in &ids {
+            self.release_claim(*id, "Interrupted enrichment run recovered")?;
+        }
+        Ok(ids.len())
     }
 
     fn complete_enrichment_queue_item(&self, id: i64) -> Result<()> {
-        let now = now_unix();
-        let conn = self.write_conn.lock().unwrap();
-        conn.execute(
-            "UPDATE enrichment_queue_v1 SET status = 'completed', stage = 'completed', completed_at = ?1, updated_at = ?1, last_error = NULL WHERE id = ?2",
-            params![now, id],
-        )?;
-        Ok(())
+        self.finish_attempt(id, None, None)
     }
 
     fn fail_enrichment_queue_item(
@@ -945,17 +961,7 @@ impl EnrichmentStore for SqliteEnrichmentStore {
         error: &str,
         retry_after_secs: Option<i64>,
     ) -> Result<()> {
-        let now = now_unix();
-        let (status, next_attempt_at) = match retry_after_secs {
-            Some(secs) => ("queued", Some(now.saturating_add(secs))),
-            None => ("failed", None),
-        };
-        let conn = self.write_conn.lock().unwrap();
-        conn.execute(
-            "UPDATE enrichment_queue_v1 SET status = ?1, stage = 'failed', updated_at = ?2, next_attempt_at = ?3, last_error = ?4 WHERE id = ?5",
-            params![status, now, next_attempt_at, error, id],
-        )?;
-        Ok(())
+        self.finish_attempt(id, Some(error), retry_after_secs)
     }
 
     fn get_entity_enrichment_status(
@@ -980,7 +986,7 @@ impl EnrichmentStore for SqliteEnrichmentStore {
         let queue = conn
             .prepare_cached(
                 "SELECT id, entity_type, entity_id, status, priority, reason, stage, attempts,
-                    created_at, updated_at, next_attempt_at, started_at, completed_at, last_error
+                    created_at, updated_at, next_attempt_at, started_at, completed_at, last_error, normal_attempts, agent_attempts, cycle
              FROM enrichment_queue_v1 WHERE entity_type = ?1 AND entity_id = ?2",
             )?
             .query_row(params![entity_type, entity_id], queue_item_from_row)
@@ -993,6 +999,9 @@ impl EnrichmentStore for SqliteEnrichmentStore {
                 status: q.status,
                 stage: q.stage,
                 attempts: q.attempts,
+                normal_attempts: q.normal_attempts,
+                agent_attempts: q.agent_attempts,
+                cycle: q.cycle,
                 last_error: q.last_error,
                 updated_at: Some(q.updated_at),
                 enriched_at: enriched.as_ref().map(|v| v.0),
@@ -1004,6 +1013,9 @@ impl EnrichmentStore for SqliteEnrichmentStore {
                 status: "completed".to_string(),
                 stage: None,
                 attempts: 0,
+                normal_attempts: 0,
+                agent_attempts: 0,
+                cycle: 0,
                 last_error: None,
                 updated_at: None,
                 enriched_at: Some(enriched_at),
@@ -1632,7 +1644,7 @@ mod tests {
         assert!(store
             .enqueue_enrichment_if_missing_or_stale("track", "track1", "impression", 5, 3600)
             .unwrap());
-        assert!(store
+        assert!(!store
             .enqueue_enrichment_if_missing_or_stale("track", "track1", "listening", 20, 3600)
             .unwrap());
 
@@ -1642,7 +1654,7 @@ mod tests {
             .unwrap();
         assert_eq!(item.status, "queued");
         assert_eq!(item.priority, 20);
-        assert_eq!(item.reason, Some("listening".to_string()));
+        assert_eq!(item.reason, Some("impression".to_string()));
 
         store
             .enqueue_enrichment_if_missing_or_stale("artist", "artist1", "impression", 5, 3600)
@@ -1703,6 +1715,7 @@ mod tests {
             .enqueue_enrichment_if_missing_or_stale("album", "album1", "contract-test", 10, 3600)
             .unwrap();
         let item = store.claim_enrichment_queue_batch(1).unwrap().remove(0);
+        store.begin_enrichment_attempt(item.id).unwrap();
 
         store
             .fail_enrichment_queue_item(item.id, "provider unavailable", Some(60))
@@ -1756,7 +1769,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(stale_item.status, "queued");
-        assert_eq!(stale_item.stage, Some("queued".to_string()));
+        assert_eq!(stale_item.stage, Some("normal".to_string()));
         assert_eq!(stale_item.started_at, None);
         assert_eq!(fresh_item.status, "running");
     }

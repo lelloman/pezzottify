@@ -23,6 +23,7 @@ mod source_knowledge;
 pub mod track_embedding_sync;
 pub mod whatsnew_batch;
 mod work_knowledge;
+mod work_research;
 mod work_resolution;
 
 // pub use audit_log_cleanup::AuditLogCleanupJob;

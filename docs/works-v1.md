@@ -45,30 +45,42 @@ Resolution is source-first:
    use the referenced Work and its writer/composer/lyricist/librettist credits
    directly, without an LLM. Missing creators, partial/medley relationships and
    multiple Works remain unresolved.
-3. If no recording was resolved, search Wikidata for the catalog track title and
-   fetch composition candidates and their creators. Ask the model for **one
-   identity decision**, a fetched Q-ID or null, with an explanation. The server
-   copies the selected reference's title, creators and supported kind; the model
-   cannot invent those fields. Empty candidate sets require no model request.
-4. Reuse or create the local Work in a transaction with its track link and
-   evidence. Validated external IDs take precedence over text matching. Different
-   external identities do not merge merely because title/creator text matches.
+3. Normal attempts that cannot establish a single explicit relationship retry
+   within the shared 12-attempt budget. Afterward the bounded intervention agent
+   can search MusicBrainz recordings and works, fetch credits and relationships,
+   and search Wikidata candidates in a bounded tool loop. A title-based model choice is
+   retained in research evidence only, never as a verified Work attachment.
+   Even a fetched Q-ID with matching copied fields does not establish that this
+   recording performs that composition. Contradictory explanations cannot create
+   links because the final proposal must pass an independent source validator.
+4. Reuse/create the local Work only through the explicit MusicBrainz relationship,
+   retaining its evidence. Different externally identified Works do not merge
+   merely because title/creator text matches.
 
-The Wikidata match remains a model-assisted identity decision, not a proven
-recording relationship. Source-backed identity facts do not guarantee the model
-selected the right composition. This path must still pass factual evaluation.
+Uncertain tracks keep an unresolved result and consume the bounded retry budget;
+after three failed interventions the queue becomes `failed_enrichment`.
+Already completed unresolved evaluations from older versions are not bulk
+requeued by this upgrade. An explicit manual retry can reopen them.
 
-There is no longer a model-memory fallback that creates an inferred Work when
-sources are absent. Uncertain tracks remain unresolved; they do not receive a
-fabricated provisional composition. Source errors retry with backoff. Existing
-linked Works are not automatically replaced.
+On startup, the schema upgrade archives existing `wikidata_supported_v1`
+attachments in `work_link_quarantine_v1`, including their original Work IDs,
+status, reason, evidence and timestamps. It then detaches those unverified
+recording links, marks their resolutions `needs_review_v1`, and marks their
+queue rows terminal. The underlying Work records and source identifiers are
+retained. This is a reversible quarantine of an unverified mechanism, not a claim
+that every old link was wrong. Explicit MusicBrainz links are unaffected.
+The original evidence remains available for review even after manual retry.
 
-Normalization folds case/whitespace and sorts creators while preserving accents,
-punctuation and movement identifiers. The current one-Work-per-track model cannot
-represent medleys. MusicBrainz and Wikidata IDs are persisted in
-`work_external_ids_v1`, with statuses `musicbrainz_supported_v1` and
-`wikidata_supported_v1`. Cross-provider text-only equivalence is not assumed;
-without an explicit bridge, duplicate representations may require later review.
+Work identity normalization preserves accents, punctuation and movement
+identifiers. Recording matching separately folds typographic apostrophes.
+It also tolerates one explicit terminal remaster label, such as
+`Two of a Mind - 2003 Remastered` versus `Two of a Mind`, while still requiring
+the same fetched ISRC and complete artist credits. Live/remix/edit qualifiers,
+movement identifiers, and unsupported suffixes remain significant. This is a
+recording-title comparison rule, not a change to stored titles or Work identity.
+The current one-Work-per-track model cannot represent medleys. MusicBrainz and
+previously stored Wikidata IDs remain in `work_external_ids_v1`; newly accepted
+recording relationships use `musicbrainz_supported_v1`.
 
 ## Storage and API
 
@@ -144,13 +156,30 @@ catalog tracks **without claiming queues, creating Works, or changing links**:
 {"work_dry_run_track_ids": ["track-id-1", "track-id-2"]}
 ```
 
+This invokes the same bounded research loop and intervention model used after
+normal retries, retaining results in the job audit without writing Work links or
+queue state. One item may take up to 240 seconds; use small batches with the
+existing job-runner timeout. The opt-in `work_research_live_corpus` Rust test also
+evaluates exported catalog contexts without opening a production database.
+
 Dry runs require an enabled LLM provider and make actual reference/provider requests as needed. The
 job audit details contain each proposal, validation failure (if any), model
 responses, input context and candidates. This path shares the production
-identification code. It does not simulate writes between examples: evaluate
+research and validation code. It does not simulate writes between examples: evaluate
 matching against pre-existing Works, or use an isolated database to evaluate
-sequential creation and linking. Each track takes zero or one model calls,
-in addition to reference requests.
+sequential creation and linking. Each intervention uses at most five research
+rounds and ten new tool calls. The application advances untried searches/fetches;
+the model proposes additional actions. Every round receives a fresh prompt from
+accumulated source state and previous round outcomes. Repeated actions are skipped,
+and format failures do not discard earlier evidence. Deterministic validation
+accepts a unique corroborated link without another model decision.
+
+A compact checkpoint carries search outcomes, discovered candidates, full fetched
+documents when they fit, and errors into later interventions in the same retry cycle.
+Changed catalog identity or manual reopening starts fresh. Oversized documents
+are evicted whole and must be fetched again before validation. Source failures
+can be retried later; successful empty searches are remembered. Current prompt and
+tool traces remain in the evaluation audit, with compact memory in attempt history.
 
 Before accepting a model/prompt for broad use, build a manually reviewed set
 containing original/cover/live/remaster groups, different songs with the same
