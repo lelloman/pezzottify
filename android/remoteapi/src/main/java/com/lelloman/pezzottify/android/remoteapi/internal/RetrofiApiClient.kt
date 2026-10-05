@@ -156,6 +156,12 @@ internal interface RetrofitApiClient {
         @Query("offset") offset: Int = 0,
     ): Response<GenreTracksResponse>
 
+    @GET("/v1/content/track/{id}/lyrics")
+    suspend fun getTrackLyrics(
+        @Header("Authorization") authToken: String,
+        @Path("id") id: String,
+    ): Response<kotlinx.serialization.json.JsonElement>
+
     @POST("/v1/content/lyrics/{entityType}/{id}/download")
     suspend fun downloadLyrics(
         @Header("Authorization") authToken: String,

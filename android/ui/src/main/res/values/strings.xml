@@ -691,4 +691,9 @@
     <string name="download_lyrics">Download lyrics</string>
     <string name="lyrics_download_started">Lyrics fetching started. Already downloaded lyrics will be reused.</string>
     <string name="lyrics_download_failed">Could not start lyrics fetching. Check availability and try again shortly.</string>
+    <string name="player_lyrics">Lyrics</string>
+    <string name="player_lyrics_follow">Follow current line</string>
+    <string name="player_lyrics_synced">LRCLIB · Synced lyrics</string>
+    <string name="player_lyrics_plain">LRCLIB · Lyrics</string>
+    <string name="player_lyrics_seek">Seek to this line</string>
 </resources>

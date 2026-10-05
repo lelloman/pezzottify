@@ -530,6 +530,19 @@ internal class RemoteApiClientImpl(
                 .returnFromRetrofitResponse()
         }
 
+    override suspend fun getTrackLyrics(id: String): RemoteApiResponse<com.lelloman.pezzottify.android.domain.remoteapi.TrackLyrics?> =
+        catchingNetworkError {
+            val response = getRetrofit().getTrackLyrics(authToken, id)
+            response.commonError?.let { return@catchingNetworkError it }
+            // Retrofit erases nullable response types. Read JSON explicitly so a
+            // valid null (no downloaded lyrics) is not a deserialization error.
+            val body = response.body()
+            RemoteApiResponse.Success(
+                if (body == null || body is kotlinx.serialization.json.JsonNull) null
+                else jsonConverter.decodeFromString<com.lelloman.pezzottify.android.domain.remoteapi.TrackLyrics>(body.toString())
+            )
+        }
+
     override suspend fun downloadLyrics(entityType: String, id: String): RemoteApiResponse<com.lelloman.pezzottify.android.domain.remoteapi.LyricsDownloadResponse> =
         catchingNetworkError {
             getRetrofit().downloadLyrics(authToken, entityType, id).returnFromRetrofitResponse()
