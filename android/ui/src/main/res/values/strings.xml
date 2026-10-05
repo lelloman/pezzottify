@@ -696,4 +696,7 @@
     <string name="player_lyrics_synced">LRCLIB · Synced lyrics</string>
     <string name="player_lyrics_plain">LRCLIB · Lyrics</string>
     <string name="player_lyrics_seek">Seek to this line</string>
+    <string name="player_open_lyrics">Open lyrics player</string>
+    <string name="player_back_to_player">Back to player</string>
+    <string name="player_lyrics_unavailable">No lyrics available for this track.</string>
 </resources>
