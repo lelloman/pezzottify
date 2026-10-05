@@ -139,6 +139,8 @@
       </div>
     </section>
 
+    <TrackLyrics :trackId="trackId" class="trackLyricsSection" />
+
     <section v-if="artistIds.length" class="artistsSection">
       <h2>Artists</h2>
       <div class="artistsContainer">
@@ -178,6 +180,7 @@ import { useUserStore } from "@/store/user";
 import ToggableFavoriteIcon from "@/components/common/ToggableFavoriteIcon.vue";
 import EnrichmentStatusIndicator from "@/components/common/EnrichmentStatusIndicator.vue";
 import RadioBuilderModal from "@/components/common/RadioBuilderModal.vue";
+import TrackLyrics from "@/components/common/TrackLyrics.vue";
 
 const props = defineProps({
   trackId: {
@@ -720,6 +723,14 @@ onUnmounted(() => {
   margin: -12px 0 0;
   color: var(--text-subdued);
   font-size: 0.9rem;
+}
+
+.trackLyricsSection {
+  margin-top: 28px;
+  padding: 24px;
+  background: var(--surface-panel);
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
 }
 
 .detailSection {
