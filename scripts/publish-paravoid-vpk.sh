@@ -9,6 +9,9 @@
 # The shell's baseline must be saved in
 #   android/.paravoid-signing/releases/<base-version>.<shell-version-code>/baseline-candidate
 # (kept after each shell publication). The payload version is the current commit count.
+# Production connection settings (oidc.issuerUrl, oidc.clientId, server.baseUrl) must
+# be in android/local.properties, or supplied to isolated builds through
+# ORG_GRADLE_PROJECT_connectionPropertiesFile=/absolute/path/to/connection.properties.
 set -euo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 shell_version="${1:?usage: publish-paravoid-vpk.sh <shell-version-code>}"
