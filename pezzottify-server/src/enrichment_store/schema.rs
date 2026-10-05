@@ -286,5 +286,6 @@ pub fn create_enrichment_v1_schema(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_entity_evidence_v1_entity ON entity_evidence_v1(entity_type, entity_id);
         "#,
     )?;
+    super::retries::migrate(conn)?;
     Ok(())
 }

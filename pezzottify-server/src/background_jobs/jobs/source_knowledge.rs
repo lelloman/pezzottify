@@ -39,6 +39,41 @@ pub(super) struct ReferenceClient {
 }
 
 impl ReferenceClient {
+    pub(super) async fn research_search(&self, kind: &str, query: &str) -> Result<Value> {
+        ensure!(
+            matches!(kind, "recording" | "work"),
+            "invalid search resource"
+        );
+        ensure!(
+            !query.trim().is_empty() && query.len() <= 500,
+            "invalid query"
+        );
+        self.get(
+            &format!("{}/{kind}", self.mb),
+            &[("query", query), ("fmt", "json"), ("limit", "10")],
+        )
+        .await
+    }
+
+    pub(super) async fn research_fetch(&self, kind: &str, id: &str) -> Result<Value> {
+        ensure!(
+            matches!(kind, "recording" | "work") && valid_mbid(id),
+            "invalid source identity"
+        );
+        let inc = if kind == "recording" {
+            "artist-credits+isrcs+work-rels+work-level-rels+artist-rels"
+        } else {
+            "artist-rels+recording-rels"
+        };
+        let value = self
+            .get(
+                &format!("{}/{kind}/{id}", self.mb),
+                &[("fmt", "json"), ("inc", inc)],
+            )
+            .await?;
+        ensure!(value["id"] == id, "source identity changed");
+        Ok(value)
+    }
     pub fn new() -> Result<Self> {
         Ok(Self {
             client: reqwest::Client::builder()
@@ -146,21 +181,21 @@ impl ReferenceClient {
         let response = self.entities(&id).await?;
         let entity = &response["entities"][&id];
         ensure!(entity["id"] == id, "missing resolved Wikidata entity");
-        let spotify_match = claim_values(entity, "P1902")
+        let spotify_match = identifier_values(entity, "P1902")
             .iter()
             .any(|v| v.as_str() == Some(spotify));
         let mbid_match = mbid.is_some_and(|id| {
-            claim_values(entity, "P434")
+            identifier_values(entity, "P434")
                 .iter()
                 .any(|v| v.as_str() == Some(id))
         });
         ensure!(
-            mbid.is_none() || claim_values(entity, "P434").is_empty() || mbid_match,
+            mbid.is_none() || identifier_values(entity, "P434").is_empty() || mbid_match,
             "conflicting MusicBrainz and Wikidata artist identities"
         );
         ensure!(
             spotify_match || mbid_match,
-            "saved Wikidata identity no longer matches catalog identifiers"
+            "Wikidata identity does not match catalog identifiers"
         );
         let url = format!("https://www.wikidata.org/wiki/{id}");
         result
@@ -350,7 +385,9 @@ impl ReferenceClient {
             "MusicBrainz lookup changed identity"
         );
         let identifier_matches = if kind == "album" {
-            result["barcode"].as_str() == Some(code)
+            result["barcode"]
+                .as_str()
+                .is_some_and(|barcode| barcodes_match(barcode, code))
         } else {
             result["isrcs"]
                 .as_array()
@@ -453,11 +490,50 @@ fn normalize(s: &str) -> String {
         .replace(['‘', '’'], "'")
 }
 
+// A mastering label does not identify a different performance. Strip only one
+// explicit terminal label, never arbitrary parentheses, years, or version text.
+fn recording_title(s: &str) -> String {
+    fn mastering_label(label: &str) -> bool {
+        fn year(s: &str) -> bool {
+            s.len() == 4
+                && s.bytes().all(|c| c.is_ascii_digit())
+                && s.parse::<u16>().is_ok_and(|n| (1900..=2099).contains(&n))
+        }
+        let words: Vec<_> = label.split_whitespace().collect();
+        match words.as_slice() {
+            ["remaster" | "remastered"] => true,
+            [y, "remaster" | "remastered"] | ["remaster" | "remastered", y] => year(y),
+            _ => false,
+        }
+    }
+    let normalized = normalize(s);
+    let bracketed = [('(', ')'), ('[', ']')]
+        .into_iter()
+        .find_map(|(open, close)| {
+            let body = normalized.strip_suffix(close)?;
+            let (title, label) = body.rsplit_once(open)?;
+            mastering_label(label).then_some(title.trim_end())
+        });
+    let dashed = [" - ", " – ", " — "].into_iter().find_map(|separator| {
+        let (title, label) = normalized.rsplit_once(separator)?;
+        mastering_label(label).then_some(title.trim_end())
+    });
+    match bracketed.or(dashed).filter(|title| !title.is_empty()) {
+        Some(title) => title.to_owned(),
+        None => normalized,
+    }
+}
+
 fn corroborates(candidate: &Value, context: &Value, kind: &str) -> bool {
     let title = context[kind]["name"].as_str().unwrap_or_default();
-    if title.is_empty()
-        || normalize(candidate["title"].as_str().unwrap_or_default()) != normalize(title)
-    {
+    let candidate_title = candidate["title"].as_str().unwrap_or_default();
+    let titles_match = normalize(candidate_title) == normalize(title)
+        || (kind == "track"
+            && context["track"]["external_id_isrc"]
+                .as_str()
+                .is_some_and(|id| !id.is_empty())
+            && recording_title(candidate_title) == recording_title(title));
+    if title.trim().is_empty() || !titles_match {
         return false;
     }
     let local: BTreeSet<_> = context["artists"]
@@ -481,7 +557,43 @@ fn corroborates(candidate: &Value, context: &Value, kind: &str) -> bool {
     !local.is_empty() && local == remote
 }
 
+pub(super) fn recording_matches_catalog(recording: &Value, context: &Value) -> bool {
+    let Some(code) = context["track"]["external_id_isrc"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+    else {
+        return false;
+    };
+    corroborates(recording, context, "track")
+        && recording["isrcs"]
+            .as_array()
+            .is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(code)))
+}
+
+// GTINs may be represented as UPC/EAN or zero-padded GTIN-14. Do not strip
+// arbitrary punctuation or compare partial identifiers.
+fn barcodes_match(left: &str, right: &str) -> bool {
+    fn canonical(value: &str) -> Option<&str> {
+        if !matches!(value.len(), 8 | 12 | 13 | 14) || !value.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        let value = value.trim_start_matches('0');
+        (!value.is_empty()).then_some(value)
+    }
+    matches!((canonical(left), canonical(right)), (Some(a), Some(b)) if a == b)
+}
+
+fn identifier_values(entity: &Value, property: &str) -> Vec<Value> {
+    // These describe the identifier's label/account, not a temporal restriction
+    // or a different subject. Other qualifiers still require interpretation.
+    claim_values_with_qualifiers(entity, property, &["P1810", "P1552"])
+}
+
 fn claim_values(entity: &Value, property: &str) -> Vec<Value> {
+    claim_values_with_qualifiers(entity, property, &[])
+}
+
+fn claim_values_with_qualifiers(entity: &Value, property: &str, allowed: &[&str]) -> Vec<Value> {
     let rows: Vec<_> = entity["claims"][property]
         .as_array()
         .into_iter()
@@ -495,7 +607,7 @@ fn claim_values(entity: &Value, property: &str) -> Vec<Value> {
         .filter(|r| {
             r.get("qualifiers")
                 .and_then(Value::as_object)
-                .is_none_or(|q| q.is_empty())
+                .is_none_or(|q| q.keys().all(|key| allowed.contains(&key.as_str())))
         })
         .filter_map(|r| r.pointer("/mainsnak/datavalue/value").cloned())
         .collect()
@@ -537,6 +649,41 @@ fn wikidata_time(value: &Value) -> Option<String> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn source_knowledge_barcodes_preserve_full_identity() {
+        assert!(barcodes_match("00042282501523", "042282501523"));
+        assert!(barcodes_match("081227371968", "00081227371968"));
+        assert!(!barcodes_match("00042282501523", "042282501524"));
+        assert!(!barcodes_match("00000000000000", "000000000000"));
+        assert!(!barcodes_match("0422-82501523", "042282501523"));
+        assert!(!barcodes_match("42282501523", "042282501523"));
+    }
+
+    #[test]
+    fn source_knowledge_identifier_qualifiers_do_not_relax_facts() {
+        let claim = |value: &str, qualifier: &str, rank: &str| {
+            json!({
+                "rank":rank,"qualifiers":{qualifier:[{"snaktype":"value"}]},
+                "mainsnak":{"datavalue":{"value":value}}
+            })
+        };
+        let entity = json!({"claims":{"P434":[
+            claim("artist-mbid","P1810","normal"),
+            claim("former-id","P582","normal"),
+            claim("deprecated-id","P1810","deprecated")
+        ],"P1902":[claim("spotify-id","P1552","normal")],
+        "P569":[claim("1970","P1810","normal")]}});
+        assert_eq!(
+            identifier_values(&entity, "P434"),
+            vec![json!("artist-mbid")]
+        );
+        assert_eq!(
+            identifier_values(&entity, "P1902"),
+            vec![json!("spotify-id")]
+        );
+        assert!(claim_values(&entity, "P569").is_empty());
+    }
+
     #[tokio::test]
     async fn source_knowledge_http_resolves_ids_before_fetching_precise_facts() {
         use simple_server::web::{routing::get, Json, Query, Router};
@@ -548,7 +695,7 @@ mod tests {
             assert_eq!(q["maxlag"],"5");
             assert_eq!(q["ids"],"Q1");
             Json(json!({"entities":{"Q1":{"id":"Q1","claims":{
-                "P1902":[{"rank":"normal","mainsnak":{"datavalue":{"value":"artist-id"}}}],
+                "P1902":[{"rank":"normal","qualifiers":{"P1810":[{"snaktype":"value"}]},"mainsnak":{"datavalue":{"value":"artist-id"}}}],
                 "P31":[{"rank":"normal","mainsnak":{"datavalue":{"value":{"id":"Q5"}}}}],
                 "P569":[{"rank":"normal","mainsnak":{"datavalue":{"value":{"time":"+1970-01-01T00:00:00Z","precision":9,"calendarmodel":"http://www.wikidata.org/entity/Q1985727"}}}}]
             }}}}))
@@ -605,6 +752,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn source_knowledge_http_album_accepts_zero_padded_barcode_but_not_wrong_id() {
+        use simple_server::web::{routing::get, Json, Router};
+        const ID: &str = "00000000-0000-0000-0000-000000000010";
+        const WRONG: &str = "00000000-0000-0000-0000-000000000011";
+        let release = |id: &str, barcode: &str| {
+            json!({"id":id,"title":"Standards, Vol. 2","barcode":barcode,
+            "artist-credit":[{"artist":{"name":"Keith Jarrett"}}]})
+        };
+        let app = Router::new()
+            .route(
+                "/release",
+                get(move || async move {
+                    Json(json!({"count":1,"releases":[release(ID,"042282501523")]}))
+                }),
+            )
+            .route(
+                &format!("/release/{ID}"),
+                get(move || async move { Json(release(ID, "042282501523")) }),
+            )
+            .route(
+                &format!("/release/{WRONG}"),
+                get(move || async move { Json(release(WRONG, "042282501524")) }),
+            );
+        let server = simple_server::testing::TestServer::tcp(app).await.unwrap();
+        let mut client = ReferenceClient::new().unwrap();
+        client.mb = format!("http://{}", server.address().unwrap());
+        let context = json!({"album":{"name":"Standards, Vol. 2","external_id_upc":"00042282501523"},
+            "artists":[{"name":"Keith Jarrett"}]});
+        assert_eq!(
+            client
+                .music_entity("album", &context, None)
+                .await
+                .unwrap()
+                .unwrap()["id"],
+            ID
+        );
+        assert!(client
+            .music_entity("album", &context, Some(WRONG))
+            .await
+            .is_err());
+    }
+
+    #[tokio::test]
     async fn source_knowledge_http_musicbrainz_corroborates_and_reuses_identity() {
         use simple_server::web::{routing::get, Json, Query, Router};
         const ID: &str = "00000000-0000-0000-0000-000000000001";
@@ -652,6 +842,28 @@ mod tests {
             .await
             .unwrap()
             .is_some());
+        let mut remaster = context.clone();
+        remaster["track"]["name"] = json!("If It's Magic - 2003 Remastered");
+        assert!(client
+            .music_entity("track", &remaster, None)
+            .await
+            .unwrap()
+            .is_some());
+        assert!(client
+            .music_entity("track", &remaster, Some(ID))
+            .await
+            .unwrap()
+            .is_some());
+        remaster["track"]["name"] = json!("If It's Magic - Live - 2003 Remastered");
+        assert!(client
+            .music_entity("track", &remaster, None)
+            .await
+            .unwrap()
+            .is_none());
+        assert!(client
+            .music_entity("track", &remaster, Some(ID))
+            .await
+            .is_err());
         let mut wrong = context.clone();
         wrong["artists"][0]["artist"]["name"] = json!("Namesake");
         assert!(client
@@ -668,6 +880,76 @@ mod tests {
             .is_none());
         drop(upstream_server);
     }
+    #[test]
+    fn source_knowledge_remaster_labels_require_the_same_isrc_and_artists() {
+        let recording = json!({"title":"Two of a Mind","isrcs":["USBB10300135"],"artist-credit":[{"artist":{"name":"Paul Desmond"}},{"artist":{"name":"Gerry Mulligan"}}]});
+        let base = json!({"track":{"name":"Two of a Mind","external_id_isrc":"USBB10300135"},"artists":[{"name":"Paul Desmond"},{"name":"Gerry Mulligan"}]});
+        for title in [
+            "Two of a Mind - 2003 Remastered",
+            "Two of a Mind (Remastered 2003)",
+            "Two of a Mind [2003 Remaster]",
+            "Two of a Mind – Remastered",
+            "Two of a Mind — Remaster",
+            "Two of a Mind - REMASTERED 2003",
+        ] {
+            let mut context = base.clone();
+            context["track"]["name"] = json!(title);
+            assert!(recording_matches_catalog(&recording, &context), "{title}");
+            let mut source = recording.clone();
+            source["title"] = json!(title);
+            assert!(
+                recording_matches_catalog(&source, &base),
+                "source suffix: {title}"
+            );
+            context["track"]["external_id_isrc"] = json!("OTHER");
+            assert!(!recording_matches_catalog(&recording, &context));
+            context["track"]["external_id_isrc"] = Value::Null;
+            assert!(!recording_matches_catalog(&recording, &context));
+            context = base.clone();
+            context["track"]["name"] = json!(title);
+            context["artists"][0]["name"] = json!("Another Artist");
+            assert!(!recording_matches_catalog(&recording, &context));
+            let album = json!({"album":{"name":title},"artists":base["artists"]});
+            assert!(
+                !corroborates(&recording, &album, "album"),
+                "album editions stay distinct"
+            );
+        }
+    }
+
+    #[test]
+    fn source_knowledge_remaster_normalization_preserves_performance_and_composition_variants() {
+        for different in [
+            "Song (Live)",
+            "Song - Live - 2003 Remastered",
+            "Song (Remix) [Remastered]",
+            "Song - Radio Edit",
+            "Song - Acoustic",
+            "Song (Part II)",
+            "Song - Remastered Live",
+            "Song - 2003",
+            "Song (2003)",
+            "Song - Remastered Bonus Track",
+            "Song - 20030 Remastered",
+            "Song - Remaster - Remaster",
+        ] {
+            assert_ne!(
+                recording_title(different),
+                recording_title("Song"),
+                "{different}"
+            );
+        }
+        assert_eq!(
+            recording_title("Song (Live) - 2003 Remastered"),
+            recording_title("Song (Live)")
+        );
+        assert_ne!(
+            recording_title("Song (Part I) - Remastered"),
+            recording_title("Song (Part II)")
+        );
+        assert_ne!(recording_title("(Remastered)"), "");
+    }
+
     #[test]
     fn source_knowledge_dates_preserve_precision() {
         let date = |precision| json!({"time":"+1970-01-01T00:00:00Z","precision":precision,"calendarmodel":"http://www.wikidata.org/entity/Q1985727"});

@@ -179,6 +179,11 @@ pub trait EnrichmentStore: Send + Sync {
         limit: usize,
         entity_types: &[String],
     ) -> Result<Vec<EnrichmentQueueItemV1>>;
+    fn begin_enrichment_attempt(&self, id: i64) -> Result<EnrichmentQueueItemV1>;
+    fn enrichment_attempt_history(&self, id: i64) -> Result<Vec<serde_json::Value>>;
+    fn record_enrichment_diagnostics(&self, id: i64, value: &serde_json::Value) -> Result<()>;
+    fn release_enrichment_claim(&self, id: i64, reason: &str) -> Result<()>;
+    fn retry_enrichment_manually(&self, entity_type: &str, entity_id: &str) -> Result<bool>;
     fn requeue_stale_running_enrichment_queue_items(&self, stale_after_secs: i64) -> Result<usize>;
     fn complete_enrichment_queue_item(&self, id: i64) -> Result<()>;
     fn fail_enrichment_queue_item(

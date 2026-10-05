@@ -81,13 +81,17 @@ const showDialog = ref(false);
 
 const normalizedStatus = computed(() => props.status?.status || null);
 const shouldShow = computed(() =>
-  ["queued", "running", "failed"].includes(normalizedStatus.value),
+  ["queued", "running", "failed", "failed_enrichment"].includes(
+    normalizedStatus.value,
+  ),
 );
 
 const entityLabel = computed(() => props.entityType || "item");
 const statusLabel = computed(() => {
   if (normalizedStatus.value === "queued") return "Queued";
   if (normalizedStatus.value === "running") return "Running";
+  if (normalizedStatus.value === "failed_enrichment")
+    return "Enrichment failed";
   if (normalizedStatus.value === "failed") return "Failed";
   return "Unknown";
 });
@@ -104,6 +108,9 @@ const dialogMessage = computed(() => {
   }
   if (normalizedStatus.value === "running") {
     return "Pezzottify is currently generating richer metadata for this item. Refresh this page later to see the updated details.";
+  }
+  if (normalizedStatus.value === "failed_enrichment") {
+    return "Enrichment has stopped for this item. It will not retry automatically. An administrator can review the failure and start a new attempt cycle.";
   }
   if (normalizedStatus.value === "failed") {
     return "Pezzottify tried to generate richer metadata for this item but the job failed. It may retry later, or an administrator can inspect the enrichment job.";
@@ -155,7 +162,8 @@ const lastError = computed(() => props.status?.last_error || null);
   color: var(--spotify-green);
 }
 
-.enrichmentStatusButton.is-failed {
+.enrichmentStatusButton.is-failed,
+.enrichmentStatusButton.is-failed_enrichment {
   color: #ff8f8f;
 }
 

@@ -96,8 +96,8 @@ engine = "pezzothash"
 read_pool_size = 4
 
 # Shared agent LLM settings
-# Metadata Enrichment v1 reuses this existing agent configuration; it does
-# not define a separate model/provider config. Simple-AI can be used here if
+# Metadata Enrichment v1 reuses this provider and can select a separate
+# intervention model. Simple-AI can be used here if
 # it exposes an OpenAI-compatible chat endpoint.
 # [agent]
 # enabled = true
@@ -107,6 +107,8 @@ read_pool_size = 4
 # provider = "openai" # "openai" for OpenAI-compatible APIs, otherwise Ollama
 # base_url = "http://simple-ai:8000/v1"
 # model = "your-chat-model"
+# intervention_model = "class:big" # Use a route permitted by the service credential.
+# intervention_reasoning_effort = "low" # Only when the intervention model supports it.
 # reasoning_effort = "none" # Enrichment only; requires advertised model support.
 # thinking_budget_tokens = 512 # Optional SimpleAI extension; requires model support.
 # api_key = "your-api-key"
@@ -229,6 +231,8 @@ interval_hours = 6
 # Metadata Enrichment v1 Job
 # Processes queued artist/album/track enrichment requests, seeding from listening data when empty.
 [background_jobs.metadata_enrichment]
+# Set true BEFORE deployment for controlled experiments; admin triggers still work.
+manual_only = false
 # New Work requests per UTC day, independent of the existing queue backlog.
 # 0 disables Work discovery but still permits processing/retries of queued items.
 work_daily_enqueue_limit = 400

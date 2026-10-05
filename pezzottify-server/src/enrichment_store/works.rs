@@ -636,71 +636,22 @@ mod tests {
     }
 
     #[test]
-    fn wikidata_work_identity_survives_label_changes_and_separates_external_namesakes() {
-        let (store, tmp) = setup();
-        let evidence = |qid: &str| serde_json::json!({"selected_source":{"qid":qid}});
-        let first = store
-            .resolve_track_work("a", Some(&proposal("Title", "Writer")), &evidence("Q1"), "")
-            .unwrap();
-        let renamed = store
-            .resolve_track_work(
-                "b",
-                Some(&proposal("Localized title", "Writer")),
-                &evidence("Q1"),
-                "",
-            )
-            .unwrap();
-        assert_eq!(first.work, renamed.work);
-        assert_eq!(
-            first.work.as_ref().unwrap().wikidata_id.as_deref(),
-            Some("Q1")
-        );
-        let namesake = store
-            .resolve_track_work("c", Some(&proposal("Title", "Writer")), &evidence("Q2"), "")
-            .unwrap();
-        assert_ne!(
-            first.work.as_ref().unwrap().id,
-            namesake.work.as_ref().unwrap().id
-        );
-        assert_eq!(store.search_works("Title", 25).unwrap().len(), 2);
-        drop(store);
-        let reopened = SqliteEnrichmentStore::new(
-            tmp.path().join("enrichment.db"),
-            &crate::backup::DbRegistry::new(),
-        )
-        .unwrap();
-        assert_eq!(
-            reopened
-                .get_work(&first.work.unwrap().id)
-                .unwrap()
-                .unwrap()
-                .wikidata_id
-                .as_deref(),
-            Some("Q1")
-        );
-    }
-
-    #[test]
-    fn wikidata_work_can_add_a_reference_to_an_existing_inferred_identity() {
+    fn wikidata_candidate_alone_cannot_create_or_attach_a_work() {
         let (store, _tmp) = setup();
-        let first = store
-            .resolve_track_work(
-                "a",
-                Some(&proposal("Song", "Writer")),
-                &serde_json::json!({}),
-                "",
-            )
-            .unwrap();
-        let linked = store
-            .resolve_track_work(
-                "b",
-                Some(&proposal("Song", "Writer")),
-                &serde_json::json!({"selected_source":{"qid":"Q1"}}),
-                "",
-            )
-            .unwrap();
-        assert_eq!(first.work.unwrap().id, linked.work.as_ref().unwrap().id);
-        assert_eq!(linked.work.unwrap().wikidata_id.as_deref(), Some("Q1"));
+        for reason in ["Matches catalog", "There is no matching fetched work"] {
+            let evidence = serde_json::json!({"selected_source":{"qid":"Q1"},"reason":reason});
+            let result = store
+                .resolve_track_work(
+                    reason,
+                    Some(&proposal("Title", "Writer")),
+                    &evidence,
+                    reason,
+                )
+                .unwrap();
+            assert!(result.work.is_none());
+            assert_eq!(result.status, "unresolved");
+        }
+        assert!(store.search_works("Title", 25).unwrap().is_empty());
     }
 
     #[test]
@@ -1029,6 +980,14 @@ impl SqliteEnrichmentStore {
         } else {
             ("musicbrainz", musicbrainz_id)
         };
+        // A model-selected Wikidata candidate is only a suggestion. Its existence
+        // does not corroborate the recording's relationship to that composition.
+        let proposal = if wikidata_id.is_some() {
+            reason = "Unverified Work suggestion; no recording-to-Work relationship".into();
+            None
+        } else {
+            proposal
+        };
         if let Some(proposal) = proposal {
             match identity(proposal) {
                 Ok(mut key) => {
@@ -1079,7 +1038,12 @@ impl SqliteEnrichmentStore {
             } else {
                 "musicbrainz_supported_v1"
             }
-        } else if work_id.is_none() && evidence["prompt_version"] == "work-resolution-v3-sources" {
+        } else if work_id.is_none()
+            && (wikidata_id.is_some()
+                || evidence["prompt_version"].as_str().is_some_and(|v| {
+                    v.starts_with("work-resolution-v") || v.starts_with("work-research-v")
+                }))
+        {
             "source_unresolved_v3"
         } else {
             "llm_work_v2"

@@ -395,6 +395,7 @@ impl AppConfig {
                 let me_file = bg_jobs_file.metadata_enrichment.unwrap_or_default();
                 let me_defaults = MetadataEnrichmentJobSettings::default();
                 MetadataEnrichmentJobSettings {
+                    manual_only: me_file.manual_only.unwrap_or(me_defaults.manual_only),
                     interval_hours: me_file
                         .interval_hours
                         .unwrap_or(me_defaults.interval_hours)
@@ -497,6 +498,8 @@ impl AppConfig {
             enabled: agent_file.enabled.unwrap_or(false),
             max_iterations: agent_file.max_iterations.unwrap_or(20),
             llm: AgentLlmSettings {
+                intervention_model: agent_llm_file.intervention_model,
+                intervention_reasoning_effort: agent_llm_file.intervention_reasoning_effort,
                 provider: agent_llm_file
                     .provider
                     .unwrap_or(agent_llm_defaults.provider),
@@ -517,7 +520,19 @@ impl AppConfig {
             },
         };
 
-        if let Some(effort) = &agent.llm.reasoning_effort {
+        if let Some(model) = &agent.llm.intervention_model {
+            anyhow::ensure!(
+                !model.trim().is_empty() && model.len() <= 200,
+                "invalid agent.llm.intervention_model"
+            );
+        }
+        for effort in [
+            &agent.llm.reasoning_effort,
+            &agent.llm.intervention_reasoning_effort,
+        ]
+        .into_iter()
+        .flatten()
+        {
             anyhow::ensure!(
                 agent.llm.provider == "openai",
                 "agent.llm.reasoning_effort requires an OpenAI-compatible provider"
@@ -527,7 +542,7 @@ impl AppConfig {
                     effort.as_str(),
                     "none" | "minimal" | "low" | "medium" | "high" | "xhigh"
                 ),
-                "invalid agent.llm.reasoning_effort"
+                "invalid agent.llm reasoning effort"
             );
         }
 
@@ -826,6 +841,8 @@ pub struct BackgroundJobsSettings {
 /// Settings for v1 metadata enrichment queue processing.
 #[derive(Debug, Clone)]
 pub struct MetadataEnrichmentJobSettings {
+    /// Disable scheduled runs while keeping explicit admin triggers available.
+    pub manual_only: bool,
     pub interval_hours: u64,
     pub batch_size: usize,
     /// Maximum new Work requests per UTC day; zero disables discovery, not retries.
@@ -836,6 +853,7 @@ pub struct MetadataEnrichmentJobSettings {
 impl Default for MetadataEnrichmentJobSettings {
     fn default() -> Self {
         Self {
+            manual_only: false,
             interval_hours: 6,
             batch_size: 2000,
             work_daily_enqueue_limit: 400,
@@ -1000,6 +1018,8 @@ impl Default for AgentSettings {
 /// Settings for the LLM provider.
 #[derive(Debug, Clone)]
 pub struct AgentLlmSettings {
+    pub intervention_model: Option<String>,
+    pub intervention_reasoning_effort: Option<String>,
     pub reasoning_effort: Option<String>,
     pub thinking_budget_tokens: Option<i32>,
     pub provider: String,
@@ -1014,6 +1034,8 @@ pub struct AgentLlmSettings {
 impl Default for AgentLlmSettings {
     fn default() -> Self {
         Self {
+            intervention_model: None,
+            intervention_reasoning_effort: None,
             reasoning_effort: None,
             thinking_budget_tokens: None,
             provider: "ollama".to_string(),
@@ -1346,6 +1368,45 @@ mod tests {
         }
     }
 
+    #[test]
+    fn intervention_config_preserves_extraction_and_validates_model_controls() {
+        let temp = tempfile::tempdir().unwrap();
+        let cli = CliConfig {
+            db_dir: Some(temp.path().into()),
+            ..Default::default()
+        };
+        for (model, effort, valid) in [
+            ("code:smart", "low", true),
+            ("", "low", false),
+            ("class:big", "typo", false),
+        ] {
+            let file = FileConfig {
+                agent: Some(AgentConfig {
+                    llm: Some(AgentLlmConfig {
+                        provider: Some("openai".into()),
+                        model: Some("class:fast".into()),
+                        intervention_model: Some(model.into()),
+                        intervention_reasoning_effort: Some(effort.into()),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            };
+            let resolved = AppConfig::resolve(&cli, Some(file));
+            assert_eq!(resolved.is_ok(), valid);
+            if let Ok(config) = resolved {
+                assert_eq!(config.agent.llm.model, "class:fast");
+                assert_eq!(config.agent.llm.intervention_model.as_deref(), Some(model));
+                assert_eq!(
+                    config.agent.llm.intervention_reasoning_effort.as_deref(),
+                    Some(effort)
+                );
+                assert!(config.agent.llm.reasoning_effort.is_none());
+            }
+        }
+    }
+
     use super::*;
     use tempfile::TempDir;
 
@@ -1598,6 +1659,32 @@ mod tests {
         let result = AppConfig::resolve(&cli, None);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not a directory"));
+    }
+
+    #[test]
+    fn metadata_enrichment_manual_only_config_keeps_job_registered() {
+        let temp_dir = make_temp_db_dir();
+        let cli = CliConfig {
+            db_dir: Some(temp_dir.path().to_path_buf()),
+            ..Default::default()
+        };
+        let file:FileConfig=toml::from_str("[background_jobs.metadata_enrichment]\nmanual_only = true\nwork_daily_enqueue_limit = 0\nbatch_size = 1\n").unwrap();
+        let config = AppConfig::resolve(&cli, Some(file)).unwrap();
+        assert!(config.background_jobs.metadata_enrichment.manual_only);
+        assert_eq!(
+            config
+                .background_jobs
+                .metadata_enrichment
+                .work_daily_enqueue_limit,
+            0
+        );
+        assert!(
+            !AppConfig::resolve(&cli, None)
+                .unwrap()
+                .background_jobs
+                .metadata_enrichment
+                .manual_only
+        );
     }
 
     #[test]
