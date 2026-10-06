@@ -5,6 +5,7 @@
       v-else-if="artistData"
       :data-id="artistData.id"
       :artist="artistData"
+      :library="library"
     />
     <div v-else-if="error" class="artistState errorState">
       Error. {{ error }}
@@ -20,6 +21,7 @@ import { useStaticsStore } from "@/store/statics";
 const staticsStore = useStaticsStore();
 
 const props = defineProps({
+  library: Boolean,
   artistId: {
     type: String,
     required: true,

@@ -7,7 +7,6 @@
         @click.stop="setAlbumsTab"
         :class="{
           tabSelector: true,
-          scaleClickFeedback: true,
           selectedTab: selectedTab === 'albums',
         }"
       >
@@ -18,7 +17,6 @@
         @click.stop="setArtistsTab"
         :class="{
           tabSelector: true,
-          scaleClickFeedback: true,
           selectedTab: selectedTab === 'artists',
         }"
       >
@@ -29,7 +27,6 @@
         @click.stop="setPlaylistsTab"
         :class="{
           tabSelector: true,
-          scaleClickFeedback: true,
           selectedTab: selectedTab === 'playlists',
         }"
       >
@@ -41,6 +38,7 @@
       <div v-if="loading" class="libraryState">Loading library</div>
       <template v-else-if="albumIds?.length">
         <AlbumCard
+          library
           v-for="albumId in albumIds"
           :key="albumId"
           :albumId="albumId"
@@ -54,6 +52,7 @@
       <div v-if="loading" class="libraryState">Loading library</div>
       <template v-else-if="artistsIds?.length">
         <LoadArtistListItem
+          library
           v-for="artistId in artistsIds"
           :key="artistId"
           :artistId="artistId"
@@ -77,6 +76,7 @@
       <div v-if="loading" class="libraryState">Loading library</div>
       <div v-else-if="playlists.length" class="playlistsContainer">
         <LoadPlaylistListItem
+          library
           v-for="playlist in playlists"
           :key="playlist.id"
           :playlistId="playlist.id"
@@ -270,15 +270,15 @@ onMounted(() => {
   min-height: 0;
   flex-direction: column;
   overflow-y: auto;
-  padding: 10px;
-  gap: 6px;
+  padding: 8px;
+  gap: 0;
   scrollbar-gutter: stable;
 }
 
 .playlistsContainer {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0;
   min-width: 0;
 }
 
@@ -333,5 +333,60 @@ onMounted(() => {
   font-size: 0.84rem;
   font-weight: 700;
   text-align: center;
+}
+/* Library rows follow the measured 64px / 48px Spotify layout. */
+.libraryPanel :deep(.searchResultRow) {
+  height: 64px;
+  min-height: 64px;
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+}
+.libraryPanel :deep(.searchResultRow:hover) {
+  background: #1f1f1f;
+}
+.libraryPanel :deep(.searchResultImage),
+.libraryPanel :deep(.searchResultRoundImage),
+.libraryPanel :deep(.playlistIcon) {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+}
+.libraryPanel :deep(.searchResultImage) {
+  border-radius: 4px;
+}
+.libraryPanel :deep(.playlistItem) {
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 12px;
+}
+.libraryPanel :deep(.column),
+.libraryPanel :deep(.playlistMeta) {
+  gap: 2px;
+}
+.libraryPanel :deep(.title),
+.libraryPanel :deep(.playlistItem h2) {
+  display: block;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 22px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.libraryPanel :deep(.artistsNames),
+.libraryPanel :deep(.librarySubtitle),
+.libraryPanel :deep(.playlistItem span) {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  color: var(--text-subdued);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.libraryPanel :deep(.subtitle) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

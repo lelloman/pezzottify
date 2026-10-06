@@ -13,7 +13,10 @@
         :urls="chooseSmallArtistImageUrl(artist)"
         class="searchResultRoundImage"
       />
-      <h3 class="title">{{ artist.name }}</h3>
+      <div class="artistIdentity">
+        <h3 class="title">{{ artist.name }}</h3>
+        <p v-if="library" class="librarySubtitle">Artist</p>
+      </div>
     </div>
     <EntityContextMenu ref="contextMenu" />
   </div>
@@ -28,6 +31,7 @@ import MultiSourceImage from "./MultiSourceImage.vue";
 import EntityContextMenu from "@/components/common/contextmenu/EntityContextMenu.vue";
 
 defineProps({
+  library: Boolean,
   artist: {
     type: Object,
     required: true,
@@ -43,6 +47,13 @@ const handleClick = (artist) => {
 </script>
 
 <style scoped>
+.artistIdentity {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .artistListItem {
   display: contents;
 }
