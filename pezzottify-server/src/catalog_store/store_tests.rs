@@ -36,6 +36,21 @@ mod tests {
         assert_eq!(detail.artwork_url, list[0].artwork_url);
         assert_eq!(detail.total, 1);
         assert!(store.get_tracks_by_genre("missing", 50, 0).unwrap().artwork_url.is_none());
+        {
+            let conn = store.write_conn.lock().unwrap();
+            conn.execute("INSERT INTO artist_genres (artist_rowid,genre) VALUES (1,'opera')", []).unwrap();
+            conn.execute("INSERT INTO tracks (id,name,album_rowid,track_number,popularity,disc_number,duration_ms,explicit,track_available) VALUES ('aria','Aria',1,2,0,1,1000,0,1)", []).unwrap();
+            conn.execute("INSERT INTO track_artists (track_rowid,artist_rowid) VALUES (2,1)", []).unwrap();
+        }
+        // A conductor's opera tag must never admit their concerto/symphony recordings.
+        assert!(store.get_random_tracks_by_genre("opera", 50).unwrap().is_empty());
+        assert_eq!(store.get_tracks_by_genre("opera", 50, 0).unwrap().total, 0);
+        store.write_conn.lock().unwrap().execute("INSERT INTO genre_recordings VALUES ('opera','aria','explicit opera evidence')", []).unwrap();
+        assert_eq!(store.get_random_tracks_by_genre("opera", 50).unwrap(), vec!["aria"]);
+        let opera = store.get_tracks_by_genre("opera", 50, 0).unwrap();
+        assert_eq!(opera.track_ids, vec!["aria"]);
+        assert_eq!(opera.total, 1);
+        assert_eq!(store.get_genres_with_counts().unwrap().iter().find(|g| g.name=="opera").unwrap().track_count, 1);
     }
 
     #[test]
