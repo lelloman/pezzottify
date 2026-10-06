@@ -15,6 +15,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
       children: [
         {
+          path: "/now-playing",
+          name: "now-playing",
+          component: HomeView,
+          meta: { requiresAuth: true },
+        },
+        {
           path: "/search/:query?",
           name: "search_results",
           component: HomeView,

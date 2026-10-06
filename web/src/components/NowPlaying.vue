@@ -1,142 +1,114 @@
 <template>
-  <Teleport to="body">
-    <dialog
-      ref="dialog"
-      class="nowPlaying"
-      aria-labelledby="nowPlayingTitle"
-      @cancel.prevent="$emit('close')"
-    >
-      <header class="nowPlayingHeader">
-        <span id="nowPlayingTitle">Now playing</span>
-        <button
-          type="button"
-          autofocus
-          aria-label="Close full-screen player"
-          @click="$emit('close')"
-        >
-          Close <span aria-hidden="true">×</span>
-        </button>
-      </header>
-      <div class="nowPlayingBody">
-        <section class="recordPanel" aria-label="Playback controls">
-          <MultiSourceImage
-            :urls="imageUrls"
-            :lazy="false"
-            alt="Album artwork"
-            class="artwork"
-          />
-          <div class="identity">
-            <h1>{{ playback.currentTrack?.title || "Unknown track" }}</h1>
-            <p>{{ playback.currentTrack?.artistName }}</p>
-            <p class="album">{{ playback.currentTrack?.albumTitle }}</p>
-          </div>
-          <div class="seekRow">
-            <input
-              aria-label="Playback position"
-              type="range"
-              min="0"
-              max="1"
-              step="0.001"
-              :disabled="!durationMs"
-              :value="playback.progressPercent || 0"
-              @change="playback.seekToPercentage(Number($event.target.value))"
-            />
-            <div class="times">
-              <span>{{ time(playback.progressSec) }}</span
-              ><span>{{ time(durationMs / 1000) }}</span>
-            </div>
-          </div>
-          <div class="transport">
-            <button
-              type="button"
-              aria-label="Previous track"
-              @click="playback.skipPreviousTrack"
-            >
-              <SkipPrevious />
-            </button>
-            <button
-              type="button"
-              class="playButton"
-              :aria-label="playback.isPlaying ? 'Pause' : 'Play'"
-              @click="playback.playPause"
-            >
-              <PauseIcon v-if="playback.isPlaying" /><PlayIcon v-else />
-            </button>
-            <button
-              type="button"
-              aria-label="Next track"
-              @click="playback.skipNextTrack"
-            >
-              <SkipNext />
-            </button>
-          </div>
-          <p v-if="playback.mode === 'remote'" class="remoteNotice">
-            Controlling playback on your connected device
-          </p>
-        </section>
-        <div class="lyricsColumn">
-          <TrackLyrics
-            v-if="playback.currentTrackId"
-            :trackId="playback.currentTrackId"
-          />
+  <section class="nowPlaying" aria-labelledby="nowPlayingTitle">
+    <header class="nowPlayingHeader">
+      <span id="nowPlayingTitle">Now playing</span>
+    </header>
+    <p v-if="!playback.currentTrackId" class="emptyPlayback">
+      Play a track to see its artwork and lyrics here.
+    </p>
+    <div v-else class="nowPlayingBody">
+      <section class="recordPanel" aria-label="Playback controls">
+        <MultiSourceImage
+          :urls="imageUrls"
+          :lazy="false"
+          alt="Album artwork"
+          class="artwork"
+        />
+        <div class="identity">
+          <h1>{{ playback.currentTrack?.title || "Unknown track" }}</h1>
+          <p>{{ playback.currentTrack?.artistName }}</p>
+          <p class="album">{{ playback.currentTrack?.albumTitle }}</p>
         </div>
+        <div class="seekRow">
+          <input
+            aria-label="Playback position"
+            type="range"
+            min="0"
+            max="1"
+            step="0.001"
+            :disabled="!durationMs"
+            :value="playback.progressPercent || 0"
+            @change="playback.seekToPercentage(Number($event.target.value))"
+          />
+          <div class="times">
+            <span>{{ time(playback.progressSec) }}</span
+            ><span>{{ time(durationMs / 1000) }}</span>
+          </div>
+        </div>
+        <div class="transport">
+          <button
+            type="button"
+            aria-label="Previous track"
+            @click="playback.skipPreviousTrack"
+          >
+            <SkipPrevious />
+          </button>
+          <button
+            type="button"
+            class="playButton"
+            :aria-label="playback.isPlaying ? 'Pause' : 'Play'"
+            @click="playback.playPause"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path v-if="playback.isPlaying" d="M6 4h4v16H6zM14 4h4v16h-4z" />
+              <path v-else d="M7 3v18l15-9z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            aria-label="Next track"
+            @click="playback.skipNextTrack"
+          >
+            <SkipNext />
+          </button>
+        </div>
+        <p v-if="playback.mode === 'remote'" class="remoteNotice">
+          Controlling playback on your connected device
+        </p>
+      </section>
+      <div class="lyricsColumn">
+        <TrackLyrics
+          v-if="playback.currentTrackId"
+          :trackId="playback.currentTrackId"
+        />
       </div>
-    </dialog>
-  </Teleport>
+    </div>
+  </section>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed } from "vue";
 import { usePlaybackStore } from "@/store/playback";
 import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
 import TrackLyrics from "@/components/common/TrackLyrics.vue";
-import PlayIcon from "@/components/icons/PlayIcon.vue";
-import PauseIcon from "@/components/icons/PauseIcon.vue";
 import SkipPrevious from "@/components/icons/SkipPrevious.vue";
 import SkipNext from "@/components/icons/SkipNext.vue";
 
-defineProps({ imageUrls: { type: Array, default: () => [] } });
-const emit = defineEmits(["close"]);
 const playback = usePlaybackStore();
-const dialog = ref(null);
+const imageUrls = computed(() => {
+  const track = playback.currentTrack;
+  const imageId = playback.mode === "remote" ? track?.imageId : track?.albumId;
+  return imageId ? [`/v1/content/image/${imageId}`] : [];
+});
 const durationMs = computed(() => playback.currentTrack?.duration || 0);
 const time = (value) => {
   const seconds = Math.max(0, Math.floor(Number(value) || 0));
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 };
-let previousOverflow;
-const opener = document.activeElement;
-onMounted(() => {
-  previousOverflow = document.body.style.overflow;
-  document.body.style.overflow = "hidden";
-  dialog.value.showModal();
-});
-onBeforeUnmount(() => {
-  dialog.value?.close();
-  document.body.style.overflow = previousOverflow;
-  if (opener?.isConnected) opener.focus();
-});
-watch(
-  () => playback.currentTrackId,
-  (id) => {
-    if (!id) emit("close");
-  },
-);
 </script>
 
 <style scoped>
 .nowPlaying {
   font: inherit;
-  position: fixed;
-  inset: 0;
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
-  width: 100vw;
-  height: 100dvh;
-  max-width: none;
-  max-height: none;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   margin: 0;
   padding: 0;
-  border: 0;
   color: var(--text-base, #f5f5f5);
   background: radial-gradient(
     ellipse at top left,
@@ -145,11 +117,8 @@ watch(
     #0b0d0e 75%
   );
 }
-.nowPlaying[open] {
-  display: flex;
-  flex-direction: column;
-}
 .nowPlayingHeader {
+  flex-shrink: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -178,13 +147,15 @@ input:focus-visible {
   outline: 2px solid var(--spotify-green, #1ed760);
   outline-offset: 4px;
 }
-.nowPlayingHeader button span {
-  padding-left: 14px;
-  font-size: 1.5rem;
+.emptyPlayback {
+  padding: 24px;
+  color: var(--text-subdued, #aaa);
 }
 .nowPlayingBody {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
   flex: 1;
   min-height: 0;
   width: 100%;
@@ -192,7 +163,10 @@ input:focus-visible {
   margin: 0 auto;
 }
 .recordPanel {
-  padding: 32px clamp(24px, 5vw, 80px);
+  min-height: 0;
+  min-width: 0;
+  overscroll-behavior: contain;
+  padding: 24px;
   overflow-y: auto;
   text-align: center;
 }
@@ -240,6 +214,9 @@ input {
   margin-top: 16px;
 }
 .transport button {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
   width: 48px;
   height: 48px;
   padding: 12px;
@@ -252,14 +229,17 @@ input {
 .transport .playButton {
   width: 64px;
   height: 64px;
-  padding: 18px;
+  padding: 16px;
   background: var(--spotify-green, #1ed760);
-  color: #071108;
+  color: #fff;
   border-radius: 50%;
 }
 .lyricsColumn {
+  min-height: 0;
+  min-width: 0;
+  overscroll-behavior: contain;
   overflow-y: auto;
-  padding: 36px clamp(24px, 4vw, 64px) 80px;
+  padding: 24px;
   border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
 .remoteNotice {
@@ -267,25 +247,39 @@ input {
   font-size: 0.8rem;
   margin-top: 24px;
 }
-@media (max-width: 767px) {
+@container (max-width: 700px) {
   .nowPlayingBody {
-    display: block;
-    overflow-y: auto;
-  }
-  .recordPanel,
-  .lyricsColumn {
-    overflow: visible;
-  }
-  .artwork {
-    width: min(65vw, 30vh);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
   }
   .recordPanel {
-    padding: 24px;
+    display: grid;
+    grid-template-columns: 80px minmax(0, 1fr);
+    align-content: start;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+  }
+  .artwork {
+    width: 80px;
+    margin: 0;
+  }
+  .identity {
+    text-align: left;
+  }
+  .identity h1 {
+    font-size: 1.2rem;
+  }
+  .seekRow,
+  .transport,
+  .remoteNotice {
+    grid-column: 1 / -1;
+    margin-top: 0;
   }
   .lyricsColumn {
     border-left: 0;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
-    padding: 28px 24px 60px;
+    padding: 20px;
   }
   .nowPlayingHeader {
     padding: 12px 20px;
