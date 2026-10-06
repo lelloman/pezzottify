@@ -18,6 +18,7 @@ before(async () => {
   server = await createServer({
     root,
     configFile: false,
+    cacheDir: "node_modules/.vite-lyrics-test",
     optimizeDeps: { noDiscovery: true, include: ["vue"] },
     logLevel: "error",
     plugins: [
