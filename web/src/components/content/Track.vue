@@ -235,16 +235,6 @@ const titleCase = (value) => {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 };
 
-const extractYear = (value) => {
-  if (!value) return null;
-  if (typeof value === "number" && Number.isFinite(value)) {
-    const year = new Date(value * 1000).getFullYear();
-    return Number.isFinite(year) ? String(year) : null;
-  }
-  const match = String(value).match(/^(\d{4})/);
-  return match ? match[1] : null;
-};
-
 const formatEnrichmentDate = (value) => {
   if (!value) return null;
 
@@ -287,10 +277,6 @@ const formatLanguageLabel = (value) => {
     return titleCase(value);
   }
 };
-
-const albumYear = computed(() =>
-  extractYear(album.value?.release_date || album.value?.date),
-);
 
 const trackSummary = computed(() => {
   const profile = trackProfile.value;

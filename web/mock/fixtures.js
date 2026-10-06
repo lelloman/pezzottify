@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { genreArtwork } from "../src/utils/genreArtwork.js";
 // Deliberately fictional catalog: stable IDs, original lyrics, locally drawn covers.
 export const artists = [
