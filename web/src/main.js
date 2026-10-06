@@ -27,7 +27,7 @@ const remoteStore = useRemoteStore();
 
 app.mount("#app");
 
-if ("serviceWorker" in navigator) {
+if ("serviceWorker" in navigator && import.meta.env.MODE !== "mock") {
   window.addEventListener("load", async () => {
     try {
       await navigator.serviceWorker.register("/sw.js");
