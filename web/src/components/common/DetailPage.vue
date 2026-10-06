@@ -2,23 +2,23 @@
   <article
     ref="pageElement"
     class="detailPage"
-    :class="{ tinted }"
-    :style="
-      banner
-        ? {
-            '--banner-image-opacity': 1 - bannerProgress,
-            '--banner-title-opacity': titleProgress,
-          }
-        : undefined
-    "
+    :class="{ tinted, paletteDetail: !banner }"
+    :style="{
+      '--artwork-color': artworkColor,
+      '--banner-image-opacity': 1 - bannerProgress,
+      '--banner-title-opacity': titleProgress,
+    }"
   >
-    <div
-      v-if="tinted && imageUrls.length"
-      class="detailTint"
+    <MultiSourceImage
+      v-if="!banner && imageUrls.length"
+      :urls="imageUrls"
+      :lazy="false"
+      palette
+      class="paletteSource"
+      alt=""
       aria-hidden="true"
-    >
-      <MultiSourceImage :urls="imageUrls" :lazy="false" alt="" />
-    </div>
+      @palette="artworkColor = $event"
+    />
     <div v-if="banner" class="stickyArtistHeader" aria-hidden="true">
       <div class="stickyArtistTitle">{{ title }}</div>
     </div>
@@ -29,7 +29,7 @@
       @contextmenu="banner && $emit('artwork-contextmenu', $event)"
     >
       <MultiSourceImage
-        v-if="imageUrls.length && !tinted"
+        v-if="imageUrls.length && banner"
         :urls="imageUrls"
         :lazy="false"
         alt=""
@@ -85,8 +85,10 @@ import {
   onActivated,
   onDeactivated,
   nextTick,
+  watch,
 } from "vue";
 import MultiSourceImage from "./MultiSourceImage.vue";
+import { PALETTE_FALLBACK } from "@/utils/androidPalette";
 defineEmits(["artwork-contextmenu"]);
 const props = defineProps({
   title: { type: String, required: true },
@@ -96,6 +98,14 @@ const props = defineProps({
   banner: Boolean,
   tinted: Boolean,
 });
+const artworkColor = ref(PALETTE_FALLBACK);
+watch(
+  () => JSON.stringify(props.imageUrls),
+  () => {
+    artworkColor.value = PALETTE_FALLBACK;
+  },
+  { flush: "sync" },
+);
 const pageElement = ref(null),
   heroElement = ref(null),
   titleElement = ref(null);
@@ -155,26 +165,28 @@ onBeforeUnmount(stopTracking);
   isolation: isolate;
   background: #121212;
 }
-.detailTint {
+.paletteSource {
   position: absolute;
-  z-index: -1;
-  inset: 0 0 auto;
-  height: 650px;
+  width: 1px;
+  height: 1px;
   overflow: hidden;
   pointer-events: none;
-  opacity: 0.5;
-  mask-image: linear-gradient(#000, #000 25%, transparent);
+  opacity: 0;
 }
-.detailTint :deep(img) {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: blur(70px);
-  transform: scale(1.2);
+.paletteDetail {
+  background: #121212;
 }
-.tinted .detailHero,
-.tinted .detailBody {
-  background: transparent;
+.paletteDetail .detailHero {
+  background: linear-gradient(
+    color-mix(in srgb, var(--artwork-color) 65%, #121212),
+    color-mix(in srgb, var(--artwork-color) 40%, #121212)
+  );
+}
+.paletteDetail .detailBody {
+  background: linear-gradient(
+    color-mix(in srgb, var(--artwork-color) 22%, #121212),
+    #121212 280px
+  );
 }
 .detailHero {
   position: relative;

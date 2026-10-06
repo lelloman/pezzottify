@@ -5,6 +5,7 @@
 <script setup>
 import { useDebugStore } from "@/store/debug";
 import { fetchImageBlob } from "@/services/imageLoader";
+import { artworkPaletteColor, PALETTE_FALLBACK } from "@/utils/androidPalette";
 import { ref, watch, onMounted, onUnmounted } from "vue";
 
 const configStore = useDebugStore();
@@ -15,7 +16,9 @@ const props = defineProps({
     validator: (value) => value.every((url) => typeof url === "string"),
   },
   lazy: { type: Boolean, default: true },
+  palette: Boolean,
 });
+const emit = defineEmits(["palette"]);
 
 const imgRef = ref(null);
 const currentSrc = ref("");
@@ -47,6 +50,7 @@ watch(
   ],
   ([urlsJson, enabled, visible], _, onCleanup) => {
     const controller = new AbortController();
+    if (props.palette) emit("palette", PALETTE_FALLBACK);
     let objectUrl = null;
     onCleanup(() => {
       controller.abort();
@@ -67,6 +71,14 @@ watch(
           await image.decode();
           if (controller.signal.aborted) return;
           currentSrc.value = objectUrl;
+          if (props.palette) {
+            try {
+              emit("palette", artworkPaletteColor(image, url));
+            } catch {
+              // Canvas extraction must never prevent artwork from displaying.
+              emit("palette", PALETTE_FALLBACK);
+            }
+          }
           return;
         } catch {
           if (controller.signal.aborted) return;
