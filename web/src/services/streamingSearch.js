@@ -1,3 +1,5 @@
+import { authenticatedFetch } from "./authenticatedFetch.js";
+
 /**
  * Streaming Search Service
  *
@@ -51,7 +53,7 @@ export function streamingSearch(
 ) {
   const controller = new AbortController();
 
-  fetch(buildStreamingSearchUrl(query, options), {
+  authenticatedFetch(buildStreamingSearchUrl(query, options), {
     method: "GET",
     headers: {
       Accept: "text/event-stream",
@@ -124,13 +126,16 @@ export async function fetchStreamingSearchSections(
   options = {},
   signal,
 ) {
-  const response = await fetch(buildStreamingSearchUrl(query, options), {
-    method: "GET",
-    headers: {
-      Accept: "text/event-stream",
+  const response = await authenticatedFetch(
+    buildStreamingSearchUrl(query, options),
+    {
+      method: "GET",
+      headers: {
+        Accept: "text/event-stream",
+      },
+      signal,
     },
-    signal,
-  });
+  );
 
   if (!response.ok) {
     throw new Error(`Search failed: ${response.status}`);

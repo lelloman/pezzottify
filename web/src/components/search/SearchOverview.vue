@@ -11,7 +11,10 @@
         {{ filter.label }}
       </button>
     </div>
-    <p v-if="loading && !items.length" class="state" role="status">
+    <p v-if="error" class="state" role="alert">
+      Search could not be completed. Please try again.
+    </p>
+    <p v-else-if="loading && !items.length" class="state" role="status">
       Searching…
     </p>
     <p v-else-if="!items.length && !loading" class="state" role="status">
@@ -90,6 +93,7 @@ const props = defineProps({
   items: { type: Array, default: () => [] },
   primary: Object,
   loading: Boolean,
+  error: Boolean,
 });
 const route = useRoute(),
   router = useRouter(),

@@ -4,6 +4,7 @@
       :items="overviewItems"
       :primary="primaryResult"
       :loading="isStreamingLoading"
+      :error="searchError"
     />
     <section
       v-if="query.trim() && (works.length || workLoading || workError)"
@@ -52,6 +53,7 @@ const props = defineProps({
     default: () => [],
   },
   isStreamingLoading: Boolean,
+  searchError: Boolean,
 });
 
 const primaryResult = computed(() =>

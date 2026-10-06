@@ -237,7 +237,7 @@ import UploadIcon from "./icons/UploadIcon.vue";
 import MusicNoteIcon from "./icons/MusicNoteIcon.vue";
 import MultiSourceImage from "./common/MultiSourceImage.vue";
 import { formatImageUrl } from "../utils";
-import { withCsrfHeader } from "../services/csrf";
+import { authenticatedFetch } from "../services/authenticatedFetch.js";
 import { wsConnectionStatus, wsServerVersion } from "../services/websocket";
 import {
   fetchStreamingSearchSections,
@@ -420,9 +420,9 @@ const fetchSuggestions = debounce(async (query, version) => {
 
   try {
     if (useOrganicSearch.value) {
-      const response = await fetch("/v1/content/search", {
+      const response = await authenticatedFetch("/v1/content/search", {
         method: "POST",
-        headers: withCsrfHeader({ "Content-Type": "application/json" }),
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: trimmed,
           resolve: true,
