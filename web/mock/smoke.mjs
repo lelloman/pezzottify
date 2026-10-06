@@ -6,6 +6,7 @@ import { screens } from "./fixtures.js";
 // Separate test server: tests never reset a developer's running design lab.
 const server = await createServer({
   mode: "mock",
+  cacheDir: "node_modules/.vite-mock-smoke",
   server: { port: 5175, strictPort: false },
   logLevel: "error",
 });

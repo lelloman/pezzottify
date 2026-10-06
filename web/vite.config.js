@@ -34,6 +34,7 @@ const appVersion = `${baseVersion}.${commitCount}`;
 export default defineConfig(async ({ command, mode }) => {
   const mock = command === "serve" && mode === "mock";
   return {
+    cacheDir: `node_modules/.vite-${mode}`,
     define: {
       __APP_VERSION__: JSON.stringify(appVersion),
     },

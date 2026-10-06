@@ -7,6 +7,7 @@ import { albums, tracks, resolvedAlbum, resolvedTrack } from "./fixtures.js";
 // fetch every pending track, flooding the browser with thousands of requests.
 const server = await createServer({
   mode: "mock",
+  cacheDir: "node_modules/.vite-mock-loading",
   server: { port: 5175, strictPort: false },
   logLevel: "error",
 });
