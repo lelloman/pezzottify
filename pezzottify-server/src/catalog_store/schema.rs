@@ -457,7 +457,12 @@ const TRACK_LYRICS_TABLE: Table = Table {
 const GENRE_ARTWORK_TABLE: Table = Table {
     name: "genre_artwork",
     columns: &[
-        sqlite_column!("genre", &SqlType::Text, is_primary_key = true, non_null = true),
+        sqlite_column!(
+            "genre",
+            &SqlType::Text,
+            is_primary_key = true,
+            non_null = true
+        ),
         sqlite_column!("entity_type", &SqlType::Text, non_null = true),
         sqlite_column!("entity_id", &SqlType::Text, non_null = true),
         sqlite_column!("selected_at", &SqlType::Integer, non_null = true),
@@ -468,8 +473,14 @@ const GENRE_ARTWORK_TABLE: Table = Table {
 
 const GENRE_RECORDING_POLICY_TABLE: Table = Table {
     name: "genre_recording_policy",
-    columns: &[sqlite_column!("genre", &SqlType::Text, is_primary_key = true, non_null = true)],
-    indices: &[], unique_constraints: &[],
+    columns: &[sqlite_column!(
+        "genre",
+        &SqlType::Text,
+        is_primary_key = true,
+        non_null = true
+    )],
+    indices: &[],
+    unique_constraints: &[],
 };
 const GENRE_RECORDINGS_TABLE: Table = Table {
     name: "genre_recordings",
@@ -478,7 +489,8 @@ const GENRE_RECORDINGS_TABLE: Table = Table {
         sqlite_column!("track_id", &SqlType::Text, non_null = true),
         sqlite_column!("evidence", &SqlType::Text, non_null = true),
     ],
-    indices: &[], unique_constraints: &[&["genre", "track_id"]],
+    indices: &[],
+    unique_constraints: &[&["genre", "track_id"]],
 };
 
 /// Spotify catalog schema and Pezzottify enrichment tables.
@@ -860,10 +872,19 @@ pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
     VersionedSchema {
         version: 11,
         tables: &[
-            ARTISTS_TABLE, ALBUMS_TABLE, TRACKS_TABLE, TRACK_ARTISTS_TABLE,
-            ARTIST_ALBUMS_TABLE, ARTIST_GENRES_TABLE, ALBUM_IMAGES_TABLE,
-            ARTIST_IMAGES_TABLE, RELATED_ARTISTS_TABLE, ENTITY_EMBEDDINGS_TABLE,
-            ARTIST_ENRICHMENT_QUEUE_TABLE, CATALOG_STATS_TABLE, TRACK_LYRICS_TABLE,
+            ARTISTS_TABLE,
+            ALBUMS_TABLE,
+            TRACKS_TABLE,
+            TRACK_ARTISTS_TABLE,
+            ARTIST_ALBUMS_TABLE,
+            ARTIST_GENRES_TABLE,
+            ALBUM_IMAGES_TABLE,
+            ARTIST_IMAGES_TABLE,
+            RELATED_ARTISTS_TABLE,
+            ENTITY_EMBEDDINGS_TABLE,
+            ARTIST_ENRICHMENT_QUEUE_TABLE,
+            CATALOG_STATS_TABLE,
+            TRACK_LYRICS_TABLE,
             GENRE_ARTWORK_TABLE,
         ],
         migration: Some(|tx: &rusqlite::Connection| {
@@ -874,11 +895,22 @@ pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
     VersionedSchema {
         version: 12,
         tables: &[
-            ARTISTS_TABLE, ALBUMS_TABLE, TRACKS_TABLE, TRACK_ARTISTS_TABLE,
-            ARTIST_ALBUMS_TABLE, ARTIST_GENRES_TABLE, ALBUM_IMAGES_TABLE,
-            ARTIST_IMAGES_TABLE, RELATED_ARTISTS_TABLE, ENTITY_EMBEDDINGS_TABLE,
-            ARTIST_ENRICHMENT_QUEUE_TABLE, CATALOG_STATS_TABLE, TRACK_LYRICS_TABLE,
-            GENRE_ARTWORK_TABLE, GENRE_RECORDING_POLICY_TABLE, GENRE_RECORDINGS_TABLE,
+            ARTISTS_TABLE,
+            ALBUMS_TABLE,
+            TRACKS_TABLE,
+            TRACK_ARTISTS_TABLE,
+            ARTIST_ALBUMS_TABLE,
+            ARTIST_GENRES_TABLE,
+            ALBUM_IMAGES_TABLE,
+            ARTIST_IMAGES_TABLE,
+            RELATED_ARTISTS_TABLE,
+            ENTITY_EMBEDDINGS_TABLE,
+            ARTIST_ENRICHMENT_QUEUE_TABLE,
+            CATALOG_STATS_TABLE,
+            TRACK_LYRICS_TABLE,
+            GENRE_ARTWORK_TABLE,
+            GENRE_RECORDING_POLICY_TABLE,
+            GENRE_RECORDINGS_TABLE,
         ],
         migration: Some(|tx: &rusqlite::Connection| {
             tx.execute_batch(include_str!("genre_recordings.sql"))?;
@@ -897,13 +929,24 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         let old = &CATALOG_VERSIONED_SCHEMAS[10];
         old.create(&conn).unwrap();
-        conn.execute_batch(include_str!("genre_artwork.sql")).unwrap();
-        conn.execute("INSERT INTO genre_artwork VALUES ('jazz', 'artist', 'chosen', 123)", []).unwrap();
+        conn.execute_batch(include_str!("genre_artwork.sql"))
+            .unwrap();
+        conn.execute(
+            "INSERT INTO genre_artwork VALUES ('jazz', 'artist', 'chosen', 123)",
+            [],
+        )
+        .unwrap();
         old.validate(&conn).unwrap();
         let latest = &CATALOG_VERSIONED_SCHEMAS[11];
         (latest.migration.unwrap())(&conn).unwrap();
         latest.validate(&conn).unwrap();
-        let id: String = conn.query_row("SELECT entity_id FROM genre_artwork WHERE genre='jazz'", [], |row| row.get(0)).unwrap();
+        let id: String = conn
+            .query_row(
+                "SELECT entity_id FROM genre_artwork WHERE genre='jazz'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
         assert_eq!(id, "chosen");
     }
 
