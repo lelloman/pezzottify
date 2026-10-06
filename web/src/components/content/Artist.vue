@@ -1,52 +1,33 @@
 <template>
-  <div v-if="artist">
-    <div class="topSection">
-      <MultiSourceImage
-        class="coverImage"
-        :urls="coverUrls"
-        @contextmenu.prevent="
-          entityMenu?.openMenu($event, 'artist', artistId, artist.name)
-        "
-      />
-      <div class="artistInfoColum">
-        <div class="artistIdentity">
-          <h1 class="artistName">{{ artist.name }}</h1>
-          <p v-if="lifeSummary" class="artistLifeSummary">{{ lifeSummary }}</p>
-          <div v-if="shortBio" class="artistBioBlock">
-            <p
-              ref="bioTextRef"
-              class="artistBioText"
-              :class="{ expanded: bioExpanded }"
-            >
-              {{ shortBio }}
-            </p>
-            <button
-              v-if="bioOverflows"
-              type="button"
-              class="artistBioToggle"
-              @click="bioExpanded = !bioExpanded"
-            >
-              {{ bioExpanded ? "Show less" : "Read more" }}
-            </button>
-          </div>
-        </div>
-        <div class="artistActions">
-          <button
-            class="advancedRadioButton"
-            :disabled="playback.radioCreationState.status === 'creating'"
-            @click="playback.setArtistGreatestHits(artistId)"
-          >
-            ▶ Play greatest hits
+  <DetailPage
+    v-if="artist"
+    :title="artist.name"
+    kind="Artist"
+    @artwork-contextmenu.prevent="
+      entityMenu?.openMenu($event, 'artist', artistId, artist.name)
+    "
+    :imageUrls="coverUrls || []"
+    round
+  >
+    <template #meta
+      ><span v-if="lifeSummary">{{ lifeSummary }}</span
+      ><span v-if="artist.genres?.length">{{
+        artist.genres.join(" · ")
+      }}</span></template
+    >
+    <template #actions>
+      <DetailActions
+        playLabel="Play greatest hits"
+        showSave
+        :saved="isArtistLiked"
+        @play="playback.setArtistGreatestHits(artistId)"
+        @save="handleClickOnFavoriteIcon"
+        :disabled="playback.radioCreationState.status === 'creating'"
+      >
+        <template #more>
+          <button type="button" @click="handleClickOnArtistRadio">
+            <RadioIcon /> Start radio
           </button>
-          <ToggableFavoriteIcon
-            :toggled="isArtistLiked"
-            :clickCallback="handleClickOnFavoriteIcon"
-          />
-          <RadioIcon
-            class="radioIcon scaleClickFeedback"
-            title="Listen to radio"
-            @click.stop="handleClickOnArtistRadio"
-          />
           <button
             class="advancedRadioButton"
             @click.stop="showRadioBuilder = true"
@@ -76,26 +57,58 @@
             <SteeringWheelIcon class="steerButtonIcon" />
             Add to mix
           </button>
-        </div>
-      </div>
-      <EnrichmentStatusIndicator
-        :status="artist.enrichment_status"
-        entityType="artist"
-      />
-    </div>
-    <div class="relatedArtistsContainer">
-      <LoadArtistListItem
-        v-for="artistId in artist.related"
-        :key="artistId"
-        :artistId="artistId"
-      />
-    </div>
+        </template>
+      </DetailActions>
+    </template>
+
     <div class="discographyContainer">
       <ArtistDiscography :artistId="artistId" />
     </div>
     <div class="discographyContainer">
       <ArtistDiscography :artistId="artistId" :appearsOn="true" />
     </div>
+    <section
+      v-if="
+        shortBio ||
+        ['queued', 'running', 'failed', 'failed_enrichment'].includes(
+          artist.enrichment_status?.status,
+        )
+      "
+      class="detailSupporting"
+    >
+      <h2 class="detailSectionTitle">About this artist</h2>
+      <div v-if="shortBio" class="artistBioBlock">
+        <p
+          ref="bioTextRef"
+          class="artistBioText"
+          :class="{ expanded: bioExpanded }"
+        >
+          {{ shortBio }}
+        </p>
+        <button
+          v-if="bioOverflows"
+          type="button"
+          class="artistBioToggle"
+          @click="bioExpanded = !bioExpanded"
+        >
+          {{ bioExpanded ? "Show less" : "Read more" }}
+        </button>
+      </div>
+      <EnrichmentStatusIndicator
+        :status="artist.enrichment_status"
+        entityType="artist"
+      />
+    </section>
+    <section v-if="artist.related?.length" class="detailSupporting">
+      <h2 class="detailSectionTitle">Related artists</h2>
+      <div class="relatedArtistsContainer">
+        <LoadArtistListItem
+          v-for="artistId in artist.related"
+          :key="artistId"
+          :artistId="artistId"
+        />
+      </div>
+    </section>
     <DestinationStepsPrompt
       :isOpen="showDestinationPrompt"
       :reference="{
@@ -112,7 +125,7 @@
       :seedEntityId="artistId"
       @close="showRadioBuilder = false"
     />
-  </div>
+  </DetailPage>
 
   <div v-else>
     <p>Loading {{ artistId }}...</p>
@@ -120,14 +133,14 @@
 </template>
 
 <script setup>
+import DetailPage from "@/components/common/DetailPage.vue";
+import DetailActions from "@/components/common/DetailActions.vue";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { MAX_COMPONENTS } from "@/utils/gravity";
 import { chooseArtistCoverImageUrl } from "@/utils";
 import { useUserStore } from "@/store/user.js";
 import { useStaticsStore } from "@/store/statics.js";
 import { useRemoteStore } from "@/store/remote.js";
-import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
-import ToggableFavoriteIcon from "@/components/common/ToggableFavoriteIcon.vue";
 import LoadArtistListItem from "@/components/common/LoadArtistListItem.vue";
 import ArtistDiscography from "@/components/common/ArtistDiscography.vue";
 import RadioIcon from "@/components/icons/RadioIcon.vue";
@@ -307,57 +320,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.topSection {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(180px, 300px) minmax(0, 1fr);
-  gap: clamp(20px, 3vw, 36px);
-  align-items: start;
-  padding: clamp(18px, 3vw, 32px);
-  border: 1px solid var(--surface-border);
-  border-radius: 8px;
-  background: linear-gradient(
-      135deg,
-      rgba(58, 134, 255, 0.16),
-      rgba(17, 20, 22, 0.58) 45%
-    ),
-    var(--surface-raised);
-}
-
-.coverImage {
-  width: 100%;
-  aspect-ratio: 1;
-  height: auto;
-  object-fit: cover;
-  border-radius: 50%;
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
-}
-
-.artistInfoColum {
-  min-width: 0;
-  align-self: stretch;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  margin: 0;
-}
-
-.artistIdentity {
-  min-width: 0;
-}
-
-.artistLifeSummary {
-  margin: 12px 0 0;
-  color: var(--text-muted);
-  font-size: clamp(0.95rem, 1.3vw, 1.1rem);
-  font-weight: 650;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
 .artistBioBlock {
   max-width: 860px;
   margin-top: 18px;
@@ -396,15 +358,6 @@ onUnmounted(() => {
   color: var(--spotify-green);
 }
 
-.artistName {
-  margin: 0;
-  color: var(--text-base);
-  font-size: clamp(2rem, 4.6vw, 4.6rem);
-  font-weight: 900;
-  line-height: 0.96;
-  letter-spacing: 0;
-}
-
 .relatedArtistsContainer {
   width: 100%;
   display: grid;
@@ -416,34 +369,6 @@ onUnmounted(() => {
 
 .discographyContainer {
   margin: 18px 0 0;
-}
-
-.verticalFiller {
-  display: none;
-}
-
-.artistActions {
-  display: flex;
-  margin-top: auto;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.artistActions :deep(.bigIcon) {
-  width: 42px;
-  height: 42px;
-}
-
-.radioIcon {
-  width: 42px;
-  height: 42px;
-  cursor: pointer;
-  color: var(--spotify-green);
-}
-
-.radioIcon:hover {
-  color: var(--spotify-green-hover);
 }
 
 .advancedRadioButton {
@@ -461,16 +386,6 @@ onUnmounted(() => {
 
 .advancedRadioButton:hover {
   background: var(--surface-hover);
-}
-
-@media (max-width: 720px) {
-  .topSection {
-    grid-template-columns: 1fr;
-  }
-
-  .coverImage {
-    max-width: 280px;
-  }
 }
 
 .steerButton {

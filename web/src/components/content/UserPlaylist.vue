@@ -1,27 +1,22 @@
 <template>
-  <div class="playlistWrapper">
+  <div class="detailPageHost">
     <div v-if="loading">Loading...</div>
-    <div v-else-if="playlist" class="playlistData">
-      <div class="nameRow">
-        <h1 class="playlistNameLabel">
-          {{ playlist.name }}
-        </h1>
-
-        <EditIcon
-          class="editIcon scaleClickFeedback"
-          @click.stop="handleEditButtonClick"
-        />
-      </div>
-      <div class="commandsSection">
-        <PlayIcon
-          class="commandIcon scaleClickFeedback bigIcon"
-          @click.stop="handleClickOnPlay"
-        />
-        <TrashIcon
-          class="commandIcon scaleClickFeedback mediumIcon"
-          @click.stop="handleClickOnDelete"
-        />
-      </div>
+    <DetailPage v-else-if="playlist" :title="playlist.name" kind="Playlist">
+      <template #meta
+        ><span>{{ playlist.tracks.length }} tracks</span></template
+      >
+      <template #actions
+        ><DetailActions playLabel="Play playlist" @play="handleClickOnPlay"
+          ><template #more>
+            <button type="button" @click="handleEditButtonClick">
+              <EditIcon />Rename playlist
+            </button>
+            <button type="button" @click="handleClickOnDelete">
+              <TrashIcon />Delete playlist
+            </button>
+          </template></DetailActions
+        ></template
+      >
       <div class="tracksSection">
         <div
           v-for="(trackId, trackIndex) in playlist.tracks"
@@ -40,7 +35,7 @@
           />
         </div>
       </div>
-    </div>
+    </DetailPage>
     <div v-else-if="error">Error. {{ error }}</div>
   </div>
 
@@ -85,7 +80,9 @@
 
 <script setup>
 import { watch, ref, computed, onBeforeUnmount } from "vue";
-import PlayIcon from "@/components/icons/PlayIcon.vue";
+import DetailPage from "@/components/common/DetailPage.vue";
+import DetailActions from "@/components/common/DetailActions.vue";
+
 import TrashIcon from "../icons/TrashIcon.vue";
 import ConfirmationDialog from "@/components/common/ConfirmationDialog.vue";
 import { useRoute, useRouter } from "vue-router";
@@ -231,54 +228,10 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-@import "@/assets/icons.css";
-
-.playlistData {
-  display: flex;
-  flex-direction: column;
-  margin: 8px;
-}
-
-.nameRow {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-}
-
-.playlistNameLabel {
-  font-size: 34px;
-  flex: 1;
-}
-
-.editIcon {
-  fill: white;
-  height: 32px;
-  width: 32px;
-}
-
-.commandsSection {
-  display: flex;
-  flex-direction: row;
-  margin-top: 16px;
-  margin-left: 8px;
-  margin-right: 8px;
-  gap: 16px;
-  align-items: center;
-}
-
-.commandIcon {
-  fill: var(--accent-color);
-}
-
 .tracksSection {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-}
-
-.playlistConfirmationName {
-  font-weight: bold;
-  color: red;
 }
 
 #playlistNameInput {

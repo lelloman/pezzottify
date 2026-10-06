@@ -26,12 +26,12 @@
         <div class="minimal-duration">{{ formatDuration(track.duration) }}</div>
       </div>
       <!-- Standard mode: horizontal layout -->
-      <div v-else class="track-item-content">
+      <div v-else class="track-item-content" :class="{ albumLayout }">
         <div class="trackIndexSpan">
           <p>{{ trackNumber }}</p>
         </div>
         <MultiSourceImage
-          v-if="track.image_urls"
+          v-if="track.image_urls && !albumLayout"
           class="trackImage scaleClickFeedback"
           :urls="track.image_urls"
           @click.stop="$emit('track-image-clicked', track)"
@@ -73,6 +73,7 @@ const staticsStore = useStaticsStore();
 const userStore = useUserStore();
 
 const props = defineProps({
+  albumLayout: Boolean,
   trackId: {
     type: String,
     required: true,
@@ -270,6 +271,43 @@ defineExpose({
   overflow: hidden;
 }
 
+.albumLayout {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  grid-template-areas: "number title duration" "number artists duration";
+  column-gap: 12px;
+  row-gap: 3px;
+}
+.albumLayout .trackIndexSpan {
+  grid-area: number;
+  width: auto;
+  padding: 0;
+  text-align: center;
+  color: var(--text-subdued);
+}
+.albumLayout .trackNameSpan {
+  grid-area: title;
+  width: auto;
+  min-width: 0;
+  margin: 0;
+}
+.albumLayout .trackArtistsSpan {
+  grid-area: artists;
+  width: auto;
+  min-width: 0;
+  padding: 0;
+  font-size: 0.85rem;
+  color: var(--text-subdued);
+}
+.albumLayout .track-duration {
+  grid-area: duration;
+  color: var(--text-subdued);
+  padding-left: 12px;
+}
+.albumLayout .track-fetch-error-icon {
+  grid-area: number;
+  align-self: end;
+}
 /* Track availability states */
 .trackUnavailable {
   opacity: 0.4;
