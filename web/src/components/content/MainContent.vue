@@ -9,6 +9,7 @@
         :results="results"
         :streamingSections="streamingSections"
         :isStreamingLoading="isStreamingLoading"
+        :searchError="searchError"
       />
       <Track v-else-if="trackId" :key="'track-' + trackId" :trackId="trackId" />
       <Work v-else-if="workId" :key="'work-' + workId" :workId="workId" />
@@ -59,7 +60,7 @@ import { useDebugStore } from "@/store/debug";
 import { storeToRefs } from "pinia";
 import SearchWrapper from "./SearchWrapper.vue";
 import { streamingSearch } from "@/services/streamingSearch";
-import { withCsrfHeader } from "@/services/csrf";
+import { authenticatedFetch } from "@/services/authenticatedFetch.js";
 
 const debugStore = useDebugStore();
 const { useOrganicSearch, excludeUnavailable } = storeToRefs(debugStore);
@@ -139,20 +140,16 @@ const fetchCatalogResults = async (query, filters) => {
   if (filters) {
     requestBody.filters = filters;
   }
-  try {
-    const response = await fetch("/v1/content/search", {
-      method: "POST",
-      headers: withCsrfHeader({ "Content-Type": "application/json" }),
-      body: JSON.stringify(requestBody),
-    });
-    return await response.json();
-  } catch (error) {
-    console.error("Catalog search error:", error);
-    return [];
-  }
+  const response = await authenticatedFetch("/v1/content/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(requestBody),
+  });
+  if (!response.ok) throw new Error(`Search failed: ${response.status}`);
+  return await response.json();
 };
 
-const fetchStreamingResults = (query) => {
+const fetchStreamingResults = (query, version) => {
   // Abort any existing streaming search
   if (abortStreamingSearch) {
     abortStreamingSearch();
@@ -164,13 +161,17 @@ const fetchStreamingResults = (query) => {
   abortStreamingSearch = streamingSearch(
     query,
     (section) => {
+      if (version !== searchVersion) return;
       streamingSections.value = [...streamingSections.value, section];
     },
     (error) => {
+      if (version !== searchVersion) return;
       console.error("Streaming search error:", error);
+      searchError.value = true;
       isStreamingLoading.value = false;
     },
     () => {
+      if (version !== searchVersion) return;
       isStreamingLoading.value = false;
     },
     { excludeUnavailable: excludeUnavailable.value },
@@ -178,20 +179,28 @@ const fetchStreamingResults = (query) => {
 };
 
 let searchVersion = 0;
+const searchError = ref(false);
 const fetchResults = async (newQuery, queryParams) => {
   const version = ++searchVersion;
+  abortStreamingSearch?.();
+  searchError.value = false;
   if (newQuery) {
     if (useOrganicSearch.value) {
       results.value = [];
       isStreamingLoading.value = true;
       const filters = queryParams.type ? queryParams.type.split(",") : null;
-      const fetched = await fetchCatalogResults(newQuery, filters);
-      if (version === searchVersion) {
-        results.value = Array.isArray(fetched) ? fetched : [];
-        isStreamingLoading.value = false;
+      try {
+        const fetched = await fetchCatalogResults(newQuery, filters);
+        if (version === searchVersion)
+          results.value = Array.isArray(fetched) ? fetched : [];
+      } catch (error) {
+        if (version === searchVersion) searchError.value = true;
+        console.error("Catalog search error:", error);
+      } finally {
+        if (version === searchVersion) isStreamingLoading.value = false;
       }
     } else {
-      fetchStreamingResults(newQuery);
+      fetchStreamingResults(newQuery, version);
     }
   } else {
     results.value = [];

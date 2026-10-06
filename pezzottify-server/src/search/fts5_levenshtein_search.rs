@@ -3349,6 +3349,33 @@ mod tests {
     }
 
     #[test]
+    fn test_tchaikowski_spelling_with_availability_after_restart() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("search.db");
+        let registry = crate::backup::DbRegistry::new();
+        let vault = Fts5LevenshteinSearchVault::new(
+            Arc::new(MockCatalogStore::new(vec![SearchableItem {
+                id: "tchaikovsky".into(),
+                name: "Pyotr Ilyich Tchaikovsky".into(),
+                content_type: SearchableContentType::Artist,
+                additional_text: vec![],
+                is_available: true,
+            }])),
+            &db_path,
+            &registry,
+        )
+        .unwrap();
+        for vault in [
+            vault,
+            Fts5LevenshteinSearchVault::new_lazy(&db_path, &registry).unwrap(),
+        ] {
+            let results = vault.search_expanded_with_availability("tchaikowski", 20, None, true);
+            assert_eq!(results.len(), 1);
+            assert_eq!(results[0].item_id, "tchaikovsky");
+        }
+    }
+
+    #[test]
     fn test_typo_correction_search_after_large_same_length_bucket() {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("search.db");
