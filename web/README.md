@@ -73,3 +73,10 @@ Docker builds work from this repository alone. See
 the shared assistant.
 Provider credentials, MCP, music tools, prompts and confirmation policy remain here;
 the shared Rust engine owns conversation and context state.
+
+## Local UI design environment
+
+Run `npm run dev:mock` for the real app with a fictional catalog and local mock
+API at http://127.0.0.1:5174. Open http://127.0.0.1:5174/__mock for the screen
+index, fixture reset, and populated/empty/slow/error/login scenarios. See
+[mock/README.md](mock/README.md) for coverage, editing fixtures, and smoke tests.
