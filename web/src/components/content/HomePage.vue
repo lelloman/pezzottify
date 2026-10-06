@@ -228,17 +228,7 @@
           <router-link to="/genres" class="seeAllLink">See all</router-link>
         </div>
         <div class="genreGrid">
-          <router-link
-            v-for="genre in genres"
-            :key="genre.name"
-            :to="`/genre/${encodeURIComponent(genre.name)}`"
-            class="genreCard"
-          >
-            <span class="genreCardName">{{ genre.name }}</span>
-            <span class="genreTrackCount">{{
-              formatTrackCount(genre.track_count)
-            }}</span>
-          </router-link>
+          <GenreCard v-for="genre in genres" :key="genre.name" :genre="genre" />
         </div>
       </section>
     </template>
@@ -253,6 +243,7 @@
 
 <script setup>
 import { ref, onMounted, computed } from "vue";
+import GenreCard from "@/components/common/GenreCard.vue";
 import MusicNoteIcon from "@/components/icons/MusicNoteIcon.vue";
 import ChevronLeft from "@/components/icons/ChevronLeft.vue";
 import ChevronRight from "@/components/icons/ChevronRight.vue";
@@ -292,10 +283,6 @@ const formatArtistNames = (names) => {
 };
 
 // Helper to format track count
-const formatTrackCount = (count) => {
-  if (count === 1) return "1 track";
-  return `${count.toLocaleString()} tracks`;
-};
 
 const selectFeaturedAlbum = (index) => {
   if (featuredAlbums.value.length === 0) return;
@@ -884,82 +871,15 @@ onMounted(async () => {
   scroll-snap-type: x proximity;
 }
 
+.genreGrid {
+  scrollbar-width: none;
+}
 .genreGrid::-webkit-scrollbar {
-  height: 8px;
+  display: none;
 }
-
-.genreGrid::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
-}
-
-.genreGrid::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.genreCard {
-  display: flex;
+.genreGrid > * {
   flex: 0 0 clamp(160px, 16vw, 220px);
-  flex-direction: column;
-  justify-content: space-between;
-  min-height: 92px;
-  padding: 14px;
-  border-radius: 8px;
-  color: #fff;
-  text-decoration: none;
   scroll-snap-align: start;
-  background: linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.075),
-      rgba(255, 255, 255, 0.025)
-    ),
-    #181818;
-  border: 1px solid rgba(255, 255, 255, 0.065);
-  transition:
-    transform var(--transition-fast),
-    border-color var(--transition-fast),
-    background var(--transition-fast);
-}
-
-.genreCard:nth-child(3n + 1) {
-  background: linear-gradient(
-      135deg,
-      rgba(29, 185, 84, 0.2),
-      rgba(255, 255, 255, 0.025)
-    ),
-    #181818;
-}
-
-.genreCard:nth-child(3n + 2) {
-  background: linear-gradient(
-      135deg,
-      rgba(58, 134, 255, 0.2),
-      rgba(255, 255, 255, 0.025)
-    ),
-    #181818;
-}
-
-.genreCard:nth-child(3n) {
-  background: linear-gradient(
-      135deg,
-      rgba(255, 180, 84, 0.2),
-      rgba(255, 255, 255, 0.025)
-    ),
-    #181818;
-}
-
-.genreCard:hover {
-  color: #fff;
-  transform: translateY(-2px);
-  border-color: rgba(255, 255, 255, 0.16);
-}
-
-.genreCardName {
-  color: #fff;
-  font-size: 0.98rem;
-  font-weight: 700;
-  line-height: 1.15;
-  text-transform: capitalize;
 }
 
 .loadingState,
