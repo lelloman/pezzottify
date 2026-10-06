@@ -9,13 +9,27 @@
         <MusicNoteIcon class="logoIcon" />
         <span class="logoWordmark">ezzottify</span>
       </router-link>
-      <div ref="searchContainerRef" class="searchInputContainer">
+      <div
+        ref="searchContainerRef"
+        class="searchInputContainer"
+        @focusout="handleSearchFocusOut"
+      >
         <div class="searchBar">
+          <svg class="searchGlyph" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="10.5" cy="10.5" r="7.5" />
+            <path d="m16 16 5 5" />
+          </svg>
           <input
             class="searchInput"
             type="text"
-            placeholder="Search..."
+            placeholder="What do you want to play?"
+            aria-label="Search music"
+            :aria-expanded="isSearchPopoverOpen"
+            aria-controls="search-suggestions"
+            autocomplete="off"
+            @keydown.down.prevent="focusSuggestion"
             @focus="handleSearchFocus"
+            @click="!isSearchPopoverOpen && handleSearchFocus()"
             @input="onInput"
             @keydown.enter.prevent="commitSearch"
             @keydown.esc.prevent="closeSearchPopover"
@@ -25,109 +39,134 @@
           <button
             v-if="localQuery"
             id="clearQueryButton"
-            type="submit"
+            type="button"
+            aria-label="Clear search"
             name="clearQueryButton"
             @click="clearQuery()"
           >
-            <CrossIcon class="scaleClickFeedback crossIcon" />
+            <svg class="crossIcon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m5 5 14 14M5 19 19 5" />
+            </svg>
           </button>
         </div>
 
         <div
           v-if="isSearchPopoverOpen"
+          id="search-suggestions"
           class="searchPopover"
-          @mousedown.prevent
+          @keydown="navigateSuggestions"
         >
           <template v-if="hasSuggestionQuery">
             <div class="popoverHeader">
-              <span>Search suggestions</span>
-              <button
-                type="button"
-                class="searchAllButton"
-                @click="commitSearch"
-              >
-                Search all
-              </button>
+              <span>↑ ↓ Navigate</span><span>Enter to open</span>
             </div>
-
-            <div
-              v-if="isSuggestionLoading && suggestionSections.length === 0"
-              class="popoverState"
+            <button
+              type="button"
+              class="suggestionRow searchQueryRow"
+              data-search-choice
+              @click="commitSearch"
             >
-              Searching
-            </div>
-            <div v-else-if="suggestionError" class="popoverState">
-              Search is unavailable
-            </div>
-            <div
-              v-else-if="
-                !isSuggestionLoading && suggestionSections.length === 0
-              "
+              <svg class="queryIcon" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="10" cy="10" r="7" />
+                <path d="m15 15 6 6" />
+              </svg>
+              <span class="suggestionTitle"
+                >Search for “{{ localQuery.trim() }}”</span
+              >
+            </button>
+            <p
+              v-if="isSuggestionLoading && !visibleSuggestions.length"
               class="popoverState"
+              role="status"
+            >
+              Searching…
+            </p>
+            <p v-else-if="suggestionError" class="popoverState" role="status">
+              Search is unavailable
+            </p>
+            <p
+              v-else-if="!isSuggestionLoading && !visibleSuggestions.length"
+              class="popoverState"
+              role="status"
             >
               No matches
-            </div>
-            <div v-else class="suggestionSections">
-              <section
-                v-for="section in suggestionSections"
-                :key="section.type"
-                class="suggestionSection"
+            </p>
+            <button
+              v-for="result in visibleSuggestions"
+              :key="result.type + '-' + result.id"
+              type="button"
+              class="suggestionRow"
+              data-search-choice
+              @click="selectSuggestion(result)"
+            >
+              <MultiSourceImage
+                :urls="suggestionImageUrls(result)"
+                :lazy="false"
+                class="suggestionImage"
+                :class="{ roundSuggestionImage: result.type === 'Artist' }"
+                alt=""
+              />
+              <span class="suggestionText"
+                ><span class="suggestionTitle">{{ result.name }}</span
+                ><span class="suggestionSubtitle">{{
+                  suggestionSubtitle(result)
+                }}</span></span
               >
-                <h3 class="suggestionSectionTitle">{{ section.label }}</h3>
-                <button
-                  v-for="result in section.results"
-                  :key="result.type + '-' + result.id"
-                  type="button"
-                  class="suggestionRow"
-                  @click="selectSuggestion(result)"
-                >
-                  <MultiSourceImage
-                    :urls="suggestionImageUrls(result)"
-                    :lazy="false"
-                    :class="{
-                      suggestionImage: true,
-                      roundSuggestionImage: result.type === 'Artist',
-                    }"
-                  />
-                  <span class="suggestionText">
-                    <span class="suggestionTitle">{{ result.name }}</span>
-                    <span class="suggestionSubtitle">
-                      {{ suggestionSubtitle(result) }}
-                    </span>
-                  </span>
-                </button>
-              </section>
-            </div>
+            </button>
           </template>
-
           <template v-else>
-            <section v-if="recentSearches.length" class="suggestionSection">
-              <h3 class="suggestionSectionTitle">Recent searches</h3>
+            <h3 class="suggestionSectionTitle">Recent searches</h3>
+            <div
+              v-for="(entry, index) in recentSearches"
+              :key="entry.type + ':' + (entry.id || entry.name)"
+              class="recentSearchRow"
+            >
               <button
-                v-for="query in recentSearches"
-                :key="query"
                 type="button"
-                class="recentSearchButton"
-                @click="runRecentSearch(query)"
+                class="suggestionRow"
+                data-search-choice
+                @click="runRecentSearch(entry)"
               >
-                {{ query }}
-              </button>
-            </section>
-
-            <section class="suggestionSection">
-              <h3 class="suggestionSectionTitle">Quick links</h3>
-              <div class="quickLinkGrid">
-                <button
-                  v-for="link in quickLinks"
-                  :key="link.path"
-                  type="button"
-                  class="quickLinkButton"
-                  @click="openQuickLink(link.path)"
+                <MultiSourceImage
+                  v-if="entry.type !== 'Query'"
+                  :urls="suggestionImageUrls(entry)"
+                  :lazy="false"
+                  class="suggestionImage"
+                  :class="{ roundSuggestionImage: entry.type === 'Artist' }"
+                  alt=""
+                />
+                <svg
+                  v-else
+                  class="queryIcon"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
-                  {{ link.label }}
-                </button>
-              </div>
-            </section>
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 6v6l4 2" />
+                </svg>
+                <span class="suggestionText"
+                  ><span class="suggestionTitle">{{ entry.name }}</span
+                  ><span class="suggestionSubtitle">{{
+                    entry.type === "Query"
+                      ? "Search"
+                      : suggestionSubtitle(entry)
+                  }}</span></span
+                >
+              </button>
+              <button
+                type="button"
+                class="removeRecent"
+                :aria-label="`Remove ${entry.name} from recent searches`"
+                @click="removeRecentSearch(index)"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m5 5 14 14M5 19 19 5" />
+                </svg>
+              </button>
+            </div>
+            <p v-if="!recentSearches.length" class="popoverState">
+              Your recent searches will appear here.
+            </p>
           </template>
         </div>
       </div>
@@ -178,11 +217,17 @@
 </template>
 
 <script setup>
-import { ref, watch, computed, onMounted, onBeforeUnmount } from "vue";
+import {
+  ref,
+  watch,
+  computed,
+  nextTick,
+  onMounted,
+  onBeforeUnmount,
+} from "vue";
 import { storeToRefs } from "pinia";
 import { debounce } from "lodash-es"; // Lightweight debounce
 import { useRouter, useRoute } from "vue-router";
-import CrossIcon from "./icons/CrossIcon.vue";
 import SettingsIcon from "./icons/SettingsIcon.vue";
 import DevicesIcon from "./icons/DevicesIcon.vue";
 import LogoutIcon from "./icons/LogoutIcon.vue";
@@ -221,16 +266,28 @@ const suggestionError = ref(false);
 const searchSuggestions = ref([]);
 
 const RECENT_SEARCHES_KEY = "pezzottify_recent_searches";
-const MAX_RECENT_SEARCHES = 5;
+const MAX_RECENT_SEARCHES = 10;
 const SUGGESTION_FETCH_LIMIT = 30;
 let suggestionAbortController = null;
+let suggestionVersion = 0;
 const suggestionImageUrlCache = new Map();
 
 function loadRecentSearches() {
   try {
     const saved = JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || "[]");
     return Array.isArray(saved)
-      ? saved.filter(Boolean).slice(0, MAX_RECENT_SEARCHES)
+      ? saved
+          .map((entry) =>
+            typeof entry === "string" ? { type: "Query", name: entry } : entry,
+          )
+          .filter(
+            (entry) =>
+              entry &&
+              typeof entry.name === "string" &&
+              ["Query", "Album", "Artist", "Track"].includes(entry.type) &&
+              (entry.type === "Query" || typeof entry.id === "string"),
+          )
+          .slice(0, MAX_RECENT_SEARCHES)
       : [];
   } catch {
     return [];
@@ -238,19 +295,6 @@ function loadRecentSearches() {
 }
 
 const recentSearches = ref(loadRecentSearches());
-
-const quickLinks = computed(() => {
-  const links = [
-    { label: "Genres", path: "/genres" },
-    { label: "Devices", path: "/devices" },
-  ];
-
-  if (userStore.canRequestContent) {
-    links.splice(1, 0, { label: "Requests", path: "/requests" });
-  }
-
-  return links;
-});
 
 const props = defineProps({
   initialQuery: {
@@ -261,22 +305,11 @@ const props = defineProps({
 
 const localQuery = ref(props.initialQuery);
 const hasSuggestionQuery = computed(() => localQuery.value.trim().length > 0);
-const suggestionSections = computed(() => {
-  const sections = [
-    { type: "Track", label: "Tracks", results: [] },
-    { type: "Album", label: "Albums", results: [] },
-    { type: "Artist", label: "Artists", results: [] },
-  ];
-
-  for (const result of searchSuggestions.value) {
-    const section = sections.find((item) => item.type === result.type);
-    if (section && section.results.length < 3) {
-      section.results.push(result);
-    }
-  }
-
-  return sections.filter((section) => section.results.length > 0);
-});
+const visibleSuggestions = computed(() =>
+  searchSuggestions.value
+    .filter((result) => ["Track", "Album", "Artist"].includes(result.type))
+    .slice(0, 9),
+);
 
 watch(
   () => props.initialQuery,
@@ -285,23 +318,93 @@ watch(
   },
 );
 
-function saveRecentSearch(query) {
-  const trimmed = query.trim();
-  if (!trimmed) return;
-
+function persistRecentSearches() {
+  try {
+    localStorage.setItem(
+      RECENT_SEARCHES_KEY,
+      JSON.stringify(recentSearches.value),
+    );
+  } catch {
+    /* Keep history in memory if storage is unavailable. */
+  }
+}
+function saveRecentSearch(value) {
+  const entry =
+    typeof value === "string"
+      ? { type: "Query", name: value.trim() }
+      : {
+          type: value.type,
+          id: value.id,
+          name: value.name,
+          album_id: value.album_id,
+          artists_ids_names: value.artists_ids_names,
+          year: value.year,
+        };
+  if (!entry.name) return;
   recentSearches.value = [
-    trimmed,
+    entry,
     ...recentSearches.value.filter(
-      (item) => item.toLowerCase() !== trimmed.toLowerCase(),
+      (item) =>
+        !(
+          item.type === entry.type &&
+          (entry.id
+            ? item.id === entry.id
+            : item.name.toLowerCase() === entry.name.toLowerCase())
+        ),
     ),
   ].slice(0, MAX_RECENT_SEARCHES);
-  localStorage.setItem(
-    RECENT_SEARCHES_KEY,
-    JSON.stringify(recentSearches.value),
+  persistRecentSearches();
+}
+function removeRecentSearch(index) {
+  recentSearches.value.splice(index, 1);
+  persistRecentSearches();
+  nextTick(() => {
+    const target =
+      searchContainerRef.value?.querySelectorAll(".removeRecent")[
+        Math.min(index, recentSearches.value.length - 1)
+      ] || searchContainerRef.value?.querySelector("input");
+    target?.focus();
+  });
+}
+function focusSuggestion() {
+  isSearchPopoverOpen.value = true;
+  nextTick(() =>
+    searchContainerRef.value?.querySelector("[data-search-choice]")?.focus(),
   );
 }
+function navigateSuggestions(event) {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    searchContainerRef.value?.querySelector("input")?.focus();
+    closeSearchPopover();
+    return;
+  }
+  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+  const rows = [
+    ...searchContainerRef.value.querySelectorAll("[data-search-choice]"),
+  ];
+  const index = rows.indexOf(document.activeElement);
+  event.preventDefault();
+  if (event.key === "ArrowUp" && index <= 0) {
+    searchContainerRef.value.querySelector("input").focus();
+    return;
+  }
+  const next =
+    event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? rows.length - 1
+        : Math.max(
+            0,
+            Math.min(
+              rows.length - 1,
+              index + (event.key === "ArrowDown" ? 1 : -1),
+            ),
+          );
+  rows[next]?.focus();
+}
 
-const fetchSuggestions = debounce(async (query) => {
+const fetchSuggestions = debounce(async (query, version) => {
   const trimmed = query.trim();
   if (!trimmed) {
     searchSuggestions.value = [];
@@ -336,6 +439,7 @@ const fetchSuggestions = debounce(async (query) => {
       }
 
       const payload = await response.json();
+      if (version !== suggestionVersion) return;
       searchSuggestions.value = Array.isArray(payload) ? payload : [];
     } else {
       const sections = await fetchStreamingSearchSections(
@@ -346,23 +450,27 @@ const fetchSuggestions = debounce(async (query) => {
         },
         suggestionAbortController.signal,
       );
+      if (version !== suggestionVersion) return;
       searchSuggestions.value = sectionsToResults(sections).slice(
         0,
         SUGGESTION_FETCH_LIMIT,
       );
     }
   } catch (error) {
-    if (error.name !== "AbortError") {
+    if (version === suggestionVersion && error.name !== "AbortError") {
       console.error("Search suggestion error:", error);
       suggestionError.value = true;
       searchSuggestions.value = [];
     }
   } finally {
-    isSuggestionLoading.value = false;
+    if (version === suggestionVersion) isSuggestionLoading.value = false;
   }
-}, 500);
+}, 300);
 
 function queueSuggestionFetch(query) {
+  const version = ++suggestionVersion;
+  suggestionAbortController?.abort();
+  searchSuggestions.value = [];
   const trimmed = query.trim();
   if (!trimmed) {
     fetchSuggestions.cancel();
@@ -375,7 +483,7 @@ function queueSuggestionFetch(query) {
 
   isSuggestionLoading.value = true;
   suggestionError.value = false;
-  fetchSuggestions(trimmed);
+  fetchSuggestions(trimmed, version);
 }
 
 function onInput(event) {
@@ -407,22 +515,20 @@ function commitSearch() {
 }
 
 function clearQuery() {
+  queueSuggestionFetch("");
   localQuery.value = "";
   inputValue.value = "";
   searchSuggestions.value = [];
   suggestionError.value = false;
   router.push("/");
+  nextTick(() => searchContainerRef.value?.querySelector("input")?.focus());
 }
 
-function runRecentSearch(query) {
-  localQuery.value = query;
-  inputValue.value = query;
+function runRecentSearch(entry) {
+  if (entry.type !== "Query") return selectSuggestion(entry);
+  localQuery.value = entry.name;
+  inputValue.value = entry.name;
   commitSearch();
-}
-
-function openQuickLink(path) {
-  closeSearchPopover();
-  router.push(path);
 }
 
 function resultPath(result) {
@@ -439,7 +545,7 @@ function resultPath(result) {
 }
 
 function selectSuggestion(result) {
-  saveRecentSearch(result.name);
+  saveRecentSearch(result);
   closeSearchPopover();
   router.push(resultPath(result));
 }
@@ -456,12 +562,14 @@ function suggestionSubtitle(result) {
   switch (result.type) {
     case "Album": {
       const artists = artistNames(result.artists_ids_names);
-      return [result.year, artists].filter(Boolean).join(" - ");
+      return ["Album", result.year, artists].filter(Boolean).join(" · ");
     }
     case "Artist":
       return "Artist";
     case "Track":
-      return artistNames(result.artists_ids_names) || "Track";
+      return ["Song", artistNames(result.artists_ids_names)]
+        .filter(Boolean)
+        .join(" · ");
     default:
       return result.type;
   }
@@ -481,6 +589,13 @@ function suggestionImageUrls(result) {
   return suggestionImageUrlCache.get(cacheKey);
 }
 
+function handleSearchFocusOut(event) {
+  if (
+    event.relatedTarget &&
+    !searchContainerRef.value?.contains(event.relatedTarget)
+  )
+    closeSearchPopover();
+}
 function handleDocumentPointerDown(event) {
   if (!searchContainerRef.value?.contains(event.target)) {
     closeSearchPopover();
@@ -624,178 +739,157 @@ header {
   cursor: pointer;
 }
 
+.searchGlyph {
+  position: absolute;
+  left: 16px;
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: var(--text-subdued);
+  stroke-width: 2;
+  pointer-events: none;
+}
+.searchInput {
+  padding-left: 48px;
+}
 .searchPopover {
   position: absolute;
   top: calc(100% + 8px);
   left: 0;
   right: 0;
   z-index: var(--z-dropdown);
-  max-height: min(68vh, 520px);
+  max-height: min(68vh, 590px);
   overflow-y: auto;
-  padding: 10px;
-  background: #111416;
-  border: 1px solid var(--surface-border-strong);
+  padding: 8px;
+  background: #282828;
+  border: 0;
   border-radius: 8px;
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.62);
+  box-shadow: var(--shadow-menu);
 }
-
 .popoverHeader {
   display: flex;
-  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 2px 2px 10px;
+  padding: 4px 8px 8px;
   color: var(--text-subdued);
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  text-transform: uppercase;
+  font-size: 12px;
 }
-
-.searchAllButton {
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--surface-border-strong);
-  border-radius: 6px;
-  background: #1a1f22;
-  color: var(--text-base);
-  cursor: pointer;
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-}
-
-.searchAllButton:hover {
-  background: #252b2f;
-}
-
 .popoverState {
-  padding: 22px 8px;
-  color: var(--text-subdued);
-  text-align: center;
-  font-size: var(--text-sm);
-}
-
-.suggestionSections {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.suggestionSection {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.suggestionSection + .suggestionSection {
-  padding-top: 6px;
-  border-top: 1px solid var(--surface-border);
-}
-
-.suggestionSectionTitle {
   margin: 0;
-  padding: 0 2px;
+  padding: 20px 8px;
   color: var(--text-subdued);
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  text-transform: uppercase;
+  font-size: 14px;
 }
-
-.suggestionRow,
-.recentSearchButton,
-.quickLinkButton {
-  appearance: none;
-  border: 1px solid transparent;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-  transition:
-    background-color var(--transition-fast),
-    border-color var(--transition-fast);
+.suggestionSectionTitle {
+  padding: 8px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-base);
 }
-
 .suggestionRow {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 54px;
+  gap: 12px;
+  min-height: 64px;
   width: 100%;
-  padding: 7px;
-  border-radius: 8px;
-  background: #111416;
+  padding: 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-base);
+  text-align: left;
+  cursor: pointer;
 }
-
 .suggestionRow:hover,
-.recentSearchButton:hover,
-.quickLinkButton:hover {
-  background: #1b2023;
-  border-color: rgba(255, 255, 255, 0.08);
+.suggestionRow:focus-visible,
+.recentSearchRow:hover {
+  background: #ffffff1a;
 }
-
 .suggestionImage {
-  width: 40px;
-  height: 40px;
-  flex: 0 0 auto;
-  border-radius: 7px;
-  background: var(--bg-highlight);
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  border-radius: 4px;
   object-fit: cover;
+  background: var(--surface-raised);
 }
-
 .roundSuggestionImage {
   border-radius: 50%;
 }
-
 .suggestionText {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  gap: 2px;
 }
-
 .suggestionTitle,
 .suggestionSubtitle {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .suggestionTitle {
   color: var(--text-base);
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 400;
 }
-
 .suggestionSubtitle {
   color: var(--text-subdued);
-  font-size: var(--text-xs);
+  font-size: 14px;
+  line-height: 20px;
 }
-
-.recentSearchButton {
-  min-height: 34px;
-  padding: 0 10px;
-  border-radius: 7px;
-  background: #151a1d;
-  color: var(--text-base);
-  font-weight: var(--font-semibold);
+.queryIcon {
+  width: 48px;
+  height: 48px;
+  padding: 12px;
+  flex: 0 0 48px;
+  fill: none;
+  stroke: var(--text-subdued);
+  stroke-width: 1.8;
 }
-
-.quickLinkGrid {
+.recentSearchRow {
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+}
+.recentSearchRow .suggestionRow {
+  min-width: 0;
+  flex: 1;
+}
+.removeRecent {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  margin-right: 8px;
+  color: var(--text-subdued);
+  border-radius: 50%;
 }
-
-.quickLinkButton {
-  min-height: 38px;
-  padding: 0 10px;
-  border-radius: 7px;
-  background: #1a1f22;
-  color: var(--text-base);
-  font-weight: var(--font-semibold);
+.removeRecent svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
 }
-
+.removeRecent:hover {
+  color: white;
+  background: var(--surface-hover);
+}
+.searchPopover button:focus-visible,
+#clearQueryButton:focus-visible {
+  outline: 2px solid white;
+  outline-offset: -2px;
+}
 .crossIcon {
   width: 24px;
   height: 24px;
-  stroke: #666;
+  stroke: var(--text-subdued);
+  stroke-width: 2;
+  fill: none;
 }
 
 .topBarContent {

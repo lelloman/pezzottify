@@ -64,7 +64,7 @@ import { withCsrfHeader } from "@/services/csrf";
 const debugStore = useDebugStore();
 const { useOrganicSearch, excludeUnavailable } = storeToRefs(debugStore);
 
-const results = ref(null);
+const results = ref([]);
 const streamingSections = ref([]);
 const isStreamingLoading = ref(false);
 let abortStreamingSearch = null;
@@ -177,12 +177,19 @@ const fetchStreamingResults = (query) => {
   );
 };
 
+let searchVersion = 0;
 const fetchResults = async (newQuery, queryParams) => {
+  const version = ++searchVersion;
   if (newQuery) {
     if (useOrganicSearch.value) {
       results.value = [];
+      isStreamingLoading.value = true;
       const filters = queryParams.type ? queryParams.type.split(",") : null;
-      results.value = await fetchCatalogResults(newQuery, filters);
+      const fetched = await fetchCatalogResults(newQuery, filters);
+      if (version === searchVersion) {
+        results.value = Array.isArray(fetched) ? fetched : [];
+        isStreamingLoading.value = false;
+      }
     } else {
       fetchStreamingResults(newQuery);
     }
