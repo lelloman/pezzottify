@@ -33,6 +33,8 @@ export class LocalOutlet {
 
     this.sound = new Howl({
       src: [this.formatTrackUrl(trackId)],
+      // Streaming URLs have no extension for Howler's codec detection.
+      format: ["ogg"],
       html5: true,
       preload: true,
       volume: this.callbacks.getVolume(),
