@@ -129,7 +129,7 @@
     </div>
 
     <div class="tracksContainer">
-      <div class="albumTrackHeading">
+      <div class="detailTrackHeading">
         <span>#</span><span>Title</span><span>Duration</span>
       </div>
       <div
@@ -679,18 +679,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.albumTrackHeading {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
-  gap: 16px;
-  padding: 0 16px 12px;
-  border-bottom: 1px solid var(--surface-border);
-  color: var(--text-subdued);
-  font-size: var(--text-sm);
-}
-.albumTrackHeading span:first-child {
-  text-align: center;
-}
 .discContainer + .discContainer {
   margin-top: 24px;
 }

@@ -1,23 +1,62 @@
 <template>
   <div class="detailPageHost">
     <div v-if="loading">Loading...</div>
-    <DetailPage v-else-if="playlist" :title="playlist.name" kind="Playlist">
+    <DetailPage
+      v-else-if="playlist"
+      :title="playlist.name"
+      kind="Playlist"
+      :imageUrls="coverImages[0] || []"
+    >
+      <template v-if="coverImages.length" #artwork>
+        <div
+          class="playlistArtwork"
+          :class="{ collage: coverImages.length > 1 }"
+        >
+          <MultiSourceImage
+            v-for="(urls, index) in coverImages"
+            :key="index"
+            :urls="urls"
+            :lazy="false"
+            alt=""
+          />
+        </div>
+      </template>
       <template #meta
-        ><span>{{ playlist.tracks.length }} tracks</span></template
+        ><span
+          >{{ playlist.tracks.length }} tracks<span v-if="playlistDuration">
+            · {{ playlistDuration }} min</span
+          ></span
+        ></template
       >
       <template #actions
-        ><DetailActions playLabel="Play playlist" @play="handleClickOnPlay"
-          ><template #more>
-            <button type="button" @click="handleEditButtonClick">
-              <EditIcon />Rename playlist
+        ><DetailActions
+          playLabel="Play playlist"
+          :disabled="!playlist.tracks.length"
+          @play="handleClickOnPlay"
+          ><template #secondary>
+            <button
+              type="button"
+              title="Rename playlist"
+              @click="handleEditButtonClick"
+            >
+              <EditIcon /><span class="actionLabel">Rename playlist</span>
             </button>
-            <button type="button" @click="handleClickOnDelete">
-              <TrashIcon />Delete playlist
+            <button
+              type="button"
+              title="Delete playlist"
+              @click="handleClickOnDelete"
+            >
+              <TrashIcon class="deleteIcon" /><span class="actionLabel"
+                >Delete playlist</span
+              >
             </button>
           </template></DetailActions
         ></template
       >
-      <div class="tracksSection">
+      <div v-if="playlist.tracks.length" class="tracksSection">
+        <div class="detailTrackHeading">
+          <span>#</span><span>Title</span><span>Duration</span>
+        </div>
         <div
           v-for="(trackId, trackIndex) in playlist.tracks"
           :key="trackIndex + trackId"
@@ -27,14 +66,19 @@
           "
         >
           <LoadTrackListItem
+            albumLayout
             :contextId="playlistId"
             :trackId="trackId"
             :trackNumber="trackIndex + 1"
-            @track-clicked="handleTrackSelection"
+            @track-clicked="handleTrackSelection(trackIndex)"
             :isCurrentlyPlaying="trackIndex == currentTrackIndex"
           />
         </div>
       </div>
+      <p v-else class="emptyPlaylist">
+        This playlist is empty. Add tracks from their context menu to get
+        started.
+      </p>
     </DetailPage>
     <div v-else-if="error">Error. {{ error }}</div>
   </div>
@@ -66,7 +110,7 @@
       :positiveButtonCallback="handleChangeNameButtonClicked"
     >
       <template #message>
-        <input id="editPlaylistNameInput" />
+        <input id="editPlaylistNameInput" aria-label="Playlist name" />
       </template>
     </ConfirmationDialog>
   </Transition>
@@ -80,6 +124,9 @@
 
 <script setup>
 import { watch, ref, computed, onBeforeUnmount } from "vue";
+import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
+import { useStaticsStore } from "@/store/statics";
+import { chooseAlbumCoverImageUrl } from "@/utils";
 import DetailPage from "@/components/common/DetailPage.vue";
 import DetailActions from "@/components/common/DetailActions.vue";
 
@@ -104,6 +151,37 @@ const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
 const playback = usePlaybackStore();
+const statics = useStaticsStore();
+const trackRefs = new Map();
+const trackData = (id) => {
+  if (!trackRefs.has(id)) trackRefs.set(id, statics.getTrack(id));
+  return trackRefs.get(id).item;
+};
+const coverImages = computed(() => {
+  const tracks = playlist.value?.tracks || [];
+  const count = Math.min(4, tracks.length);
+  const albums = [
+    ...new Set(
+      Array.from(
+        { length: count },
+        (_, i) =>
+          trackData(tracks[Math.floor((i * tracks.length) / count)])?.album_id,
+      ).filter(Boolean),
+    ),
+  ];
+  const images = albums.map((id) => chooseAlbumCoverImageUrl({ id }));
+  return images.length > 1
+    ? Array.from({ length: 4 }, (_, i) => images[i % images.length])
+    : images;
+});
+const playlistDuration = computed(() => {
+  const durations = (playlist.value?.tracks || []).map(
+    (id) => trackData(id)?.duration,
+  );
+  return durations.length && durations.every(Number.isFinite)
+    ? Math.round(durations.reduce((sum, duration) => sum + duration, 0) / 60000)
+    : null;
+});
 
 const loading = ref(true);
 const error = ref(null);
@@ -152,9 +230,8 @@ const handleClickOnDelete = () => {
   deleteConfirmationDialogOpen.value = true;
 };
 
-const handleTrackSelection = (track) => {
-  console.log("Selected track:", track);
-};
+const handleTrackSelection = (index) =>
+  playback.setUserPlaylist(playlist.value, index);
 
 watch(
   [() => playback.currentTrackIndex, () => playback.currentPlaylist],
@@ -228,24 +305,41 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.deleteIcon :deep(path) {
+  fill: currentColor;
+}
 .tracksSection {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
+  gap: 0;
 }
-
-#playlistNameInput {
-  font-size: 34px;
-  flex: 1;
-  background-color: transparent;
-  border: none;
-  color: white;
-  font-weight: bold;
-  font-size: 34px;
-  padding: 0;
-  margin: 0;
-  outline: none;
-  border-bottom: 2px solid white;
-  margin-right: 16px;
+.detailTrackHeading {
+  margin-bottom: 10px;
+}
+.playlistArtwork {
+  width: 100%;
+  height: 100%;
+  display: grid;
+}
+.playlistArtwork.collage {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+.playlistArtwork :deep(img) {
+  min-width: 0;
+  min-height: 0;
+}
+.emptyPlaylist {
+  padding: 24px 0;
+  color: var(--text-subdued);
+}
+#editPlaylistNameInput {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--surface-border);
+  border-radius: 4px;
+  background: var(--surface-raised);
+  color: var(--text-base);
+  font: inherit;
 }
 </style>
