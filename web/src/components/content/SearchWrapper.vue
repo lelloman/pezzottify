@@ -1,6 +1,15 @@
 <template>
-  <div>
-    <section v-if="query.trim()" class="workResults" :aria-busy="workLoading">
+  <div class="searchPage">
+    <SearchOverview
+      :items="overviewItems"
+      :primary="primaryResult"
+      :loading="isStreamingLoading"
+    />
+    <section
+      v-if="query.trim() && (works.length || workLoading || workError)"
+      class="workResults"
+      :aria-busy="workLoading"
+    >
       <h2 class="sectionTitle">Works</h2>
       <p v-if="workLoading" role="status">Searching works…</p>
       <p v-else-if="workError" role="status">Could not load matching works.</p>
@@ -22,18 +31,11 @@
         {{ expanded ? "Show fewer works" : `Show all ${works.length} works` }}
       </button>
     </section>
-    <SearchResults v-if="useOrganicSearch" :results="results" />
-    <StreamingSearchResults
-      v-else
-      :sections="streamingSections"
-      :isLoading="isStreamingLoading"
-    />
   </div>
 </template>
 
 <script setup>
-import SearchResults from "./SearchResults.vue";
-import StreamingSearchResults from "./StreamingSearchResults.vue";
+import SearchOverview from "../search/SearchOverview.vue";
 import WorkResult from "@/components/search/WorkResult.vue";
 import { computed, ref, watch } from "vue";
 import axios from "axios";
@@ -50,6 +52,43 @@ const props = defineProps({
     default: () => [],
   },
   isStreamingLoading: Boolean,
+});
+
+const primaryResult = computed(() =>
+  props.useOrganicSearch
+    ? null
+    : props.streamingSections.find(
+        (section) => section.section.startsWith("primary_") && section.item,
+      )?.item,
+);
+const overviewItems = computed(() => {
+  const items = props.useOrganicSearch
+    ? props.results || []
+    : props.streamingSections.flatMap((section) => {
+        if (section.item) return [section.item];
+        const types = {
+          popular_by: "Track",
+          tracks_from: "Track",
+          albums_by: "Album",
+          related_artists: "Artist",
+        };
+        return (section.items || []).map((item) => ({
+          ...item,
+          type: item.type || types[section.section],
+        }));
+      });
+  const seen = new Set();
+  return [
+    ...(primaryResult.value ? [primaryResult.value] : []),
+    ...items,
+  ].filter((item) => {
+    if (!item.id || !["Album", "Artist", "Track"].includes(item.type))
+      return false;
+    const key = item.type + ":" + item.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 });
 
 const works = ref([]);
@@ -87,11 +126,18 @@ watch(
 </script>
 
 <style scoped>
+.searchPage {
+  padding: 24px;
+  min-width: 0;
+}
+.workResults {
+  margin-top: 28px;
+}
 .workResults {
   margin-bottom: 24px;
 }
 .sectionTitle {
-  font-size: var(--text-lg);
+  font-size: 24px;
   font-weight: var(--font-semibold);
   color: var(--text-base);
   margin: 0 0 12px;
