@@ -1,6 +1,21 @@
 <template>
-  <article class="detailPage">
+  <article
+    ref="pageElement"
+    class="detailPage"
+    :style="
+      banner
+        ? {
+            '--banner-image-opacity': 1 - bannerProgress,
+            '--banner-title-opacity': titleProgress,
+          }
+        : undefined
+    "
+  >
+    <div v-if="banner" class="stickyArtistHeader" aria-hidden="true">
+      <div class="stickyArtistTitle">{{ title }}</div>
+    </div>
     <header
+      ref="heroElement"
       class="detailHero"
       :class="{ artistBanner: banner }"
       @contextmenu="banner && $emit('artwork-contextmenu', $event)"
@@ -40,7 +55,9 @@
       </div>
       <div class="detailIdentity">
         <p class="detailKind">{{ kind }}</p>
-        <h1 :class="{ longTitle: title.length > 40 }">{{ title }}</h1>
+        <h1 ref="titleElement" :class="{ longTitle: title.length > 40 }">
+          {{ title }}
+        </h1>
         <div class="detailMeta"><slot name="meta" /></div>
       </div>
     </header>
@@ -53,15 +70,71 @@
   </article>
 </template>
 <script setup>
+import {
+  ref,
+  onMounted,
+  onBeforeUnmount,
+  onActivated,
+  onDeactivated,
+  nextTick,
+} from "vue";
 import MultiSourceImage from "./MultiSourceImage.vue";
 defineEmits(["artwork-contextmenu"]);
-defineProps({
+const props = defineProps({
   title: { type: String, required: true },
   kind: { type: String, required: true },
   imageUrls: { type: Array, default: () => [] },
   round: Boolean,
   banner: Boolean,
 });
+const pageElement = ref(null),
+  heroElement = ref(null),
+  titleElement = ref(null);
+const bannerProgress = ref(0),
+  titleProgress = ref(0);
+let scrollRoot = null,
+  resizeObserver = null,
+  frame = 0;
+const clamp = (value) => Math.max(0, Math.min(1, value));
+const updateBanner = () => {
+  frame = 0;
+  if (!scrollRoot || !heroElement.value) return;
+  const top = scrollRoot.getBoundingClientRect().top + scrollRoot.clientTop;
+  const hero = heroElement.value.getBoundingClientRect();
+  const title = titleElement.value.getBoundingClientRect();
+  bannerProgress.value = clamp(
+    (top - hero.top) / Math.max(1, hero.height - 56),
+  );
+  titleProgress.value = clamp((top + 56 - title.bottom) / 32);
+};
+const scheduleUpdate = () => {
+  if (!frame) frame = requestAnimationFrame(updateBanner);
+};
+const stopTracking = () => {
+  scrollRoot?.removeEventListener("scroll", scheduleUpdate);
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+  scrollRoot = null;
+  cancelAnimationFrame(frame);
+  frame = 0;
+};
+const startTracking = async () => {
+  if (!props.banner) return;
+  await nextTick();
+  stopTracking();
+  scrollRoot = pageElement.value?.closest(".mainContent");
+  if (!scrollRoot) return;
+  scrollRoot.addEventListener("scroll", scheduleUpdate, { passive: true });
+  resizeObserver = new ResizeObserver(scheduleUpdate);
+  resizeObserver.observe(scrollRoot);
+  resizeObserver.observe(heroElement.value);
+  resizeObserver.observe(titleElement.value);
+  updateBanner();
+};
+onMounted(startTracking);
+onActivated(startTracking);
+onDeactivated(stopTracking);
+onBeforeUnmount(stopTracking);
 </script>
 <style scoped>
 .detailPage {
@@ -199,6 +272,34 @@ defineProps({
     padding: 0 16px 32px;
   }
 }
+.stickyArtistHeader {
+  position: sticky;
+  top: 0;
+  height: 0;
+  z-index: 20;
+  pointer-events: none;
+}
+.stickyArtistTitle {
+  display: block;
+  line-height: 56px;
+  min-width: 0;
+  height: 56px;
+  padding: 0 var(--detail-gutter);
+  background: #202020;
+  color: var(--text-base);
+  font-size: 24px;
+  font-weight: 700;
+  opacity: var(--banner-title-opacity, 0);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+@container (max-width:560px) {
+  .stickyArtistTitle {
+    padding-inline: 20px;
+    font-size: 20px;
+  }
+}
 /* Artist details use the portrait as a cover crop, never a stretched image. */
 .artistBanner {
   display: flex;
@@ -214,7 +315,7 @@ defineProps({
   object-fit: cover;
   object-position: center 35%;
   filter: none;
-  opacity: 1;
+  opacity: var(--banner-image-opacity, 1);
 }
 .artistBanner .heroBackdrop:not([src]) {
   visibility: hidden;

@@ -1,5 +1,5 @@
 <template>
-  <article class="entityCard" :class="{ hero }">
+  <article class="entityCard" :class="{ hero, hideSubtitle }">
     <RouterLink
       :to="`/${result.type.toLowerCase()}/${result.id}`"
       class="cardLink"
@@ -11,7 +11,9 @@
         alt=""
       />
       <span class="name">{{ result.name }}</span>
-      <span class="subtitle">{{ subtitle }}</span>
+      <span v-if="!hideSubtitle" class="subtitle">{{
+        metaLabel || subtitle
+      }}</span>
       <span
         v-if="
           availability === 'missing' ||
@@ -50,6 +52,8 @@ import { useUserStore } from "@/store/user";
 const props = defineProps({
   result: { type: Object, required: true },
   hero: Boolean,
+  metaLabel: String,
+  hideSubtitle: Boolean,
 });
 const playback = usePlaybackStore(),
   user = useUserStore();
@@ -175,6 +179,9 @@ const play = () => {
   transition:
     opacity 150ms,
     transform 150ms;
+}
+.hideSubtitle:not(.hero) .playButton {
+  bottom: 48px;
 }
 .hero .playButton {
   width: 56px;

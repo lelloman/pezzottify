@@ -40,7 +40,15 @@
       class="albumsContainer"
       ref="albumsContainerRef"
     >
-      <AlbumCard v-for="album in albums" :key="album.id" :album="album" />
+      <SearchEntityCard
+        v-for="album in albums"
+        :key="album.id"
+        :result="{ ...album, type: 'Album' }"
+        :metaLabel="albumSubtitle(album)"
+        @contextmenu.prevent="
+          entityMenu?.openMenu($event, 'album', album.id, album.name)
+        "
+      />
     </div>
 
     <div v-if="isLoading" class="loadingIndicator">
@@ -49,21 +57,15 @@
 
     <div v-if="error" class="error">{{ error }}</div>
 
-    <div v-if="!isLoading && !hasMore && albums.length > 0" class="endMessage">
-      {{
-        appearsOn
-          ? `End of features (${total} albums)`
-          : `End of discography (${total} albums)`
-      }}
-    </div>
-
     <div ref="sentinelRef" class="sentinel"></div>
+    <Teleport to="body"><EntityContextMenu ref="entityMenu" /></Teleport>
   </div>
 </template>
 
 <script setup>
 import { onMounted, onUnmounted, watch, ref } from "vue";
-import AlbumCard from "@/components/common/AlbumCard.vue";
+import SearchEntityCard from "@/components/search/SearchEntityCard.vue";
+import EntityContextMenu from "./contextmenu/EntityContextMenu.vue";
 import { useRemoteStore } from "@/store/remote";
 
 const props = defineProps({
@@ -77,11 +79,20 @@ const props = defineProps({
   },
 });
 
+const entityMenu = ref(null);
+const albumSubtitle = (album) => {
+  const year =
+    album.year || album.release_year || album.release_date?.slice(0, 4);
+  const kind =
+    { single: "Single", ep: "EP", compilation: "Compilation", album: "Album" }[
+      album.album_type?.toLowerCase()
+    ] || "Album";
+  return [year, kind].filter(Boolean).join(" · ");
+};
 const PAGE_SIZE = 50;
 
 const remoteStore = useRemoteStore();
 const albums = ref([]);
-const total = ref(0);
 const hasMore = ref(true);
 const error = ref(null);
 const isLoading = ref(false);
@@ -140,7 +151,6 @@ const loadMore = async () => {
 
     if (response) {
       albums.value = [...albums.value, ...response.albums];
-      total.value = response.total;
       hasMore.value = response.has_more;
       offset.value += response.albums.length;
     } else {
@@ -306,21 +316,9 @@ onUnmounted(() => {
 
 .albumsContainer {
   display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(1, 1fr);
-  justify-items: start;
-}
-
-@media (min-width: 1000px) {
-  .albumsContainer {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (min-width: 1500px) {
-  .albumsContainer {
-    grid-template-columns: repeat(3, 1fr);
-  }
+  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(min(170px, 100%), 1fr));
+  margin-inline: -12px;
 }
 
 .loadingIndicator {
@@ -348,13 +346,6 @@ onUnmounted(() => {
   text-align: center;
   padding: 16px;
   color: var(--error, #e91429);
-}
-
-.endMessage {
-  text-align: center;
-  padding: 16px;
-  color: var(--text-subdued, #6a6a6a);
-  font-size: var(--text-sm, 14px);
 }
 
 .sentinel {

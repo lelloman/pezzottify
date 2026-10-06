@@ -1,6 +1,14 @@
 <template>
   <div class="relatedArtistWrapper">
     <div v-if="loading" class="artistState">Loading</div>
+    <SearchEntityCard
+      v-else-if="artistData && card"
+      hideSubtitle
+      :result="{ ...artistData, type: 'Artist' }"
+      @contextmenu.prevent="
+        entityMenu?.openMenu($event, 'artist', artistData.id, artistData.name)
+      "
+    />
     <ArtistListItem
       v-else-if="artistData"
       :data-id="artistData.id"
@@ -10,11 +18,16 @@
     <div v-else-if="error" class="artistState errorState">
       Error. {{ error }}
     </div>
+    <Teleport v-if="card" to="body"
+      ><EntityContextMenu ref="entityMenu"
+    /></Teleport>
   </div>
 </template>
 
 <script setup>
 import { ref, watch } from "vue";
+import SearchEntityCard from "@/components/search/SearchEntityCard.vue";
+import EntityContextMenu from "./contextmenu/EntityContextMenu.vue";
 import ArtistListItem from "@/components/common/ArtistListItem.vue";
 import { useStaticsStore } from "@/store/statics";
 
@@ -22,12 +35,14 @@ const staticsStore = useStaticsStore();
 
 const props = defineProps({
   library: Boolean,
+  card: Boolean,
   artistId: {
     type: String,
     required: true,
   },
 });
 
+const entityMenu = ref(null);
 const artistData = ref(null);
 const loading = ref(true);
 const error = ref(null);
