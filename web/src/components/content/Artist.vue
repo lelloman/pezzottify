@@ -103,6 +103,7 @@
       <h2 class="detailSectionTitle">Related artists</h2>
       <div class="relatedArtistsContainer">
         <LoadArtistListItem
+          card
           v-for="artistId in artist.related"
           :key="artistId"
           :artistId="artistId"
@@ -361,10 +362,11 @@ onUnmounted(() => {
 .relatedArtistsContainer {
   width: 100%;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(170px, 100%), 1fr));
   gap: 8px;
   overflow: visible;
-  margin: 16px 0;
+  margin: 16px -12px;
+  width: calc(100% + 24px);
 }
 
 .discographyContainer {
