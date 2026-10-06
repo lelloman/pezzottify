@@ -1746,8 +1746,22 @@ mod tests {
             scheduler.run().await;
         });
 
-        // Give scheduler time to start and run the startup hook
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        // Wait for persisted completion, not a fixed delay: loaded CI runners
+        // may take longer to schedule the job or finish writing its history.
+        let history = tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let history = handle.get_job_history("startup_job", 10).unwrap();
+                if history
+                    .first()
+                    .is_some_and(|run| matches!(run.status.as_str(), "completed" | "failed"))
+                {
+                    break history;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("Startup job should finish and record its result within 10 seconds");
 
         // The job should have been executed (OnStartup hook)
         assert!(
@@ -1756,7 +1770,6 @@ mod tests {
         );
 
         // Verify job history was recorded
-        let history = handle.get_job_history("startup_job", 10).unwrap();
         assert!(!history.is_empty(), "Job history should be recorded");
         assert_eq!(history[0].status, "completed");
         assert_eq!(history[0].triggered_by, "hook:OnStartup");
@@ -1815,8 +1828,22 @@ mod tests {
             scheduler.run().await;
         });
 
-        // Give scheduler time to run
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        // Wait for persisted completion, not a fixed delay: loaded CI runners
+        // may take longer to schedule the job or finish writing its history.
+        let history = tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let history = handle.get_job_history("failing_job", 10).unwrap();
+                if history
+                    .first()
+                    .is_some_and(|run| matches!(run.status.as_str(), "completed" | "failed"))
+                {
+                    break history;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("Startup job should finish and record its result within 10 seconds");
 
         // The job should have executed but failed
         assert!(
@@ -1825,7 +1852,6 @@ mod tests {
         );
 
         // Verify failure was recorded
-        let history = handle.get_job_history("failing_job", 10).unwrap();
         assert!(!history.is_empty(), "Job history should be recorded");
         assert_eq!(history[0].status, "failed");
         assert!(history[0].error_message.is_some());
