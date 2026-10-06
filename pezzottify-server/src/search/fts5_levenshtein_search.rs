@@ -3107,6 +3107,7 @@ mod tests {
                 _offset: usize,
             ) -> anyhow::Result<crate::catalog_store::GenreTracksResult> {
                 Ok(crate::catalog_store::GenreTracksResult {
+                    artwork_url: None,
                     track_ids: Vec::new(),
                     total: 0,
                     has_more: false,

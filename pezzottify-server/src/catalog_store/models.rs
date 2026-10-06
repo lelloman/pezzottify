@@ -373,6 +373,8 @@ pub struct ArtistDiscography {
 /// Genre information with track count
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GenreInfo {
+    #[serde(default)]
+    pub artwork_url: Option<String>,
     pub name: String,
     pub track_count: usize,
 }
@@ -380,6 +382,7 @@ pub struct GenreInfo {
 /// Result for paginated genre tracks query
 #[derive(Clone, Debug, Serialize)]
 pub struct GenreTracksResult {
+    pub artwork_url: Option<String>,
     pub track_ids: Vec<String>,
     pub total: usize,
     pub has_more: bool,
