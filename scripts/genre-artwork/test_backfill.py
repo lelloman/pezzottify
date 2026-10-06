@@ -45,6 +45,19 @@ class BackfillTest(unittest.TestCase):
             db.close()
             applied = module.backfill(path, True)
             self.assertEqual(applied['inserted'], 3)
+            self.assertEqual(len({c['entity_id'] for c in applied['selections']}), 3)
+            replanned = module.backfill(path, reselect=True, overrides={'jazz': 'a'})
+            reassigned = {c['genre']: c for c in replanned['selections']}
+            self.assertEqual(reassigned['jazz']['entity_id'], 'a')
+            self.assertNotIn('unavailable', reassigned)  # no duplicate portrait as fallback
+            self.assertEqual(len({c['entity_id'] for c in replanned['selections']}), len(reassigned))
+            db = sqlite3.connect(path)
+            db.execute("UPDATE artist_images SET url='https://a' WHERE artist_rowid=2")
+            db.commit()
+            db.close()
+            shared_url = module.backfill(path, reselect=True)
+            self.assertLessEqual(sum(c['entity_type']=='artist' for c in shared_url['selections']), 1)
+
             db = sqlite3.connect(path)
             db.execute("UPDATE genre_artwork SET entity_id='manual-override' WHERE genre='jazz'")
             db.commit()
