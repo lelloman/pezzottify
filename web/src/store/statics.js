@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { reactive, watch } from "vue";
+import { reactive } from "vue";
 import { useRemoteStore } from "./remote";
 
 export const useStaticsStore = defineStore("statics", () => {
@@ -16,11 +16,13 @@ export const useStaticsStore = defineStore("statics", () => {
   };
 
   const loadFetchItemFromStorage = (itemType, itemId) => {
-    const item = localStorage.getItem(getStoredItemKey(itemType, itemId));
-    if (item) {
-      return JSON.parse(item);
+    try {
+      const item = localStorage.getItem(getStoredItemKey(itemType, itemId));
+      return item ? JSON.parse(item) : null;
+    } catch {
+      // Corrupt or unavailable browser storage must not prevent a remote load.
+      return null;
     }
-    return null;
   };
 
   // Transform ResolvedArtist response to legacy format
@@ -142,122 +144,80 @@ export const useStaticsStore = defineStore("statics", () => {
   };
 
   const updateItemFromRemote = (itemType, itemId) => {
-    fetchItemFromRemote(itemType, itemId)
-      .then((fetchedItem) => {
-        localStorage.setItem(
-          getStoredItemKey(itemType, itemId),
-          JSON.stringify(fetchedItem),
-        );
-        statics[itemType][itemId].ref.item = fetchedItem;
-      })
-      .catch((e) => {
-        console.log("updateItemFromRemote error:", e);
-        if (!statics[itemType][itemId].ref.item) {
-          statics[itemType][itemId].ref.error = "Failed to fetch item";
-        }
-      });
-  };
+    const entry = statics[itemType][itemId];
+    if (entry.promise) return entry.promise;
 
-  const triggerStaticItemFetch = (itemType, itemId) => {
-    const storedItem = loadFetchItemFromStorage(itemType, itemId);
-    if (storedItem && isValidCachedItem(itemType, storedItem)) {
-      // Serve cached data immediately, then refresh in the background
-      statics[itemType][itemId].ref.item = storedItem;
-      updateItemFromRemote(itemType, itemId);
-      return;
-    }
-    // If cached item is invalid, remove it
-    if (storedItem) {
-      localStorage.removeItem(getStoredItemKey(itemType, itemId));
-    }
-    updateItemFromRemote(itemType, itemId);
+    // Install the shared promise before doing any reactive writes. Getters can
+    // run repeatedly during rendering without starting duplicate requests.
+    entry.promise = Promise.resolve().then(async () => {
+      try {
+        for (;;) {
+          const revision = entry.revision;
+          let fetchedItem;
+          try {
+            fetchedItem = await fetchItemFromRemote(itemType, itemId);
+            if (!fetchedItem) throw new Error("Failed to fetch item");
+          } catch {
+            if (revision !== entry.revision) continue;
+            if (!entry.ref.item) entry.ref.error = "Failed to fetch item";
+            return null;
+          }
+          // A catalog invalidation during the request requires one fresh load.
+          // Discard the old response without publishing it or caching it.
+          if (revision !== entry.revision) continue;
+          try {
+            localStorage.setItem(
+              getStoredItemKey(itemType, itemId),
+              JSON.stringify(fetchedItem),
+            );
+          } catch {
+            // Quota/privacy failures do not discard successfully loaded data.
+          }
+          entry.ref.error = null;
+          entry.ref.item = fetchedItem;
+          return fetchedItem;
+        }
+      } finally {
+        entry.promise = null;
+      }
+    });
+    return entry.promise;
   };
 
   const getItem = (type, id) => {
     let entry = statics[type][id];
-    if (entry) {
-      if (!entry.ref.item) {
-        triggerStaticItemFetch(type, id);
-      }
-      return entry.ref;
-    }
+    // Loading and failed entries are both stable. Explicit invalidation, rather
+    // than a render/computed getter, starts another attempt after a failure.
+    if (entry) return entry.ref;
 
+    const storedItem = loadFetchItemFromStorage(type, id);
     entry = {
-      id: id,
       ref: reactive({
         error: null,
-        item: null,
+        item: isValidCachedItem(type, storedItem) ? storedItem : null,
       }),
+      promise: null,
+      revision: 0,
     };
     statics[type][id] = entry;
-    triggerStaticItemFetch(type, id);
+    // Serve valid cached data immediately and refresh once in the background.
+    void updateItemFromRemote(type, id);
     return entry.ref;
   };
 
-  const getItemData = (type, id) => {
-    let entry = statics[type][id];
-    if (entry) {
-      return entry.ref.item;
-    }
-    return null;
-  };
+  const getItemData = (type, id) => statics[type][id]?.ref.item ?? null;
 
-  // If the item is not present, it waits for it to be fetched
   const waitItemData = (type, id) => {
-    let entry = statics[type][id];
-    if (entry && entry.ref.item) {
-      return Promise.resolve(entry.ref.item);
-    }
-
-    if (entry && !entry.ref.item) {
-      return new Promise((resolve, reject) => {
-        const stopWatchItem = watch(
-          () => entry.ref.item,
-          (newValue) => {
-            if (newValue) {
-              stopWatchItem();
-              stopWatchError();
-              resolve(newValue);
-            }
-          },
-        );
-
-        const stopWatchError = watch(
-          () => entry.ref.error,
-          (newValue) => {
-            if (newValue) {
-              stopWatchItem();
-              stopWatchError();
-              reject(newValue);
-            }
-          },
-        );
+    const itemRef = getItem(type, id);
+    if (itemRef.item) return Promise.resolve(itemRef.item);
+    const entry = statics[type][id];
+    if (entry.promise) {
+      return entry.promise.then((item) => {
+        if (!item) throw new Error(itemRef.error || "Failed to fetch item");
+        return item;
       });
     }
-
-    entry = {
-      id: id,
-      ref: reactive({
-        error: null,
-        item: null,
-      }),
-    };
-    statics[type][id] = entry;
-    return new Promise((resolve, reject) => {
-      fetchItemFromRemote(type, id)
-        .then((item) => {
-          localStorage.setItem(
-            getStoredItemKey(type, id),
-            JSON.stringify(item),
-          );
-          entry.ref.item = item;
-          resolve(item);
-        })
-        .catch((e) => {
-          entry.ref.error = "Failed to fetch item";
-          reject(e);
-        });
-    });
+    return Promise.reject(new Error(itemRef.error || "Failed to fetch item"));
   };
 
   const waitAlbumData = (albumId) => {
@@ -293,16 +253,18 @@ export const useStaticsStore = defineStore("statics", () => {
 
   // Invalidate a cached item (remove from memory and localStorage)
   const invalidateItem = (itemType, itemId) => {
-    // Remove from in-memory cache
-    if (statics[itemType][itemId]) {
-      statics[itemType][itemId].ref.item = null;
+    try {
+      localStorage.removeItem(getStoredItemKey(itemType, itemId));
+    } catch {
+      // In-memory invalidation still works without browser storage.
     }
-
-    // Remove from localStorage
-    const storageKey = getStoredItemKey(itemType, itemId);
-    localStorage.removeItem(storageKey);
-
-    console.log(`[Statics] Invalidated ${itemType}/${itemId}`);
+    const entry = statics[itemType]?.[itemId];
+    if (!entry) return;
+    entry.revision++;
+    entry.ref.error = null;
+    entry.ref.item = null;
+    // Keep the same reactive reference so mounted rows receive the refresh.
+    void updateItemFromRemote(itemType, itemId);
   };
 
   return {
