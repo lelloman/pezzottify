@@ -220,8 +220,8 @@ watch(
 }
 
 .playlistName {
-  font-size: 0.88rem;
-  font-weight: 850;
+  font-size: var(--text-lg);
+  font-weight: 700;
   color: var(--text-base);
   white-space: nowrap;
 }

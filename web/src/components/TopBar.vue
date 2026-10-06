@@ -594,8 +594,8 @@ header {
   border: 1px solid transparent;
   border-radius: 999px;
   padding: 0 3.5rem 0 1rem;
-  font-size: 0.94rem;
-  font-weight: 500;
+  font-size: var(--text-lg);
+  font-weight: 400;
   transition:
     border-color var(--transition-fast),
     background-color var(--transition-fast);

@@ -350,7 +350,7 @@ onUnmounted(() => {
   color: var(--text-base);
   font: inherit;
   font-size: 0.9rem;
-  font-weight: 800;
+  font-weight: 700;
   cursor: pointer;
 }
 
@@ -380,7 +380,7 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-base);
   font-size: 0.86rem;
-  font-weight: 800;
+  font-weight: 700;
   cursor: pointer;
 }
 

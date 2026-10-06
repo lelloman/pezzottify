@@ -226,7 +226,7 @@ onMounted(() => {
   appearance: none;
   cursor: pointer;
   min-width: 0;
-  min-height: 36px;
+  min-height: 32px;
   padding: 0 10px;
   border: 1px solid transparent;
   border-radius: 999px;
@@ -237,7 +237,7 @@ onMounted(() => {
     border-color var(--transition-fast),
     color var(--transition-fast),
     opacity var(--transition-fast);
-  opacity: 0.82;
+  opacity: 1;
   text-align: center;
 }
 
@@ -246,8 +246,8 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: 400;
 }
 
 .tabSelector:hover {

@@ -57,8 +57,9 @@ const handleClick = () => {
 
 <style scoped>
 .track-name {
-  font-size: 16px;
-  font-weight: bold;
+  font-size: var(--text-lg);
+  line-height: 24px;
+  font-weight: var(--font-normal);
   cursor: pointer;
   white-space: nowrap;
   width: 100%;

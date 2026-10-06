@@ -65,8 +65,8 @@ const handleClick = (artist) => {
   text-overflow: ellipsis;
   white-space: nowrap;
   margin: 0;
-  font-size: 0.9rem;
-  font-weight: 850;
+  font-size: var(--text-lg);
+  font-weight: 700;
   color: #ffffff !important;
 }
 </style>

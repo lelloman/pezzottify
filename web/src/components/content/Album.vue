@@ -681,12 +681,12 @@ onUnmounted(() => {
 <style scoped>
 .albumTrackHeading {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
-  gap: 12px;
-  padding: 0 8px 12px;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 16px;
+  padding: 0 16px 12px;
   border-bottom: 1px solid var(--surface-border);
   color: var(--text-subdued);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
 }
 .albumTrackHeading span:first-child {
   text-align: center;
@@ -718,7 +718,7 @@ onUnmounted(() => {
   border-radius: 999px;
   color: var(--text-muted);
   background: rgba(255, 255, 255, 0.04);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   font-weight: 750;
   line-height: 1.2;
 }

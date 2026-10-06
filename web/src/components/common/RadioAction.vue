@@ -72,21 +72,23 @@ summary svg {
   z-index: 40;
   width: 190px;
   max-width: calc(100cqw - 160px);
-  padding: 6px;
-  background: #282828;
-  border-radius: 6px;
-  box-shadow: 0 12px 36px #0008;
+  padding: 4px;
+  background: var(--menu-background);
+  border-radius: 4px;
+  box-shadow: var(--shadow-menu);
 }
 .radioMenu button {
   display: block;
   width: 100%;
-  padding: 12px;
+  padding: 8px 12px;
+  min-height: 40px;
   border: 0;
-  border-radius: 3px;
+  border-radius: 2px;
   background: none;
   color: var(--text-base);
   text-align: left;
   font: inherit;
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 .radioMenu button:hover,

@@ -35,7 +35,7 @@
       </div>
       <div class="detailIdentity">
         <p class="detailKind">{{ kind }}</p>
-        <h1>{{ title }}</h1>
+        <h1 :class="{ longTitle: title.length > 40 }">{{ title }}</h1>
         <div class="detailMeta"><slot name="meta" /></div>
       </div>
     </header>
@@ -70,7 +70,7 @@ defineProps({
   grid-template-columns: clamp(150px, 24cqw, 232px) minmax(0, 1fr);
   align-items: end;
   gap: 24px;
-  padding: 40px 28px 28px;
+  padding: 40px var(--detail-gutter) 24px;
   background: linear-gradient(140deg, #343035, #202020 65%, #181818);
 }
 .heroBackdrop {
@@ -111,18 +111,20 @@ defineProps({
   min-width: 0;
 }
 .detailKind {
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: 400;
   margin: 0 0 12px;
 }
 .detailIdentity h1 {
   margin: 0 0 20px;
-  font-size: clamp(2rem, 5.8cqw, 4.5rem);
-  font-weight: 850;
+  font-size: clamp(2rem, 7cqw, 6rem);
+  font-weight: 800;
   line-height: 1.04;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.02em;
   overflow-wrap: anywhere;
-  text-wrap: balance;
+}
+.detailIdentity h1.longTitle {
+  font-size: clamp(2rem, 4cqw, 3rem);
 }
 .detailMeta {
   display: flex;
@@ -131,7 +133,7 @@ defineProps({
   gap: 8px 14px;
   color: var(--text-subdued);
   font-size: 0.875rem;
-  line-height: 1.6;
+  line-height: 1.5;
 }
 .detailMeta :deep(p) {
   margin: 0;
@@ -141,7 +143,7 @@ defineProps({
   color: var(--text-base);
 }
 .detailBody {
-  padding: 0 28px 40px;
+  padding: 0 var(--detail-gutter) 40px;
   background: linear-gradient(#ffffff03, transparent 180px);
 }
 .detailActionBar {
@@ -153,7 +155,7 @@ defineProps({
 }
 .detailBody :deep(.detailSectionTitle) {
   margin: 0 0 16px;
-  font-size: 1.4rem;
+  font-size: var(--text-2xl);
   font-weight: 700;
   letter-spacing: -0.02em;
 }

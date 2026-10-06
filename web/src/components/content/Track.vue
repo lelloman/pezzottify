@@ -526,7 +526,7 @@ onUnmounted(() => {
   margin: 12px 0 0;
   color: var(--text-muted);
   font-size: clamp(0.95rem, 1.3vw, 1.1rem);
-  font-weight: 650;
+  font-weight: 400;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -537,7 +537,7 @@ onUnmounted(() => {
   background: transparent;
   color: var(--text-base);
   font: inherit;
-  font-weight: 800;
+  font-weight: 700;
   cursor: pointer;
 }
 
@@ -600,7 +600,7 @@ onUnmounted(() => {
   color: var(--text-base);
   font: inherit;
   font-size: 0.9rem;
-  font-weight: 800;
+  font-weight: 700;
   cursor: pointer;
 }
 
@@ -617,7 +617,7 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-base);
   font-size: 0.86rem;
-  font-weight: 800;
+  font-weight: 700;
   cursor: pointer;
 }
 
@@ -656,8 +656,8 @@ onUnmounted(() => {
 .detailItem dt,
 .creditsList dt {
   color: var(--text-subdued);
-  font-size: 0.76rem;
-  font-weight: 850;
+  font-size: var(--text-xs);
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -666,7 +666,7 @@ onUnmounted(() => {
   margin: 4px 0 0;
   color: var(--text-base);
   font-size: 0.95rem;
-  font-weight: 650;
+  font-weight: 400;
   overflow-wrap: anywhere;
 }
 
@@ -682,7 +682,7 @@ onUnmounted(() => {
   margin: 0 0 10px;
   color: var(--text-base);
   font-size: 1rem;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .creditsList {

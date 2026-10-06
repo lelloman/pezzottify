@@ -130,7 +130,7 @@ const handleClick = (albumId) => {
   padding: 10px 12px;
   border-radius: 8px;
   color: var(--text-subdued);
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 
@@ -155,13 +155,13 @@ const handleClick = (albumId) => {
 
 .title {
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
   margin: 0;
-  font-size: 0.9rem;
-  font-weight: 850;
-  line-height: 1.18;
+  font-size: var(--text-lg);
+  font-weight: 400;
+  line-height: 1.5;
   color: #ffffff !important;
 }
 
@@ -180,8 +180,8 @@ const handleClick = (albumId) => {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-subdued);
-  font-size: 0.76rem;
-  font-weight: 620;
+  font-size: var(--text-sm);
+  font-weight: 400;
 }
 
 .image-unavailable {
@@ -194,7 +194,7 @@ const handleClick = (albumId) => {
   border-radius: 4px;
   padding: 2px 6px;
   font-size: 0.68rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .availability-badge.partial {
