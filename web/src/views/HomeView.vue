@@ -70,24 +70,21 @@ function handleSelect(item) {
   width: 100%;
   height: 100%;
   display: grid;
-  grid-template-rows: var(--topbar-height) 1fr auto;
-  grid-template-columns: 1fr;
+  grid-template-rows: var(--topbar-height) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   overflow: hidden;
-  background: linear-gradient(
-      180deg,
-      rgba(29, 185, 84, 0.035),
-      transparent 28%
-    ),
-    var(--bg-base);
+  background: var(--bg-base);
 }
 
 .centralPanel {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   height: 100%;
   overflow: hidden;
-  gap: 10px;
-  padding: 10px;
+  min-width: 0;
+  min-height: 0;
+  gap: 8px;
+  padding: 0 8px;
 }
 
 /* Mobile: Hide sidebars, full-width content */
@@ -112,9 +109,7 @@ function handleSelect(item) {
 /* Tablet (768px+): Show left sidebar only */
 @media (min-width: 768px) {
   .centralPanel {
-    grid-template-columns: var(--sidebar-width-tablet) 1fr;
-    gap: 12px;
-    padding: 12px;
+    grid-template-columns: var(--sidebar-width-tablet) minmax(0, 1fr);
   }
 
   .userContentSideBar {
@@ -126,31 +121,25 @@ function handleSelect(item) {
   }
 }
 
-/* Desktop (1024px+): Show both sidebars */
+/* Keep the content spacious before adding the queue column. */
 @media (min-width: 1024px) {
   .centralPanel {
-    grid-template-columns: var(--sidebar-width-desktop) 1fr var(
-        --sidebar-width-desktop
-      );
-    gap: 12px;
-    padding: 12px;
+    grid-template-columns: var(--sidebar-width-desktop) minmax(0, 1fr);
   }
+}
 
-  .userContentSideBar {
-    display: flex;
+@media (min-width: 1280px) {
+  .centralPanel {
+    grid-template-columns: var(--sidebar-width-desktop) minmax(0, 1fr) 280px;
   }
-
   .currentlyPlayingSideBar {
     display: flex;
   }
 }
 
-/* Large Desktop (1280px+): Wider sidebars */
-@media (min-width: 1280px) {
+@media (min-width: 1600px) {
   .centralPanel {
-    grid-template-columns: var(--sidebar-width-large) 1fr var(
-        --sidebar-width-large
-      );
+    grid-template-columns: var(--sidebar-width-large) minmax(0, 1fr) 320px;
   }
 }
 
@@ -192,7 +181,7 @@ function handleSelect(item) {
 /* Mobile Player Height - auto handles collapse when player hidden */
 @media (max-width: 767px) {
   .mainContainer {
-    grid-template-rows: var(--topbar-height) 1fr auto;
+    grid-template-rows: var(--topbar-height) minmax(0, 1fr) auto;
   }
 }
 </style>

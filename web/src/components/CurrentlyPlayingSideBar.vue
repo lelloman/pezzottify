@@ -199,9 +199,9 @@ watch(
   height: 100%;
   overflow: hidden;
   background: var(--surface-panel);
-  border: 1px solid var(--surface-border);
+  border: 0;
   border-radius: 8px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 
 /* Header */
@@ -209,8 +209,8 @@ watch(
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px;
-  border-bottom: 1px solid var(--surface-border);
+  padding: 16px 12px;
+  border-bottom: 0;
 }
 
 .headerTitle {
