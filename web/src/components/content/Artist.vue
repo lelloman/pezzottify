@@ -7,7 +7,7 @@
       entityMenu?.openMenu($event, 'artist', artistId, artist.name)
     "
     :imageUrls="coverUrls || []"
-    round
+    banner
   >
     <template #meta
       ><span v-if="lifeSummary">{{ lifeSummary }}</span

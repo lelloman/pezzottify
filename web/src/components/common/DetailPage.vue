@@ -1,6 +1,10 @@
 <template>
   <article class="detailPage">
-    <header class="detailHero">
+    <header
+      class="detailHero"
+      :class="{ artistBanner: banner }"
+      @contextmenu="banner && $emit('artwork-contextmenu', $event)"
+    >
       <MultiSourceImage
         v-if="imageUrls.length"
         :urls="imageUrls"
@@ -10,6 +14,7 @@
         class="heroBackdrop"
       />
       <div
+        v-if="!banner"
         class="detailArtwork"
         :class="{ round }"
         @contextmenu="$emit('artwork-contextmenu', $event)"
@@ -55,6 +60,7 @@ defineProps({
   kind: { type: String, required: true },
   imageUrls: { type: Array, default: () => [] },
   round: Boolean,
+  banner: Boolean,
 });
 </script>
 <style scoped>
@@ -191,6 +197,63 @@ defineProps({
   }
   .detailBody {
     padding: 0 16px 32px;
+  }
+}
+/* Artist details use the portrait as a cover crop, never a stretched image. */
+.artistBanner {
+  display: flex;
+  align-items: flex-end;
+  min-height: clamp(280px, 38cqw, 420px);
+  padding: 40px var(--detail-gutter) 32px;
+  background: linear-gradient(135deg, #514b5b, #27252c 60%, #181818);
+}
+.artistBanner .heroBackdrop {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 35%;
+  filter: none;
+  opacity: 1;
+}
+.artistBanner .heroBackdrop:not([src]) {
+  visibility: hidden;
+}
+.artistBanner::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(
+      180deg,
+      #0000000d 0%,
+      #00000026 30%,
+      #000000b3 100%
+    ),
+    linear-gradient(90deg, #0004, transparent 75%);
+  pointer-events: none;
+}
+.artistBanner .detailIdentity {
+  width: 100%;
+  text-shadow: 0 2px 16px #0005;
+}
+.artistBanner .detailIdentity h1 {
+  font-size: clamp(48px, 9cqw, 96px);
+  margin-bottom: 16px;
+}
+.artistBanner .detailIdentity h1.longTitle {
+  font-size: clamp(32px, 6cqw, 64px);
+}
+.artistBanner .detailMeta {
+  color: #ffffffe6;
+}
+@container (max-width:560px) {
+  .artistBanner {
+    min-height: 280px;
+    padding: 24px 20px;
+  }
+  .artistBanner .detailIdentity h1 {
+    font-size: clamp(40px, 10cqw, 64px);
   }
 }
 </style>
