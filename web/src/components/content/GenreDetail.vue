@@ -1,5 +1,12 @@
 <template>
-  <DetailPage :title="decodedGenreName" kind="Genre">
+  <DetailPage
+    :title="decodedGenreName"
+    kind="Genre"
+    banner
+    :imageUrls="artwork ? [artwork] : []"
+    class="genreDetail"
+    :style="{ '--genre-background': genreBackground(decodedGenreName) }"
+  >
     <template #meta
       ><span v-if="genreData">{{
         formatTrackCount(genreData.total)
@@ -19,15 +26,20 @@
       v-else-if="genreData && genreData.track_ids.length > 0"
       class="tracksSection"
     >
+      <div class="detailTrackHeading">
+        <span>#</span><span>Title</span><span>Duration</span>
+      </div>
       <div
         v-for="(trackId, trackIndex) in genreData.track_ids"
         :key="trackId"
         class="track"
       >
         <LoadTrackListItem
+          albumLayout
+          :isCurrentlyPlaying="playback.currentTrackId === trackId"
           :contextId="genreName"
           :trackId="trackId"
-          :trackNumber="trackIndex + 1 + currentOffset"
+          :trackNumber="trackIndex + 1"
           @track-clicked="handleTrackSelection"
         />
       </div>
@@ -51,6 +63,7 @@
 </template>
 
 <script setup>
+import { genreArtwork, genreBackground } from "@/utils/genreArtwork";
 import { ref, computed, onMounted, watch } from "vue";
 import { useRemoteStore } from "@/store/remote";
 import { usePlaybackStore } from "@/store/playback";
@@ -76,6 +89,8 @@ const currentOffset = ref(0);
 const TRACKS_PER_PAGE = 50;
 
 const decodedGenreName = computed(() => decodeURIComponent(props.genreName));
+
+const artwork = computed(() => genreArtwork(decodedGenreName.value));
 
 const formatTrackCount = (count) => {
   if (count === 1) return "1 track";
@@ -149,6 +164,17 @@ watch(
 </script>
 
 <style scoped>
+.genreDetail :deep(.artistBanner) {
+  background: var(--genre-background);
+}
+.genreDetail :deep(h1),
+.genreDetail :deep(.stickyArtistTitle) {
+  text-transform: capitalize;
+}
+.detailTrackHeading {
+  margin-bottom: 8px;
+}
+
 .genreName {
   font-size: var(--text-2xl);
   font-weight: var(--font-bold);
