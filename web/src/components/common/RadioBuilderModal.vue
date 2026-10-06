@@ -469,8 +469,8 @@ button:disabled {
 }
 
 .primaryButton {
-  background: var(--accent-color);
-  color: var(--text-bright);
+  background: var(--spotify-green);
+  color: #000;
   font-weight: var(--font-semibold);
 }
 

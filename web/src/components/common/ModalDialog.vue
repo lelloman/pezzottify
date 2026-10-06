@@ -66,6 +66,9 @@ onUnmounted(() => {
 }
 
 .modal {
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
   background: var(--bg-elevated);
   color: var(--text-base);
   padding: 20px;
