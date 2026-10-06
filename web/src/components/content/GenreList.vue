@@ -1,6 +1,6 @@
 <template>
   <div class="genreListPage">
-    <h1 class="pageTitle">Browse by Genre</h1>
+    <h1 class="pageTitle">Browse genres</h1>
 
     <!-- Loading State -->
     <div v-if="isLoading" class="loadingState">Loading genres...</div>
@@ -12,9 +12,20 @@
         :key="genre.name"
         :to="`/genre/${encodeURIComponent(genre.name)}`"
         class="genreCard"
+        :style="{ background: genreBackground(genre.name) }"
       >
-        <span class="genreName">{{ genre.name }}</span>
-        <span class="trackCount">{{ formatTrackCount(genre.track_count) }}</span>
+        <MultiSourceImage
+          v-if="genreArtwork(genre.name)"
+          :urls="[genreArtwork(genre.name)]"
+          class="genrePoster"
+          alt=""
+        />
+        <div class="genreIdentity">
+          <span class="genreName">{{ genre.name }}</span>
+          <span class="trackCount">{{
+            formatTrackCount(genre.track_count)
+          }}</span>
+        </div>
       </router-link>
     </div>
 
@@ -26,6 +37,8 @@
 </template>
 
 <script setup>
+import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
+import { genreArtwork, genreBackground } from "@/utils/genreArtwork";
 import { ref, onMounted } from "vue";
 import { useRemoteStore } from "@/store/remote";
 
@@ -48,7 +61,8 @@ onMounted(async () => {
 .genreListPage {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-4);
+  gap: 24px;
+  padding: 24px;
 }
 
 .pageTitle {
@@ -60,35 +74,77 @@ onMounted(async () => {
 
 .genreGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: var(--spacing-3);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
+  gap: 20px;
 }
 
 .genreCard {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  text-decoration: none;
+  background: #28282f;
+}
+.genrePoster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 220ms ease;
+}
+.genreIdentity {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-1);
-  padding: var(--spacing-4);
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
-  text-decoration: none;
-  transition: background-color var(--transition-fast);
+  justify-content: flex-end;
+  padding: 20px;
+  gap: 6px;
+  background: linear-gradient(transparent 25%, #0005 55%, #000d);
 }
-
-.genreCard:hover {
-  background-color: var(--bg-elevated-highlight);
-}
-
 .genreName {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-semibold);
-  color: var(--text-base);
+  font-size: clamp(24px, 3cqw, 32px);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  color: #fff;
   text-transform: capitalize;
+  overflow-wrap: anywhere;
 }
-
 .trackCount {
   font-size: var(--text-sm);
-  color: var(--text-subdued);
+  color: #ffffffc9;
+}
+.genreCard:hover .genrePoster {
+  transform: scale(1.045);
+}
+.genreCard:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 4px;
+}
+@container (max-width: 560px) {
+  .genreListPage {
+    padding: 24px 16px;
+  }
+  .genreGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .genreIdentity {
+    padding: 14px;
+  }
+  .genreName {
+    font-size: 22px;
+  }
+  .trackCount {
+    font-size: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .genrePoster {
+    transition: none;
+  }
 }
 
 .loadingState,
