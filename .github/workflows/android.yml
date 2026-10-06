@@ -64,8 +64,12 @@ jobs:
         working-directory: .
 
       - name: Build and test
+        # D8 merges share the Gradle daemon heap. Avoid concurrent app merges
+        # and give the complete multi-variant build more than the 2 GiB default.
         run: |
-          ./gradlew testDebugUnitTest \
+          ./gradlew --no-parallel --max-workers=2 \
+            '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8' \
+            testDebugUnitTest \
             :app:testNormalPhoneDebugUnitTest :app:testParavoidAndroidPhoneDebugUnitTest \
             :app:compileNormalPhoneReleaseKotlin :app:assembleNormalPhoneDebug \
             :app:assembleParavoidAndroidPhoneDebug :player-app:assembleDebug :player-app:assembleRelease
@@ -74,7 +78,8 @@ jobs:
         # Runtime-library lint lacks the plugin-generated shell permissions and API floor.
         # Run after compilation: lint can otherwise race KAPT-generated variant sources.
         run: |
-          ./gradlew \
+          ./gradlew --no-parallel --max-workers=2 \
+            '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8' \
             :domain:lintDebug :ui:lintDebug :remoteapi:lintDebug :localdata:lintDebug \
             :debuginterface:lintDebug :player:lintDebug :logger:lintDebug \
             :equalizer:lintDebug :theme:lintDebug :player-app:lintDebug \
@@ -92,7 +97,9 @@ jobs:
 
       - name: Build and inspect complete Paravoid packaging
         run: |
-          ./gradlew :app:assembleParavoidAndroidPhoneDebug \
+          ./gradlew --no-parallel --max-workers=2 \
+            '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8' \
+            :app:assembleParavoidAndroidPhoneDebug \
             -PparavoidComplete=true \
             -PparavoidTrustPolicy="$RUNNER_TEMP/paravoid-keys/trust.json" \
             -PparavoidReleaseKey="$RUNNER_TEMP/paravoid-keys/release.der"
