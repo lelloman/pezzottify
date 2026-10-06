@@ -1,3 +1,21 @@
+/* Figtree by Erik Kennedy: https://github.com/erikdkennedy/figtree
+   Bundled under the SIL Open Font License; see fonts/figtree/OFL.txt. */
+@font-face {
+  font-family: "Figtree";
+  src: url("./fonts/figtree/Figtree-Variable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Figtree";
+  src: url("./fonts/figtree/Figtree-Italic-Variable.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 300 900;
+  font-display: swap;
+}
+
 /* ============================================
    Pezzottify Design System - Design Tokens
    ============================================ */
@@ -59,9 +77,9 @@
   --info: #3d91f5;
 
   /* Spotify reference: 16px body, 14px secondary, 24px section headings.
-     Spotify Mix is not bundled; use its Helvetica/Arial fallback stack. */
+     Figtree provides an open-source geometric alternative to Spotify Mix. */
   /* ===== Typography - Font Family ===== */
-  --font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-family: "Figtree", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-family-title: var(--font-family);
 
   /* ===== Typography - Font Sizes ===== */

@@ -6,10 +6,26 @@
       class="playlistItem searchResultRow"
       @click.stop="handleClick"
     >
-      <div class="playlistIcon">P</div>
+      <div class="playlistIcon">
+        <svg
+          v-if="library"
+          viewBox="0 0 24 24"
+          width="24"
+          height="24"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            d="M9 4v11.2a3.5 3.5 0 1 0 2 3.2V8l8-2v7.2a3.5 3.5 0 1 0 2 3.2V1z"
+          /></svg
+        ><template v-else>P</template>
+      </div>
       <div class="playlistMeta">
         <h2>{{ playlist.name }}</h2>
-        <span>{{ playlist.tracks?.length || 0 }} tracks</span>
+        <span
+          >{{ library ? "Playlist · " : ""
+          }}{{ playlist.tracks?.length || 0 }} tracks</span
+        >
       </div>
     </div>
     <div v-else-if="error" class="playlistState errorState">
@@ -28,6 +44,7 @@ const router = useRouter();
 const userStore = useUserStore();
 
 const props = defineProps({
+  library: Boolean,
   playlistId: {
     type: String,
     required: true,
@@ -66,6 +83,12 @@ const handleClick = () => {
 </script>
 
 <style scoped>
+.playlistIcon:has(svg) {
+  background: #282828;
+  color: #b3b3b3;
+  border-radius: 4px;
+}
+
 .playlistWrapper {
   min-width: 0;
   margin: 0;

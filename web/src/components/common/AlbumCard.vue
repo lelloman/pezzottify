@@ -12,8 +12,9 @@
     >
       <MultiSourceImage
         :urls="chooseAlbumCoverImageUrl(album)"
-        class="searchResultImage scaleClickFeedback"
+        class="searchResultImage"
         :class="{
+          scaleClickFeedback: !library,
           'image-unavailable': albumData?.album_availability === 'missing',
         }"
       />
@@ -22,6 +23,7 @@
         <LoadClickableArtistsNames
           v-if="showArtists && album.artists_ids"
           class="artistsNames"
+          :prefix="library ? 'Album · ' : undefined"
           :artistsIds="album.artists_ids"
         />
       </div>
@@ -31,7 +33,26 @@
       >
         Partial
       </div>
+      <button
+        v-if="library"
+        type="button"
+        class="libraryPlay"
+        :aria-label="`Play ${album.name}`"
+        :title="`Play ${album.name}`"
+        @click.stop="handlePlayClick(album.id)"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          width="24"
+          height="24"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path d="M7 3v18l15-9z" />
+        </svg>
+      </button>
       <PlayIcon
+        v-if="!library"
         class="searchResultPlayIcon scaleClickFeedback bigIcon"
         :data-id="album.id"
         @click.stop="handlePlayClick(album.id)"
@@ -63,6 +84,7 @@ const staticsStore = useStaticsStore();
 const playbackStore = usePlaybackStore();
 
 const props = defineProps({
+  library: Boolean,
   albumId: {
     type: String,
     required: false,
@@ -119,6 +141,30 @@ const handleClick = (albumId) => {
 </script>
 
 <style scoped>
+.libraryPlay {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 0;
+  border-radius: 4px;
+  background: #0007;
+  color: white;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+.searchResultRow:hover .libraryPlay,
+.libraryPlay:focus-visible {
+  opacity: 1;
+}
+.libraryPlay:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+
 .albumWrapper {
   min-width: 0;
 }
