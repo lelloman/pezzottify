@@ -27,6 +27,19 @@
         @save="handleClickOnFavoriteIcon"
       >
         <template #inline>
+          <DownloadAction
+            v-if="
+              showDownloadSection ||
+              (userStore.canRequestContent &&
+                downloadRequestState !== 'can_request')
+            "
+            :state="downloadRequestState"
+            :busy="isRequesting"
+            :progress="downloadProgress"
+            :queuePosition="effectiveQueuePosition"
+            :error="downloadError"
+            @request="handleRequestDownload"
+          />
           <RadioAction
             @start="handleClickOnAlbumRadio"
             @customize="showRadioBuilder = true"
@@ -59,74 +72,6 @@
         </template>
       </DetailActions>
     </template>
-
-    <!-- Download Request Section -->
-    <div v-if="showDownloadSection" class="downloadRequestSection">
-      <div
-        v-if="downloadRequestState === 'can_request'"
-        class="downloadRequestContent"
-      >
-        <button
-          class="downloadRequestButton"
-          @click="handleRequestDownload"
-          :disabled="isRequesting"
-        >
-          <span v-if="isRequesting">Requesting...</span>
-          <span v-else>Request Download</span>
-        </button>
-      </div>
-      <div
-        v-else-if="downloadRequestState === 'pending'"
-        class="downloadRequestContent statusPending"
-      >
-        <span class="statusIcon">⏳</span>
-        <span
-          >Download queued{{
-            effectiveQueuePosition ? ` (#${effectiveQueuePosition})` : ""
-          }}</span
-        >
-      </div>
-      <div
-        v-else-if="downloadRequestState === 'in_progress'"
-        class="downloadRequestContent statusInProgress"
-      >
-        <span class="statusIcon">⬇️</span>
-        <span v-if="downloadProgress"
-          >Downloading {{ downloadProgress.completed }}/{{
-            downloadProgress.total_children
-          }}
-          tracks</span
-        >
-        <span v-else>Downloading...</span>
-      </div>
-      <div
-        v-else-if="downloadRequestState === 'completed'"
-        class="downloadRequestContent statusCompleted"
-      >
-        <span class="statusIcon">✅</span>
-        <span>Download completed</span>
-      </div>
-      <div
-        v-else-if="downloadRequestState === 'failed'"
-        class="downloadRequestContent statusFailed"
-      >
-        <span class="statusIcon">❌</span>
-        <span>Download failed</span>
-        <button class="retryButton" @click="handleRequestDownload">
-          Retry
-        </button>
-      </div>
-      <div
-        v-else-if="downloadRequestState === 'error'"
-        class="downloadRequestContent statusFailed"
-      >
-        <span class="statusIcon">❌</span>
-        <span>{{ downloadError || "Failed to request" }}</span>
-        <button class="retryButton" @click="handleRequestDownload">
-          Retry
-        </button>
-      </div>
-    </div>
 
     <div class="tracksContainer">
       <div class="detailTrackHeading">
@@ -232,6 +177,7 @@
 </template>
 
 <script setup>
+import DownloadAction from "@/components/common/DownloadAction.vue";
 import RadioAction from "@/components/common/RadioAction.vue";
 import PlaylistPlusIcon from "@/components/icons/PlaylistPlusIcon.vue";
 import DetailPage from "@/components/common/DetailPage.vue";
@@ -566,7 +512,11 @@ const syncedDownloadRequest = computed(() => {
 });
 
 const downloadProgress = computed(() => {
-  return syncedDownloadRequest.value?.progress || null;
+  return (
+    syncedDownloadRequest.value?.progress ||
+    existingRequest.value?.progress ||
+    null
+  );
 });
 
 const effectiveQueuePosition = computed(() => {
@@ -630,8 +580,8 @@ const handleRequestDownload = async () => {
     let artistName = "Unknown Artist";
     if (album.value.artists_ids && album.value.artists_ids.length > 0) {
       const artistRef = staticsStore.getArtist(album.value.artists_ids[0]);
-      if (artistRef.value?.item?.name) {
-        artistName = artistRef.value.item.name;
+      if (artistRef.item?.name) {
+        artistName = artistRef.item.name;
       }
     }
 
@@ -642,6 +592,7 @@ const handleRequestDownload = async () => {
     );
 
     if (result.success) {
+      existingRequest.value = { status: "pending", ...result.data };
       // Refetch to get the new request status
       await fetchDownloadRequest();
     } else {
@@ -749,9 +700,7 @@ onUnmounted(() => {
   color: var(--spotify-green);
 }
 
-.advancedRadioButton,
-.downloadRequestButton,
-.retryButton {
+.advancedRadioButton {
   min-height: 38px;
   padding: 0 16px;
   border-radius: 999px;
@@ -764,8 +713,7 @@ onUnmounted(() => {
     opacity var(--transition-fast);
 }
 
-.advancedRadioButton,
-.retryButton {
+.advancedRadioButton {
   border: 1px solid var(--surface-border-strong);
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-base);
@@ -801,56 +749,6 @@ onUnmounted(() => {
   font-size: 0.82rem;
   font-weight: 850;
   text-transform: uppercase;
-}
-
-.downloadRequestSection {
-  margin: 16px 0;
-  padding: 14px;
-  background: var(--surface-raised);
-  border: 1px solid var(--surface-border);
-  border-radius: 8px;
-}
-
-.downloadRequestContent {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-}
-
-.downloadRequestButton {
-  background-color: var(--spotify-green);
-  color: #071108;
-  border: none;
-}
-
-.downloadRequestButton:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.downloadRequestButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.statusIcon {
-  font-size: 18px;
-}
-
-.statusPending {
-  color: var(--text-subdued);
-}
-
-.statusInProgress {
-  color: var(--spotify-green);
-}
-
-.statusCompleted {
-  color: #4caf50;
-}
-
-.statusFailed {
-  color: #f44336;
 }
 
 .steerButton {

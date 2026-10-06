@@ -89,6 +89,7 @@ onDeactivated(close);
   display: flex;
   align-items: center;
   gap: 24px;
+  flex-wrap: wrap;
 }
 button,
 summary {

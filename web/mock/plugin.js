@@ -43,6 +43,29 @@ export function mockPlugin() {
       completed_at: 1780000300,
     },
   ];
+  requests.push(
+    ...[
+      ["album-9", "IN_PROGRESS"],
+      ["album-10", "FAILED"],
+      ["album-11", "COMPLETED"],
+      ["track-68", "PENDING"],
+      ["track-69", "IN_PROGRESS"],
+      ["track-70", "COMPLETED"],
+      ["track-71", "FAILED"],
+    ].map(([id, status]) => ({
+      id: `request-${id}`,
+      content_id: id,
+      content_type: id.startsWith("album") ? "ALBUM" : "TRACK",
+      content_name: "Preview download",
+      status,
+      priority: "USER",
+      created_at: 1780000000,
+      queue_position: status === "PENDING" ? 2 : null,
+      progress:
+        status === "IN_PROGRESS" ? { completed: 3, total_children: 6 } : null,
+    })),
+  );
+  const initialRequests = structuredClone(requests);
   const ingestionJobs = [
     {
       id: "ingestion-1",
@@ -86,7 +109,7 @@ export function mockPlugin() {
     has_more: false,
     next_offset: items.length,
   });
-  const panel = `<!doctype html><meta name="viewport" content="width=device-width"><title>Pezzottify design lab</title><style>body{background:#121212;color:#eee;font:16px system-ui;max-width:1000px;margin:40px auto;padding:24px}a,button,select{color:#eee;background:#252525;border:1px solid #444;border-radius:8px;padding:12px;text-decoration:none}nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}h1{color:#1ed760}button{cursor:pointer}form{display:flex;gap:12px;margin:24px 0;flex-wrap:wrap}</style><h1>Pezzottify design lab</h1><p>Real screens, fictional data. Changes stay in this local server's memory. Restart or reset to restore fixtures.</p><form><label>Scenario <select id="scenario">${["populated", "empty", "slow", "error", "signed-out"].map((x) => `<option>${x}</option>`).join("")}</select></label><button>Apply and open app</button><button type="button" id="reset">Reset fixtures</button></form><p>Playback uses a quiet 90-second test tone. A paused queue is preloaded; press Play to test transport and synced lyrics. Login accepts any non-empty username/password.</p><nav>${screens.map(([title, path]) => `<a href="${path}">${title}</a>`).join("")}</nav><p><a href="/__mock/status">Mock status / unhandled requests</a></p><script>const apply=async(s)=>{await fetch('/__mock/scenario',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scenario:s})});localStorage.clear();sessionStorage.clear();location.href=s==='signed-out'?'/login':'/'};document.querySelector('form').onsubmit=e=>{e.preventDefault();apply(document.querySelector('select').value)};document.querySelector('a[href="/login"]').onclick=e=>{e.preventDefault();apply('signed-out')};document.querySelector('#reset').onclick=()=>apply('populated');fetch('/__mock/status').then(r=>r.json()).then(s=>document.querySelector('select').value=s.scenario);</script>`;
+  const panel = `<!doctype html><meta name="viewport" content="width=device-width"><title>Pezzottify design lab</title><style>body{background:#121212;color:#eee;font:16px system-ui;max-width:1000px;margin:40px auto;padding:24px}a,button,select{color:#eee;background:#252525;border:1px solid #444;border-radius:8px;padding:12px;text-decoration:none}nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}h1{color:#1ed760}button{cursor:pointer}form{display:flex;gap:12px;margin:24px 0;flex-wrap:wrap}</style><h1>Pezzottify design lab</h1><p>Real screens, fictional data. Changes stay in this local server's memory. Restart or reset to restore fixtures.</p><form><label>Scenario <select id="scenario">${["populated", "empty", "slow", "error", "signed-out"].map((x) => `<option>${x}</option>`).join("")}</select></label><button>Apply and open app</button><button type="button" id="reset">Reset fixtures</button></form><p>Playback uses a quiet 90-second test tone. A paused queue is preloaded; press Play to test transport and synced lyrics. Login accepts any non-empty username/password.</p><h2>Download states</h2><nav><a href="/album/album-8">Album · Request download</a><a href="/album/album-12">Album · Requested</a><a href="/album/album-9">Album · Downloading</a><a href="/album/album-11">Album · Available (no download control)</a><a href="/album/album-10">Album · Failed / retry</a><a href="/track/track-67">Track · Request download</a><a href="/track/track-69">Track · Downloading</a><a href="/track/track-71">Track · Failed / retry</a></nav><h2>All screens</h2><nav>${screens.map(([title, path]) => `<a href="${path}">${title}</a>`).join("")}</nav><p><a href="/__mock/status">Mock status / unhandled requests</a></p><script>const apply=async(s)=>{await fetch('/__mock/scenario',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scenario:s})});localStorage.clear();sessionStorage.clear();location.href=s==='signed-out'?'/login':'/'};document.querySelector('form').onsubmit=e=>{e.preventDefault();apply(document.querySelector('select').value)};document.querySelector('a[href="/login"]').onclick=e=>{e.preventDefault();apply('signed-out')};document.querySelector('#reset').onclick=()=>apply('populated');fetch('/__mock/status').then(r=>r.json()).then(s=>document.querySelector('select').value=s.scenario);</script>`;
   async function handle(req, res, next) {
     const url = new URL(req.url, "http://localhost");
     const path = decodeURIComponent(url.pathname);
@@ -120,6 +143,10 @@ export function mockPlugin() {
         unhandled: [...misses],
         screens,
       });
+    if (path === "/__mock/downloads/reset" && method === "POST") {
+      requests.splice(0, requests.length, ...structuredClone(initialRequests));
+      return json(res, { ok: true });
+    }
     if (path === "/__mock/scenario" && method === "POST") {
       if (
         !["populated", "empty", "slow", "error", "signed-out"].includes(
@@ -128,6 +155,7 @@ export function mockPlugin() {
       )
         return json(res, { error: "Unknown scenario" }, 400);
       state = freshState();
+      requests.splice(0, requests.length, ...structuredClone(initialRequests));
       state.scenario = body.scenario;
       state.loggedIn = body.scenario !== "signed-out";
       misses.clear();
@@ -430,12 +458,28 @@ export function mockPlugin() {
         requests: list(requests),
         total: list(requests).length,
       });
-    if (path.startsWith("/v1/download/request/"))
+    if (path.startsWith("/v1/download/request/")) {
+      const id = body.album_id || body.track_id;
+      const old = requests.find((r) => r.content_id === id);
+      const request = {
+        id: old?.id || `request-${id}`,
+        content_id: id,
+        content_type: body.album_id ? "ALBUM" : "TRACK",
+        content_name: body.album_name || "Track",
+        status: "PENDING",
+        priority: "USER",
+        created_at: 1780000000,
+        queue_position: 2,
+      };
+      if (old) Object.assign(old, request);
+      else requests.push(request);
       return json(res, {
         success: true,
-        request_id: "request-1",
+        request_id: request.id,
         status: "pending",
+        queue_position: 2,
       });
+    }
     if (path === "/v1/admin/users")
       return json(
         res,

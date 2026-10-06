@@ -33,6 +33,20 @@
         @play="handleClickOnPlayTrack"
         @save="handleClickOnFavoriteIcon"
       >
+        <template #inline>
+          <DownloadAction
+            v-if="
+              showDownloadButton ||
+              (userStore.canRequestContent && downloadState !== 'can_request')
+            "
+            :state="downloadState"
+            :busy="isRequestingDownload"
+            :progress="currentDownload?.progress"
+            :queuePosition="currentDownload?.queue_position"
+            :error="downloadRequestMessage"
+            @request="handleRequestDownload"
+          />
+        </template>
         <template #more>
           <button type="button" @click="handleClickOnTrackRadio">
             <RadioIcon /> Start radio
@@ -58,26 +72,10 @@
           >
             Play all versions
           </button>
-          <button
-            v-if="showDownloadButton"
-            class="secondaryActionButton"
-            type="button"
-            :disabled="isRequestingDownload"
-            @click.stop="handleRequestDownload"
-          >
-            {{ isRequestingDownload ? "Requesting..." : "Request download" }}
-          </button>
         </template>
       </DetailActions>
     </template>
 
-    <p
-      v-if="downloadRequestMessage"
-      class="downloadRequestMessage"
-      role="status"
-    >
-      {{ downloadRequestMessage }}
-    </p>
     <section v-if="artistIds.length" class="artistsSection">
       <h2>Artists</h2>
       <div class="artistsContainer">
@@ -191,6 +189,7 @@ import RadioIcon from "@/components/icons/RadioIcon.vue";
 import { usePlaybackStore } from "@/store/playback";
 import { useRemoteStore } from "@/store/remote";
 import { chooseAlbumCoverImageUrl, formatDuration } from "@/utils";
+import DownloadAction from "@/components/common/DownloadAction.vue";
 import { canRequestTrackDownload } from "@/utils/downloadRequests";
 import { useRouter } from "vue-router";
 import LoadArtistListItem from "@/components/common/LoadArtistListItem.vue";
@@ -214,6 +213,19 @@ const isTrackLiked = ref(false);
 const showRadioBuilder = ref(false);
 const isRequestingDownload = ref(false);
 const downloadRequestMessage = ref(null);
+const existingDownload = ref(null);
+const currentDownload = computed(
+  () => userStore.getDownloadRequest(props.trackId) || existingDownload.value,
+);
+const downloadState = computed(() => {
+  if (downloadRequestMessage.value) return "error";
+  const status = currentDownload.value?.status?.toLowerCase();
+  if (["pending", "in_progress", "completed", "failed"].includes(status))
+    return status;
+  return track.value?.availability === "fetching"
+    ? "in_progress"
+    : "can_request";
+});
 const summaryTextRef = ref(null);
 const summaryExpanded = ref(false);
 const summaryOverflows = ref(false);
@@ -445,13 +457,21 @@ const handleClickOnAlbumName = () => {
 const handleRequestDownload = async () => {
   if (isRequestingDownload.value) return;
 
+  const requestedId = props.trackId;
   isRequestingDownload.value = true;
   downloadRequestMessage.value = null;
   try {
     const result = await remoteStore.requestTrackDownload(props.trackId);
-    downloadRequestMessage.value = result.success
-      ? "Download queued"
-      : result.error || "Failed to request download";
+    if (props.trackId !== requestedId) return;
+    if (result.success)
+      existingDownload.value = { status: "pending", ...result.data };
+    else
+      downloadRequestMessage.value = String(
+        result.error || "Failed to request download",
+      );
+  } catch {
+    if (props.trackId === requestedId)
+      downloadRequestMessage.value = "Failed to request download";
   } finally {
     isRequestingDownload.value = false;
   }
@@ -464,7 +484,15 @@ const fetchTrack = async (id) => {
   coverUrls.value = [];
   downloadRequestMessage.value = null;
 
+  existingDownload.value = null;
   if (!id) return;
+  if (userStore.canRequestContent) {
+    void remoteStore.fetchMyDownloadRequests().then((data) => {
+      if (props.trackId === id)
+        existingDownload.value =
+          data?.requests?.find((r) => r.content_id === id) || null;
+    });
+  }
 
   trackDataUnwatcher = watch(
     staticsStore.getTrack(id),
@@ -633,12 +661,6 @@ onUnmounted(() => {
 .secondaryActionButton:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-.downloadRequestMessage {
-  margin: -12px 0 0;
-  color: var(--text-subdued);
-  font-size: 0.9rem;
 }
 
 .trackLyricsSection {
