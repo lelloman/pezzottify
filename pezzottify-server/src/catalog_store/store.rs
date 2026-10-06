@@ -60,6 +60,7 @@ fn migrate_if_needed(conn: &mut Connection) -> Result<()> {
         preflight_versioned_schema("pezzottify/catalog", CATALOG_VERSIONED_SCHEMAS, None)?;
         info!("Creating catalog db schema at version {}", latest_version);
         latest_schema.create(conn)?;
+        conn.execute_batch(include_str!("genre_recordings.sql"))?;
         create_artist_enrichment_enqueue_trigger(conn)?;
         initialize_empty_catalog_stats(conn)?;
         create_catalog_stats_triggers(conn)?;

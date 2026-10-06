@@ -15,9 +15,15 @@
     <template #actions
       ><DetailActions
         :playLabel="isLoadingRadio ? 'Loading radio' : 'Shuffle play'"
-        :disabled="isLoadingRadio"
+        :disabled="isLoadingRadio || isLoading || !genreData?.total"
         @play="handleShufflePlay"
     /></template>
+    <p
+      v-if="decodedGenreName.toLowerCase() === 'opera'"
+      class="genreEvidenceNote"
+    >
+      Recordings selected using opera metadata, rather than artist tags.
+    </p>
     <!-- Loading State -->
     <div v-if="isLoading" class="loadingState">Loading tracks...</div>
 
@@ -164,6 +170,11 @@ watch(
 </script>
 
 <style scoped>
+.genreEvidenceNote {
+  color: var(--text-subdued);
+  font-size: var(--text-sm);
+  margin: 0 0 24px;
+}
 .genreDetail :deep(.artistBanner) {
   background: var(--genre-background);
 }

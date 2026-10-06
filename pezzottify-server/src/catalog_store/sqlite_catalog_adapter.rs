@@ -2245,15 +2245,19 @@ impl CatalogStore for SqliteCatalogStore {
         let conn = conn.lock().unwrap();
 
         let mut stmt = conn.prepare_cached(
-            "SELECT ag.genre, COUNT(DISTINCT t.rowid) as track_count,
-                    (SELECT '/v1/content/image/' || ga.entity_id FROM genre_artwork ga WHERE ga.genre = ag.genre)
-             FROM artist_genres ag
-             JOIN track_artists ta ON ta.artist_rowid = ag.artist_rowid
-             JOIN tracks t ON t.rowid = ta.track_rowid
-             WHERE t.track_available = 1
-             GROUP BY ag.genre
-             HAVING track_count > 0
-             ORDER BY track_count DESC",
+            "WITH memberships AS (
+                SELECT ag.genre, t.rowid AS track_rowid FROM artist_genres ag
+                JOIN track_artists ta ON ta.artist_rowid=ag.artist_rowid
+                JOIN tracks t ON t.rowid=ta.track_rowid
+                WHERE t.track_available=1
+                  AND NOT EXISTS (SELECT 1 FROM genre_recording_policy p WHERE p.genre=ag.genre)
+                UNION
+                SELECT r.genre, t.rowid FROM genre_recordings r JOIN tracks t ON t.id=r.track_id
+                WHERE t.track_available=1
+            )
+            SELECT m.genre, COUNT(DISTINCT m.track_rowid),
+                (SELECT '/v1/content/image/' || ga.entity_id FROM genre_artwork ga WHERE ga.genre=m.genre)
+            FROM memberships m GROUP BY m.genre ORDER BY COUNT(DISTINCT m.track_rowid) DESC",
         )?;
 
         let genres = stmt
@@ -2282,10 +2286,16 @@ impl CatalogStore for SqliteCatalogStore {
         let total: i64 = conn.query_row(
             "SELECT COUNT(*) FROM tracks t
              WHERE t.track_available = 1
-               AND EXISTS (
-                 SELECT 1 FROM track_artists ta
-                 JOIN artist_genres ag ON ta.artist_rowid = ag.artist_rowid
-                 WHERE ta.track_rowid = t.rowid AND ag.genre = ?1
+               AND (
+                 EXISTS (SELECT 1 FROM genre_recordings r WHERE r.genre=?1 AND r.track_id=t.id)
+                 OR (
+                   NOT EXISTS (SELECT 1 FROM genre_recording_policy p WHERE p.genre=?1)
+                   AND EXISTS (
+                     SELECT 1 FROM track_artists ta
+                     JOIN artist_genres ag ON ta.artist_rowid=ag.artist_rowid
+                     WHERE ta.track_rowid=t.rowid AND ag.genre=?1
+                   )
+                 )
                )",
             params![genre],
             |row| row.get(0),
@@ -2295,10 +2305,16 @@ impl CatalogStore for SqliteCatalogStore {
         let mut stmt = conn.prepare_cached(
             "SELECT t.id FROM tracks t
              WHERE t.track_available = 1
-               AND EXISTS (
-                 SELECT 1 FROM track_artists ta
-                 JOIN artist_genres ag ON ta.artist_rowid = ag.artist_rowid
-                 WHERE ta.track_rowid = t.rowid AND ag.genre = ?1
+               AND (
+                 EXISTS (SELECT 1 FROM genre_recordings r WHERE r.genre=?1 AND r.track_id=t.id)
+                 OR (
+                   NOT EXISTS (SELECT 1 FROM genre_recording_policy p WHERE p.genre=?1)
+                   AND EXISTS (
+                     SELECT 1 FROM track_artists ta
+                     JOIN artist_genres ag ON ta.artist_rowid=ag.artist_rowid
+                     WHERE ta.track_rowid=t.rowid AND ag.genre=?1
+                   )
+                 )
                )
              ORDER BY t.popularity DESC
              LIMIT ?2 OFFSET ?3",
@@ -2333,10 +2349,16 @@ impl CatalogStore for SqliteCatalogStore {
         let mut stmt = conn.prepare_cached(
             "SELECT t.id FROM tracks t
              WHERE t.track_available = 1
-               AND EXISTS (
-                 SELECT 1 FROM track_artists ta
-                 JOIN artist_genres ag ON ta.artist_rowid = ag.artist_rowid
-                 WHERE ta.track_rowid = t.rowid AND ag.genre = ?1
+               AND (
+                 EXISTS (SELECT 1 FROM genre_recordings r WHERE r.genre=?1 AND r.track_id=t.id)
+                 OR (
+                   NOT EXISTS (SELECT 1 FROM genre_recording_policy p WHERE p.genre=?1)
+                   AND EXISTS (
+                     SELECT 1 FROM track_artists ta
+                     JOIN artist_genres ag ON ta.artist_rowid=ag.artist_rowid
+                     WHERE ta.track_rowid=t.rowid AND ag.genre=?1
+                   )
+                 )
                )
              ORDER BY RANDOM()
              LIMIT ?2",
