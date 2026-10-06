@@ -253,12 +253,12 @@ watch(
   container-type: inline-size;
   overflow: auto;
   background: var(--surface-panel);
-  border: 1px solid var(--surface-border);
+  border: 0;
   border-radius: 8px;
   padding: 0;
   margin: 0;
   color: var(--text-base);
-  box-shadow: var(--shadow-sm);
+  min-height: 0;
 }
 
 .mainContent > :not(.homePage):not(.nowPlaying) {

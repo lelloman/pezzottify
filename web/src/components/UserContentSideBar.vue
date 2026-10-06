@@ -1,5 +1,6 @@
 <template>
   <aside class="panel libraryPanel">
+    <h2 class="libraryHeading">Your library</h2>
     <div class="tabSelectorsContainer">
       <button
         type="button"
@@ -197,7 +198,16 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.libraryHeading {
+  margin: 0;
+  padding: 20px 16px 8px;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
 .libraryPanel {
+  border: 0;
+  box-shadow: none;
   min-height: 0;
   overflow: hidden;
 }
@@ -208,8 +218,8 @@ onMounted(() => {
   gap: 6px;
   padding: 10px;
   margin: 0;
-  border-bottom: 1px solid var(--surface-border);
-  background: rgba(255, 255, 255, 0.018);
+  border: 0;
+  background: transparent;
 }
 
 .tabSelector {
@@ -219,8 +229,8 @@ onMounted(() => {
   min-height: 36px;
   padding: 0 10px;
   border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
+  border-radius: 999px;
+  background: var(--surface-raised);
   color: var(--text-subdued);
   transition:
     background-color var(--transition-fast),
@@ -237,7 +247,7 @@ onMounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.78rem;
-  font-weight: 850;
+  font-weight: 600;
 }
 
 .tabSelector:hover {
@@ -248,9 +258,9 @@ onMounted(() => {
 }
 
 .selectedTab {
-  background-color: var(--surface-active) !important;
-  border-color: rgba(29, 185, 84, 0.32);
-  color: var(--spotify-green);
+  background-color: #fff !important;
+  border-color: transparent;
+  color: #121212;
   opacity: 1 !important;
 }
 
@@ -287,7 +297,7 @@ onMounted(() => {
   color: var(--text-base);
   cursor: pointer;
   font-size: 0.84rem;
-  font-weight: 850;
+  font-weight: 600;
   transition:
     background-color var(--transition-fast),
     border-color var(--transition-fast),

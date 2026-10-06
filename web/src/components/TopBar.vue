@@ -579,8 +579,8 @@ header {
   position: relative;
   z-index: var(--z-sticky);
   height: var(--topbar-height);
-  background: #0b0d0e;
-  border-bottom: 1px solid var(--surface-border);
+  background: var(--bg-base);
+  border-bottom: 0;
 }
 
 .searchInputContainer {
@@ -599,15 +599,15 @@ header {
 
 .searchInput {
   width: 100%;
-  height: 2.7rem;
-  background: #1a1f22;
+  height: 48px;
+  background: var(--surface-raised);
   color: var(--text-base);
   outline: none;
-  border: 1px solid var(--surface-border);
-  border-radius: 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
   padding: 0 3.5rem 0 1rem;
   font-size: 0.94rem;
-  font-weight: 650;
+  font-weight: 500;
   transition:
     border-color var(--transition-fast),
     background-color var(--transition-fast);
@@ -618,9 +618,9 @@ header {
 }
 
 .searchInput:focus {
-  border-color: rgba(29, 185, 84, 0.52);
-  background: #151a1d;
-  box-shadow: 0 0 0 3px rgba(29, 185, 84, 0.12);
+  border-color: white;
+  background: #282828;
+  box-shadow: 0 0 0 1px white;
 }
 
 #clearQueryButton {
@@ -1002,5 +1002,23 @@ header {
 
 .badge-complete .badgeCount {
   background: #7ed321;
+}
+@media (max-width: 767px) {
+  .topBarContent {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: 40px 48px;
+    gap: 8px;
+    padding: 8px;
+  }
+  .userActions {
+    justify-content: flex-end;
+    gap: 0;
+  }
+  .searchInputContainer {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    max-width: none;
+  }
 }
 </style>

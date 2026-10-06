@@ -385,7 +385,7 @@ onMounted(async () => {
   align-items: end;
   min-height: 300px;
   padding: clamp(18px, 3vw, 34px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 0;
   border-radius: 8px;
   background: linear-gradient(
       135deg,

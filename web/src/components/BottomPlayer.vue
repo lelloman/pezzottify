@@ -532,10 +532,8 @@ watch(
   gap: 18px;
   padding: 10px 14px;
   align-items: center;
-  background: rgba(11, 13, 14, 0.96);
-  border-top: 1px solid var(--surface-border);
-  box-shadow: 0 -16px 36px rgba(0, 0, 0, 0.26);
-  backdrop-filter: blur(18px);
+  background: var(--bg-base);
+  border-top: 0;
 }
 
 /* ============================================
@@ -754,15 +752,15 @@ watch(
 
 @media (max-width: 767px) {
   .footerPlayer.hasRadioCreation {
-    grid-template-rows: 4px 1fr auto;
+    grid-template-rows: 4px 1fr auto auto;
   }
   .hasRadioCreation .radioCreationStatus {
-    grid-row: 3;
+    grid-row: 4;
   }
   .footerPlayer {
     height: var(--player-height-mobile);
-    grid-template-columns: 1fr auto auto;
-    grid-template-rows: 4px 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: 4px 1fr auto;
     gap: 8px;
     padding: 8px 10px;
   }
@@ -823,8 +821,8 @@ watch(
   }
 
   .extraControlsRow {
-    grid-column: 3;
-    grid-row: 2;
+    grid-column: 1 / -1;
+    grid-row: 3;
     gap: 3px;
   }
 

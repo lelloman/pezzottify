@@ -12,15 +12,15 @@
   --accent-color: var(--spotify-green);
 
   /* ===== Background Colors ===== */
-  --bg-base: #0b0d0e;
-  --bg-elevated: #111416;
-  --bg-highlight: #1b2023;
+  --bg-base: #000000;
+  --bg-elevated: #181818;
+  --bg-highlight: #282828;
   --bg-tinted: rgba(29, 185, 84, 0.1);
-  --bg-press: #252b2f;
-  --surface-panel: rgba(17, 20, 22, 0.94);
-  --surface-raised: rgba(26, 31, 34, 0.96);
+  --bg-press: #333333;
+  --surface-panel: #121212;
+  --surface-raised: #1f1f1f;
   --surface-hover: rgba(255, 255, 255, 0.07);
-  --surface-active: rgba(29, 185, 84, 0.16);
+  --surface-active: rgba(255, 255, 255, 0.1);
   --surface-border: rgba(255, 255, 255, 0.075);
   --surface-border-strong: rgba(255, 255, 255, 0.13);
   --bg-elevated-base: var(--surface-panel);
@@ -153,11 +153,11 @@
 
   /* ===== Layout Constants ===== */
   --sidebar-width-mobile: 0;
-  --sidebar-width-tablet: 280px;
-  --sidebar-width-desktop: 320px;
-  --sidebar-width-large: 360px;
+  --sidebar-width-tablet: 224px;
+  --sidebar-width-desktop: 256px;
+  --sidebar-width-large: 288px;
   --player-height-mobile: 72px;
-  --player-height-desktop: 100px;
+  --player-height-desktop: 88px;
   --topbar-height: 64px;
   --mobile-nav-height: 56px;
 }
@@ -252,4 +252,11 @@ label {
 .scaleClickFeedback:active {
   transition: scale 0.3s ease;
   scale: 0.9;
+}
+
+@media (max-width: 767px) {
+  :root {
+    --topbar-height: 112px;
+    --player-height-mobile: 112px;
+  }
 }
