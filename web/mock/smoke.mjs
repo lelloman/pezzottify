@@ -120,11 +120,18 @@ try {
     .getByRole("button", { name: "Expand your library", exact: true })
     .click();
   await library
-    .getByRole("button", { name: "Widen your library", exact: true })
+    .getByRole("button", { name: "Expand your library", exact: true })
     .click();
-  assert.equal(await library.evaluate((e) => e.clientWidth), 400);
+  assert.ok(await library.evaluate((e) => e.clientWidth > 600));
+  assert.equal(await page.locator(".mainContentPanel").isVisible(), false);
+  assert.equal(
+    await library
+      .locator(".libraryList")
+      .evaluate((e) => getComputedStyle(e).display),
+    "grid",
+  );
   await library
-    .getByRole("button", { name: "Restore library width", exact: true })
+    .getByRole("button", { name: "Minimize your library", exact: true })
     .click();
   await library
     .getByRole("button", { name: "Play Golden Hour", exact: true })

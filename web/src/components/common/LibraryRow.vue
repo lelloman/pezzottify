@@ -1,8 +1,9 @@
 <template>
-  <li class="libraryRow" :class="{ selected, playing, collapsed }">
+  <li class="libraryRow" :class="{ selected, playing, collapsed, expanded }">
     <RouterLink
       :to="`/${entry.type}/${entry.id}`"
       class="libraryLink"
+      @click="$emit('navigate', $event)"
       :aria-current="selected ? 'page' : undefined"
       :aria-label="`${entry.name}, ${entry.subtitle}`"
       :title="`${entry.name} — ${entry.subtitle}`"
@@ -65,9 +66,10 @@ defineProps({
   selected: Boolean,
   playing: Boolean,
   collapsed: Boolean,
+  expanded: Boolean,
   busy: Boolean,
 });
-defineEmits(["play"]);
+defineEmits(["play", "navigate"]);
 </script>
 <style scoped>
 .libraryRow {
@@ -194,5 +196,44 @@ defineEmits(["play"]);
 .collapsed.playing .artwork {
   outline: 2px solid var(--spotify-green);
   outline-offset: -2px;
+}
+.expanded .libraryLink {
+  flex-direction: column;
+  align-items: stretch;
+  height: auto;
+  padding: 12px;
+  gap: 12px;
+}
+.expanded .artwork {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  flex-basis: auto;
+  box-shadow: 0 8px 24px #0004;
+}
+.expanded .identity {
+  width: 100%;
+}
+.expanded .playingIcon {
+  position: absolute;
+  bottom: 14px;
+  right: 12px;
+}
+.expanded.playing .identity {
+  padding-right: 20px;
+}
+.expanded .playOverlay {
+  left: auto;
+  top: auto;
+  right: 20px;
+  bottom: 74px;
+  border-radius: 50%;
+  background: var(--spotify-green);
+  color: black;
+  box-shadow: 0 8px 16px #0005;
+}
+.expanded .playOverlay:hover {
+  transform: scale(1.04);
+  background: var(--spotify-green-hover);
 }
 </style>

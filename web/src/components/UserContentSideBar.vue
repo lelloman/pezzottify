@@ -1,7 +1,7 @@
 <template>
   <aside
     class="panel libraryPanel"
-    :class="{ collapsed }"
+    :class="{ collapsed, expanded: layout === 'wide' }"
     aria-label="Your library"
   >
     <header class="libraryHeader">
@@ -35,47 +35,80 @@
           type="button"
           class="iconButton expandButton"
           :aria-label="
-            layout === 'wide' ? 'Restore library width' : 'Widen your library'
+            layout === 'wide' ? 'Minimize your library' : 'Expand your library'
           "
           :title="
-            layout === 'wide' ? 'Restore library width' : 'Widen your library'
+            layout === 'wide' ? 'Minimize your library' : 'Expand your library'
           "
           @click="setLayout(layout === 'wide' ? 'normal' : 'wide')"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M14 4h6v6M20 4l-6 6M10 20H4v-6M4 20l6-6" />
+            <path
+              :d="
+                layout === 'wide'
+                  ? 'M20 4l-6 6m0-6v6h6M4 20l6-6m-6 0h6v6'
+                  : 'M14 4h6v6M20 4l-6 6M10 20H4v-6M4 20l6-6'
+              "
+            />
           </svg>
         </button>
       </template>
     </header>
-    <template v-if="!collapsed">
-      <div class="filterChips" role="group" aria-label="Filter your library">
-        <button
-          v-if="filter"
-          type="button"
-          class="clearFilter iconButton"
-          aria-label="Show all library items"
-          title="Show all library items"
-          @click="setFilter('')"
+    <div v-if="!collapsed" class="libraryToolbar">
+      <div class="filterRail">
+        <div
+          ref="filterScroller"
+          class="filterChips"
+          role="group"
+          aria-label="Filter your library"
+          @scroll="updateFilterOverflow"
         >
-          ×
+          <button
+            v-if="filter"
+            type="button"
+            class="clearFilter iconButton"
+            aria-label="Show all library items"
+            title="Show all library items"
+            @click="setFilter('')"
+          >
+            ×
+          </button>
+          <button
+            v-for="item in filters"
+            :key="item.type"
+            type="button"
+            class="filterChip"
+            :class="{ active: filter === item.type }"
+            :aria-pressed="filter === item.type"
+            @click="setFilter(filter === item.type ? '' : item.type)"
+          >
+            {{ item.label }}
+          </button>
+        </div>
+        <button
+          v-if="canScrollLeft"
+          class="filterArrow left iconButton"
+          aria-label="Scroll library filters left"
+          @click="scrollFilters(-1)"
+        >
+          <svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6" /></svg>
         </button>
         <button
-          v-for="item in filters"
-          :key="item.type"
-          type="button"
-          class="filterChip"
-          :class="{ active: filter === item.type }"
-          :aria-pressed="filter === item.type"
-          @click="setFilter(filter === item.type ? '' : item.type)"
+          v-if="canScrollRight"
+          class="filterArrow right iconButton"
+          aria-label="Scroll library filters right"
+          @click="scrollFilters(1)"
         >
-          {{ item.label }}
+          <svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6" /></svg>
         </button>
       </div>
       <div class="libraryTools">
-        <div class="librarySearch" :class="{ open: searchOpen }">
+        <div
+          class="librarySearch"
+          :class="{ open: searchOpen || layout === 'wide' }"
+        >
           <button
-            v-if="!searchOpen"
+            v-if="!searchOpen && layout !== 'wide'"
             type="button"
             class="iconButton"
             aria-label="Search your library"
@@ -101,7 +134,13 @@
           <summary aria-label="Sort your library" title="Sort your library">
             {{ sortLabel
             }}<svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M8 6h12M8 12h12M8 18h12M3 6h1M3 12h1M3 18h1" />
+              <path
+                :d="
+                  layout === 'wide'
+                    ? 'M3 3h6v6H3zM15 3h6v6h-6zM3 15h6v6H3zM15 15h6v6h-6z'
+                    : 'M8 6h12M8 12h12M8 18h12M3 6h1M3 12h1M3 18h1'
+                "
+              />
             </svg>
           </summary>
           <div class="sortOptions">
@@ -119,7 +158,7 @@
           </div>
         </details>
       </div>
-    </template>
+    </div>
     <p v-if="actionError" class="actionError" role="alert">{{ actionError }}</p>
     <div
       ref="scrollContainer"
@@ -142,6 +181,8 @@
           :selected="isSelected(entry)"
           :playing="isPlaying(entry)"
           :collapsed="collapsed"
+          :expanded="layout === 'wide'"
+          @navigate="leaveExpanded"
           :busy="busyKey === entry.key"
           @play="playEntry"
           @contextmenu="openContextMenu($event, entry)"
@@ -179,6 +220,7 @@ import { chooseAlbumCoverImageUrl, chooseSmallArtistImageUrl } from "@/utils";
 import LibraryRow from "./common/LibraryRow.vue";
 import PlusIcon from "./icons/PlusIcon.vue";
 import EntityContextMenu from "./common/contextmenu/EntityContextMenu.vue";
+const props = defineProps({ requestedLayout: String });
 const emit = defineEmits(["layout-change"]);
 const userStore = useUserStore(),
   statics = useStaticsStore(),
@@ -383,6 +425,50 @@ const setLayout = (value) => {
   persist("library.layout", value);
   emit("layout-change", value);
 };
+watch(
+  () => props.requestedLayout,
+  (value) => {
+    if (value && value !== layout.value) setLayout(value);
+  },
+);
+const leaveExpanded = (event) => {
+  if (
+    layout.value === "wide" &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.shiftKey &&
+    event.button === 0
+  )
+    setLayout("normal");
+};
+const filterScroller = ref(null);
+const canScrollLeft = ref(false),
+  canScrollRight = ref(false);
+const updateFilterOverflow = () => {
+  const el = filterScroller.value;
+  canScrollLeft.value = !!el && el.scrollLeft > 1;
+  canScrollRight.value =
+    !!el && el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+};
+const scrollFilters = (direction) =>
+  filterScroller.value?.scrollBy({
+    left: direction * 140,
+    behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? "instant"
+      : "smooth",
+  });
+const filterObserver = new ResizeObserver(updateFilterOverflow);
+watch(
+  filterScroller,
+  (el, old) => {
+    if (old) filterObserver.unobserve(old);
+    if (el) filterObserver.observe(el);
+    updateFilterOverflow();
+  },
+  { flush: "post" },
+);
+watch(filter, () => nextTick(updateFilterOverflow));
+onBeforeUnmount(() => filterObserver.disconnect());
 const closeSort = (event) => {
   if (sortMenu.value) {
     sortMenu.value.open = false;
@@ -414,23 +500,36 @@ watch([filter, query, sort], () => {
 const navigateRows = (event) => {
   if (
     !event.target.closest(".libraryLink") ||
-    !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)
+    ![
+      "ArrowDown",
+      "ArrowUp",
+      "ArrowLeft",
+      "ArrowRight",
+      "Home",
+      "End",
+    ].includes(event.key)
   )
     return;
   const links = [...scrollContainer.value.querySelectorAll(".libraryLink")];
   const index = links.indexOf(event.target.closest(".libraryLink"));
+  const columns =
+    layout.value === "wide"
+      ? getComputedStyle(
+          scrollContainer.value.querySelector(".libraryList"),
+        ).gridTemplateColumns.split(" ").length
+      : 1;
+  const step = {
+    ArrowDown: columns,
+    ArrowUp: -columns,
+    ArrowLeft: -1,
+    ArrowRight: 1,
+  }[event.key];
   const next =
     event.key === "Home"
       ? 0
       : event.key === "End"
         ? links.length - 1
-        : Math.max(
-            0,
-            Math.min(
-              links.length - 1,
-              index + (event.key === "ArrowDown" ? 1 : -1),
-            ),
-          );
+        : Math.max(0, Math.min(links.length - 1, index + step));
   event.preventDefault();
   links[next]?.focus();
 };
@@ -475,6 +574,7 @@ const createPlaylist = async () => {
     await userStore.createPlaylist((result) => {
       const id = typeof result === "string" ? result : result?.id;
       if (id) {
+        if (layout.value === "wide") setLayout("normal");
         setFilter("playlist");
         query.value = "";
         router.push({
@@ -589,7 +689,56 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", outside));
   overflow-x: auto;
   padding: 8px 12px;
   flex-shrink: 0;
-  scrollbar-width: thin;
+}
+.libraryToolbar {
+  flex-shrink: 0;
+  min-width: 0;
+}
+.filterRail {
+  position: relative;
+  min-width: 0;
+}
+.filterChips {
+  scrollbar-width: none;
+}
+.filterChips::-webkit-scrollbar {
+  display: none;
+}
+.filterArrow {
+  position: absolute;
+  top: 8px;
+  background: #282828;
+  color: white;
+  z-index: 1;
+}
+.filterArrow.left {
+  left: 4px;
+  box-shadow: 8px 0 12px 4px #121212;
+}
+.filterArrow.right {
+  right: 4px;
+  box-shadow: -8px 0 12px 4px #121212;
+}
+.expanded .libraryToolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-right: 16px;
+}
+.expanded .filterRail {
+  flex: 1;
+}
+.expanded .libraryTools {
+  padding: 0;
+  width: 250px;
+}
+.expanded .libraryList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  align-items: start;
+}
+.expanded .libraryHeader {
+  padding-inline: 24px;
 }
 .filterChip {
   flex-shrink: 0;
@@ -695,7 +844,6 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", outside));
   min-height: 0;
   overflow-y: auto;
   padding: 0 8px 8px;
-  scrollbar-width: thin;
 }
 .libraryList {
   margin: 0;
