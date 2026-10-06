@@ -7,17 +7,39 @@
       {{ error }}
       <button type="button" :disabled="loading" @click="load">Retry</button>
     </p>
-    <DetailPage v-if="work" :title="work.title" kind="Composition">
+    <DetailPage
+      v-if="work"
+      :title="work.title"
+      kind="Composition"
+      tinted
+      :imageUrls="
+        work.creator_artist_ids?.length
+          ? [formatImageUrl(work.creator_artist_ids[0])]
+          : []
+      "
+    >
       <template #artwork
         ><WorkArtwork :artistIds="work.creator_artist_ids || []"
       /></template>
-      <template #meta
-        ><span v-if="work.creators?.length"
-          >Written by {{ work.creators.join(" · ") }}</span
-        ><span v-if="work.composition_year">{{
-          work.composition_year
-        }}</span></template
-      >
+      <template #meta>
+        <div class="workMeta">
+          <span v-if="work.creators?.length"
+            >Written by {{ work.creators.join(" · ") }}</span
+          >
+          <template v-if="work.composition_year">
+            <span v-if="work.creators?.length" aria-hidden="true">•</span>
+            <span>{{ work.composition_year }}</span>
+          </template>
+          <template v-if="work.catalog_number">
+            <span
+              v-if="work.creators?.length || work.composition_year"
+              aria-hidden="true"
+              >•</span
+            >
+            <span>{{ work.catalog_number }}</span>
+          </template>
+        </div>
+      </template>
       <template #actions
         ><DetailActions
           playLabel="Play recordings"
@@ -26,7 +48,6 @@
       <section class="recordings" aria-labelledby="recordings-title">
         <div class="sectionHeading">
           <div>
-            <p class="eyebrow">Explore the music</p>
             <h2 id="recordings-title">Recordings &amp; versions</h2>
           </div>
           <span class="recordingCount"
@@ -36,16 +57,25 @@
             }}</span
           >
         </div>
-        <label class="recordingFilter"
-          >Show recordings
-          <select v-model="scope" @change="changeScope">
-            <option value="all">
-              This work, its parts &amp; related works
-            </option>
-            <option value="parts">This work &amp; its parts</option>
-            <option value="related">Related works only</option>
-          </select>
-        </label>
+        <div class="recordingFilter" role="group" aria-label="Recording scope">
+          <button
+            v-for="option in scopeOptions"
+            :key="option.value"
+            type="button"
+            :aria-pressed="scope === option.value"
+            :title="option.description"
+            @click="selectScope(option.value)"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+        <p
+          v-if="loading && !tracks.length"
+          class="loadingRecordings"
+          role="status"
+        >
+          Loading recordings…
+        </p>
         <p v-if="!tracks.length && !loading && !error" class="statePanel">
           {{
             scope === "related"
@@ -55,17 +85,29 @@
                 : "No recordings linked to this work, its parts or related works yet."
           }}
         </p>
-        <div v-else class="recordingList">
-          <div class="listHeading" aria-hidden="true">
-            <span>Recording / artist</span><span>Album</span>
+        <div v-if="tracks.length" class="recordingList">
+          <div class="detailTrackHeading" aria-hidden="true">
+            <span>#</span><span>Title</span><span>Duration</span>
           </div>
           <div
             v-for="(entry, index) in tracks"
             :key="entry.track.id"
             class="recordingRow"
+            :class="{
+              currentRecording: playback.currentTrackId === entry.track.id,
+            }"
+            @contextmenu.prevent="
+              trackMenu?.openMenu(
+                $event,
+                'track',
+                entry.track.id,
+                entry.track.name,
+              )
+            "
           >
             <div class="recordingTrack">
               <LoadTrackListItem
+                albumLayout
                 :trackId="entry.track.id"
                 :trackNumber="index + 1"
                 :isCurrentlyPlaying="playback.currentTrackId === entry.track.id"
@@ -77,31 +119,44 @@
                   })
                 "
               />
-              <p
+              <div
                 v-if="
-                  entry.recording_work && entry.relationship_scope !== 'direct'
+                  entry.album ||
+                  (entry.recording_work &&
+                    entry.relationship_scope !== 'direct')
                 "
-                class="recordingWork"
+                class="recordingContext"
               >
-                {{
-                  entry.relationship_scope === "part" ? "Part" : "Related work"
-                }}
-                ·
                 <RouterLink
-                  :to="{
-                    name: 'work',
-                    params: { workId: entry.recording_work.id },
-                  }"
-                  >{{ entry.recording_work.title }}</RouterLink
+                  v-if="entry.album"
+                  class="albumLink"
+                  :to="{ name: 'album', params: { albumId: entry.album.id } }"
+                  >{{ entry.album.name }}</RouterLink
                 >
-              </p>
+                <span
+                  v-if="
+                    entry.recording_work &&
+                    entry.relationship_scope !== 'direct'
+                  "
+                  class="recordingWork"
+                >
+                  <span v-if="entry.album" aria-hidden="true"> · </span>
+                  {{
+                    entry.relationship_scope === "part"
+                      ? "Part"
+                      : "Related work"
+                  }}
+                  ·
+                  <RouterLink
+                    :to="{
+                      name: 'work',
+                      params: { workId: entry.recording_work.id },
+                    }"
+                    >{{ entry.recording_work.title }}</RouterLink
+                  >
+                </span>
+              </div>
             </div>
-            <RouterLink
-              v-if="entry.album"
-              class="albumLink"
-              :to="{ name: 'album', params: { albumId: entry.album.id } }"
-              >{{ entry.album.name }}</RouterLink
-            >
           </div>
         </div>
         <div v-if="hasMore && !error" class="pagination">
@@ -178,12 +233,15 @@
           </p>
         </div>
       </details>
+      <EntityContextMenu ref="trackMenu" />
     </DetailPage>
   </div>
 </template>
 
 <script setup>
 import DetailPage from "@/components/common/DetailPage.vue";
+import { formatImageUrl } from "@/utils";
+import EntityContextMenu from "@/components/common/contextmenu/EntityContextMenu.vue";
 import DetailActions from "@/components/common/DetailActions.vue";
 
 import { computed, ref, watch, onBeforeUnmount } from "vue";
@@ -199,6 +257,29 @@ const work = ref(null);
 const tracks = ref([]);
 const relations = ref([]);
 const scope = ref("all");
+const trackMenu = ref(null);
+const scopeOptions = [
+  {
+    value: "all",
+    label: "All recordings",
+    description: "This work, its parts & related works",
+  },
+  {
+    value: "parts",
+    label: "Work & parts",
+    description: "This work & its parts",
+  },
+  {
+    value: "related",
+    label: "Related works",
+    description: "Related works only",
+  },
+];
+function selectScope(value) {
+  if (scope.value === value) return;
+  scope.value = value;
+  changeScope();
+}
 const relationGroups = computed(() => {
   const groups = new Map();
   for (const relation of relations.value) {
@@ -293,139 +374,75 @@ onBeforeUnmount(() => controller?.abort());
 </script>
 
 <style scoped>
-.eyebrow {
-  color: var(--text-subdued);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  margin: 0 0 10px;
-}
-h1 {
-  font-size: clamp(36px, 5vw, 68px);
-  font-weight: 800;
-  line-height: 1.07;
-  letter-spacing: -0.04em;
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-.creators {
-  font-size: 16px;
-  line-height: 1.7;
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-.recordings {
-  margin-top: 0;
-}
-.relations {
-  margin-top: 24px;
-}
-.relations details {
-  border-bottom: 1px solid var(--surface-border);
-}
-.relations summary span {
-  display: inline;
-  margin: 0 0 0 12px;
-}
-.relationList {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 16px;
-}
-.relationList a {
+.workMeta {
   display: flex;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 6px;
-}
-.relationList a:hover {
-  background: var(--surface-hover);
-}
-.relationList small {
-  display: block;
-  color: var(--text-subdued);
-  margin-top: 4px;
-}
-.partNumber {
-  flex: 0 0 24px;
-  color: var(--text-subdued);
-}
-.recordingFilter {
-  display: flex;
-  align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
-  color: var(--text-subdued);
-  margin: 0 8px 20px;
-  font-size: 13px;
-}
-.recordingFilter select {
-  max-width: 100%;
-  padding: 8px;
-  background: var(--surface-raised);
-  color: var(--text-base);
-  border: 1px solid var(--surface-border);
-  border-radius: 6px;
-}
-.recordingWork {
-  margin: 0 12px 8px 48px;
-  color: var(--text-subdued);
-  font-size: 12px;
-  overflow-wrap: anywhere;
+  align-items: center;
+  gap: 4px 8px;
 }
 .sectionHeading {
   display: flex;
-  align-items: end;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 16px;
-  padding: 0 8px 20px;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 20px;
 }
 h2 {
-  font-size: clamp(21px, 2.5vw, 28px);
-  line-height: 1.25;
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
   margin: 0;
-  letter-spacing: -0.025em;
 }
-.recordingCount {
+.recordingCount,
+.loadingRecordings {
+  color: var(--text-subdued);
+  font-size: var(--text-sm);
+}
+.recordingFilter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+.recordingFilter button {
+  padding: 8px 12px;
+  border: 0;
+  background: #ffffff12;
+  font-size: var(--text-sm);
+}
+.recordingFilter button:hover {
+  background: #ffffff20;
+}
+.recordingFilter button[aria-pressed="true"] {
+  background: #fff;
+  color: #000;
+}
+.recordingList .detailTrackHeading {
+  margin-bottom: 8px;
+}
+.recordingRow {
+  min-width: 0;
+  border-radius: 4px;
+  padding-bottom: 8px;
+}
+.recordingRow:hover,
+.recordingRow:focus-within {
+  background: #ffffff12;
+}
+.recordingRow.currentRecording {
+  background: var(--surface-active);
+}
+.recordingRow :deep(.albumTrackRow.playingTrack),
+.recordingRow :deep(.albumTrackRow:hover) {
+  background: transparent;
+}
+.recordingContext {
+  margin: 0 16px 0 48px;
   color: var(--text-subdued);
   font-size: 12px;
-  flex-shrink: 0;
-  padding-bottom: 3px;
-}
-.recordingList {
-  border-top: 1px solid var(--surface-border);
-}
-.listHeading,
-.recordingRow {
-  display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
-  gap: 20px;
-  align-items: center;
-}
-.listHeading {
-  padding: 14px 8px;
-  color: var(--text-subdued);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-.recordingRow {
-  border-top: 1px solid var(--surface-border);
-  padding: 6px 0;
-  border-radius: 6px;
-}
-.recordingRow:hover {
-  background: var(--surface-hover);
-}
-.recordingRow > * {
-  min-width: 0;
-}
-.albumLink {
-  color: var(--text-subdued);
-  font-size: 13px;
+  line-height: 20px;
   overflow-wrap: anywhere;
-  margin-right: 12px;
 }
 a {
   color: inherit;
@@ -435,23 +452,84 @@ a:hover {
   color: var(--text-base);
   text-decoration: underline;
 }
-.pagination {
+.relations,
+.workDetails {
+  margin-top: 32px;
+}
+.relations details,
+.workDetails {
+  border-top: 1px solid #ffffff15;
+}
+summary {
+  padding: 20px 0;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+summary span {
+  margin-left: 12px;
+  color: var(--text-subdued);
+  font-size: var(--text-sm);
+  font-weight: 400;
+}
+.relationList {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px;
+}
+.relationList a {
   display: flex;
-  justify-content: center;
-  padding: 24px;
+  gap: 16px;
+  padding: 12px 16px;
+  border-radius: 4px;
+}
+.relationList a:hover {
+  background: #ffffff12;
+}
+.relationList small {
+  display: block;
+  color: var(--text-subdued);
+  margin-top: 4px;
+  font-size: var(--text-sm);
+}
+.partNumber {
+  flex: 0 0 16px;
+  color: var(--text-subdued);
+}
+.detailsBody {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  font-size: var(--text-sm);
+}
+dl,
+dd {
+  margin: 0;
+}
+dt {
+  color: var(--text-subdued);
+  margin-bottom: 4px;
+}
+dd {
+  overflow-wrap: anywhere;
+}
+.pagination {
+  padding: 24px 0;
 }
 button {
-  background: var(--surface-raised);
-  border: 1px solid var(--surface-border-strong);
+  background: transparent;
+  border: 1px solid #ffffff50;
   border-radius: 999px;
   padding: 10px 20px;
   color: var(--text-base);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 button:hover {
-  background: var(--surface-hover);
+  border-color: #fff;
 }
 button:disabled {
   opacity: 0.5;
@@ -460,105 +538,18 @@ button:disabled {
 button:focus-visible,
 a:focus-visible,
 summary:focus-visible {
-  outline: 2px solid var(--accent-color);
-  outline-offset: 4px;
+  outline: 2px solid var(--spotify-green);
+  outline-offset: 3px;
 }
 .statePanel {
-  padding: 28px;
-  background: var(--surface-panel);
-  border: 1px solid var(--surface-border);
-  border-radius: 8px;
+  padding: 24px;
   color: var(--text-subdued);
   line-height: 1.6;
 }
-.workDetails {
-  border-top: 1px solid var(--surface-border);
-  margin: 32px 8px 0;
-}
-summary {
-  padding: 20px 0;
-  font-size: 14px;
-  cursor: pointer;
-}
-summary span {
-  color: var(--text-subdued);
-  font-size: 12px;
-  margin-left: 12px;
-}
-.detailsBody {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  flex-wrap: wrap;
-  padding: 0 0 16px;
-}
-dl {
-  margin: 0;
-}
-dd {
-  margin: 0;
-  font-size: 14px;
-  overflow-wrap: anywhere;
-}
-.detailsBody a {
-  display: inline-block;
-  padding: 8px 12px;
-  border: 1px solid var(--surface-border);
-  border-radius: 6px;
-  font-size: 13px;
-}
-@media (max-width: 700px) {
+@container (max-width: 560px) {
   .sectionHeading {
     align-items: start;
     flex-direction: column;
-    gap: 10px;
-  }
-  .recordingRow {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-  }
-  .listHeading {
-    display: none;
-  }
-  .albumLink {
-    margin: 0 12px 8px 56px;
-    font-size: 12px;
-  }
-  .recordingRow :deep(.track-item-content) {
-    display: grid;
-    grid-template-columns: 32px minmax(0, 1fr) auto;
-    gap: 4px 8px;
-  }
-  .recordingRow :deep(.trackIndexSpan) {
-    grid-column: 1;
-    grid-row: 1 / 3;
-    width: auto;
-    padding: 0;
-    text-align: center;
-  }
-  .recordingRow :deep(.trackImage) {
-    display: none;
-  }
-  .recordingRow :deep(.trackNameSpan) {
-    grid-column: 2;
-    grid-row: 1;
-    width: auto;
-    min-width: 0;
-    margin: 0;
-  }
-  .recordingRow :deep(.trackArtistsSpan) {
-    grid-column: 2;
-    grid-row: 2;
-    width: auto;
-    padding: 0;
-    font-size: 12px;
-    color: var(--text-subdued);
-  }
-  .recordingRow :deep(.track-duration) {
-    grid-column: 3;
-    grid-row: 1 / 3;
-    font-size: 12px;
-    color: var(--text-subdued);
   }
   summary span {
     display: block;

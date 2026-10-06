@@ -54,7 +54,15 @@
         >
           ⚠
         </div>
-        <div class="track-duration">{{ formatDuration(track.duration) }}</div>
+        <div class="track-duration">
+          {{
+            albumLayout
+              ? formatDuration(track.duration)
+                  .replace(/^00:/, "")
+                  .replace(/^0(?=\d:)/, "")
+              : formatDuration(track.duration)
+          }}
+        </div>
       </div>
     </div>
   </div>
