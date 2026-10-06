@@ -841,13 +841,13 @@ export const usePlaybackStore = defineStore("playback", () => {
     play();
   };
 
-  const setUserPlaylist = async (newPlaylist) => {
+  const setUserPlaylist = async (newPlaylist, startIndex = 0) => {
     if (mode.value === "remote") return;
     if (newPlaylist.tracks.length === 0) return;
 
     const userPlaylistPlaylist = makePlaylistFromUserPlaylist(newPlaylist);
     setNewPlayingPlaylist(userPlaylistPlaylist);
-    loadTrack(0);
+    loadTrack(startIndex);
     play();
   };
 

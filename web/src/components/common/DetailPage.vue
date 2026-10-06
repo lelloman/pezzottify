@@ -165,12 +165,15 @@ defineProps({
 }
 .detailBody :deep(.detailTrackHeading) {
   display: grid;
-  grid-template-columns: 20px 1fr auto;
-  gap: 8px;
-  padding: 0 8px 12px 24px;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 16px;
+  padding: 0 16px 12px;
   border-bottom: 1px solid #ffffff15;
   color: var(--text-subdued);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
+}
+.detailBody :deep(.detailTrackHeading span:first-child) {
+  text-align: center;
 }
 @container (max-width:560px) {
   .detailHero {
