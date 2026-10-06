@@ -1,7 +1,7 @@
 <template>
   <div class="discographyContainer">
     <div class="header">
-      <h1>{{ appearsOn ? 'Appears In' : 'Discography' }}</h1>
+      <h2>{{ appearsOn ? "Appears In" : "Discography" }}</h2>
       <div class="sortSelector">
         <label>Sort by:</label>
         <select v-model="sortOrder" @change="resetAndLoad">
@@ -11,7 +11,11 @@
       </div>
     </div>
 
-    <div v-if="albums.length > 0" class="albumsContainer" ref="albumsContainerRef">
+    <div
+      v-if="albums.length > 0"
+      class="albumsContainer"
+      ref="albumsContainerRef"
+    >
       <AlbumCard v-for="album in albums" :key="album.id" :album="album" />
     </div>
 
@@ -22,7 +26,11 @@
     <div v-if="error" class="error">{{ error }}</div>
 
     <div v-if="!isLoading && !hasMore && albums.length > 0" class="endMessage">
-      {{ appearsOn ? `End of features (${total} albums)` : `End of discography (${total} albums)` }}
+      {{
+        appearsOn
+          ? `End of features (${total} albums)`
+          : `End of discography (${total} albums)`
+      }}
     </div>
 
     <div ref="sentinelRef" class="sentinel"></div>
@@ -149,7 +157,7 @@ onUnmounted(() => {
   margin-bottom: 16px;
 }
 
-.header h1 {
+.header h2 {
   margin: 0;
 }
 

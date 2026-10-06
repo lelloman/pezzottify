@@ -171,10 +171,10 @@ summary:hover {
   top: 100%;
   left: 0;
   z-index: 40;
-  background: #282828;
-  box-shadow: 0 12px 36px #0008;
-  padding: 6px;
-  border-radius: 6px;
+  background: var(--menu-background);
+  box-shadow: var(--shadow-menu);
+  padding: 4px;
+  border-radius: 4px;
   width: 240px;
   max-width: calc(100cqw - 152px);
 }
@@ -184,12 +184,14 @@ summary:hover {
   gap: 10px;
   width: 100%;
   border: 0;
-  border-radius: 3px;
-  padding: 12px;
+  border-radius: 2px;
+  padding: 8px 12px;
+  min-height: 40px;
   background: transparent;
   color: #eee;
   text-align: left;
   font: inherit;
+  font-size: var(--text-sm);
   cursor: pointer;
   white-space: normal;
 }

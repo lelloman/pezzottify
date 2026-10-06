@@ -179,21 +179,25 @@ defineExpose({
 .container {
   position: fixed;
   width: 220px;
-  border: 1px solid #ccc;
-  background-color: #151515;
+  border: 0;
+  border-radius: 4px;
+  padding: 4px;
+  box-shadow: var(--shadow-menu);
+  background-color: var(--menu-background);
   z-index: 1000;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
 }
 
 .contextMenuItem {
   display: flex;
   flex-direction: row;
-  height: 50px;
+  min-height: 40px;
+  border-radius: 2px;
   cursor: pointer;
   align-items: center;
-  font-size: 14px;
+  font-size: var(--text-sm);
   padding: 0 8px;
 }
 
@@ -203,18 +207,21 @@ defineExpose({
 }
 
 .contextMenuItem:hover {
-  background-color: #222;
+  background-color: var(--surface-hover);
 }
 
 .subMenu {
   z-index: 1001;
   position: fixed;
   width: 200px;
-  border: 1px solid #ccc;
-  background-color: #151515;
+  border: 0;
+  border-radius: 4px;
+  padding: 4px;
+  box-shadow: var(--shadow-menu);
+  background-color: var(--menu-background);
   z-index: 1001;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
 }
 </style>

@@ -92,7 +92,7 @@ const handleClick = () => {
   background: rgba(29, 185, 84, 0.16);
   color: var(--spotify-green);
   font-size: 1rem;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .playlistMeta {
@@ -108,8 +108,8 @@ const handleClick = () => {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-base) !important;
-  font-size: 0.9rem;
-  font-weight: 850;
+  font-size: var(--text-lg);
+  font-weight: 700;
   margin: 0;
 }
 
@@ -118,8 +118,8 @@ const handleClick = () => {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-subdued);
-  font-size: 0.76rem;
-  font-weight: 620;
+  font-size: var(--text-sm);
+  font-weight: 400;
 }
 
 .playlistState {
@@ -129,7 +129,7 @@ const handleClick = () => {
   padding: 10px 12px;
   border-radius: 8px;
   color: var(--text-subdued);
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 

@@ -429,11 +429,11 @@ onMounted(async () => {
 }
 
 .eyebrow {
-  color: #9eddb7;
+  color: var(--text-base);
   font-size: 0.72rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .heroTitle {
@@ -443,7 +443,7 @@ onMounted(async () => {
   -webkit-box-orient: vertical;
   overflow: hidden;
   font-size: clamp(2rem, 4.2vw, 4.8rem);
-  font-weight: 900;
+  font-weight: 700;
   line-height: 0.94;
   letter-spacing: 0;
   text-decoration: none;
@@ -502,7 +502,7 @@ onMounted(async () => {
   min-width: 42px;
   color: rgba(255, 255, 255, 0.66);
   font-size: 0.8rem;
-  font-weight: 800;
+  font-weight: 700;
   text-align: center;
 }
 
@@ -515,7 +515,7 @@ onMounted(async () => {
   padding: 0 18px;
   border-radius: 999px;
   font-size: 0.9rem;
-  font-weight: 800;
+  font-weight: 700;
   text-decoration: none;
 }
 
@@ -556,18 +556,18 @@ onMounted(async () => {
 
 .sectionTitle {
   margin: 2px 0 0;
-  color: #9eddb7;
-  font-size: clamp(1rem, 1.35vw, 1.32rem);
-  font-weight: 900;
+  color: var(--text-base);
+  font-size: var(--text-2xl);
+  font-weight: 700;
   line-height: 1.15;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .seeAllLink {
   flex: 0 0 auto;
   color: rgba(255, 255, 255, 0.62);
   font-size: 0.82rem;
-  font-weight: 800;
+  font-weight: 700;
   text-decoration: none;
 }
 
@@ -605,16 +605,21 @@ onMounted(async () => {
   flex: 0 0 clamp(150px, 14vw, 190px);
   flex-direction: column;
   min-width: 0;
-  gap: 11px;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 6px;
+  transition: background-color var(--transition-fast);
   color: #fff;
   text-align: left;
   text-decoration: none;
   scroll-snap-align: start;
 }
 
+.albumCard:hover {
+  background: var(--surface-raised);
+}
 .featuredAlbumCard {
   border: 0;
-  padding: 0;
   background: transparent;
   cursor: pointer;
 }
@@ -625,12 +630,12 @@ onMounted(async () => {
 }
 
 .featuredAlbumCard.isSelected .albumName {
-  color: #9eddb7;
+  color: var(--text-base);
 }
 
 .albumCover {
   aspect-ratio: 1;
-  border-radius: 8px;
+  border-radius: 6px;
   overflow: hidden;
   background: #242424;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
@@ -638,12 +643,6 @@ onMounted(async () => {
     transform var(--transition-base),
     filter var(--transition-base),
     box-shadow var(--transition-base);
-}
-
-.albumCard:hover .albumCover {
-  transform: translateY(-4px);
-  filter: brightness(1.08);
-  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.34);
 }
 
 .albumInfo,
@@ -661,22 +660,22 @@ onMounted(async () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .albumName {
-  font-size: 0.88rem;
+  font-size: var(--text-lg);
 }
 
 .artistName,
 .recentArtist,
 .genreTrackCount {
-  color: rgba(255, 255, 255, 0.58);
+  color: var(--text-subdued);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.76rem;
-  font-weight: 620;
+  font-size: var(--text-sm);
+  font-weight: 400;
 }
 
 .recentGrid {
@@ -750,7 +749,7 @@ onMounted(async () => {
 .artistRank {
   color: rgba(255, 255, 255, 0.36);
   font-size: 0.82rem;
-  font-weight: 900;
+  font-weight: 700;
   text-align: center;
 }
 
@@ -848,7 +847,7 @@ onMounted(async () => {
 .genreCardName {
   color: #fff;
   font-size: 0.98rem;
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1.15;
   text-transform: capitalize;
 }
@@ -882,7 +881,7 @@ onMounted(async () => {
 
 .emptyState h2 {
   margin: 0;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .emptyState p {

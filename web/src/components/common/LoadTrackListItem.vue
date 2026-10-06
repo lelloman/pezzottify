@@ -5,7 +5,7 @@
     <div
       v-else-if="track"
       @click="handleTrackClick"
-      :class="computeTrackRowClasses"
+      :class="[computeTrackRowClasses, { albumTrackRow: albumLayout }]"
     >
       <!-- Minimal mode: vertical layout for sidebar/queue -->
       <div v-if="minimal" class="track-item-minimal">
@@ -205,7 +205,7 @@ defineExpose({
   flex-direction: row;
   padding: 7px 8px;
   align-items: center;
-  border-radius: 7px;
+  border-radius: 4px;
   transition: background-color var(--transition-fast);
 }
 
@@ -271,12 +271,16 @@ defineExpose({
   overflow: hidden;
 }
 
+.albumTrackRow {
+  min-height: var(--track-row-height);
+  padding: 0 16px;
+}
 .albumLayout {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
   grid-template-areas: "number title duration" "number artists duration";
-  column-gap: 12px;
-  row-gap: 3px;
+  column-gap: 16px;
+  row-gap: 0;
 }
 .albumLayout .trackIndexSpan {
   grid-area: number;
@@ -296,13 +300,15 @@ defineExpose({
   width: auto;
   min-width: 0;
   padding: 0;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
+  line-height: 20px;
   color: var(--text-subdued);
 }
 .albumLayout .track-duration {
   grid-area: duration;
   color: var(--text-subdued);
   padding-left: 12px;
+  font-size: var(--text-sm);
 }
 .albumLayout .track-fetch-error-icon {
   grid-area: number;
