@@ -290,7 +290,7 @@ export function mockPlugin() {
       return json(
         res,
         list(
-          genres.map((g, i) => ({
+          genres.map((g) => ({
             id: `genre:${g.name}`,
             entity_id: `genre:${g.name}`,
             label: g.name,
