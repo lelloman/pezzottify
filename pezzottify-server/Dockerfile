@@ -25,6 +25,9 @@ RUN npm run build
 # ------------------------------------------
 FROM rust:1.91.1 AS rust-builder
 
+# Give rustc worker threads more stack for optimized release compilation.
+ENV RUST_MIN_STACK=33554432
+
 # Build args for version info (detected on host, passed by build script)
 ARG GIT_HASH=unknown
 ARG GIT_DIRTY=0
