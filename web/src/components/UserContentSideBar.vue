@@ -1,392 +1,754 @@
 <template>
-  <aside class="panel libraryPanel">
-    <h2 class="libraryHeading">Your library</h2>
-    <div class="tabSelectorsContainer">
+  <aside
+    class="panel libraryPanel"
+    :class="{ collapsed }"
+    aria-label="Your library"
+  >
+    <header class="libraryHeader">
       <button
         type="button"
-        @click.stop="setAlbumsTab"
-        :class="{
-          tabSelector: true,
-          selectedTab: selectedTab === 'albums',
-        }"
+        class="headingButton"
+        :aria-label="
+          collapsed ? 'Expand your library' : 'Collapse your library'
+        "
+        :title="collapsed ? 'Expand your library' : 'Collapse your library'"
+        :aria-expanded="!collapsed"
+        @click="setLayout(collapsed ? 'normal' : 'collapsed')"
       >
-        <span>Albums</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 4v16M9 4v16M15 4l5 15" />
+        </svg>
+        <h2 v-if="!collapsed">Your library</h2>
       </button>
-      <button
-        type="button"
-        @click.stop="setArtistsTab"
-        :class="{
-          tabSelector: true,
-          selectedTab: selectedTab === 'artists',
-        }"
-      >
-        <span>Artists</span>
-      </button>
-      <button
-        type="button"
-        @click.stop="setPlaylistsTab"
-        :class="{
-          tabSelector: true,
-          selectedTab: selectedTab === 'playlists',
-        }"
-      >
-        <span>Playlists</span>
-      </button>
-    </div>
-
-    <div v-if="selectedTab == 'albums'" class="contentContainer">
-      <div v-if="loading" class="libraryState">Loading library</div>
-      <template v-else-if="albumIds?.length">
-        <AlbumCard
-          library
-          v-for="albumId in albumIds"
-          :key="albumId"
-          :albumId="albumId"
-          :showArtists="true"
-        />
+      <template v-if="!collapsed">
+        <button
+          type="button"
+          class="createButton"
+          aria-label="Create playlist"
+          title="Create playlist"
+          :disabled="isCreatingPlaylist"
+          @click="createPlaylist"
+        >
+          <PlusIcon /><span>Create</span>
+        </button>
+        <button
+          type="button"
+          class="iconButton expandButton"
+          :aria-label="
+            layout === 'wide' ? 'Restore library width' : 'Widen your library'
+          "
+          :title="
+            layout === 'wide' ? 'Restore library width' : 'Widen your library'
+          "
+          @click="setLayout(layout === 'wide' ? 'normal' : 'wide')"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M14 4h6v6M20 4l-6 6M10 20H4v-6M4 20l6-6" />
+          </svg>
+        </button>
       </template>
-      <div v-else class="libraryState">No saved albums</div>
-    </div>
-
-    <div v-else-if="selectedTab == 'artists'" class="contentContainer">
-      <div v-if="loading" class="libraryState">Loading library</div>
-      <template v-else-if="artistsIds?.length">
-        <LoadArtistListItem
-          library
-          v-for="artistId in artistsIds"
-          :key="artistId"
-          :artistId="artistId"
-        />
-      </template>
-      <div v-else class="libraryState">No saved artists</div>
-    </div>
-
-    <div v-else-if="selectedTab == 'playlists'" class="contentContainer">
-      <button
-        type="button"
-        class="createPlaylistButton scaleClickFeedback"
-        :disabled="isCreatingPlaylist"
-        @click.stop="handleCreatePlaylistButtonClick"
-      >
-        <PlusIcon class="createPlaylistIcon" />
-        <span v-if="!isCreatingPlaylist">New playlist</span>
-        <span v-else>Creating</span>
-      </button>
-
-      <div v-if="loading" class="libraryState">Loading library</div>
-      <div v-else-if="playlists.length" class="playlistsContainer">
-        <LoadPlaylistListItem
-          library
-          v-for="playlist in playlists"
-          :key="playlist.id"
-          :playlistId="playlist.id"
-        />
+    </header>
+    <template v-if="!collapsed">
+      <div class="filterChips" role="group" aria-label="Filter your library">
+        <button
+          v-if="filter"
+          type="button"
+          class="clearFilter iconButton"
+          aria-label="Show all library items"
+          title="Show all library items"
+          @click="setFilter('')"
+        >
+          ×
+        </button>
+        <button
+          v-for="item in filters"
+          :key="item.type"
+          type="button"
+          class="filterChip"
+          :class="{ active: filter === item.type }"
+          :aria-pressed="filter === item.type"
+          @click="setFilter(filter === item.type ? '' : item.type)"
+        >
+          {{ item.label }}
+        </button>
       </div>
-      <div v-else class="libraryState">No playlists</div>
+      <div class="libraryTools">
+        <div class="librarySearch" :class="{ open: searchOpen }">
+          <button
+            v-if="!searchOpen"
+            type="button"
+            class="iconButton"
+            aria-label="Search your library"
+            title="Search your library"
+            @click="openSearch"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="10" cy="10" r="6.5" />
+              <path d="m15 15 5 5" />
+            </svg>
+          </button>
+          <input
+            v-else
+            ref="searchInput"
+            v-model="query"
+            type="search"
+            aria-label="Search your library"
+            placeholder="Search your library"
+            @keydown.esc.stop="closeSearch"
+          />
+        </div>
+        <details ref="sortMenu" class="sortMenu" @keydown.esc.stop="closeSort">
+          <summary aria-label="Sort your library" title="Sort your library">
+            {{ sortLabel
+            }}<svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8 6h12M8 12h12M8 18h12M3 6h1M3 12h1M3 18h1" />
+            </svg>
+          </summary>
+          <div class="sortOptions">
+            <p>Sort by</p>
+            <button
+              v-for="option in sortOptions"
+              :key="option.value"
+              type="button"
+              :aria-pressed="sort === option.value"
+              @click="setSort(option.value)"
+            >
+              {{ option.label
+              }}<span v-if="sort === option.value" aria-hidden="true">✓</span>
+            </button>
+          </div>
+        </details>
+      </div>
+    </template>
+    <p v-if="actionError" class="actionError" role="alert">{{ actionError }}</p>
+    <div
+      ref="scrollContainer"
+      class="libraryContent"
+      :aria-busy="userStore.isInitializing"
+      @keydown="navigateRows"
+    >
+      <p v-if="userStore.isInitializing" class="libraryState" role="status">
+        Loading your library…
+      </p>
+      <ul
+        v-else-if="visibleEntries.length"
+        class="libraryList"
+        aria-label="Saved items"
+      >
+        <LibraryRow
+          v-for="entry in visibleEntries"
+          :key="entry.key"
+          :entry="entry"
+          :selected="isSelected(entry)"
+          :playing="isPlaying(entry)"
+          :collapsed="collapsed"
+          :busy="busyKey === entry.key"
+          @play="playEntry"
+          @contextmenu="openContextMenu($event, entry)"
+        />
+      </ul>
+      <p v-else class="libraryState" role="status">
+        {{
+          pending
+            ? "Searching saved items…"
+            : query
+              ? "No matches in your library."
+              : filter
+                ? `No saved ${filter}s yet.`
+                : "Your library is empty. Save albums and artists, or create a playlist."
+        }}
+      </p>
     </div>
+    <Teleport to="body"><EntityContextMenu ref="entityMenu" /></Teleport>
   </aside>
 </template>
-
 <script setup>
-import "@/assets/base.css";
-import "@/assets/main.css";
-import { watch, ref, onMounted, computed } from "vue";
-import { useUserStore } from "@/store/user.js";
-import { useRouter } from "vue-router";
-import AlbumCard from "@/components/common/AlbumCard.vue";
-import LoadArtistListItem from "@/components/common/LoadArtistListItem.vue";
-import LoadPlaylistListItem from "./common/LoadPlaylistListItem.vue";
-import PlusIcon from "@/components/icons/PlusIcon.vue";
-
-const userStore = useUserStore();
-const router = useRouter();
-
-const albumIds = ref(null);
-const artistsIds = ref(null);
-const playlistsData = ref(null);
-const loading = ref(true);
-
-const selectedTab = ref(null);
-
-const isCreatingPlaylist = ref(false);
-
-// Get playlists as a computed property to ensure reactivity
-const playlists = computed(() => {
-  if (playlistsData.value && playlistsData.value.list) {
-    // Return the playlist list directly
-    return playlistsData.value.list;
+import {
+  computed,
+  ref,
+  watch,
+  nextTick,
+  onMounted,
+  onBeforeUnmount,
+} from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useUserStore } from "@/store/user";
+import { useStaticsStore } from "@/store/statics";
+import { usePlaybackStore } from "@/store/playback";
+import { chooseAlbumCoverImageUrl, chooseSmallArtistImageUrl } from "@/utils";
+import LibraryRow from "./common/LibraryRow.vue";
+import PlusIcon from "./icons/PlusIcon.vue";
+import EntityContextMenu from "./common/contextmenu/EntityContextMenu.vue";
+const emit = defineEmits(["layout-change"]);
+const userStore = useUserStore(),
+  statics = useStaticsStore(),
+  playback = usePlaybackStore(),
+  route = useRoute(),
+  router = useRouter();
+const filters = [
+  { type: "playlist", label: "Playlists" },
+  { type: "artist", label: "Artists" },
+  { type: "album", label: "Albums" },
+];
+const sortOptions = [
+  { value: "name", label: "Alphabetical" },
+  { value: "creator", label: "Creator" },
+  { value: "played", label: "Played this session" },
+];
+const stored = (key, allowed, fallback) => {
+  try {
+    const value = localStorage.getItem(key);
+    return allowed.includes(value) ? value : fallback;
+  } catch {
+    return fallback;
   }
-  return [];
+};
+const filter = ref(
+  stored("library.filter", ["", "album", "artist", "playlist"], ""),
+);
+const sort = ref(
+  stored(
+    "library.sort",
+    sortOptions.map((o) => o.value),
+    "name",
+  ),
+);
+const layout = ref(
+  stored("library.layout", ["normal", "wide", "collapsed"], "normal"),
+);
+const collapsed = computed(() => layout.value === "collapsed");
+const query = ref(""),
+  searchOpen = ref(false),
+  searchInput = ref(null),
+  sortMenu = ref(null),
+  scrollContainer = ref(null),
+  entityMenu = ref(null),
+  isCreatingPlaylist = ref(false),
+  actionError = ref(""),
+  busyKey = ref(null);
+const played = ref({});
+const refs = new Map();
+// Cache references once: statics getters retry empty entries, so avoid invoking them on each filter pass.
+const data = (type, id) => {
+  const key = `${type}:${id}`;
+  if (!refs.has(key))
+    refs.set(
+      key,
+      type === "album"
+        ? statics.getAlbum(id)
+        : type === "artist"
+          ? statics.getArtist(id)
+          : statics.getTrack(id),
+    );
+  return refs.get(key);
+};
+const artistNames = (ids) =>
+  (ids || [])
+    .map((id) => data("artist", id).item?.name)
+    .filter(Boolean)
+    .join(", ");
+const playlistImages = (playlist) => {
+  const tracks = playlist.tracks || [];
+  const albums = [
+    ...new Set(
+      Array.from(
+        { length: Math.min(4, tracks.length) },
+        (_, i) =>
+          data(
+            "track",
+            tracks[
+              Math.floor((i * tracks.length) / Math.min(4, tracks.length))
+            ],
+          ).item?.album_id,
+      ).filter(Boolean),
+    ),
+  ];
+  const images = albums.map((id) => chooseAlbumCoverImageUrl({ id }));
+  return images.length > 1
+    ? Array.from({ length: 4 }, (_, i) => images[i % images.length])
+    : images;
+};
+const entries = computed(() => [
+  ...(userStore.likedAlbumIds || []).map((id) => {
+    const ref = data("album", id),
+      item = ref.item,
+      creator = artistNames(item?.artists_ids);
+    return {
+      key: `album:${id}`,
+      type: "album",
+      id,
+      name: item?.name || (ref.error ? "Album unavailable" : "Loading album…"),
+      creator,
+      subtitle: creator ? `Album · ${creator}` : "Album",
+      images: [chooseAlbumCoverImageUrl({ id })],
+      ready: !!item,
+      pending: !item && !ref.error,
+    };
+  }),
+  ...(userStore.likedArtistsIds || []).map((id) => {
+    const ref = data("artist", id),
+      item = ref.item;
+    return {
+      key: `artist:${id}`,
+      type: "artist",
+      id,
+      name:
+        item?.name || (ref.error ? "Artist unavailable" : "Loading artist…"),
+      creator: item?.name || "",
+      subtitle: "Artist",
+      images: [chooseSmallArtistImageUrl({ id })],
+      ready: !!item,
+      pending: !item && !ref.error,
+    };
+  }),
+  ...(userStore.playlistsData?.list || []).map((item) => ({
+    key: `playlist:${item.id}`,
+    type: "playlist",
+    id: item.id,
+    name: item.name,
+    creator: "",
+    subtitle: `Playlist · ${item.tracks?.length || 0} tracks`,
+    images: playlistImages(item),
+    ready: true,
+    pending: false,
+    item,
+  })),
+]);
+const pending = computed(() => entries.value.some((e) => e.pending));
+const normalize = (value) =>
+  value.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
+const visibleEntries = computed(() => {
+  const text = normalize(query.value.trim());
+  return entries.value
+    .filter(
+      (e) =>
+        (!filter.value || e.type === filter.value) &&
+        (!text ||
+          normalize(`${e.name} ${e.creator} ${e.subtitle}`).includes(text)),
+    )
+    .sort((a, b) => {
+      if (sort.value === "played") {
+        const delta = (played.value[b.key] || 0) - (played.value[a.key] || 0);
+        if (delta) return delta;
+      }
+      if (sort.value === "creator") {
+        const delta = a.creator.localeCompare(b.creator, undefined, {
+          sensitivity: "base",
+        });
+        if (delta) return delta;
+      }
+      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    });
 });
-
+const sortLabel = computed(
+  () => sortOptions.find((o) => o.value === sort.value)?.label,
+);
+const isSelected = (entry) =>
+  route.name === entry.type && route.params[`${entry.type}Id`] === entry.id;
+const playbackKey = computed(() => {
+  const list = playback.currentPlaylist;
+  if (list?.type === playback.PLAYBACK_CONTEXTS.userPlaylist)
+    return `playlist:${list.context.id}`;
+  if (list?.type === playback.PLAYBACK_CONTEXTS.album)
+    return `album:${list.context.id}`;
+  if (
+    list?.type === playback.PLAYBACK_CONTEXTS.radio &&
+    list.context?.seed?.entity_type === "artist"
+  )
+    return `artist:${list.context.seed.entity_id}`;
+  return null;
+});
+const isPlaying = (entry) =>
+  playback.isPlaying && entry.key === playbackKey.value;
 watch(
-  () => userStore.isInitializing,
-  (newIsInitializing) => {
-    loading.value = newIsInitializing;
+  [playbackKey, () => playback.isPlaying],
+  ([key, active]) => {
+    if (key && active) played.value = { ...played.value, [key]: Date.now() };
   },
   { immediate: true },
 );
-watch(
-  () => userStore.likedAlbumIds,
-  (likedAlbums) => {
-    if (likedAlbums) {
-      albumIds.value = likedAlbums;
-    }
-  },
-  { immediate: true },
-);
-watch(
-  () => userStore.likedArtistsIds,
-  (likedArtists) => {
-    if (likedArtists) {
-      artistsIds.value = likedArtists;
-    }
-  },
-  { immediate: true },
-);
-watch(
-  () => userStore.playlistsData,
-  (newPlaylistsData) => {
-    console.log("new userStore.playlistsData ", newPlaylistsData);
-    if (newPlaylistsData) {
-      playlistsData.value = newPlaylistsData;
-    }
-  },
-  { immediate: true },
-);
-
-const handleCreatePlaylistButtonClick = () => {
-  if (isCreatingPlaylist.value) {
+const persist = (key, value) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* Preferences can remain in memory. */
+  }
+};
+const setFilter = (value) => {
+  filter.value = value;
+  persist("library.filter", value);
+};
+const setLayout = (value) => {
+  layout.value = value;
+  persist("library.layout", value);
+  emit("layout-change", value);
+};
+const closeSort = (event) => {
+  if (sortMenu.value) {
+    sortMenu.value.open = false;
+    if (event?.type === "keydown")
+      sortMenu.value.querySelector("summary")?.focus();
+  }
+};
+const setSort = (value) => {
+  sort.value = value;
+  persist("library.sort", value);
+  closeSort();
+  sortMenu.value?.querySelector("summary")?.focus();
+};
+const openSearch = async () => {
+  searchOpen.value = true;
+  await nextTick();
+  searchInput.value?.focus();
+};
+const closeSearch = () => {
+  query.value = "";
+  searchOpen.value = false;
+};
+const outside = (event) => {
+  if (sortMenu.value && !sortMenu.value.contains(event.target)) closeSort();
+};
+watch([filter, query, sort], () => {
+  if (scrollContainer.value) scrollContainer.value.scrollTop = 0;
+});
+const navigateRows = (event) => {
+  if (
+    !event.target.closest(".libraryLink") ||
+    !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)
+  )
     return;
+  const links = [...scrollContainer.value.querySelectorAll(".libraryLink")];
+  const index = links.indexOf(event.target.closest(".libraryLink"));
+  const next =
+    event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? links.length - 1
+        : Math.max(
+            0,
+            Math.min(
+              links.length - 1,
+              index + (event.key === "ArrowDown" ? 1 : -1),
+            ),
+          );
+  event.preventDefault();
+  links[next]?.focus();
+};
+const openContextMenu = (event, entry) => {
+  if (entry.type !== "playlist") {
+    event.preventDefault();
+    entityMenu.value?.openMenu(event, entry.type, entry.id, entry.name);
   }
-  isCreatingPlaylist.value = true;
-  userStore.createPlaylist((newPlaylistId) => {
-    isCreatingPlaylist.value = false;
-    console.log("New playlist created: ", newPlaylistId);
-    if (newPlaylistId) {
-      router.push(`/playlist/${newPlaylistId}?edit=true`);
+};
+const playEntry = async (entry) => {
+  if (busyKey.value) return;
+  busyKey.value = entry.key;
+  actionError.value = "";
+  try {
+    if (entry.type === "album") await playback.setAlbumId(entry.id);
+    else if (entry.type === "artist")
+      await playback.setArtistGreatestHits(entry.id);
+    else {
+      await userStore.loadPlaylistData(entry.id);
+      const item = userStore.playlistsData?.by_id?.[entry.id];
+      if (!item) throw Error("Playlist unavailable");
+      if (!item.tracks?.length) {
+        actionError.value = "This playlist has no tracks yet.";
+        return;
+      }
+      await playback.setUserPlaylist(item);
     }
-  });
-};
-
-const setTab = (tabName) => {
-  if (["albums", "artists", "playlists"].indexOf(tabName) < 0) {
-    return false;
+    if (playback.isPlaying && playbackKey.value === entry.key) {
+      played.value = { ...played.value, [entry.key]: Date.now() };
+    }
+  } catch {
+    actionError.value = "Could not start playback. Please try again.";
+  } finally {
+    busyKey.value = null;
   }
-  selectedTab.value = tabName;
-  localStorage.setItem("selectedTab", tabName);
-  return true;
 };
-
-const setAlbumsTab = () => {
-  setTab("albums");
+const createPlaylist = async () => {
+  if (isCreatingPlaylist.value) return;
+  isCreatingPlaylist.value = true;
+  actionError.value = "";
+  try {
+    await userStore.createPlaylist((result) => {
+      const id = typeof result === "string" ? result : result?.id;
+      if (id) {
+        setFilter("playlist");
+        query.value = "";
+        router.push({
+          name: "playlist",
+          params: { playlistId: id },
+          query: { edit: "true" },
+        });
+      } else
+        actionError.value = "Could not create the playlist. Please try again.";
+    });
+  } catch {
+    actionError.value = "Could not create the playlist. Please try again.";
+  } finally {
+    isCreatingPlaylist.value = false;
+  }
 };
-
-const setArtistsTab = () => {
-  setTab("artists");
-};
-
-const setPlaylistsTab = () => {
-  setTab("playlists");
-};
-
 onMounted(() => {
-  if (!setTab(localStorage.getItem("selectedTab"))) {
-    setAlbumsTab();
-  }
+  emit("layout-change", layout.value);
+  document.addEventListener("pointerdown", outside);
 });
+onBeforeUnmount(() => document.removeEventListener("pointerdown", outside));
 </script>
-
 <style scoped>
-.libraryHeading {
-  margin: 0;
-  padding: 20px 16px 8px;
-  font-size: 1rem;
-  font-weight: 700;
-}
-
 .libraryPanel {
   border: 0;
-  box-shadow: none;
   min-height: 0;
-  overflow: hidden;
-}
-
-.tabSelectorsContainer {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  padding: 10px;
-  margin: 0;
-  border: 0;
-  background: transparent;
-}
-
-.tabSelector {
-  appearance: none;
-  cursor: pointer;
   min-width: 0;
-  min-height: 32px;
-  padding: 0 10px;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: var(--surface-raised);
-  color: var(--text-subdued);
-  transition:
-    background-color var(--transition-fast),
-    border-color var(--transition-fast),
-    color var(--transition-fast),
-    opacity var(--transition-fast);
-  opacity: 1;
-  text-align: center;
-}
-
-.tabSelector > span {
-  display: block;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--text-sm);
-  font-weight: 400;
+  container-type: inline-size;
 }
-
-.tabSelector:hover {
-  background-color: var(--surface-hover);
-  border-color: var(--surface-border);
-  color: var(--text-base);
-  opacity: 1;
-}
-
-.selectedTab {
-  background-color: #fff !important;
-  border-color: transparent;
-  color: #121212;
-  opacity: 1 !important;
-}
-
-.contentContainer {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  flex-direction: column;
-  overflow-y: auto;
-  padding: 8px;
-  gap: 0;
-  scrollbar-gutter: stable;
-}
-
-.playlistsContainer {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  min-width: 0;
-}
-
-.createPlaylistButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-height: 38px;
-  margin: 0 0 6px;
-  border: 1px solid var(--surface-border);
-  border-radius: 7px;
-  padding: 0 12px;
-  width: 100%;
-  background: rgba(255, 255, 255, 0.045);
-  color: var(--text-base);
-  cursor: pointer;
-  font-size: 0.84rem;
-  font-weight: 600;
-  transition:
-    background-color var(--transition-fast),
-    border-color var(--transition-fast),
-    color var(--transition-fast);
-}
-
-.createPlaylistButton:hover:not(:disabled) {
-  background-color: var(--surface-hover);
-  border-color: rgba(29, 185, 84, 0.28);
-  color: var(--spotify-green);
-}
-
-.createPlaylistButton:disabled {
-  cursor: wait;
-  opacity: 0.65;
-}
-
-.createPlaylistIcon {
-  width: 18px;
-  height: 18px;
-  fill: currentColor;
-}
-
-.libraryState {
+.libraryHeader {
   display: flex;
   align-items: center;
-  justify-content: center;
-  min-height: 92px;
-  padding: 14px;
-  border: 1px dashed var(--surface-border);
-  border-radius: 8px;
-  color: var(--text-subdued);
-  font-size: 0.84rem;
-  font-weight: 700;
-  text-align: center;
-}
-/* Library rows follow the measured 64px / 48px Spotify layout. */
-.libraryPanel :deep(.searchResultRow) {
-  height: 64px;
-  min-height: 64px;
-  padding: 8px;
-  border: 0;
-  border-radius: 6px;
-}
-.libraryPanel :deep(.searchResultRow:hover) {
-  background: #1f1f1f;
-}
-.libraryPanel :deep(.searchResultImage),
-.libraryPanel :deep(.searchResultRoundImage),
-.libraryPanel :deep(.playlistIcon) {
-  width: 48px;
-  height: 48px;
+  gap: 8px;
+  padding: 16px 12px 8px;
   flex-shrink: 0;
 }
-.libraryPanel :deep(.searchResultImage) {
-  border-radius: 4px;
+.headingButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+  height: 36px;
 }
-.libraryPanel :deep(.playlistItem) {
-  grid-template-columns: 48px minmax(0, 1fr);
-  gap: 12px;
-}
-.libraryPanel :deep(.column),
-.libraryPanel :deep(.playlistMeta) {
-  gap: 2px;
-}
-.libraryPanel :deep(.title),
-.libraryPanel :deep(.playlistItem h2) {
-  display: block;
+.headingButton h2 {
   font-size: 16px;
-  font-weight: 400;
-  line-height: 22px;
+  font-weight: 700;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-.libraryPanel :deep(.artistsNames),
-.libraryPanel :deep(.librarySubtitle),
-.libraryPanel :deep(.playlistItem span) {
+.headingButton svg {
+  display: none;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+.headingButton:hover {
+  color: white;
+}
+.createButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 8px 12px;
+  background: #1f1f1f;
+  border-radius: 999px;
   font-size: 14px;
-  font-weight: 400;
-  line-height: 20px;
-  color: var(--text-subdued);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 700;
 }
-.libraryPanel :deep(.subtitle) {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.createButton svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+.createButton:hover {
+  background: #2a2a2a;
+}
+.createButton:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.iconButton {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  color: var(--text-subdued);
+}
+.iconButton:hover {
+  color: white;
+  background: #ffffff1a;
+}
+.iconButton svg,
+.sortMenu svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+.filterChips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 12px;
+  flex-shrink: 0;
+  scrollbar-width: thin;
+}
+.filterChip {
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #ffffff12;
+  color: white;
+  font-size: 14px;
   white-space: nowrap;
+}
+.filterChip:hover {
+  background: #ffffff24;
+}
+.filterChip.active {
+  background: white;
+  color: #121212;
+}
+.clearFilter {
+  font-size: 24px;
+}
+.libraryTools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 16px 8px;
+  flex-shrink: 0;
+}
+.librarySearch {
+  min-width: 0;
+}
+.librarySearch.open {
+  flex: 1;
+}
+.librarySearch input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  border: 0;
+  border-radius: 4px;
+  padding: 6px 8px;
+  background: #ffffff1a;
+  color: white;
+  font-size: 14px;
+}
+.sortMenu {
+  position: relative;
+  flex-shrink: 0;
+}
+.sortMenu summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 140px;
+  height: 32px;
+  font-size: 14px;
+  list-style: none;
+  color: var(--text-subdued);
+  cursor: pointer;
+}
+.sortMenu summary::-webkit-details-marker {
+  display: none;
+}
+.sortMenu summary:hover {
+  color: white;
+}
+.sortOptions {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  width: 205px;
+  padding: 4px;
+  z-index: 50;
+  background: var(--menu-background);
+  border-radius: 4px;
+  box-shadow: var(--shadow-menu);
+}
+.sortOptions p {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--text-subdued);
+}
+.sortOptions button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 14px;
+  text-align: left;
+  border-radius: 2px;
+}
+.sortOptions button:hover {
+  background: #ffffff1a;
+}
+.sortOptions button[aria-pressed="true"] {
+  color: var(--spotify-green);
+}
+.libraryContent {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 8px 8px;
+  scrollbar-width: thin;
+}
+.libraryList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.libraryState {
+  padding: 24px 12px;
+  color: var(--text-subdued);
+  font-size: 14px;
+  line-height: 1.6;
+  text-align: center;
+}
+.actionError {
+  margin: 8px 16px;
+  color: var(--text-subdued);
+  font-size: 14px;
+}
+button:focus-visible,
+summary:focus-visible,
+input:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+.collapsed .libraryHeader {
+  padding: 16px 8px 8px;
+  justify-content: center;
+}
+.collapsed .headingButton {
+  flex: 0 0 48px;
+  justify-content: center;
+}
+.collapsed .headingButton svg {
+  display: block;
+}
+.collapsed .libraryContent {
+  padding: 0 4px 8px;
+}
+@container (max-width:300px) {
+  .createButton {
+    padding: 8px;
+    width: 36px;
+  }
+  .createButton span {
+    display: none;
+  }
+  .libraryTools {
+    padding-inline: 12px;
+  }
+}
+.libraryTools:has(.librarySearch.open) .sortMenu summary {
+  font-size: 0;
+  width: 32px;
+  justify-content: center;
 }
 </style>

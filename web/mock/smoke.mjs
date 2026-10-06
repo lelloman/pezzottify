@@ -65,6 +65,90 @@ try {
     .filter({ hasText: "Open Windows" })
     .waitFor();
   console.log("PASS playback and skip");
+  // Library navigation, filters, sorting, playback states, and playlist creation.
+  await page.goto(origin + "/album/album-1");
+  await page.waitForLoadState("networkidle");
+  const library = page.getByRole("complementary", { name: "Your library" });
+  const rows = library.locator(".libraryRow");
+  assert.equal(await rows.count(), 7);
+  assert.equal(
+    await library.locator('.libraryLink[aria-current="page"]').count(),
+    1,
+  );
+  await library.getByRole("button", { name: "Albums", exact: true }).click();
+  assert.equal(await rows.count(), 3);
+  await library
+    .getByRole("button", { name: "Search your library", exact: true })
+    .click();
+  const librarySearch = library.getByRole("searchbox", {
+    name: "Search your library",
+  });
+  await librarySearch.fill("mira");
+  assert.equal(await rows.count(), 1);
+  assert.match(await rows.first().innerText(), /Golden Hour/);
+  await librarySearch.fill("nothing matches this");
+  await library
+    .getByText("No matches in your library.", { exact: true })
+    .waitFor();
+  await librarySearch.press("Escape");
+  await library
+    .getByRole("button", { name: "Show all library items", exact: true })
+    .click();
+  await library.getByLabel("Sort your library", { exact: true }).click();
+  await library.getByRole("button", { name: "Creator", exact: true }).click();
+  await library.getByLabel("Sort your library", { exact: true }).click();
+  await library
+    .getByRole("button", { name: "Alphabetical", exact: true })
+    .click();
+  const links = library.locator(".libraryLink");
+  await links.first().focus();
+  await page.keyboard.press("ArrowDown");
+  assert.equal(
+    await links.nth(1).evaluate((e) => e === document.activeElement),
+    true,
+  );
+  await page.keyboard.press("End");
+  assert.equal(
+    await links.last().evaluate((e) => e === document.activeElement),
+    true,
+  );
+  await library
+    .getByRole("button", { name: "Collapse your library", exact: true })
+    .click();
+  assert.equal(await library.evaluate((e) => e.clientWidth), 72);
+  await library
+    .getByRole("button", { name: "Expand your library", exact: true })
+    .click();
+  await library
+    .getByRole("button", { name: "Widen your library", exact: true })
+    .click();
+  assert.equal(await library.evaluate((e) => e.clientWidth), 400);
+  await library
+    .getByRole("button", { name: "Restore library width", exact: true })
+    .click();
+  await library
+    .getByRole("button", { name: "Play Golden Hour", exact: true })
+    .focus();
+  await page.keyboard.press("Enter");
+  await library
+    .locator(".libraryRow.playing")
+    .filter({ hasText: "Golden Hour" })
+    .waitFor();
+  await library
+    .getByRole("button", { name: "Create playlist", exact: true })
+    .click();
+  await page.waitForURL(/\/playlist\/[^/]+\?edit=true$/);
+  assert.ok(!page.url().includes("object"));
+  await page.locator("#editPlaylistNameInput").waitFor();
+  await page.locator("#editPlaylistNameInput").fill("Library smoke playlist");
+  await page.getByText("Save", { exact: true }).click();
+  await library.getByRole("link", { name: /Library smoke playlist/ }).waitFor();
+  await library
+    .getByRole("button", { name: "Show all library items", exact: true })
+    .click();
+  console.log(
+    "PASS library filtering, keyboard navigation, width, playback and creation",
+  );
   const api = page.request;
   const created = await (
     await api.post(origin + "/v1/user/playlist", {

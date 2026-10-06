@@ -6,9 +6,9 @@
     </div>
     <template v-else>
       <TopBar @search="handleSearch" :initialQuery="searchQuery" />
-      <div class="centralPanel">
+      <div class="centralPanel" :style="libraryStyle">
         <UserContentSideBar
-          @select-item="handleSelect"
+          @layout-change="libraryLayout = $event"
           class="sideBar userContentSideBar"
         />
         <MainContent :search-query="searchQuery" />
@@ -20,7 +20,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import TopBar from "@/components/TopBar.vue";
 import MainContent from "@/components/content/MainContent.vue";
 import BottomPlayer from "@/components/BottomPlayer.vue";
@@ -31,6 +31,15 @@ import { useUserStore } from "@/store/user";
 
 // Access the user store
 const userStore = useUserStore();
+const libraryLayout = ref("normal");
+const libraryStyle = computed(() =>
+  libraryLayout.value === "normal"
+    ? {}
+    : {
+        "--library-width":
+          libraryLayout.value === "collapsed" ? "72px" : "min(400px, 40vw)",
+      },
+);
 const isLoading = ref(true);
 
 // Initialize the store when the component is mounted
@@ -58,10 +67,6 @@ watch(
 
 function handleSearch(query) {
   searchQuery.value = query;
-}
-
-function handleSelect(item) {
-  console.log("Selected:", item);
 }
 </script>
 
@@ -109,7 +114,10 @@ function handleSelect(item) {
 /* Tablet (768px+): Show left sidebar only */
 @media (min-width: 768px) {
   .centralPanel {
-    grid-template-columns: var(--sidebar-width-tablet) minmax(0, 1fr);
+    grid-template-columns: var(
+        --library-width,
+        var(--sidebar-width-tablet)
+      ) minmax(0, 1fr);
   }
 
   .userContentSideBar {
@@ -124,13 +132,19 @@ function handleSelect(item) {
 /* Keep the content spacious before adding the queue column. */
 @media (min-width: 1024px) {
   .centralPanel {
-    grid-template-columns: var(--sidebar-width-desktop) minmax(0, 1fr);
+    grid-template-columns: var(
+        --library-width,
+        var(--sidebar-width-desktop)
+      ) minmax(0, 1fr);
   }
 }
 
 @media (min-width: 1280px) {
   .centralPanel {
-    grid-template-columns: var(--sidebar-width-desktop) minmax(0, 1fr) 280px;
+    grid-template-columns: var(
+        --library-width,
+        var(--sidebar-width-desktop)
+      ) minmax(0, 1fr) 280px;
   }
   .currentlyPlayingSideBar {
     display: flex;
@@ -139,7 +153,10 @@ function handleSelect(item) {
 
 @media (min-width: 1600px) {
   .centralPanel {
-    grid-template-columns: var(--sidebar-width-large) minmax(0, 1fr) 320px;
+    grid-template-columns: var(
+        --library-width,
+        var(--sidebar-width-large)
+      ) minmax(0, 1fr) 320px;
   }
 }
 
