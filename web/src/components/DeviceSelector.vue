@@ -1,11 +1,14 @@
 <template>
   <div class="deviceSelector" ref="selectorRef">
-    <div
-      class="deviceSelectorButton lightControlFill scaleClickFeedback mediumIcon"
+    <button
+      type="button"
+      :aria-label="buttonTitle"
+      :aria-expanded="isOpen"
+      class="deviceSelectorButton"
       @click.stop="toggleOpen"
       :title="buttonTitle"
     >
-      <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
         <path
           d="M20 6H4c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 10H4V8h16v8z"
         />
@@ -17,7 +20,7 @@
           fill="var(--spotify-green)"
         />
       </svg>
-    </div>
+    </button>
     <div v-if="isOpen" class="deviceDropdown">
       <div class="dropdownHeader">
         <span class="dropdownTitle">Devices</span>
@@ -109,22 +112,41 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.deviceSelectorButton {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 8px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-subdued);
+  cursor: pointer;
+  transition:
+    color 150ms cubic-bezier(0.3, 0, 0, 1),
+    transform 150ms cubic-bezier(0.3, 0, 0, 1);
+}
+.deviceSelectorButton:focus-visible {
+  outline: 2px solid var(--spotify-green);
+  outline-offset: 2px;
+}
+.deviceSelectorButton:active {
+  background: transparent;
+  transform: scale(1);
+}
+
 .deviceSelector {
   position: relative;
 }
 
-.deviceSelectorButton {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--text-base);
-  border-radius: 8px;
-  transition: all var(--transition-fast);
-}
-
-.deviceSelectorButton:hover {
-  color: var(--text-bright);
+@media (hover: hover) {
+  .deviceSelectorButton:hover {
+    color: var(--text-base);
+    background: transparent;
+    transform: scale(1.04);
+    transition-duration: 50ms;
+  }
 }
 
 .deviceDropdown {

@@ -150,7 +150,7 @@
         <router-link
           v-if="userStore.hasAnyAdminPermission"
           to="/admin"
-          class="adminLink scaleClickFeedback"
+          class="adminLink"
           title="Admin Panel"
         >
           <AdminIcon class="adminIcon" />
@@ -158,30 +158,18 @@
         <router-link
           v-if="userStore.canRequestContent"
           to="/requests"
-          class="requestsLink scaleClickFeedback"
+          class="requestsLink"
           title="My Requests"
         >
           <DownloadIcon class="requestsIcon" />
         </router-link>
-        <router-link
-          to="/settings"
-          class="settingsLink scaleClickFeedback"
-          title="Settings"
-        >
+        <router-link to="/settings" class="settingsLink" title="Settings">
           <SettingsIcon class="settingsIcon" />
         </router-link>
-        <router-link
-          to="/devices"
-          class="devicesLink scaleClickFeedback"
-          title="Devices"
-        >
+        <router-link to="/devices" class="devicesLink" title="Devices">
           <DevicesIcon class="devicesIcon" />
         </router-link>
-        <router-link
-          to="/logout"
-          class="logoutLink scaleClickFeedback"
-          title="Logout"
-        >
+        <router-link to="/logout" class="logoutLink" title="Logout">
           <LogoutIcon class="logoutIcon" />
         </router-link>
       </div>
@@ -889,6 +877,13 @@ header {
   background-color: var(--surface-hover);
 }
 
+.userActions a:focus-visible {
+  outline: 2px solid var(--spotify-green);
+  outline-offset: 2px;
+}
+.userActions a:active {
+  background: var(--surface-active);
+}
 .adminIcon,
 .requestsIcon,
 .settingsIcon,

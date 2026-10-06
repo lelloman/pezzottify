@@ -1,8 +1,5 @@
 <template>
-  <svg viewBox="0 0 24 24">
-    <path
-      transform="translate(12, 12) scale(1.2) translate(-12, -12)"
-      d="M16,18H18V6H16M6,18L14.5,12L6,6V18Z"
-    ></path>
+  <svg viewBox="0 0 16 16">
+    <path d="M2 1v14l10-7zM13 1h2v14h-2z" />
   </svg>
 </template>

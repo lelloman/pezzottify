@@ -26,22 +26,13 @@
         @play="handleClickOnPlayAlbum"
         @save="handleClickOnFavoriteIcon"
       >
+        <template #inline>
+          <RadioAction
+            @start="handleClickOnAlbumRadio"
+            @customize="showRadioBuilder = true"
+          />
+        </template>
         <template #secondary>
-          <button
-            type="button"
-            title="Start radio"
-            @click="handleClickOnAlbumRadio"
-          >
-            <RadioIcon /><span class="actionLabel">Start radio</span>
-          </button>
-          <button
-            class="advancedRadioButton"
-            type="button"
-            title="Customize radio"
-            @click.stop="showRadioBuilder = true"
-          >
-            <SettingsIcon /><span class="actionLabel">Customize radio</span>
-          </button>
           <button
             class="advancedRadioButton steerButton"
             title="Steer the current queue toward this album"
@@ -241,7 +232,7 @@
 </template>
 
 <script setup>
-import SettingsIcon from "@/components/icons/SettingsIcon.vue";
+import RadioAction from "@/components/common/RadioAction.vue";
 import PlaylistPlusIcon from "@/components/icons/PlaylistPlusIcon.vue";
 import DetailPage from "@/components/common/DetailPage.vue";
 import DetailActions from "@/components/common/DetailActions.vue";
@@ -250,7 +241,6 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { MAX_COMPONENTS } from "@/utils/gravity";
 import { chooseAlbumCoverImageUrl } from "@/utils";
 import { canRequestAlbumDownload } from "@/utils/downloadRequests";
-import RadioIcon from "@/components/icons/RadioIcon.vue";
 import { usePlaybackStore } from "@/store/playback";
 import { useUserStore } from "@/store/user";
 import { useRemoteStore } from "@/store/remote";
