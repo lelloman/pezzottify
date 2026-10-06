@@ -42,7 +42,7 @@ export const albums = [
   album_type: "album",
   release_date: `${2025 - i}-06-15`,
   year: 2025 - i,
-  availability: i === 11 ? "missing" : "complete",
+  availability: i >= 7 && i !== 10 ? "missing" : "complete",
   artists_ids: [artists[i % artists.length].id],
   artist_names: [artists[i % artists.length].name],
   artists_ids_names: [
@@ -70,7 +70,9 @@ export const tracks = albums.flatMap((album, i) =>
     artists_ids: album.artists_ids,
     artists_ids_names: album.artists_ids_names,
     availability:
-      album.availability === "missing" ? "unavailable" : "available",
+      album.availability === "missing" && !(i === 11 && j === 3)
+        ? "unavailable"
+        : "available",
     image_id: album.id,
     explicit: false,
   })),
@@ -89,7 +91,7 @@ export const permissions = [
   "ServerAdmin",
   "DownloadManagerAdmin",
   "EditCatalog",
-  "RequestDownload",
+  "RequestContent",
   "UploadContent",
 ];
 export const genres = [...new Set(artists.flatMap((a) => a.genres))].map(
@@ -159,7 +161,7 @@ export const resolvedTrack = (t) => ({
     .map((artist) => ({ artist, role: "MainArtist" })),
 });
 export const resolvedAlbum = (a) => ({
-  album: a,
+  album: { ...a, album_availability: a.availability },
   artists: artists.filter((b) => a.artists_ids.includes(b.id)),
   discs: [{ number: 1, tracks: tracks.filter((t) => t.album_id === a.id) }],
   display_image: { id: a.id },
