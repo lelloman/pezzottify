@@ -2,6 +2,7 @@
   <div
     ref="progressBar"
     class="progress-bar"
+    :class="{ dragging: isDragging }"
     @mousedown="startDrag"
     @touchstart="startDrag"
     role="slider"
@@ -19,7 +20,7 @@
 </template>
 
 <script setup>
-import { ref, defineProps, defineEmits, onMounted, onUnmounted } from "vue";
+import { ref, onUnmounted } from "vue";
 
 const props = defineProps({
   progress: {
@@ -109,104 +110,62 @@ const handleKeyDown = (event) => {
   emit("update:progress", newProgress);
   emit("update:stopDrag", event);
 };
-onMounted(() => {
-  onUnmounted(() => {
-    window.removeEventListener("mousemove", onDrag);
-    window.removeEventListener("mouseup", stopDrag);
-  });
+onUnmounted(() => {
+  window.removeEventListener("mousemove", onDrag);
+  window.removeEventListener("mouseup", stopDrag);
+  window.removeEventListener("touchmove", onDrag);
+  window.removeEventListener("touchend", stopDrag);
 });
 </script>
 
 <style scoped>
 .progress-bar {
-  --idle-height: 4px;
-  --hover-height: 8px;
-  --thumb-size: 12px;
   position: relative;
   width: 100%;
-  height: var(--idle-height);
+  height: 16px;
   cursor: pointer;
-  border-radius: calc(var(--idle-height) / 2);
-  transition: height var(--transition-base);
   touch-action: none;
 }
-
-.progress-bar:hover,
-.progress-bar:focus-visible {
-  height: var(--hover-height);
-}
-
-.progress-bar:focus-visible {
-  outline: 2px solid var(--spotify-green);
-  outline-offset: 4px;
-  border-radius: var(--radius-sm);
-}
-
-.track {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: var(--bg-press);
-  border-radius: inherit;
-  transition: background-color var(--transition-base);
-}
-
+.track,
 .progress {
   position: absolute;
-  top: 0;
   left: 0;
-  height: 100%;
-  background-color: var(--text-subdued);
-  border-radius: inherit;
-  transition:
-    background-color var(--transition-base),
-    width var(--transition-fast);
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
+  top: 6px;
+  height: 4px;
+  border-radius: 999px;
 }
-
+.track {
+  width: 100%;
+  background: #ffffff4d;
+}
+.progress {
+  background: var(--text-base);
+}
 .progress-bar:hover .progress,
-.progress-bar:focus-visible .progress {
-  background-color: var(--spotify-green);
+.progress-bar:focus-visible .progress,
+.dragging .progress {
+  background: var(--spotify-green);
 }
-
 .thumb {
-  width: var(--thumb-size);
-  height: var(--thumb-size);
-  background-color: var(--text-base);
-  border-radius: var(--radius-full);
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: white;
   opacity: 0;
-  transform: scale(0);
-  transition:
-    opacity var(--transition-fast),
-    transform var(--transition-fast);
-  box-shadow: var(--shadow-md);
   pointer-events: none;
 }
-
 .progress-bar:hover .thumb,
-.progress-bar:focus-visible .thumb {
+.progress-bar:focus-visible .thumb,
+.dragging .thumb {
   opacity: 1;
-  transform: scale(1);
 }
-
-/* Show thumb when dragging even if not hovering */
-.progress-bar:active .thumb {
-  opacity: 1;
-  transform: scale(1);
-}
-
-/* Increase hit area for better touch support */
-.progress-bar::before {
-  content: "";
-  position: absolute;
-  top: -8px;
-  bottom: -8px;
-  left: 0;
-  right: 0;
-  cursor: pointer;
+.progress-bar:focus-visible {
+  outline: 2px solid var(--spotify-green);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 </style>

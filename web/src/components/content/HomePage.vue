@@ -71,27 +71,41 @@
           </div>
         </div>
         <div class="albumShelf featuredShelf">
-          <button
+          <div
             v-for="(album, index) in featuredAlbums"
             :key="album.id"
-            type="button"
             class="albumCard featuredAlbumCard"
             :class="{ isSelected: index === selectedFeaturedIndex }"
-            @click="selectFeaturedAlbum(index)"
           >
-            <div class="albumCover">
-              <MultiSourceImage
-                :urls="getImageUrls(album.id)"
-                :alt="album.name"
-              />
-            </div>
-            <div class="albumInfo">
-              <span class="albumName">{{ album.name }}</span>
-              <span class="artistName">{{
-                formatArtistNames(album.artist_names)
-              }}</span>
-            </div>
-          </button>
+            <button
+              type="button"
+              class="albumCardLink featuredSelect"
+              @click="selectFeaturedAlbum(index)"
+            >
+              <div class="albumCover">
+                <MultiSourceImage
+                  :urls="getImageUrls(album.id)"
+                  :alt="album.name"
+                />
+              </div>
+              <div class="albumInfo">
+                <span class="albumName">{{ album.name }}</span>
+                <span class="artistName">{{
+                  formatArtistNames(album.artist_names)
+                }}</span>
+              </div>
+            </button>
+            <button
+              type="button"
+              class="cardPlay"
+              :aria-label="`Play ${album.name}`"
+              @click="playback.setAlbumId(album.id)"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 3v18l15-9z" />
+              </svg>
+            </button>
+          </div>
         </div>
       </section>
 
@@ -105,23 +119,34 @@
           </div>
         </div>
         <div class="recentGrid">
-          <router-link
+          <div
             v-for="item in recentlyPlayed"
             :key="item.album_id"
-            :to="`/album/${item.album_id}`"
             class="recentCard"
           >
-            <div class="recentCover">
-              <MultiSourceImage
-                :urls="getImageUrls(item.album_id)"
-                :alt="item.album_name"
-              />
-            </div>
-            <div class="recentInfo">
-              <span class="recentName">{{ item.album_name }}</span>
-              <span class="recentArtist">{{ item.artist_name }}</span>
-            </div>
-          </router-link>
+            <router-link :to="`/album/${item.album_id}`" class="recentLink">
+              <div class="recentCover">
+                <MultiSourceImage
+                  :urls="getImageUrls(item.album_id)"
+                  :alt="item.album_name"
+                />
+              </div>
+              <div class="recentInfo">
+                <span class="recentName">{{ item.album_name }}</span>
+                <span class="recentArtist">{{ item.artist_name }}</span>
+              </div>
+            </router-link>
+            <button
+              type="button"
+              class="cardPlay"
+              :aria-label="`Play ${item.album_name}`"
+              @click="playback.setAlbumId(item.album_id)"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 3v18l15-9z" />
+              </svg>
+            </button>
+          </div>
         </div>
       </section>
 
@@ -132,25 +157,36 @@
           </div>
         </div>
         <div class="albumShelf">
-          <router-link
+          <div
             v-for="album in popular.albums"
             :key="album.id"
-            :to="`/album/${album.id}`"
             class="albumCard"
           >
-            <div class="albumCover">
-              <MultiSourceImage
-                :urls="getImageUrls(album.id)"
-                :alt="album.name"
-              />
-            </div>
-            <div class="albumInfo">
-              <span class="albumName">{{ album.name }}</span>
-              <span class="artistName">{{
-                formatArtistNames(album.artist_names)
-              }}</span>
-            </div>
-          </router-link>
+            <router-link :to="`/album/${album.id}`" class="albumCardLink">
+              <div class="albumCover">
+                <MultiSourceImage
+                  :urls="getImageUrls(album.id)"
+                  :alt="album.name"
+                />
+              </div>
+              <div class="albumInfo">
+                <span class="albumName">{{ album.name }}</span>
+                <span class="artistName">{{
+                  formatArtistNames(album.artist_names)
+                }}</span>
+              </div>
+            </router-link>
+            <button
+              type="button"
+              class="cardPlay"
+              :aria-label="`Play ${album.name}`"
+              @click="playback.setAlbumId(album.id)"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 3v18l15-9z" />
+              </svg>
+            </button>
+          </div>
         </div>
       </section>
 
@@ -221,8 +257,10 @@ import MusicNoteIcon from "@/components/icons/MusicNoteIcon.vue";
 import ChevronLeft from "@/components/icons/ChevronLeft.vue";
 import ChevronRight from "@/components/icons/ChevronRight.vue";
 import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
+import { usePlaybackStore } from "@/store/playback";
 import { formatImageUrl } from "@/utils";
 
+const playback = usePlaybackStore();
 const getImageUrls = (id) => (id ? [formatImageUrl(id)] : []);
 
 const featuredAlbums = ref([]);
@@ -663,7 +701,8 @@ onMounted(async () => {
   font-weight: 700;
 }
 
-.albumName {
+.albumName,
+.recentName {
   font-size: var(--text-lg);
 }
 
@@ -685,34 +724,105 @@ onMounted(async () => {
 }
 
 .recentCard {
-  display: grid;
-  grid-template-columns: 58px minmax(0, 1fr);
+  position: relative;
+  min-width: 0;
+  border-radius: 4px;
+  background: #ffffff12;
+  transition: background-color 150ms;
+}
+.recentCard:hover,
+.recentCard:focus-within {
+  background: #ffffff24;
+}
+.recentLink {
+  display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 74px;
-  padding: 8px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid rgba(255, 255, 255, 0.055);
-  color: #fff;
+  color: white;
   text-decoration: none;
-  transition:
-    background var(--transition-fast),
-    border-color var(--transition-fast);
+  padding-right: 64px;
+  min-width: 0;
 }
-
-.recentCard:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.12);
-}
-
 .recentCover {
-  width: 58px;
-  height: 58px;
-  border-radius: 6px;
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
   overflow: hidden;
-  background: #222;
+  border-radius: 4px 0 0 4px;
+  box-shadow: 4px 0 12px #0003;
+}
+.albumCard {
+  position: relative;
+}
+.featuredSelect {
+  width: 100%;
+  padding: 0;
+  text-align: left;
+}
+.albumCardLink {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+.cardPlay {
+  position: absolute;
+  right: 12px;
+  bottom: 76px;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--spotify-green);
+  color: black;
+  box-shadow: 0 8px 16px #0005;
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity 150ms,
+    transform 150ms;
+}
+.cardPlay svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+}
+.recentCard .cardPlay {
+  width: 40px;
+  height: 40px;
+  top: 12px;
+  bottom: auto;
+}
+.albumCard:hover .cardPlay,
+.albumCard:focus-within .cardPlay,
+.recentCard:hover .cardPlay,
+.recentCard:focus-within .cardPlay {
+  opacity: 1;
+  transform: translateY(0);
+}
+.cardPlay:hover {
+  scale: 1.04;
+  background: var(--spotify-green-hover);
+}
+.cardPlay:focus-visible,
+.recentLink:focus-visible,
+.albumCardLink:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+@media (hover: none) {
+  .cardPlay {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cardPlay {
+    transition: none;
+  }
 }
 
 .artistList {

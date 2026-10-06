@@ -117,6 +117,7 @@
           <span>{{ formattedTime }}</span>
           <ProgressBar
             id="TrackProgressBar"
+            aria-label="Playback position"
             class="trackProgressBar"
             :progress="combinedProgressPercent"
             @update:progress="updateTrackProgress"
@@ -141,9 +142,10 @@
         />
         <ProgressBar
           class="volumeProgressBar"
+          aria-label="Volume"
           :progress="computedVolumePercent"
           @update:progress="updateVolumeProgress"
-          @update:stratDrag="startDraggingVolumeProgress"
+          @update:startDrag="startDraggingVolumeProgress"
           @update:stopDrag="handleSetVolume"
         />
         <button
@@ -219,7 +221,7 @@
 <script setup>
 import { computed, ref, watch, h } from "vue";
 import { usePlaybackStore } from "@/store/playback";
-import { formatDuration, chooseAlbumCoverImageUrl } from "@/utils";
+import { chooseAlbumCoverImageUrl } from "@/utils";
 import Forward10Sec from "./icons/Forward10Sec.vue";
 import Rewind10Sec from "./icons/Rewind10Sec.vue";
 import NextTrack from "./icons/SkipNext.vue";
@@ -305,7 +307,9 @@ const formatTime = (timeInSeconds) => {
 
   const pad = (num) => String(num).padStart(2, "0");
 
-  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+  return hours
+    ? `${hours}:${pad(minutes)}:${pad(seconds)}`
+    : `${minutes}:${pad(seconds)}`;
 };
 
 const formattedTime = computed(() => formatTime(playback.progressSec));
@@ -428,7 +432,7 @@ watch(
       };
       artists.value = track.artistId ? [track.artistId] : [];
       artistName.value = track.artistName;
-      duration.value = track.duration ? formatDuration(track.duration) : "";
+      duration.value = track.duration ? formatTime(track.duration / 1000) : "";
       if (track.imageId) {
         imageUrls.value = [`/v1/content/image/${track.imageId}`];
       } else {
@@ -448,7 +452,7 @@ watch(
             artists.value = localTrack.artists_ids || [];
             artistName.value = null;
             duration.value = localTrack.duration
-              ? formatDuration(localTrack.duration)
+              ? formatTime(localTrack.duration / 1000)
               : "";
 
             // Watch album for cover image
@@ -703,7 +707,7 @@ watch(
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -711,7 +715,7 @@ watch(
   font-size: var(--text-xs);
   font-weight: var(--font-normal);
   color: var(--text-subdued);
-  min-width: 56px;
+  min-width: 32px;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
