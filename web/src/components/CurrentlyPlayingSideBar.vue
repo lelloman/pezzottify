@@ -1,88 +1,229 @@
 <template>
-  <div v-if="panelVisible" class="sidebarContainer">
-    <div class="header">
-      <button
-        :class="computePreviousPlaylistButtonClasses"
-        @click.stop="seekPlaybackHistory(-1)"
-        :disabled="!playback.canGoToPreviousPlaylist"
-        aria-label="Previous playlist"
-      >
-        <ChevronLeft class="navIcon" />
-      </button>
-      <div class="headerTitle">
-        <SlidingText :hoverAnimation="true">
-          <span class="playlistName">{{ playingContext.text }}</span>
-        </SlidingText>
+  <aside class="sidebarContainer" aria-label="Playback queue">
+    <header class="header">
+      <h2>Queue</h2>
+      <div class="historyActions" aria-label="Playback history">
+        <button
+          class="navButton"
+          @click="seekPlaybackHistory(-1)"
+          :disabled="!playback.canGoToPreviousPlaylist"
+          aria-label="Previous playlist"
+          title="Previous playlist"
+        >
+          <ChevronLeft class="navIcon" />
+        </button>
+        <button
+          class="navButton"
+          @click="seekPlaybackHistory(1)"
+          :disabled="!playback.canGoToNextPlaylist"
+          aria-label="Next playlist"
+          title="Next playlist"
+        >
+          <ChevronRight class="navIcon" />
+        </button>
       </div>
-      <button
-        :class="computeNextPlaylistButtonClasses"
-        @click.stop="seekPlaybackHistory(1)"
-        :disabled="!playback.canGoToNextPlaylist"
-        aria-label="Next playlist"
+    </header>
+    <section
+      v-if="playingContext"
+      class="queueContext"
+      aria-label="Playback context"
+    >
+      <div class="contextType">
+        <span>{{ playingContext.kind }}</span>
+        <span
+          v-if="playback.currentPlaylist?.context?.edited"
+          class="editedBadge"
+          >Edited</span
+        >
+      </div>
+      <RouterLink
+        v-if="playingContext.to"
+        :to="playingContext.to"
+        class="contextName"
+        :title="playingContext.name"
+        >{{ playingContext.name }}</RouterLink
       >
-        <ChevronRight class="navIcon" />
-      </button>
+      <p v-else class="contextName" :title="playingContext.name">
+        {{ playingContext.name }}
+      </p>
+      <RouterLink
+        v-if="destination.length"
+        to="/steering"
+        class="destinationLink"
+        :title="
+          destination.map((item) => item.label || item.entity_id).join(', ')
+        "
+      >
+        <SteeringWheelIcon />
+        <span class="destinationText"
+          ><span class="destinationLabel">Destination</span
+          ><span class="destinationName">{{ destinationTitle }}</span></span
+        >
+        <ChevronRight class="destinationArrow" />
+      </RouterLink>
+      <div v-if="destination.length" class="destinationProgress">
+        <div
+          role="progressbar"
+          aria-label="Steering progress"
+          :aria-valuenow="destinationProgress"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          class="progressTrack"
+        >
+          <span :style="{ width: destinationProgress + '%' }" />
+        </div>
+        <span>{{
+          user.isSmartContinuationEnabled
+            ? `${gravity.steps_done || 0} of ${gravity.steps_total} tracks`
+            : "Smart continuation is off"
+        }}</span>
+      </div>
+    </section>
+    <details v-if="previousTracks.length" class="previousSection">
+      <summary>
+        <ChevronRight class="historyChevron" />
+        <span>Previously played</span>
+        <span class="historyCount">{{ previousTracks.length }}</span>
+      </summary>
+      <VirtualList
+        v-model="previousTracks"
+        class="previousTrackList"
+        :style="{
+          height: `min(${Math.min(previousTracks.length * 64, 192)}px, 24vh)`,
+        }"
+        data-key="listItemId"
+        :keeps="10"
+        :size="64"
+        :disabled="true"
+        aria-label="Earlier tracks in this queue"
+      >
+        <template v-slot:item="{ record, index }">
+          <QueueTrackRow
+            :trackId="record.id"
+            :isAuto="record.isAuto"
+            @play="handleClick(index)"
+            @menu="openContextMenu($event, record.id, index)"
+          />
+        </template>
+      </VirtualList>
+    </details>
+    <section v-if="currentTrackId" class="nowPlaying">
+      <h3>Now playing</h3>
+      <QueueTrackRow
+        :trackId="currentTrackId"
+        current
+        @play="handleClick(currentIndex)"
+        @menu="openContextMenu($event, currentTrackId, currentIndex)"
+      />
+    </section>
+    <div class="nextHeading">
+      <h3>Next up</h3>
     </div>
-    <div class="trackList">
+    <div v-if="tracksVModel.length" class="trackList">
       <VirtualList
         v-model="tracksVModel"
         class="queueVirtualList"
         data-key="listItemId"
         :keeps="30"
-        :size="62"
+        :size="64"
         @drop="handleDrop"
       >
         <template v-slot:item="{ record, index }">
-          <div
-            :class="['trackItem', { isPlaying: index == currentIndex }]"
-            @contextmenu.prevent="openContextMenu($event, record.id, index)"
-          >
-            <LoadTrackListItem
-              :trackId="record.id"
-              @track-clicked="handleClick(index)"
-              :isCurrentlyPlaying="index == currentIndex"
-              :minimal="true"
-            />
-            <span
-              v-if="record.isAuto"
-              class="autoMarker"
-              title="Added by smart continuation"
-              aria-label="Added by smart continuation"
-            >
-              <AiContinuationIcon />
-            </span>
-          </div>
+          <QueueTrackRow
+            :trackId="record.id"
+            :isAuto="record.isAuto"
+            @play="handleClick(index + upcomingOffset)"
+            @menu="openContextMenu($event, record.id, index + upcomingOffset)"
+          />
         </template>
       </VirtualList>
     </div>
-
-    <TrackContextMenu ref="trackContextMenuRef" :canRemoveFromQueue="true" />
-  </div>
+    <p v-else class="emptyQueue">
+      {{
+        currentTrackId
+          ? "You’ve reached the end of the queue."
+          : "Play an album, playlist, or track to start your queue."
+      }}
+    </p>
+    <Teleport to="body"
+      ><TrackContextMenu ref="trackContextMenuRef" :canRemoveFromQueue="true"
+    /></Teleport>
+  </aside>
 </template>
 <script setup>
 import "@/assets/main.css";
 import { watch, ref, computed } from "vue";
 import { usePlaybackStore } from "@/store/playback";
+import { useUserStore } from "@/store/user";
+import { mixTitle } from "@/utils/steeringArt";
+import { progress } from "@/utils/gravity";
+import SteeringWheelIcon from "./icons/SteeringWheelIcon.vue";
 import TrackContextMenu from "@/components/common/contextmenu/TrackContextMenu.vue";
 import ChevronLeft from "@/components/icons/ChevronLeft.vue";
 import ChevronRight from "@/components/icons/ChevronRight.vue";
-import SlidingText from "@/components/common/SlidingText.vue";
-import VirtualList from "vue-virtual-draglist";
-import LoadTrackListItem from "./common/LoadTrackListItem.vue";
-import AiContinuationIcon from "./icons/AiContinuationIcon.vue";
 
-const panelVisible = computed(() => tracksVModel.value.length);
+import VirtualList from "vue-virtual-draglist";
+import QueueTrackRow from "./common/QueueTrackRow.vue";
+
 const currentIndex = ref(null);
-const playingContext = ref({
-  text: "Currently Playing",
-});
 
 const playback = usePlaybackStore();
+const user = useUserStore();
+const gravity = computed(() => playback.currentGravity);
+const destination = computed(() => gravity.value?.destination || []);
+const destinationTitle = computed(() => mixTitle(destination.value));
+const destinationProgress = computed(() =>
+  Math.round(progress(gravity.value) * 100),
+);
+const entityRoute = (type, id) =>
+  id && ["album", "artist", "track", "playlist", "work", "genre"].includes(type)
+    ? `/${type}/${encodeURIComponent(id)}`
+    : null;
+const playingContext = computed(() => {
+  const playlist = playback.currentPlaylist;
+  if (!playlist) return null;
+  const context = playlist.context || {};
+  const types = playback.PLAYBACK_CONTEXTS;
+  if (playlist.type === types.album)
+    return {
+      kind: "Album",
+      name: context.name || "Album",
+      to: entityRoute("album", context.id),
+    };
+  if (playlist.type === types.userPlaylist)
+    return {
+      kind: "Playlist",
+      name: context.name || "Playlist",
+      to: entityRoute("playlist", context.id),
+    };
+  if (playlist.type === types.radio) {
+    const kinds = {
+      greatest_hits: "Greatest hits",
+      work_versions: "All versions",
+      custom: "Custom radio",
+      genre: "Genre radio",
+    };
+    return {
+      kind: kinds[context.source] || "Radio",
+      name: context.seed?.label || context.name || "Radio",
+      to: entityRoute(context.seed?.entity_type, context.seed?.entity_id),
+    };
+  }
+  return { kind: "Mix", name: context.name || "Your mix", to: null };
+});
 
 const tracksVModel = ref([]);
+const previousTracks = ref([]);
+const currentTrackId = computed(() => playback.currentTrackId);
+const upcomingOffset = computed(() =>
+  Number.isInteger(playback.currentTrackIndex)
+    ? playback.currentTrackIndex + 1
+    : 0,
+);
 
 const handleClick = (index) => {
   playback.loadTrackIndex(index);
+  playback.play();
 };
 
 const trackContextMenuRef = ref(null);
@@ -103,24 +244,11 @@ const seekPlaybackHistory = (direction) => {
 const handleDrop = (event) => {
   const { newIndex, oldIndex } = event;
   console.log(event);
-  playback.moveTrack(oldIndex, newIndex);
+  playback.moveTrack(
+    oldIndex + upcomingOffset.value,
+    newIndex + upcomingOffset.value,
+  );
 };
-
-const computeNextPlaylistButtonClasses = computed(() => {
-  return {
-    navButton: true,
-    navButtonEnabled: playback.canGoToNextPlaylist,
-    navButtonDisabled: !playback.canGoToNextPlaylist,
-  };
-});
-
-const computePreviousPlaylistButtonClasses = computed(() => {
-  return {
-    navButton: true,
-    navButtonEnabled: playback.canGoToPreviousPlaylist,
-    navButtonDisabled: !playback.canGoToPreviousPlaylist,
-  };
-});
 
 watch(
   () => playback.currentTrackIndex,
@@ -145,47 +273,15 @@ const buildTrackRows = (trackIds, autoTrackIds = []) => {
 };
 
 watch(
-  () => playback.currentPlaylist,
-  (playlist) => {
-    if (!playlist) {
-      playingContext.value.text = "Currently Playing";
-      return;
-    }
-
-    let playingContextText = playlist.type;
-    if (playlist.type == playback.PLAYBACK_CONTEXTS.album) {
-      playingContextText = "Album: " + playlist.context.name;
-    } else if (playlist.type == playback.PLAYBACK_CONTEXTS.userPlaylist) {
-      playingContextText = "Playlist: " + playlist.context.name;
-    } else if (playlist.type == playback.PLAYBACK_CONTEXTS.userMix) {
-      playingContextText = "Your mix";
-    } else if (playlist.type == playback.PLAYBACK_CONTEXTS.radio) {
-      const seedLabel = playlist.context?.seed?.label || "Radio";
-      if (playlist.context?.source === "greatest_hits") {
-        playingContextText = seedLabel + " · Greatest hits";
-      } else if (playlist.context?.source === "work_versions") {
-        playingContextText = seedLabel + " · All versions";
-      } else if (playlist.context?.source === "custom") {
-        playingContextText = "Custom radio: " + seedLabel;
-      } else if (playlist.context?.source === "genre") {
-        playingContextText = "Genre radio: " + seedLabel;
-      } else {
-        playingContextText = "Radio: " + seedLabel;
-      }
-    }
-    if (playlist.context?.edited) playingContextText += " (edited)";
-    playingContext.value.text = playingContextText;
-  },
-  { immediate: true },
-);
-
-watch(
   () => [
     playback.currentPlaylist?.tracksIds || [],
     playback.currentPlaylist?.gravity?.auto_track_ids || [],
+    upcomingOffset.value,
   ],
-  ([trackIds, autoTrackIds]) => {
-    tracksVModel.value = buildTrackRows(trackIds, autoTrackIds);
+  ([trackIds, autoTrackIds, offset]) => {
+    const rows = buildTrackRows(trackIds, autoTrackIds);
+    previousTracks.value = rows.slice(0, Math.max(0, offset - 1));
+    tracksVModel.value = rows.slice(offset);
   },
   { immediate: true, deep: true },
 );
@@ -199,123 +295,225 @@ watch(
   height: 100%;
   overflow: hidden;
   background: var(--surface-panel);
-  border: 0;
   border-radius: 8px;
-  box-shadow: none;
 }
-
-/* Header */
 .header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 16px 12px;
-  border-bottom: 0;
+  justify-content: space-between;
+  padding: 16px;
+  flex-shrink: 0;
 }
-
-.headerTitle {
-  flex: 1;
-  min-width: 0;
-  text-align: center;
-}
-
-.playlistName {
-  font-size: var(--text-lg);
+.header h2,
+h3 {
+  font-size: 16px;
   font-weight: 700;
-  color: var(--text-base);
-  white-space: nowrap;
+  margin: 0;
 }
-
-/* Navigation Buttons */
-.navButton {
+.historyActions {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  gap: 4px;
+}
+.navButton {
   width: 32px;
   height: 32px;
-  padding: 0;
-  border: none;
-  border-radius: 7px;
-  background: transparent;
-  cursor: pointer;
-  transition: all var(--transition-fast);
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--text-subdued);
 }
-
+.navButton:hover:not(:disabled) {
+  color: white;
+  transform: scale(1.04);
+}
+.navButton:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
 .navButton:focus-visible {
-  outline: 2px solid var(--spotify-green);
+  outline: 2px solid white;
   outline-offset: 2px;
 }
-
-.navButtonEnabled {
-  color: var(--text-base);
-}
-
-.navButtonEnabled:hover {
-  background: var(--surface-hover);
-  transform: scale(1.1);
-}
-
-.navButtonEnabled:active {
-  transform: scale(0.95);
-}
-
-.navButtonDisabled {
-  color: var(--text-subtle);
-  cursor: not-allowed;
-}
-
 .navIcon {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+.queueContext {
+  margin: 0 16px 8px;
+  padding: 0 0 16px;
+  border-bottom: 1px solid var(--surface-border);
+  flex-shrink: 0;
+  max-height: 25vh;
+  overflow: auto;
+}
+.contextType {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-subdued);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.editedBadge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--surface-hover);
+}
+.contextName {
+  display: block;
+  margin: 0;
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-base);
+  text-decoration: none;
+}
+a.contextName:hover {
+  text-decoration: underline;
+}
+.destinationLink {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  color: var(--text-base);
+  text-decoration: none;
+  border-radius: 4px;
+}
+.destinationLink > svg {
   width: 20px;
   height: 20px;
   fill: currentColor;
+  flex-shrink: 0;
+  color: var(--text-subdued);
 }
-
-/* Track List */
+.destinationText {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.destinationLabel {
+  font-size: 12px;
+  color: var(--text-subdued);
+}
+.destinationName {
+  font-size: 14px;
+  line-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.destinationLink:hover .destinationName {
+  text-decoration: underline;
+}
+.destinationLink > .destinationArrow {
+  width: 16px;
+  height: 16px;
+}
+.destinationProgress {
+  font-size: 12px;
+  color: var(--text-subdued);
+  margin: 8px 0 0 30px;
+}
+.progressTrack {
+  height: 3px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--surface-hover);
+  margin-bottom: 4px;
+}
+.progressTrack span {
+  display: block;
+  height: 100%;
+  background: var(--spotify-green);
+}
+.queueContext a:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+.previousSection {
+  flex-shrink: 0;
+  min-width: 0;
+}
+.previousSection summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--text-subdued);
+  font-size: 14px;
+  font-weight: 700;
+}
+.previousSection summary::-webkit-details-marker {
+  display: none;
+}
+.previousSection summary:hover {
+  color: var(--text-base);
+}
+.previousSection summary:focus-visible {
+  outline: 2px solid white;
+  outline-offset: -4px;
+  border-radius: 4px;
+}
+.historyChevron {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  flex-shrink: 0;
+}
+.previousSection[open] .historyChevron {
+  transform: rotate(90deg);
+}
+.historyCount {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+}
+.previousTrackList {
+  height: min(192px, 24vh);
+  padding: 0 8px;
+}
+.nowPlaying {
+  padding: 12px 8px 16px;
+  flex-shrink: 0;
+}
+.nowPlaying h3 {
+  margin: 0 8px 8px;
+}
+.nextHeading {
+  padding: 12px 16px 8px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+.nextHeading p {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-subdued);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin: 4px 0 0;
+}
 .trackList {
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
-
 .queueVirtualList {
   height: 100%;
-  padding: 8px 0;
+  padding: 0 8px 8px;
 }
-
-.trackItem {
-  display: flex;
-  align-items: center;
-  padding: 4px 8px;
-  cursor: pointer;
-  border-radius: 7px;
-  margin: 0 8px;
-  transition: background-color var(--transition-fast);
-}
-
-.trackItem:hover {
-  background-color: var(--surface-hover);
-}
-
-.trackItem.isPlaying {
-  background-color: transparent;
-}
-
-.trackItem.isPlaying:hover {
-  background-color: transparent;
-}
-
-.autoMarker {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  width: 14px;
-  height: 14px;
-  margin-left: 4px;
-  opacity: 0.45;
-}
-
-.autoMarker :deep(svg) {
-  width: 100%;
-  height: 100%;
+.emptyQueue {
+  padding: 8px 16px 24px;
+  font-size: 14px;
+  color: var(--text-subdued);
+  line-height: 1.5;
 }
 </style>
