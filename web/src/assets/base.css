@@ -303,3 +303,24 @@ label {
     --player-height-mobile: 112px;
   }
 }
+
+/* One quiet scrollbar treatment for every scrollable surface. */
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-track:hover,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+}
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb-color) transparent;
+  }
+}

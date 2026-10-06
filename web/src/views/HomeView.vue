@@ -6,12 +6,17 @@
     </div>
     <template v-else>
       <TopBar @search="handleSearch" :initialQuery="searchQuery" />
-      <div class="centralPanel" :style="libraryStyle">
+      <div
+        class="centralPanel"
+        :class="{ libraryExpanded: libraryLayout === 'wide' }"
+        :style="libraryStyle"
+      >
         <UserContentSideBar
           @layout-change="libraryLayout = $event"
+          :requested-layout="libraryLayout"
           class="sideBar userContentSideBar"
         />
-        <MainContent :search-query="searchQuery" />
+        <MainContent class="mainContentPanel" :search-query="searchQuery" />
         <CurrentlyPlayingSideBar class="sideBar currentlyPlayingSideBar" />
       </div>
       <BottomPlayer />
@@ -33,12 +38,7 @@ import { useUserStore } from "@/store/user";
 const userStore = useUserStore();
 const libraryLayout = ref("normal");
 const libraryStyle = computed(() =>
-  libraryLayout.value === "normal"
-    ? {}
-    : {
-        "--library-width":
-          libraryLayout.value === "collapsed" ? "72px" : "min(400px, 40vw)",
-      },
+  libraryLayout.value === "collapsed" ? { "--library-width": "72px" } : {},
 );
 const isLoading = ref(true);
 
@@ -54,6 +54,12 @@ onMounted(async () => {
 });
 
 const route = useRoute();
+watch(
+  () => route.fullPath,
+  () => {
+    if (libraryLayout.value === "wide") libraryLayout.value = "normal";
+  },
+);
 const searchQuery = ref(decodeURIComponent(route.params.query || ""));
 
 // Watch for changes in the route's query parameter
@@ -114,10 +120,9 @@ function handleSearch(query) {
 /* Tablet (768px+): Show left sidebar only */
 @media (min-width: 768px) {
   .centralPanel {
-    grid-template-columns: var(
-        --library-width,
-        var(--sidebar-width-tablet)
-      ) minmax(0, 1fr);
+    grid-template-columns:
+      var(--library-width, var(--sidebar-width-tablet))
+      minmax(0, 1fr);
   }
 
   .userContentSideBar {
@@ -129,22 +134,29 @@ function handleSearch(query) {
   }
 }
 
+@media (min-width: 768px) {
+  .libraryExpanded .userContentSideBar {
+    grid-column: 1 / span 2;
+  }
+  .libraryExpanded .mainContentPanel {
+    display: none;
+  }
+}
+
 /* Keep the content spacious before adding the queue column. */
 @media (min-width: 1024px) {
   .centralPanel {
-    grid-template-columns: var(
-        --library-width,
-        var(--sidebar-width-desktop)
-      ) minmax(0, 1fr);
+    grid-template-columns:
+      var(--library-width, var(--sidebar-width-desktop))
+      minmax(0, 1fr);
   }
 }
 
 @media (min-width: 1280px) {
   .centralPanel {
-    grid-template-columns: var(
-        --library-width,
-        var(--sidebar-width-desktop)
-      ) minmax(0, 1fr) 280px;
+    grid-template-columns:
+      var(--library-width, var(--sidebar-width-desktop))
+      minmax(0, 1fr) 280px;
   }
   .currentlyPlayingSideBar {
     display: flex;
@@ -153,10 +165,9 @@ function handleSearch(query) {
 
 @media (min-width: 1600px) {
   .centralPanel {
-    grid-template-columns: var(
-        --library-width,
-        var(--sidebar-width-large)
-      ) minmax(0, 1fr) 320px;
+    grid-template-columns:
+      var(--library-width, var(--sidebar-width-large))
+      minmax(0, 1fr) 320px;
   }
 }
 
