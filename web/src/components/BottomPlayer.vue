@@ -80,25 +80,35 @@
       </div>
       <div class="playerControlsColumn">
         <div class="playerControlsButtonsRow">
-          <ControlIconButton :action="handleRewind10Sec" :icon="Rewind10Sec" />
           <ControlIconButton
+            label="Rewind 10 seconds"
+            :action="handleRewind10Sec"
+            :icon="Rewind10Sec"
+          />
+          <ControlIconButton
+            label="Previous track"
             :action="handleSkipPrevious"
             :icon="SkipPrevious"
           />
+          <button
+            type="button"
+            class="playPauseButton"
+            :aria-label="playback.isPlaying ? 'Pause' : 'Play'"
+            :title="playback.isPlaying ? 'Pause' : 'Play'"
+            @click="handlePlayPause"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path v-if="playback.isPlaying" d="M6 4h4v16H6zM14 4h4v16h-4z" />
+              <path v-else d="M7 3v18l15-9z" />
+            </svg>
+          </button>
           <ControlIconButton
-            v-if="!playback.isPlaying"
-            :action="handlePlayPause"
-            :icon="PlayIcon"
-            :big="true"
+            label="Next track"
+            :action="handleSkipNext"
+            :icon="NextTrack"
           />
           <ControlIconButton
-            v-if="playback.isPlaying"
-            :action="handlePlayPause"
-            :icon="PauseIcon"
-            :big="true"
-          />
-          <ControlIconButton :action="handleSkipNext" :icon="NextTrack" />
-          <ControlIconButton
+            label="Forward 10 seconds"
             :action="handleForward10Sec"
             :icon="Forward10Sec"
           />
@@ -119,11 +129,13 @@
       <div class="extraControlsRow">
         <ControlIconButton
           v-if="playback.muted"
+          label="Unmute"
           :action="handleVolumeOn"
           :icon="VolumeOffIcon"
         />
         <ControlIconButton
           v-if="!playback.muted"
+          label="Mute"
           :action="handleVolumeOff"
           :icon="VolumeOnIcon"
         />
@@ -139,7 +151,7 @@
           v-if="
             playback.currentPlaylist?.type !== playback.PLAYBACK_CONTEXTS.radio
           "
-          class="lightControlFill scaleClickFeedback scalingIcon mediumIcon smartContinuationButton"
+          class="playerIconButton smartContinuationButton"
           :class="{ active: smartContinuationEnabled }"
           :title="
             smartContinuationEnabled
@@ -161,7 +173,7 @@
           v-if="
             playback.currentPlaylist?.type !== playback.PLAYBACK_CONTEXTS.radio
           "
-          class="lightControlFill scaleClickFeedback scalingIcon mediumIcon smartContinuationButton"
+          class="playerIconButton smartContinuationButton"
           :class="{ active: steeringDestination }"
           :title="
             steeringDestination
@@ -176,17 +188,26 @@
         </button>
         <button
           type="button"
-          class="expandPlayer"
+          class="playerIconButton expandPlayer"
           aria-label="Open now playing and lyrics"
           title="Now playing and lyrics"
           :aria-current="route.name === 'now-playing' ? 'page' : undefined"
           @click="router.push({ name: 'now-playing' })"
         >
-          ↗
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            aria-hidden="true"
+          >
+            <path d="M14 4h6v6M20 4l-9 9M10 4H4v16h16v-6" />
+          </svg>
         </button>
         <DeviceSelector />
         <ControlIconButton
           v-if="playback.mode === 'local'"
+          label="Stop playback"
           :action="handleStop"
           :icon="StopIcon"
         />
@@ -199,8 +220,6 @@
 import { computed, ref, watch, h } from "vue";
 import { usePlaybackStore } from "@/store/playback";
 import { formatDuration, chooseAlbumCoverImageUrl } from "@/utils";
-import PlayIcon from "./icons/PlayIcon.vue";
-import PauseIcon from "./icons/PauseIcon.vue";
 import Forward10Sec from "./icons/Forward10Sec.vue";
 import Rewind10Sec from "./icons/Rewind10Sec.vue";
 import NextTrack from "./icons/SkipNext.vue";
@@ -220,22 +239,23 @@ import SteeringWheelIcon from "./icons/SteeringWheelIcon.vue";
 import { useUserStore } from "@/store/user";
 
 const ControlIconButton = {
-  props: ["icon", "action", "big"],
+  props: ["icon", "action", "label"],
   setup(props) {
     const onClick = () => {
       props.action();
     };
 
-    const sizeClass = props.big ? "bigIcon" : "mediumIcon";
-
     return () =>
       h(
-        "div",
+        "button",
         {
-          class: "lightControlFill scaleClickFeedback scalingIcon " + sizeClass,
+          type: "button",
+          class: "playerIconButton",
+          "aria-label": props.label,
+          title: props.label,
           onClick,
         },
-        [h(props.icon)],
+        [h(props.icon, { "aria-hidden": "true" })],
       );
   },
 };
@@ -454,28 +474,49 @@ watch(
 </script>
 
 <style scoped>
-@import "@/assets/icons.css";
-
-.expandPlayer {
+.playerIconButton {
+  display: grid;
+  place-items: center;
   flex-shrink: 0;
   width: 32px;
-  height: 36px;
-  border: 1px solid var(--surface-border);
-  border-radius: 8px;
+  height: 32px;
+  padding: 8px;
+  border: 0;
+  border-radius: 50%;
   background: transparent;
-  color: var(--text-base);
+  color: var(--text-subdued);
   cursor: pointer;
-  font-size: 1.25rem;
+  transition:
+    color 150ms cubic-bezier(0.3, 0, 0, 1),
+    transform 150ms cubic-bezier(0.3, 0, 0, 1);
 }
-.expandPlayer[aria-current="page"] {
-  color: var(--spotify-green);
+.playerIconButton :deep(svg) {
+  display: block;
+  width: 16px;
+  height: 16px;
 }
-.expandPlayer:hover {
-  background: var(--surface-hover);
+.playerIconButton :deep(svg:not([fill="none"])) {
+  fill: currentColor;
 }
-.expandPlayer:focus-visible {
+@media (hover: hover) {
+  .playerIconButton:hover {
+    color: var(--text-base);
+    background: transparent;
+    transform: scale(1.04);
+    transition-duration: 50ms;
+  }
+}
+.playerIconButton:active {
+  background: transparent;
+  transform: scale(1);
+}
+.playerIconButton:focus-visible {
   outline: 2px solid var(--spotify-green);
   outline-offset: 2px;
+}
+
+.expandPlayer[aria-current="page"] {
+  color: var(--spotify-green);
 }
 
 .radioCreationStatus {
@@ -494,8 +535,8 @@ watch(
   cursor: pointer;
 }
 .radioSpinner {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
   border: 2px solid currentColor;
   border-right-color: transparent;
@@ -621,22 +662,41 @@ watch(
   flex-direction: row;
   justify-content: center;
   align-items: center;
-  gap: 3px;
+  gap: 8px;
 }
 
-.scalingIcon {
-  transform-origin: center;
+.playPauseButton {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 8px;
+  margin: 0 8px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  color: #000;
+  cursor: pointer;
   transition:
-    transform var(--transition-fast),
-    opacity var(--transition-fast);
+    color 150ms cubic-bezier(0.3, 0, 0, 1),
+    transform 150ms cubic-bezier(0.3, 0, 0, 1);
 }
-
-.scalingIcon:hover {
-  transform: scale(1.06);
+.playPauseButton svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
 }
-
-.scalingIcon:active {
-  transform: scale(0.96);
+.playPauseButton:hover {
+  transform: scale(1.04);
+  transition-duration: 50ms;
+}
+.playPauseButton:active {
+  transform: scale(1);
+}
+.playPauseButton:focus-visible {
+  outline: 2px solid var(--spotify-green);
+  outline-offset: 4px;
 }
 
 .progressControlsRow {
@@ -683,32 +743,6 @@ watch(
    Icon Button Styling
    ============================================ */
 
-.lightControlFill {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--text-subdued);
-  border-radius: 8px;
-  transition: all var(--transition-fast);
-}
-
-.lightControlFill:hover {
-  color: var(--text-base);
-  background: var(--surface-hover);
-}
-
-.lightControlFill:focus-visible {
-  outline: 2px solid var(--spotify-green);
-  outline-offset: 2px;
-}
-
-.mediumIcon {
-  width: 32px;
-  height: 32px;
-  padding: var(--spacing-1);
-}
-
 .smartContinuationButton {
   position: relative;
   appearance: none;
@@ -717,33 +751,13 @@ watch(
 }
 
 .smartContinuationButton svg {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   fill: currentColor;
 }
 
 .smartContinuationButton.active {
   color: var(--spotify-green);
-}
-
-.bigIcon {
-  width: 48px;
-  height: 48px;
-  padding: var(--spacing-2);
-  background-color: var(--spotify-green);
-  color: #071108;
-  border-radius: 50%;
-}
-
-.bigIcon:hover {
-  background-color: var(--spotify-green-hover);
-  transform: scale(1.06);
-  color: #071108;
-}
-
-.bigIcon:active {
-  background-color: var(--spotify-green-active);
-  transform: scale(0.96);
 }
 
 /* ============================================
@@ -829,16 +843,6 @@ watch(
   .volumeProgressBar {
     display: none;
   }
-
-  .mediumIcon {
-    width: 28px;
-    height: 28px;
-  }
-
-  .bigIcon {
-    width: 40px;
-    height: 40px;
-  }
 }
 
 /* ============================================
@@ -852,6 +856,12 @@ watch(
 
   .volumeProgressBar {
     width: 100px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  button,
+  summary {
+    transition: none;
   }
 }
 </style>

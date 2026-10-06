@@ -40,14 +40,26 @@ try {
     console.log(`PASS ${name}`);
   }
   await page.goto(origin + "/now-playing");
-  await page.getByRole("button", { name: "Play", exact: true }).click();
-  await page.getByRole("button", { name: "Pause", exact: true }).waitFor();
+  await page
+    .locator(".nowPlaying")
+    .getByRole("button", { name: "Play", exact: true })
+    .click();
+  await page
+    .locator(".nowPlaying")
+    .getByRole("button", { name: "Pause", exact: true })
+    .waitFor();
   await page.waitForFunction(
     () =>
       document.querySelector(".nowPlaying .times span").textContent !== "0:12",
   );
-  await page.getByRole("button", { name: "Pause", exact: true }).click();
-  await page.getByRole("button", { name: "Next track", exact: true }).click();
+  await page
+    .locator(".nowPlaying")
+    .getByRole("button", { name: "Pause", exact: true })
+    .click();
+  await page
+    .locator(".nowPlaying")
+    .getByRole("button", { name: "Next track", exact: true })
+    .click();
   await page
     .locator(".nowPlaying h1")
     .filter({ hasText: "Open Windows" })

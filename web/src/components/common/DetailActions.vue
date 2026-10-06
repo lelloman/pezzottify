@@ -28,6 +28,7 @@
         <path v-else d="M7 12h10M12 7v10" />
       </svg>
     </button>
+    <slot name="inline" />
     <div v-if="$slots.secondary" class="secondaryActions">
       <slot name="secondary" />
     </div>
@@ -38,7 +39,19 @@
       :class="{ responsiveOnly: !$slots.more }"
       @keydown.esc="close"
     >
-      <summary aria-label="More actions" title="More actions">•••</summary>
+      <summary aria-label="More actions" title="More actions">
+        <svg
+          viewBox="0 0 24 24"
+          width="32"
+          height="32"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <circle cx="4" cy="12" r="2" />
+          <circle cx="12" cy="12" r="2" />
+          <circle cx="20" cy="12" r="2" />
+        </svg>
+      </summary>
       <div class="morePanel" @click.capture="handleAction">
         <div v-if="$slots.secondary" class="secondaryOverflow">
           <slot name="secondary" />
@@ -90,9 +103,11 @@ summary {
   padding: 16px;
   border: 0;
   border-radius: 50%;
-  background: var(--spotify-green);
-  color: #071108;
-  transition: transform 0.15s;
+  background: #1ed760;
+  color: #000;
+  transition:
+    color 150ms cubic-bezier(0.3, 0, 0, 1),
+    transform 150ms cubic-bezier(0.3, 0, 0, 1);
 }
 .primaryPlay svg {
   width: 100%;
@@ -100,17 +115,17 @@ summary {
   fill: currentColor;
 }
 .primaryPlay:hover:not(:disabled) {
-  transform: scale(1.06);
-  background: var(--spotify-green-hover);
+  transform: scale(1.04);
+  background: #3be477;
 }
 .primaryPlay:disabled {
   opacity: 0.45;
   cursor: wait;
 }
 .saveButton {
-  padding: 0;
+  padding: 12px 0;
   width: 32px;
-  height: 32px;
+  height: 56px;
   background: none;
   border: 0;
   color: var(--text-subdued);
@@ -125,7 +140,7 @@ summary {
   stroke-linejoin: round;
 }
 .saveButton.saved {
-  color: var(--spotify-green);
+  color: #1ed760;
 }
 .saveButton:hover {
   color: var(--text-base);
@@ -138,7 +153,11 @@ summary {
   color: var(--text-subdued);
   font-size: 22px;
   letter-spacing: 3px;
-  padding: 10px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 56px;
+  padding: 0;
   line-height: 1;
 }
 summary::-webkit-details-marker {
@@ -189,14 +208,14 @@ summary:hover {
 .secondaryActions {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 24px;
 }
 .secondaryActions :deep(button) {
   display: grid;
   place-items: center;
   padding: 0;
   width: 32px;
-  height: 40px;
+  height: 56px;
   min-height: 0;
   border: 0;
   background: none;
@@ -208,8 +227,8 @@ summary:hover {
   background: none;
 }
 .secondaryActions :deep(svg) {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
 }
 .secondaryActions :deep(.actionLabel) {
   position: absolute;
@@ -232,6 +251,48 @@ summary:hover {
   .secondaryOverflow,
   .responsiveOnly {
     display: block;
+  }
+}
+.saveButton,
+summary,
+.secondaryActions :deep(button) {
+  border-radius: 50%;
+  transition:
+    color 150ms cubic-bezier(0.3, 0, 0, 1),
+    transform 150ms cubic-bezier(0.3, 0, 0, 1);
+}
+@media (hover: hover) {
+  .saveButton:hover,
+  summary:hover,
+  .secondaryActions :deep(button:hover) {
+    background: transparent;
+    transform: scale(1.04);
+    transition-duration: 50ms;
+  }
+  .saveButton.saved:hover {
+    color: #1ed760;
+  }
+}
+button:focus-visible,
+summary:focus-visible,
+.secondaryActions :deep(button:focus-visible),
+.morePanel :deep(button:focus-visible) {
+  outline: 2px solid var(--spotify-green);
+  outline-offset: 3px;
+}
+.saveButton:active,
+summary:active,
+.secondaryActions :deep(button:active) {
+  background: transparent;
+  transform: scale(1);
+}
+.primaryPlay:active:not(:disabled) {
+  transform: scale(1);
+}
+@media (prefers-reduced-motion: reduce) {
+  button,
+  summary {
+    transition: none;
   }
 }
 </style>
