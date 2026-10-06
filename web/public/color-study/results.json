@@ -1,0 +1,512 @@
+{
+  "measured_at": "2026-10-07",
+  "metric": "CIE76 Lab distance to measured Spotify gradient-top color; lower is closer. Unfitted raw extraction outputs.",
+  "scores": {
+    "Average": 37.23,
+    "Dominant palette": 47.58,
+    "Filtered dominant": 35.4,
+    "Weighted Lab clusters": 49.42,
+    "Vibrant swatch": 33.8,
+    "Android \u00b7 Dominant": 34.55,
+    "Android \u00b7 Vibrant": 46.37,
+    "Android \u00b7 Light vibrant": 48.25,
+    "Android \u00b7 Dark vibrant": 38.62,
+    "Android \u00b7 Muted": 34.61,
+    "Android \u00b7 Light muted": 43.15,
+    "Android \u00b7 Dark muted": 34.09
+  },
+  "samples": [
+    {
+      "title": "Rachmaninoff: The Piano Concertos & Paganini Rhapsody",
+      "cover": "https://i.scdn.co/image/ab67616d0000e1a34835cfde01c5884211f97054",
+      "base": "#4A2D2EFF",
+      "top": "#806060FF",
+      "gradient": "linear-gradient(in oklch, rgb(128, 96, 96), rgba(0, 0, 0, 0)), none",
+      "url": "https://open.spotify.com/album/0v3T6fPnrptRXOrd854hIl",
+      "requested": "Rachmaninoff Yuja Wang",
+      "file": "0.jpg",
+      "methods": {
+        "Average": {
+          "color": "#6B5624",
+          "delta": 29.34
+        },
+        "Dominant palette": {
+          "color": "#F8E90A",
+          "delta": 99.76
+        },
+        "Filtered dominant": {
+          "color": "#FCEB01",
+          "delta": 101.22
+        },
+        "Weighted Lab clusters": {
+          "color": "#EEE00C",
+          "delta": 95.8
+        },
+        "Vibrant swatch": {
+          "color": "#FDEC00",
+          "delta": 101.7
+        },
+        "Android \u00b7 Dominant": {
+          "color": "#E8D800",
+          "delta": 93.32
+        },
+        "Android \u00b7 Vibrant": {
+          "color": "#E8D800",
+          "delta": 93.32
+        },
+        "Android \u00b7 Light vibrant": {
+          "color": "#E8E048",
+          "delta": 84.03
+        },
+        "Android \u00b7 Dark vibrant": {
+          "color": "#C0B018",
+          "delta": 73.55
+        },
+        "Android \u00b7 Muted": {
+          "color": "#A8A060",
+          "delta": 41.1
+        },
+        "Android \u00b7 Light muted": {
+          "color": "#D8D0D0",
+          "delta": 41.64
+        },
+        "Android \u00b7 Dark muted": {
+          "color": "#201010",
+          "delta": 37.89
+        }
+      }
+    },
+    {
+      "title": "Songs In The Key Of Life",
+      "cover": "https://i.scdn.co/image/ab67616d0000e1a32fee61bfec596bb6f5447c50",
+      "base": "#650000FF",
+      "top": "#D03838FF",
+      "gradient": "linear-gradient(in oklch, rgb(208, 56, 56), rgba(0, 0, 0, 0)), none",
+      "url": "https://open.spotify.com/album/6YUCc2RiXcEKS9ibuZxjt0",
+      "requested": "Songs In The Key Of Life Stevie Wonder",
+      "file": "1.jpg",
+      "methods": {
+        "Average": {
+          "color": "#CE6B4C",
+          "delta": 23.83
+        },
+        "Dominant palette": {
+          "color": "#E3493C",
+          "delta": 7.73
+        },
+        "Filtered dominant": {
+          "color": "#F3683E",
+          "delta": 20.33
+        },
+        "Weighted Lab clusters": {
+          "color": "#E64E3C",
+          "delta": 9.74
+        },
+        "Vibrant swatch": {
+          "color": "#F35D3F",
+          "delta": 15.98
+        },
+        "Android \u00b7 Dominant": {
+          "color": "#D03838",
+          "delta": 0.0
+        },
+        "Android \u00b7 Vibrant": {
+          "color": "#D03838",
+          "delta": 0.0
+        },
+        "Android \u00b7 Light vibrant": {
+          "color": "#F8E098",
+          "delta": 73.65
+        },
+        "Android \u00b7 Dark vibrant": {
+          "color": "#682820",
+          "delta": 41.3
+        },
+        "Android \u00b7 Muted": {
+          "color": "#A89858",
+          "delta": 63.73
+        },
+        "Android \u00b7 Light muted": {
+          "color": "#C0A880",
+          "delta": 61.57
+        },
+        "Android \u00b7 Dark muted": {
+          "color": "#D03838",
+          "delta": 0.0,
+          "note": "Dominant fallback"
+        }
+      }
+    },
+    {
+      "title": "Abbey Road (Remastered)",
+      "cover": "https://i.scdn.co/image/ab67616d0000e1a3dc30583ba717007b00cceb25",
+      "base": "#00365AFF",
+      "top": "#4888B0FF",
+      "gradient": "linear-gradient(in oklch, rgb(72, 136, 176), rgba(0, 0, 0, 0)), none",
+      "url": "https://open.spotify.com/album/0ETFjACtuP2ADo6LFhL6HN",
+      "requested": "Abbey Road Beatles",
+      "file": "2.jpg",
+      "methods": {
+        "Average": {
+          "color": "#5B6C6B",
+          "delta": 27.78
+        },
+        "Dominant palette": {
+          "color": "#C3DDE1",
+          "delta": 39.25
+        },
+        "Filtered dominant": {
+          "color": "#505A57",
+          "delta": 32.62
+        },
+        "Weighted Lab clusters": {
+          "color": "#A3D7F0",
+          "delta": 30.76
+        },
+        "Vibrant swatch": {
+          "color": "#A2D8F4",
+          "delta": 30.61
+        },
+        "Android \u00b7 Dominant": {
+          "color": "#101820",
+          "delta": 51.2
+        },
+        "Android \u00b7 Vibrant": {
+          "color": "#101820",
+          "delta": 51.2,
+          "note": "Dominant fallback"
+        },
+        "Android \u00b7 Light vibrant": {
+          "color": "#A0D8F0",
+          "delta": 31.04
+        },
+        "Android \u00b7 Dark vibrant": {
+          "color": "#101820",
+          "delta": 51.2,
+          "note": "Dominant fallback"
+        },
+        "Android \u00b7 Muted": {
+          "color": "#506060",
+          "delta": 29.29
+        },
+        "Android \u00b7 Light muted": {
+          "color": "#D8D8C0",
+          "delta": 50.48
+        },
+        "Android \u00b7 Dark muted": {
+          "color": "#101820",
+          "delta": 51.2
+        }
+      }
+    },
+    {
+      "title": "The Dark Side of the Moon",
+      "cover": "https://i.scdn.co/image/ab67616d0000e1a3db216ca805faf5fe35df4ee6",
+      "base": "#003D00FF",
+      "top": "#28A048FF",
+      "gradient": "linear-gradient(in oklch, rgb(40, 160, 72), rgba(0, 0, 0, 0)), none",
+      "url": "https://open.spotify.com/album/4LH4d3cOWNNsVw41Gqt2kv",
+      "requested": "The Dark Side Of The Moon Pink Floyd",
+      "file": "3.jpg",
+      "methods": {
+        "Average": {
+          "color": "#080706",
+          "delta": 84.01
+        },
+        "Dominant palette": {
+          "color": "#000000",
+          "delta": 85.72
+        },
+        "Filtered dominant": {
+          "color": "#4B6369",
+          "delta": 63.91
+        },
+        "Weighted Lab clusters": {
+          "color": "#E83C2B",
+          "delta": 116.75
+        },
+        "Vibrant swatch": {
+          "color": "#4B6369",
+          "delta": 63.91
+        },
+        "Android \u00b7 Dominant": {
+          "color": "#202828",
+          "delta": 74.41
+        },
+        "Android \u00b7 Vibrant": {
+          "color": "#E8F018",
+          "delta": 66.97
+        },
+        "Android \u00b7 Light vibrant": {
+          "color": "#202828",
+          "delta": 74.41,
+          "note": "Dominant fallback"
+        },
+        "Android \u00b7 Dark vibrant": {
+          "color": "#3098A0",
+          "delta": 55.24
+        },
+        "Android \u00b7 Muted": {
+          "color": "#506070",
+          "delta": 70.87
+        },
+        "Android \u00b7 Light muted": {
+          "color": "#B8C0C0",
+          "delta": 64.26
+        },
+        "Android \u00b7 Dark muted": {
+          "color": "#202828",
+          "delta": 74.41
+        }
+      }
+    },
+    {
+      "title": "Random Access Memories",
+      "cover": "https://i.scdn.co/image/ab67616d0000e1a39b9b36b0e22870b9f542d937",
+      "base": "#28354FFF",
+      "top": "#8A99B9FF",
+      "gradient": "linear-gradient(in oklch, rgb(138, 153, 185), rgba(0, 0, 0, 0)), none",
+      "url": "https://open.spotify.com/album/4m2880jivSbbyEGAKfITCa",
+      "requested": "Random Access Memories Daft Punk",
+      "file": "4.jpg",
+      "methods": {
+        "Average": {
+          "color": "#272828",
+          "delta": 50.43
+        },
+        "Dominant palette": {
+          "color": "#0A0C0C",
+          "delta": 62.63
+        },
+        "Filtered dominant": {
+          "color": "#8899B3",
+          "delta": 3.53
+        },
+        "Weighted Lab clusters": {
+          "color": "#EDD06D",
+          "delta": 73.77
+        },
+        "Vibrant swatch": {
+          "color": "#8899B3",
+          "delta": 3.53
+        },
+        "Android \u00b7 Dominant": {
+          "color": "#C8D0E8",
+          "delta": 21.23
+        },
+        "Android \u00b7 Vibrant": {
+          "color": "#F0D868",
+          "delta": 79.42
+        },
+        "Android \u00b7 Light vibrant": {
+          "color": "#C8D0E8",
+          "delta": 21.23
+        },
+        "Android \u00b7 Dark vibrant": {
+          "color": "#C8D0E8",
+          "delta": 21.23,
+          "note": "Dominant fallback"
+        },
+        "Android \u00b7 Muted": {
+          "color": "#8090A8",
+          "delta": 5.8
+        },
+        "Android \u00b7 Light muted": {
+          "color": "#A0B0C8",
+          "delta": 9.6
+        },
+        "Android \u00b7 Dark muted": {
+          "color": "#181018",
+          "delta": 59.31
+        }
+      }
+    },
+    {
+      "title": "Happier Than Ever",
+      "cover": "https://i.scdn.co/image/ab67616d0000e1a32a038d3bf875d23e4aeaa84e",
+      "base": "#463108FF",
+      "top": "#A89068FF",
+      "gradient": "linear-gradient(in oklch, rgb(168, 144, 104), rgba(0, 0, 0, 0)), none",
+      "url": "https://open.spotify.com/album/0JGOiO34nwfUdDrD612dOp",
+      "requested": "Happier Than Ever Billie Eilish",
+      "file": "5.jpg",
+      "methods": {
+        "Average": {
+          "color": "#A38469",
+          "delta": 7.91
+        },
+        "Dominant palette": {
+          "color": "#8A6648",
+          "delta": 16.73
+        },
+        "Filtered dominant": {
+          "color": "#8A6648",
+          "delta": 16.73
+        },
+        "Weighted Lab clusters": {
+          "color": "#8A694B",
+          "delta": 15.47
+        },
+        "Vibrant swatch": {
+          "color": "#A77C57",
+          "delta": 10.7
+        },
+        "Android \u00b7 Dominant": {
+          "color": "#D0C8B0",
+          "delta": 23.22
+        },
+        "Android \u00b7 Vibrant": {
+          "color": "#D0C8B0",
+          "delta": 23.22,
+          "note": "Dominant fallback"
+        },
+        "Android \u00b7 Light vibrant": {
+          "color": "#D0C8B0",
+          "delta": 23.22,
+          "note": "Dominant fallback"
+        },
+        "Android \u00b7 Dark vibrant": {
+          "color": "#381000",
+          "delta": 53.4
+        },
+        "Android \u00b7 Muted": {
+          "color": "#B8A078",
+          "delta": 6.05
+        },
+        "Android \u00b7 Light muted": {
+          "color": "#D0C8B0",
+          "delta": 23.22
+        },
+        "Android \u00b7 Dark muted": {
+          "color": "#484840",
+          "delta": 36.82
+        }
+      }
+    },
+    {
+      "title": "Blue",
+      "cover": "https://i.scdn.co/image/ab67616d0000e1a3e79dc1438d650f426b5e99a7",
+      "base": "#001858FF",
+      "top": "#001858FF",
+      "gradient": "linear-gradient(in oklch, rgb(0, 24, 88), rgba(0, 0, 0, 0)), none",
+      "url": "https://open.spotify.com/album/1vz94WpXDVYIEGja8cjFNa",
+      "requested": "Blue Joni Mitchell",
+      "file": "6.jpg",
+      "methods": {
+        "Average": {
+          "color": "#102C6B",
+          "delta": 10.03
+        },
+        "Dominant palette": {
+          "color": "#01175D",
+          "delta": 4.1
+        },
+        "Filtered dominant": {
+          "color": "#01175D",
+          "delta": 4.1
+        },
+        "Weighted Lab clusters": {
+          "color": "#00195E",
+          "delta": 3.24
+        },
+        "Vibrant swatch": {
+          "color": "#00195E",
+          "delta": 3.24
+        },
+        "Android \u00b7 Dominant": {
+          "color": "#001858",
+          "delta": 0.0
+        },
+        "Android \u00b7 Vibrant": {
+          "color": "#487098",
+          "delta": 43.73
+        },
+        "Android \u00b7 Light vibrant": {
+          "color": "#98B0D8",
+          "delta": 65.33
+        },
+        "Android \u00b7 Dark vibrant": {
+          "color": "#001858",
+          "delta": 0.0
+        },
+        "Android \u00b7 Muted": {
+          "color": "#6080B0",
+          "delta": 46.96
+        },
+        "Android \u00b7 Light muted": {
+          "color": "#7898C0",
+          "delta": 57.13
+        },
+        "Android \u00b7 Dark muted": {
+          "color": "#001858",
+          "delta": 0.0,
+          "note": "Dominant fallback"
+        }
+      }
+    },
+    {
+      "title": "The Beatles (Remastered)",
+      "cover": "https://i.scdn.co/image/ab67616d0000e1a34ce8b4e42588bf18182a1ad2",
+      "base": "#353535FF",
+      "top": "#535353FF",
+      "gradient": "linear-gradient(in oklch, rgb(83, 83, 83), rgba(0, 0, 0, 0)), none",
+      "url": "https://open.spotify.com/album/1klALx0u4AavZNEvC4LrTL",
+      "requested": "The Beatles White Album",
+      "file": "7.jpg",
+      "methods": {
+        "Average": {
+          "color": "#FFFFFF",
+          "delta": 64.55
+        },
+        "Dominant palette": {
+          "color": "#FFFFFF",
+          "delta": 64.7
+        },
+        "Filtered dominant": {
+          "color": "#C0BABA",
+          "delta": 40.75
+        },
+        "Weighted Lab clusters": {
+          "color": "#D7D4D4",
+          "delta": 49.85
+        },
+        "Vibrant swatch": {
+          "color": "#C0BABA",
+          "delta": 40.75
+        },
+        "Android \u00b7 Dominant": {
+          "color": "#787070",
+          "delta": 13.06
+        },
+        "Android \u00b7 Vibrant": {
+          "color": "#787070",
+          "delta": 13.06,
+          "note": "Dominant fallback"
+        },
+        "Android \u00b7 Light vibrant": {
+          "color": "#787070",
+          "delta": 13.06,
+          "note": "Dominant fallback"
+        },
+        "Android \u00b7 Dark vibrant": {
+          "color": "#787070",
+          "delta": 13.06,
+          "note": "Dominant fallback"
+        },
+        "Android \u00b7 Muted": {
+          "color": "#787070",
+          "delta": 13.06
+        },
+        "Android \u00b7 Light muted": {
+          "color": "#B8B0B0",
+          "delta": 37.3
+        },
+        "Android \u00b7 Dark muted": {
+          "color": "#787070",
+          "delta": 13.06,
+          "note": "Dominant fallback"
+        }
+      }
+    }
+  ]
+}
