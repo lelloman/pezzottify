@@ -12,7 +12,7 @@ const modules = {
     export const usePlaybackStore=()=>playback;`,
   "test-remote": `export const useRemoteStore=()=>({async getTrackLyrics(id,signal){const r=await fetch('/test-lyrics/'+id,{signal});if(!r.ok)throw Error('failed');return r.json()},async downloadLyrics(type,id){const r=await fetch('/test-download/'+id,{method:'POST'});if(!r.ok)throw Error('failed');return r.json()}});`,
   "test-image": `import {h} from 'vue';export default {props:['urls'],setup:props=>()=>h('img',{src:props.urls[0]})};`,
-  "test-entry": `import "@/assets/main.css";import {createApp,ref,h} from 'vue';import NowPlaying from '@/components/NowPlaying.vue';import TrackLyrics from '@/components/common/TrackLyrics.vue';import {playback} from 'test-playback';const open=ref(false),track=ref('one');window.testState={playback,track,open};createApp({setup:()=>()=>[h('button',{onClick:()=>open.value=true},'Expand player'),open.value?h(NowPlaying,{onClose:()=>open.value=false}):h(TrackLyrics,{trackId:track.value})]}).mount('#app');`,
+  "test-entry": `import "@/assets/main.css";import {createApp,ref,h} from 'vue';import NowPlaying from '@/components/NowPlaying.vue';import TrackLyrics from '@/components/common/TrackLyrics.vue';import {playback} from 'test-playback';const open=ref(false),track=ref('one');window.testState={playback,track,open};createApp({setup:()=>()=>[h('button',{onClick:()=>open.value=true},'Expand player'),open.value?h('main',{style:'width:calc(100% - 40px);height:calc(100dvh - 80px);overflow:auto;margin:20px;container-type:inline-size'},[h(NowPlaying)]):h(TrackLyrics,{trackId:track.value})]}).mount('#app');`,
 };
 before(async () => {
   server = await createServer({
@@ -75,7 +75,7 @@ async function pageWith(data) {
   await page.goto(origin);
   return page;
 }
-test("timed lyrics seek, playback controls, Escape and focus restoration", async () => {
+test("timed lyrics seek and playback controls in the main panel", async () => {
   const page = await pageWith(found);
   try {
     const first = page.getByRole("button", {
@@ -91,17 +91,14 @@ test("timed lyrics seek, playback controls, Escape and focus restoration", async
       1 / 6,
     );
     await page.getByRole("button", { name: "Expand player" }).click();
-    await page.getByRole("dialog").waitFor();
+    await page.locator("main .nowPlaying").waitFor();
     await page.getByRole("button", { name: "Play", exact: true }).click();
     await page.getByRole("button", { name: "Pause", exact: true }).waitFor();
-    await page.keyboard.press("Escape");
-    await page.getByRole("dialog").waitFor({ state: "detached" });
-    assert.equal(
-      await page
-        .getByRole("button", { name: "Expand player" })
-        .evaluate((el) => el === document.activeElement),
-      true,
-    );
+    assert.equal(await page.getByRole("dialog").count(), 0);
+    assert.equal(await page.evaluate(() => document.body.style.overflow), "");
+    await page.evaluate(() => {
+      window.testState.open.value = false;
+    });
     await page.evaluate(() => {
       window.testState.track.value = "other";
     });
@@ -157,15 +154,15 @@ test("instrumental, missing and provider failure messages", async () => {
     }
   }
 });
-test("full-screen player fits mobile and desktop viewports", async () => {
+test("now playing stays inside its content panel on mobile and desktop", async () => {
   const page = await pageWith(found);
   try {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole("button", { name: "Expand player" }).click();
-    await page.getByRole("dialog").waitFor();
-    const bounds = await page.getByRole("dialog").boundingBox();
-    assert.equal(bounds.width, 390);
-    assert.equal(bounds.height, 844);
+    await page.locator("main .nowPlaying").waitFor();
+    const bounds = await page.locator("main .nowPlaying").boundingBox();
+    assert.equal(bounds.width, 350);
+    assert.equal(bounds.x, 20);
     assert.equal(
       await page
         .locator(".nowPlayingBody")
@@ -177,6 +174,12 @@ test("full-screen player fits mobile and desktop viewports", async () => {
       fullPage: true,
     });
     await page.setViewportSize({ width: 1280, height: 900 });
+    assert.equal(
+      await page
+        .locator("main .nowPlaying")
+        .evaluate((el) => el.scrollWidth <= el.clientWidth),
+      true,
+    );
     await page.screenshot({
       path: "/tmp/pezzottify-lyrics-desktop.png",
       fullPage: true,
@@ -242,6 +245,82 @@ test("read and download failures expose retry actions", async () => {
     assert.equal(
       await page.getByRole("button", { name: "Check again" }).isEnabled(),
       true,
+    );
+  } finally {
+    await page.close();
+  }
+});
+
+test("now playing handles stopped playback without leaving stale lyrics", async () => {
+  const page = await pageWith(found);
+  try {
+    await page.getByRole("button", { name: "Expand player" }).click();
+    await page.locator("main .nowPlaying .timedLyrics").waitFor();
+    await page.evaluate(() => {
+      window.testState.playback.currentTrackId = null;
+    });
+    await page
+      .getByText("Play a track to see its artwork and lyrics here.")
+      .waitFor();
+    assert.equal(await page.locator("main .timedLyrics").count(), 0);
+  } finally {
+    await page.close();
+  }
+});
+
+test("lyrics scroll independently and transport glyphs stay white and proportionate", async () => {
+  const page = await pageWith({
+    status: "found",
+    plain_lyrics: Array.from({ length: 100 }, (_, i) => `Line ${i}`).join("\n"),
+  });
+  try {
+    await page.getByRole("button", { name: "Expand player" }).click();
+    await page.locator("main .plainLyrics").waitFor();
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      const controls = page.locator(".transport");
+      const before = await controls.boundingBox();
+      const lyrics = page.locator(".lyricsColumn");
+      await lyrics.hover();
+      await page.mouse.wheel(0, 1000);
+      await page.waitForFunction(
+        () => document.querySelector(".lyricsColumn").scrollTop > 0,
+      );
+      assert.deepEqual(await controls.boundingBox(), before);
+      assert.equal(
+        await page.locator("main").evaluate((el) => el.scrollTop),
+        0,
+      );
+      assert.equal(
+        await page
+          .locator(".nowPlaying")
+          .evaluate((el) => el.scrollHeight <= el.clientHeight),
+        true,
+      );
+      await lyrics.evaluate((el) => {
+        el.scrollTop = el.scrollHeight;
+      });
+      await page.mouse.wheel(0, 1000);
+      await page.waitForTimeout(100);
+      assert.equal(
+        await page.locator("main").evaluate((el) => el.scrollTop),
+        0,
+      );
+    }
+    const play = page.getByRole("button", { name: "Play", exact: true });
+    const icon = play.locator("svg");
+    assert.equal((await icon.boundingBox()).width, 32);
+    assert.equal(
+      await icon.locator("path").evaluate((el) => getComputedStyle(el).fill),
+      "rgb(255, 255, 255)",
+    );
+    await play.click();
+    assert.equal(
+      await page
+        .getByRole("button", { name: "Pause", exact: true })
+        .locator("path")
+        .evaluate((el) => getComputedStyle(el).fill),
+      "rgb(255, 255, 255)",
     );
   } finally {
     await page.close();

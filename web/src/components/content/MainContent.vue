@@ -33,6 +33,7 @@
       />
       <DevicesView v-else-if="isDevicesRoute" />
       <Steering v-else-if="isSteeringRoute" />
+      <NowPlaying v-else-if="isNowPlayingRoute" />
       <HomePage v-else />
     </keep-alive>
   </main>
@@ -51,6 +52,7 @@ import HomePage from "@/components/content/HomePage.vue";
 import GenreList from "@/components/content/GenreList.vue";
 import GenreDetail from "@/components/content/GenreDetail.vue";
 import DevicesView from "@/components/content/DevicesView.vue";
+import NowPlaying from "@/components/NowPlaying.vue";
 import Steering from "@/components/content/Steering.vue";
 import { useRoute } from "vue-router";
 import { useDebugStore } from "@/store/debug";
@@ -78,6 +80,7 @@ const isSettingsRoute = computed(() => route.name === "settings");
 const isRequestsRoute = computed(() => route.name === "requests");
 const isGenresRoute = computed(() => route.name === "genres");
 const isDevicesRoute = computed(() => route.name === "devices");
+const isNowPlayingRoute = computed(() => route.name === "now-playing");
 const isSteeringRoute = computed(() => route.name === "steering");
 const genreName = ref(route.params.genreName || "");
 
@@ -98,6 +101,7 @@ function currentRouteKey() {
   if (isGenresRoute.value) return "genres";
   if (isDevicesRoute.value) return "devices";
   if (isSteeringRoute.value) return "steering";
+  if (isNowPlayingRoute.value) return "now-playing";
   return "home";
 }
 
@@ -245,6 +249,8 @@ watch(
 <style>
 .mainContent {
   flex: 1;
+  min-width: 0;
+  container-type: inline-size;
   overflow: auto;
   background: var(--surface-panel);
   border: 1px solid var(--surface-border);
@@ -255,7 +261,7 @@ watch(
   box-shadow: var(--shadow-sm);
 }
 
-.mainContent > :not(.homePage) {
+.mainContent > :not(.homePage):not(.nowPlaying) {
   padding: clamp(18px, 2vw, 30px);
 }
 </style>

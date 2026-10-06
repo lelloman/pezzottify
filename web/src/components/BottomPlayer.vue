@@ -56,15 +56,6 @@
     </div>
     <template v-if="hasPlayback">
       <div class="trackInfoRow">
-        <button
-          type="button"
-          class="expandPlayer"
-          aria-label="Open full-screen player and lyrics"
-          title="Now playing and lyrics"
-          @click="showNowPlaying = true"
-        >
-          ↗
-        </button>
         <MultiSourceImage
           :urls="imageUrls"
           :lazy="false"
@@ -183,6 +174,16 @@
         >
           <SteeringWheelIcon />
         </button>
+        <button
+          type="button"
+          class="expandPlayer"
+          aria-label="Open now playing and lyrics"
+          title="Now playing and lyrics"
+          :aria-current="route.name === 'now-playing' ? 'page' : undefined"
+          @click="router.push({ name: 'now-playing' })"
+        >
+          ↗
+        </button>
         <DeviceSelector />
         <ControlIconButton
           v-if="playback.mode === 'local'"
@@ -192,11 +193,6 @@
       </div>
     </template>
   </footer>
-  <NowPlaying
-    v-if="showNowPlaying && hasPlayback"
-    :imageUrls="imageUrls"
-    @close="showNowPlaying = false"
-  />
 </template>
 
 <script setup>
@@ -215,16 +211,13 @@ import VolumeOnIcon from "./icons/VolumeOnIcon.vue";
 import VolumeOffIcon from "./icons/VolumeOffIcon.vue";
 import MultiSourceImage from "./common/MultiSourceImage.vue";
 import LoadClickableArtistsNames from "@/components/common/LoadClickableArtistsNames.vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import TrackName from "./common/TrackName.vue";
 import { useStaticsStore } from "@/store/statics";
 import DeviceSelector from "./DeviceSelector.vue";
 import AiContinuationIcon from "./icons/AiContinuationIcon.vue";
 import SteeringWheelIcon from "./icons/SteeringWheelIcon.vue";
 import { useUserStore } from "@/store/user";
-import NowPlaying from "./NowPlaying.vue";
-
-const showNowPlaying = ref(false);
 
 const ControlIconButton = {
   props: ["icon", "action", "big"],
@@ -248,6 +241,7 @@ const ControlIconButton = {
 };
 
 const router = useRouter();
+const route = useRoute();
 const playback = usePlaybackStore();
 const staticsStore = useStaticsStore();
 const userStore = useUserStore();
@@ -472,6 +466,9 @@ watch(
   color: var(--text-base);
   cursor: pointer;
   font-size: 1.25rem;
+}
+.expandPlayer[aria-current="page"] {
+  color: var(--spotify-green);
 }
 .expandPlayer:hover {
   background: var(--surface-hover);
