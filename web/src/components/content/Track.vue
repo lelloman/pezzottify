@@ -1,55 +1,32 @@
 <template>
-  <div v-if="track" class="trackPage">
-    <div class="topSection">
-      <MultiSourceImage class="coverImage" :urls="coverUrls" />
-      <div class="trackInfoColumn">
-        <div class="trackIdentity">
-          <p class="eyebrow">Track</p>
-          <h1 class="trackName">{{ track.name }}</h1>
-          <p v-if="album" class="albumLine">
-            From album
-            <button
-              type="button"
-              class="albumLink"
-              @click.stop="handleClickOnAlbumName"
-            >
-              {{ album.name }}<span v-if="albumYear"> ({{ albumYear }})</span>
-            </button>
-          </p>
-          <p v-if="trackMetaSummary" class="trackMetaSummary">
-            {{ trackMetaSummary }}
-          </p>
-          <div v-if="trackBadges.length" class="trackBadges">
-            <span v-for="badge in trackBadges" :key="badge">{{ badge }}</span>
-          </div>
-          <div v-if="trackSummary" class="trackSummaryBlock">
-            <p
-              ref="summaryTextRef"
-              class="trackSummaryText"
-              :class="{ expanded: summaryExpanded }"
-            >
-              {{ trackSummary }}
-            </p>
-            <button
-              v-if="summaryOverflows"
-              type="button"
-              class="trackSummaryToggle"
-              @click="summaryExpanded = !summaryExpanded"
-            >
-              {{ summaryExpanded ? "Show less" : "Read more" }}
-            </button>
-          </div>
-        </div>
-        <div class="trackActions">
-          <PlayIcon
-            class="playTrackIcon scaleClickFeedback bigIcon"
-            @click.stop="handleClickOnPlayTrack"
-          />
-          <RadioIcon
-            class="radioIcon scaleClickFeedback"
-            title="Listen to radio"
-            @click.stop="handleClickOnTrackRadio"
-          />
+  <DetailPage
+    v-if="track"
+    :title="track.name"
+    kind="Track"
+    :imageUrls="coverUrls || []"
+  >
+    <template #meta
+      ><LoadClickableArtistsNames :artistsIds="artistIds" /><button
+        v-if="album"
+        type="button"
+        class="albumLink"
+        @click="handleClickOnAlbumName"
+      >
+        {{ album.name }}</button
+      ><span v-if="trackMetaSummary">{{ trackMetaSummary }}</span></template
+    >
+    <template #actions>
+      <DetailActions
+        playLabel="Play track"
+        showSave
+        :saved="isTrackLiked"
+        @play="handleClickOnPlayTrack"
+        @save="handleClickOnFavoriteIcon"
+      >
+        <template #more>
+          <button type="button" @click="handleClickOnTrackRadio">
+            <RadioIcon /> Start radio
+          </button>
           <button
             class="secondaryActionButton"
             type="button"
@@ -80,22 +57,55 @@
           >
             {{ isRequestingDownload ? "Requesting..." : "Request download" }}
           </button>
-          <ToggableFavoriteIcon
-            :toggled="isTrackLiked"
-            :clickCallback="handleClickOnFavoriteIcon"
-          />
-        </div>
-        <p v-if="downloadRequestMessage" class="downloadRequestMessage">
-          {{ downloadRequestMessage }}
+        </template>
+      </DetailActions>
+    </template>
+
+    <p
+      v-if="downloadRequestMessage"
+      class="downloadRequestMessage"
+      role="status"
+    >
+      {{ downloadRequestMessage }}
+    </p>
+    <TrackLyrics :trackId="trackId" class="trackLyricsSection" />
+    <section
+      v-if="
+        trackSummary ||
+        trackBadges.length ||
+        ['queued', 'running', 'failed', 'failed_enrichment'].includes(
+          track.enrichment_status?.status,
+        )
+      "
+      class="detailSupporting"
+    >
+      <h2 class="detailSectionTitle">About this track</h2>
+      <div v-if="trackSummary" class="trackSummaryBlock">
+        <p
+          ref="summaryTextRef"
+          class="trackSummaryText"
+          :class="{ expanded: summaryExpanded }"
+        >
+          {{ trackSummary }}
         </p>
+        <button
+          v-if="summaryOverflows"
+          type="button"
+          class="trackSummaryToggle"
+          @click="summaryExpanded = !summaryExpanded"
+        >
+          {{ summaryExpanded ? "Show less" : "Read more" }}
+        </button>
+      </div>
+      <div v-if="trackBadges.length" class="trackBadges">
+        <span v-for="badge in trackBadges" :key="badge">{{ badge }}</span>
       </div>
       <EnrichmentStatusIndicator
         :status="track.enrichment_status"
         entityType="track"
       />
-    </div>
-
-    <section v-if="detailRows.length" class="detailSection">
+    </section>
+    <dl v-if="detailRows.length" class="detailSection">
       <div v-for="row in detailRows" :key="row.label" class="detailItem">
         <dt>{{ row.label }}</dt>
         <dd>
@@ -111,7 +121,7 @@
           <template v-else>{{ row.value }}</template>
         </dd>
       </div>
-    </section>
+    </dl>
 
     <section
       v-if="trackTags.length || trackContributors.length"
@@ -139,8 +149,6 @@
       </div>
     </section>
 
-    <TrackLyrics :trackId="trackId" class="trackLyricsSection" />
-
     <section v-if="artistIds.length" class="artistsSection">
       <h2>Artists</h2>
       <div class="artistsContainer">
@@ -158,16 +166,17 @@
       :seedEntityId="trackId"
       @close="showRadioBuilder = false"
     />
-  </div>
+  </DetailPage>
   <div v-else>
     <p>Loading {{ trackId }}...</p>
   </div>
 </template>
 
 <script setup>
+import DetailPage from "@/components/common/DetailPage.vue";
+import DetailActions from "@/components/common/DetailActions.vue";
+import LoadClickableArtistsNames from "@/components/common/LoadClickableArtistsNames.vue";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
-import PlayIcon from "@/components/icons/PlayIcon.vue";
 import RadioIcon from "@/components/icons/RadioIcon.vue";
 import { usePlaybackStore } from "@/store/playback";
 import { useRemoteStore } from "@/store/remote";
@@ -177,7 +186,6 @@ import { useRouter } from "vue-router";
 import LoadArtistListItem from "@/components/common/LoadArtistListItem.vue";
 import { useStaticsStore } from "@/store/statics";
 import { useUserStore } from "@/store/user";
-import ToggableFavoriteIcon from "@/components/common/ToggableFavoriteIcon.vue";
 import EnrichmentStatusIndicator from "@/components/common/EnrichmentStatusIndicator.vue";
 import RadioBuilderModal from "@/components/common/RadioBuilderModal.vue";
 import TrackLyrics from "@/components/common/TrackLyrics.vue";
@@ -513,72 +521,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-@import "@/assets/icons.css";
-
-.trackPage {
-  color: var(--text-base);
-}
-
-.topSection {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(180px, 300px) minmax(0, 1fr);
-  gap: clamp(20px, 3vw, 36px);
-  align-items: start;
-  padding: clamp(18px, 3vw, 32px);
-  border: 1px solid var(--surface-border);
-  border-radius: 8px;
-  background: linear-gradient(
-      135deg,
-      rgba(125, 99, 255, 0.16),
-      rgba(17, 20, 22, 0.58) 45%
-    ),
-    var(--surface-raised);
-}
-
-.coverImage {
-  width: 100%;
-  aspect-ratio: 1;
-  height: auto;
-  object-fit: cover;
-  border-radius: 8px;
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
-}
-
-.trackInfoColumn {
-  min-width: 0;
-  align-self: stretch;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 22px;
-}
-
-.trackIdentity {
-  min-width: 0;
-}
-
-.eyebrow {
-  margin: 0 0 8px;
-  color: var(--text-subdued);
-  font-size: 0.78rem;
-  font-weight: 850;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.trackName {
-  margin: 0;
-  color: var(--text-base);
-  font-size: clamp(2rem, 4.6vw, 4.6rem);
-  font-weight: 900;
-  line-height: 0.96;
-  letter-spacing: 0;
-  overflow-wrap: anywhere;
-}
-
 .albumLine,
 .trackMetaSummary {
   margin: 12px 0 0;
@@ -666,37 +608,6 @@ onUnmounted(() => {
   color: var(--spotify-green);
 }
 
-.trackActions {
-  display: flex;
-  margin-top: auto;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.trackActions :deep(.bigIcon) {
-  width: 42px;
-  height: 42px;
-}
-
-.playTrackIcon {
-  width: 54px;
-  height: 54px;
-  fill: var(--spotify-green);
-  cursor: pointer;
-}
-
-.radioIcon {
-  width: 42px;
-  height: 42px;
-  cursor: pointer;
-  color: var(--spotify-green);
-}
-
-.radioIcon:hover {
-  color: var(--spotify-green-hover);
-}
-
 .secondaryActionButton {
   width: fit-content;
   min-height: 38px;
@@ -727,27 +638,19 @@ onUnmounted(() => {
 
 .trackLyricsSection {
   margin-top: 28px;
-  padding: 24px;
-  background: var(--surface-panel);
-  border: 1px solid var(--surface-border);
-  border-radius: 12px;
+  padding: 0;
 }
 
 .detailSection {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1px;
-  margin: 18px 0 0;
-  border: 1px solid var(--surface-border);
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--surface-border);
+  gap: 20px;
+  margin: 28px 0 0;
 }
 
 .detailItem {
   min-width: 0;
-  padding: 13px 14px;
-  background: var(--surface-panel);
+  padding: 0;
 }
 
 .detailItem dt,
@@ -802,15 +705,5 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 8px;
-}
-
-@media (max-width: 720px) {
-  .topSection {
-    grid-template-columns: 1fr;
-  }
-
-  .coverImage {
-    max-width: 280px;
-  }
 }
 </style>

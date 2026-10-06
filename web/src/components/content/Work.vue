@@ -1,5 +1,5 @@
 <template>
-  <article class="workPage" :aria-busy="loading">
+  <div class="detailPageHost" :aria-busy="loading">
     <p v-if="loading && !work" class="statePanel" role="status">
       Loading composition…
     </p>
@@ -7,70 +7,22 @@
       {{ error }}
       <button type="button" :disabled="loading" @click="load">Retry</button>
     </p>
-    <template v-if="work">
-      <header class="workHeader">
-        <WorkArtwork
-          class="compositionMark"
-          :artistIds="work.creator_artist_ids || []"
-        />
-        <div class="workIdentity">
-          <p class="eyebrow">
-            Work<span v-if="work.kind">
-              · {{ work.kind.replace(/_/g, " ") }}</span
-            >
-          </p>
-          <h1>{{ work.title }}</h1>
-          <div v-if="work.creators?.length" class="credits">
-            <p class="creditLabel">Written by</p>
-            <p class="creators">{{ work.creators.join(" · ") }}</p>
-          </div>
-          <p class="workCaption">
-            <template v-if="work.composition_year"
-              >Composed {{ work.composition_year }} ·
-            </template>
-            Recordings, parts and related works.
-          </p>
-        </div>
-      </header>
-
-      <section
-        v-if="relationGroups.length"
-        class="relations"
-        aria-label="Work relationships"
+    <DetailPage v-if="work" :title="work.title" kind="Composition">
+      <template #artwork
+        ><WorkArtwork :artistIds="work.creator_artist_ids || []"
+      /></template>
+      <template #meta
+        ><span v-if="work.creators?.length"
+          >Written by {{ work.creators.join(" · ") }}</span
+        ><span v-if="work.composition_year">{{
+          work.composition_year
+        }}</span></template
       >
-        <details
-          v-for="group in relationGroups"
-          :key="group.label"
-          :open="
-            group.label === 'Parts & movements' || group.label === 'Part of'
-          "
-        >
-          <summary>
-            {{ group.label }} <span>{{ group.items.length }}</span>
-          </summary>
-          <ul class="relationList">
-            <li
-              v-for="relation in group.items"
-              :key="`${relation.work.id}-${relation.ordering}`"
-            >
-              <RouterLink
-                :to="{ name: 'work', params: { workId: relation.work.id } }"
-              >
-                <span v-if="relation.ordering > 0" class="partNumber"
-                  >{{ relation.ordering }}.</span
-                >
-                <span
-                  >{{ relation.work.title
-                  }}<small>{{
-                    relation.work.creators.join(" · ")
-                  }}</small></span
-                >
-              </RouterLink>
-            </li>
-          </ul>
-        </details>
-      </section>
-
+      <template #actions
+        ><DetailActions
+          playLabel="Play recordings"
+          @play="playback.setWorkVersions(work.id, undefined, work.title)"
+      /></template>
       <section class="recordings" aria-labelledby="recordings-title">
         <div class="sectionHeading">
           <div>
@@ -159,6 +111,44 @@
         </div>
       </section>
 
+      <section
+        v-if="relationGroups.length"
+        class="relations"
+        aria-label="Work relationships"
+      >
+        <details
+          v-for="group in relationGroups"
+          :key="group.label"
+          :open="
+            group.label === 'Parts & movements' || group.label === 'Part of'
+          "
+        >
+          <summary>
+            {{ group.label }} <span>{{ group.items.length }}</span>
+          </summary>
+          <ul class="relationList">
+            <li
+              v-for="relation in group.items"
+              :key="`${relation.work.id}-${relation.ordering}`"
+            >
+              <RouterLink
+                :to="{ name: 'work', params: { workId: relation.work.id } }"
+              >
+                <span v-if="relation.ordering > 0" class="partNumber"
+                  >{{ relation.ordering }}.</span
+                >
+                <span
+                  >{{ relation.work.title
+                  }}<small>{{
+                    relation.work.creators.join(" · ")
+                  }}</small></span
+                >
+              </RouterLink>
+            </li>
+          </ul>
+        </details>
+      </section>
+
       <details
         v-if="work.catalog_number || work.musicbrainz_id || work.wikidata_id"
         class="workDetails"
@@ -188,11 +178,14 @@
           </p>
         </div>
       </details>
-    </template>
-  </article>
+    </DetailPage>
+  </div>
 </template>
 
 <script setup>
+import DetailPage from "@/components/common/DetailPage.vue";
+import DetailActions from "@/components/common/DetailActions.vue";
+
 import { computed, ref, watch, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
 import WorkArtwork from "@/components/common/WorkArtwork.vue";
@@ -300,29 +293,6 @@ onBeforeUnmount(() => controller?.abort());
 </script>
 
 <style scoped>
-.workPage {
-  color: var(--text-base);
-  padding-bottom: 32px;
-}
-.workHeader {
-  display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
-  gap: clamp(24px, 4vw, 48px);
-  align-items: center;
-  padding: clamp(24px, 4vw, 44px);
-  border: 1px solid var(--surface-border);
-  border-radius: 8px;
-  background: linear-gradient(125deg, rgba(29, 185, 84, 0.18), transparent 65%),
-    var(--surface-raised);
-}
-.compositionMark {
-  aspect-ratio: 1;
-  width: 100%;
-  font-size: 40px;
-}
-.workIdentity {
-  min-width: 0;
-}
 .eyebrow {
   color: var(--text-subdued);
   font-size: 11px;
@@ -339,28 +309,14 @@ h1 {
   margin: 0;
   overflow-wrap: anywhere;
 }
-.credits {
-  margin-top: 24px;
-}
-.creditLabel,
-dt {
-  color: var(--text-subdued);
-  font-size: 12px;
-  margin: 0 0 6px;
-}
 .creators {
   font-size: 16px;
   line-height: 1.7;
   margin: 0;
   overflow-wrap: anywhere;
 }
-.workCaption {
-  color: var(--text-subdued);
-  font-size: 13px;
-  margin: 20px 0 0;
-}
 .recordings {
-  margin-top: 36px;
+  margin-top: 0;
 }
 .relations {
   margin-top: 24px;
@@ -552,17 +508,6 @@ dd {
   font-size: 13px;
 }
 @media (max-width: 700px) {
-  .workHeader {
-    grid-template-columns: 1fr;
-    gap: 20px;
-  }
-  .compositionMark {
-    width: 96px;
-  }
-  .compositionMark span {
-    font-size: 6px;
-    margin-bottom: 6px;
-  }
   .sectionHeading {
     align-items: start;
     flex-direction: column;

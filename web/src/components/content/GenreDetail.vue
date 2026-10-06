@@ -1,25 +1,16 @@
 <template>
-  <div class="genreDetailPage">
-    <div class="genreHeader">
-      <h1 class="genreName">{{ decodedGenreName }}</h1>
-      <div class="headerInfo">
-        <span v-if="genreData" class="trackCount">{{
-          formatTrackCount(genreData.total)
-        }}</span>
-      </div>
-    </div>
-
-    <div class="actionsRow">
-      <button
-        class="shuffleButton"
-        @click="handleShufflePlay"
+  <DetailPage :title="decodedGenreName" kind="Genre">
+    <template #meta
+      ><span v-if="genreData">{{
+        formatTrackCount(genreData.total)
+      }}</span></template
+    >
+    <template #actions
+      ><DetailActions
+        :playLabel="isLoadingRadio ? 'Loading radio' : 'Shuffle play'"
         :disabled="isLoadingRadio"
-      >
-        <PlayIcon class="buttonIcon" />
-        <span>{{ isLoadingRadio ? "Loading..." : "Shuffle Play" }}</span>
-      </button>
-    </div>
-
+        @play="handleShufflePlay"
+    /></template>
     <!-- Loading State -->
     <div v-if="isLoading" class="loadingState">Loading tracks...</div>
 
@@ -56,7 +47,7 @@
     <div v-else class="emptyState">
       <p>No tracks found for this genre</p>
     </div>
-  </div>
+  </DetailPage>
 </template>
 
 <script setup>
@@ -64,7 +55,8 @@ import { ref, computed, onMounted, watch } from "vue";
 import { useRemoteStore } from "@/store/remote";
 import { usePlaybackStore } from "@/store/playback";
 import LoadTrackListItem from "@/components/common/LoadTrackListItem.vue";
-import PlayIcon from "@/components/icons/PlayIcon.vue";
+import DetailPage from "@/components/common/DetailPage.vue";
+import DetailActions from "@/components/common/DetailActions.vue";
 
 const props = defineProps({
   genreName: {
@@ -157,18 +149,6 @@ watch(
 </script>
 
 <style scoped>
-.genreDetailPage {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-4);
-}
-
-.genreHeader {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-1);
-}
-
 .genreName {
   font-size: var(--text-2xl);
   font-weight: var(--font-bold);
@@ -177,58 +157,13 @@ watch(
   text-transform: capitalize;
 }
 
-.headerInfo {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-}
-
-.trackCount {
-  font-size: var(--text-sm);
-  color: var(--text-subdued);
-}
-
-.actionsRow {
-  display: flex;
-  gap: var(--spacing-3);
-}
-
-.shuffleButton {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--essential-bright-accent);
-  color: var(--text-base);
-  border: none;
-  border-radius: var(--radius-full);
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  cursor: pointer;
-  transition: opacity var(--transition-fast);
-}
-
-.shuffleButton:hover {
-  opacity: 0.9;
-}
-
-.shuffleButton:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.buttonIcon {
-  width: 16px;
-  height: 16px;
-}
-
 .tracksSection {
   display: flex;
   flex-direction: column;
 }
 
 .track {
-  border-bottom: 1px solid var(--essential-subdued);
+  border-bottom: none;
 }
 
 .track:last-child {

@@ -1,55 +1,46 @@
 <template>
-  <div v-if="album">
-    <div class="topSection">
-      <MultiSourceImage
-        class="coverImage"
-        :urls="coverUrls"
-        @contextmenu.prevent="
-          entityMenu?.openMenu($event, 'album', albumId, album.name)
-        "
-      />
-      <div class="albumInfoColum">
-        <div class="albumIdentity">
-          <h1 class="albumName">{{ album.name }}</h1>
-          <p v-if="albumMetaSummary" class="albumMetaSummary">
-            {{ albumMetaSummary }}
-          </p>
-          <div v-if="albumBadges.length" class="albumBadges">
-            <span v-for="badge in albumBadges" :key="badge">{{ badge }}</span>
-          </div>
-          <div v-if="albumSummary" class="albumSummaryBlock">
-            <p
-              ref="summaryTextRef"
-              class="albumSummaryText"
-              :class="{ expanded: summaryExpanded }"
-            >
-              {{ albumSummary }}
-            </p>
-            <button
-              v-if="summaryOverflows"
-              type="button"
-              class="albumSummaryToggle"
-              @click="summaryExpanded = !summaryExpanded"
-            >
-              {{ summaryExpanded ? "Show less" : "Read more" }}
-            </button>
-          </div>
-        </div>
-        <div class="commandsSection">
-          <PlayIcon
-            class="playAlbumIcon scaleClickFeedback bigIcon"
-            @click.stop="handleClickOnPlayAlbum"
-          />
-          <RadioIcon
-            class="playAlbumIcon scaleClickFeedback bigIcon radioIcon"
-            title="Listen to radio"
-            @click.stop="handleClickOnAlbumRadio"
-          />
+  <DetailPage
+    v-if="album"
+    :title="album.name"
+    kind="Album"
+    @artwork-contextmenu.prevent="
+      entityMenu?.openMenu($event, 'album', albumId, album.name)
+    "
+    :imageUrls="coverUrls || []"
+  >
+    <template #meta
+      ><LoadClickableArtistsNames :artistsIds="album.artists_ids || []" /><span
+        v-if="albumMetaSummary"
+        >{{ albumMetaSummary }}</span
+      ><span
+        >{{ albumTrackCount }} tracks<span v-if="albumDuration">
+          · {{ albumDuration }} min</span
+        ></span
+      ></template
+    >
+    <template #actions>
+      <DetailActions
+        playLabel="Play album"
+        showSave
+        :saved="isAlbumLiked"
+        @play="handleClickOnPlayAlbum"
+        @save="handleClickOnFavoriteIcon"
+      >
+        <template #secondary>
+          <button
+            type="button"
+            title="Start radio"
+            @click="handleClickOnAlbumRadio"
+          >
+            <RadioIcon /><span class="actionLabel">Start radio</span>
+          </button>
           <button
             class="advancedRadioButton"
+            type="button"
+            title="Customize radio"
             @click.stop="showRadioBuilder = true"
           >
-            Customize radio
+            <SettingsIcon /><span class="actionLabel">Customize radio</span>
           </button>
           <button
             class="advancedRadioButton steerButton"
@@ -57,7 +48,7 @@
             @click.stop="showDestinationPrompt = true"
           >
             <SteeringWheelIcon class="steerButtonIcon" />
-            Steer here
+            <span class="actionLabel">Steer here</span>
           </button>
           <button
             v-if="canAddToDestinationMix"
@@ -71,20 +62,12 @@
               })
             "
           >
-            <SteeringWheelIcon class="steerButtonIcon" />
-            Add to mix
+            <PlaylistPlusIcon class="steerButtonIcon" />
+            <span class="actionLabel">Add to mix</span>
           </button>
-          <ToggableFavoriteIcon
-            :toggled="isAlbumLiked"
-            :clickCallback="handleClickOnFavoriteIcon"
-          />
-        </div>
-      </div>
-      <EnrichmentStatusIndicator
-        :status="album.enrichment_status"
-        entityType="album"
-      />
-    </div>
+        </template>
+      </DetailActions>
+    </template>
 
     <!-- Download Request Section -->
     <div v-if="showDownloadSection" class="downloadRequestSection">
@@ -154,23 +137,19 @@
       </div>
     </div>
 
-    <div class="artistsContainer">
-      <LoadArtistListItem
-        v-for="artistId in album.artists_ids"
-        :key="artistId"
-        :artistId="artistId"
-      />
-    </div>
     <div class="tracksContainer">
+      <div class="albumTrackHeading">
+        <span>#</span><span>Title</span><span>Duration</span>
+      </div>
       <div
         v-for="(disc, discIndex) in album.discs"
         :key="disc"
         class="discContainer"
       >
-        <h1 v-if="album.discs.length > 1">
+        <h2 v-if="album.discs.length > 1">
           Disc {{ discIndex + 1
           }}<span v-if="disc.name">- {{ disc.name }}</span>
-        </h1>
+        </h2>
         <div
           v-for="(trackId, trackIndex) in disc.tracks"
           :key="trackId"
@@ -180,6 +159,7 @@
           "
         >
           <LoadTrackListItem
+            albumLayout
             :contextId="albumId"
             :trackId="trackId"
             :trackNumber="trackIndex + 1"
@@ -191,6 +171,52 @@
         </div>
       </div>
     </div>
+    <section
+      v-if="
+        albumSummary ||
+        albumBadges.length ||
+        ['queued', 'running', 'failed', 'failed_enrichment'].includes(
+          album.enrichment_status?.status,
+        )
+      "
+      class="detailSupporting"
+    >
+      <h2 class="detailSectionTitle">About this album</h2>
+      <div v-if="albumSummary" class="albumSummaryBlock">
+        <p
+          ref="summaryTextRef"
+          class="albumSummaryText"
+          :class="{ expanded: summaryExpanded }"
+        >
+          {{ albumSummary }}
+        </p>
+        <button
+          v-if="summaryOverflows"
+          type="button"
+          class="albumSummaryToggle"
+          @click="summaryExpanded = !summaryExpanded"
+        >
+          {{ summaryExpanded ? "Show less" : "Read more" }}
+        </button>
+      </div>
+      <div v-if="albumBadges.length" class="albumBadges">
+        <span v-for="badge in albumBadges" :key="badge">{{ badge }}</span>
+      </div>
+      <EnrichmentStatusIndicator
+        :status="album.enrichment_status"
+        entityType="album"
+      />
+    </section>
+    <section class="detailSupporting">
+      <h2 class="detailSectionTitle">Artists</h2>
+      <div class="artistsContainer">
+        <LoadArtistListItem
+          v-for="artistId in album.artists_ids"
+          :key="artistId"
+          :artistId="artistId"
+        />
+      </div>
+    </section>
     <TrackContextMenu ref="trackContextMenuRef" />
     <DestinationStepsPrompt
       :isOpen="showDestinationPrompt"
@@ -208,24 +234,26 @@
       :seedEntityId="albumId"
       @close="showRadioBuilder = false"
     />
-  </div>
+  </DetailPage>
   <div v-else>
     <p>Loading {{ albumId }}...</p>
   </div>
 </template>
 
 <script setup>
+import SettingsIcon from "@/components/icons/SettingsIcon.vue";
+import PlaylistPlusIcon from "@/components/icons/PlaylistPlusIcon.vue";
+import DetailPage from "@/components/common/DetailPage.vue";
+import DetailActions from "@/components/common/DetailActions.vue";
+import LoadClickableArtistsNames from "@/components/common/LoadClickableArtistsNames.vue";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { MAX_COMPONENTS } from "@/utils/gravity";
 import { chooseAlbumCoverImageUrl } from "@/utils";
 import { canRequestAlbumDownload } from "@/utils/downloadRequests";
-import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
-import PlayIcon from "@/components/icons/PlayIcon.vue";
 import RadioIcon from "@/components/icons/RadioIcon.vue";
 import { usePlaybackStore } from "@/store/playback";
 import { useUserStore } from "@/store/user";
 import { useRemoteStore } from "@/store/remote";
-import ToggableFavoriteIcon from "@/components/common/ToggableFavoriteIcon.vue";
 import LoadArtistListItem from "@/components/common/LoadArtistListItem.vue";
 import TrackContextMenu from "@/components/common/contextmenu/TrackContextMenu.vue";
 import LoadTrackListItem from "../common/LoadTrackListItem.vue";
@@ -244,6 +272,18 @@ const props = defineProps({
 });
 
 const album = ref(null);
+const albumTrackIds = computed(
+  () => album.value?.discs?.flatMap((d) => d.tracks) || [],
+);
+const albumTrackCount = computed(() => albumTrackIds.value.length);
+const albumDuration = computed(() => {
+  const durations = albumTrackIds.value.map(
+    (id) => staticsStore.getTrack(id).item?.duration,
+  );
+  return durations.length && durations.every((d) => Number.isFinite(d))
+    ? Math.round(durations.reduce((a, b) => a + b, 0) / 60000)
+    : null;
+});
 const coverUrls = ref(null);
 
 const playback = usePlaybackStore();
@@ -649,45 +689,20 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.topSection {
-  position: relative;
+.albumTrackHeading {
   display: grid;
-  grid-template-columns: minmax(180px, 300px) minmax(0, 1fr);
-  gap: clamp(20px, 3vw, 36px);
-  align-items: start;
-  padding: clamp(18px, 3vw, 32px);
-  border: 1px solid var(--surface-border);
-  border-radius: 8px;
-  background: linear-gradient(
-      135deg,
-      rgba(29, 185, 84, 0.18),
-      rgba(17, 20, 22, 0.58) 45%
-    ),
-    var(--surface-raised);
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 0 8px 12px;
+  border-bottom: 1px solid var(--surface-border);
+  color: var(--text-subdued);
+  font-size: 0.8rem;
 }
-
-.coverImage {
-  width: 100%;
-  aspect-ratio: 1;
-  height: auto;
-  object-fit: cover;
-  border-radius: 8px;
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
+.albumTrackHeading span:first-child {
+  text-align: center;
 }
-
-.albumInfoColum {
-  min-width: 0;
-  align-self: stretch;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-}
-
-.albumIdentity {
-  min-width: 0;
+.discContainer + .discContainer {
+  margin-top: 24px;
 }
 
 .albumMetaSummary {
@@ -756,34 +771,6 @@ onUnmounted(() => {
   color: var(--spotify-green);
 }
 
-.albumName {
-  margin: 0;
-  color: var(--text-base);
-  font-size: clamp(2rem, 4.6vw, 4.6rem);
-  font-weight: 900;
-  line-height: 0.96;
-  letter-spacing: 0;
-}
-
-.playAlbumIcon {
-  width: 54px;
-  height: 54px;
-  fill: var(--spotify-green);
-}
-
-.commandsSection {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: auto;
-}
-
-.commandsSection > div {
-  margin-left: 0;
-}
-
 .advancedRadioButton,
 .downloadRequestButton,
 .retryButton {
@@ -827,11 +814,10 @@ onUnmounted(() => {
 }
 
 .discContainer {
-  border-top: 1px solid var(--surface-border);
-  padding-top: 12px;
+  padding-top: 0;
 }
 
-.discContainer h1 {
+.discContainer h2 {
   margin: 0 0 8px;
   color: var(--text-subdued);
   font-size: 0.82rem;
@@ -887,16 +873,6 @@ onUnmounted(() => {
 
 .statusFailed {
   color: #f44336;
-}
-
-@media (max-width: 720px) {
-  .topSection {
-    grid-template-columns: 1fr;
-  }
-
-  .coverImage {
-    max-width: 280px;
-  }
 }
 
 .steerButton {

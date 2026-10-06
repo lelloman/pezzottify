@@ -261,7 +261,8 @@ watch(
   min-height: 0;
 }
 
-.mainContent > :not(.homePage):not(.nowPlaying) {
+.mainContent
+  > :not(.homePage):not(.nowPlaying):not(.detailPage):not(.detailPageHost) {
   padding: clamp(18px, 2vw, 30px);
 }
 </style>
