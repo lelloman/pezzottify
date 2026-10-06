@@ -3,18 +3,28 @@
     v-if="track"
     :title="track.name"
     kind="Track"
+    tinted
     :imageUrls="coverUrls || []"
   >
-    <template #meta
-      ><LoadClickableArtistsNames :artistsIds="artistIds" /><button
-        v-if="album"
-        type="button"
-        class="albumLink"
-        @click="handleClickOnAlbumName"
-      >
-        {{ album.name }}</button
-      ><span v-if="trackMetaSummary">{{ trackMetaSummary }}</span></template
-    >
+    <template #meta>
+      <div class="trackHeaderMeta">
+        <LoadClickableArtistsNames :artistsIds="artistIds" />
+        <template v-if="album">
+          <span aria-hidden="true">•</span>
+          <button
+            type="button"
+            class="albumLink"
+            @click="handleClickOnAlbumName"
+          >
+            {{ album.name }}
+          </button>
+        </template>
+        <template v-if="trackMetaSummary">
+          <span aria-hidden="true">•</span>
+          <span>{{ trackMetaSummary }}</span>
+        </template>
+      </div>
+    </template>
     <template #actions>
       <DetailActions
         playLabel="Play track"
@@ -68,7 +78,18 @@
     >
       {{ downloadRequestMessage }}
     </p>
-    <TrackLyrics :trackId="trackId" class="trackLyricsSection" />
+    <section v-if="artistIds.length" class="artistsSection">
+      <h2>Artists</h2>
+      <div class="artistsContainer">
+        <LoadArtistListItem
+          v-for="artistId in artistIds"
+          :key="artistId"
+          :artistId="artistId"
+        />
+      </div>
+    </section>
+
+    <TrackLyrics :trackId="trackId" compact class="trackLyricsSection" />
     <section
       v-if="
         trackSummary ||
@@ -146,17 +167,6 @@
             <dd>{{ contributor.contributor_name }}</dd>
           </div>
         </dl>
-      </div>
-    </section>
-
-    <section v-if="artistIds.length" class="artistsSection">
-      <h2>Artists</h2>
-      <div class="artistsContainer">
-        <LoadArtistListItem
-          v-for="artistId in artistIds"
-          :key="artistId"
-          :artistId="artistId"
-        />
       </div>
     </section>
 
@@ -292,7 +302,9 @@ const trackSummary = computed(() => {
 const trackMetaSummary = computed(() => {
   const profile = trackProfile.value;
   return joinParts([
-    formatDuration(track.value?.duration || 0),
+    formatDuration(track.value?.duration || 0)
+      .replace(/^00:/, "")
+      .replace(/^0(?=\d:)/, ""),
     titleCase(profile?.track_kind),
     profile?.recording_date
       ? `Recorded ${formatEnrichmentDate(profile.recording_date)}`
@@ -521,6 +533,13 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.trackHeaderMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
 .albumLine,
 .trackMetaSummary {
   margin: 12px 0 0;
@@ -697,13 +716,14 @@ onUnmounted(() => {
 }
 
 .artistsSection {
-  margin-top: 18px;
+  margin-top: 0;
 }
 
 .artistsContainer {
   width: 100%;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 520px;
   gap: 8px;
 }
 </style>

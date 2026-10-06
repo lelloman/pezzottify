@@ -1,5 +1,5 @@
 <template>
-  <section class="lyricsPanel" aria-label="Lyrics">
+  <section class="lyricsPanel" :class="{ compact }" aria-label="Lyrics">
     <header>
       <h2>Lyrics</h2>
       <span v-if="lyrics?.status === 'found'" class="source"
@@ -12,8 +12,12 @@
         lyrics?.status === 'found' && (lines.length || lyrics.plain_lyrics)
       "
     >
-      <div v-if="lines.length" class="timedLyrics">
-        <template v-for="(line, index) in lines" :key="index">
+      <div
+        v-if="lines.length"
+        class="timedLyrics"
+        :class="{ expanded: compact && expanded }"
+      >
+        <template v-for="(line, index) in visibleLines" :key="index">
           <button
             v-if="canSeek"
             type="button"
@@ -29,7 +33,18 @@
           </p>
         </template>
       </div>
-      <p v-else class="plainLyrics">{{ lyrics.plain_lyrics }}</p>
+      <p v-else class="plainLyrics" :class="{ expanded: compact && expanded }">
+        {{ visiblePlainLyrics }}
+      </p>
+      <button
+        v-if="compact && hasMore"
+        type="button"
+        class="lyricsToggle"
+        :aria-expanded="expanded"
+        @click="expanded = !expanded"
+      >
+        {{ expanded ? "Show less" : "Show more" }}
+      </button>
     </template>
     <p v-else-if="lyrics?.status === 'instrumental'">
       This track is instrumental.
@@ -52,7 +67,11 @@ import { useRemoteStore } from "@/store/remote";
 import { usePlaybackStore } from "@/store/playback";
 import { activeLyricIndex, parseSyncedLyrics } from "@/utils/lyrics";
 
-const props = defineProps({ trackId: { type: String, required: true } });
+const props = defineProps({
+  trackId: { type: String, required: true },
+  compact: Boolean,
+});
+const expanded = ref(false);
 const remote = useRemoteStore();
 const playback = usePlaybackStore();
 const lyrics = ref(null);
@@ -63,6 +82,21 @@ let generation = 0;
 let timer;
 let controller;
 const lines = computed(() => parseSyncedLyrics(lyrics.value?.synced_lyrics));
+const plainLines = computed(() =>
+  (lyrics.value?.plain_lyrics || "").split("\n"),
+);
+const hasMore = computed(
+  () => (lines.value.length || plainLines.value.length) > 4,
+);
+const visibleLines = computed(() =>
+  props.compact && !expanded.value ? lines.value.slice(0, 4) : lines.value,
+);
+const visiblePlainLyrics = computed(() =>
+  (props.compact && !expanded.value
+    ? plainLines.value.slice(0, 4)
+    : plainLines.value
+  ).join("\n"),
+);
 const isCurrent = computed(() => playback.currentTrackId === props.trackId);
 const canSeek = computed(
   () => isCurrent.value && playback.currentTrack?.duration > 0,
@@ -163,6 +197,7 @@ watch(
     clearTimeout(timer);
     controller?.abort();
     lyrics.value = null;
+    expanded.value = false;
     requesting.value = false;
     refresh();
   },
@@ -241,5 +276,41 @@ button:focus-visible {
 .timedLyrics button:hover {
   color: var(--text-base, white);
   background: rgba(255, 255, 255, 0.05);
+}
+.compact header {
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.compact .timedLyrics button,
+.compact .timedLyrics p,
+.compact .plainLyrics {
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.75;
+  padding: 2px 0;
+  margin: 0;
+  color: var(--text-subdued);
+}
+.compact .timedLyrics .active {
+  color: var(--text-base);
+  background: transparent;
+}
+.compact .expanded {
+  max-height: 360px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.compact .lyricsToggle {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  padding: 8px 0;
+  margin: 8px 0 0;
+  font-weight: 700;
+  font-size: 0.875rem;
+}
+.compact .lyricsToggle:hover {
+  text-decoration: underline;
 }
 </style>

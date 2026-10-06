@@ -2,6 +2,7 @@
   <article
     ref="pageElement"
     class="detailPage"
+    :class="{ tinted }"
     :style="
       banner
         ? {
@@ -11,6 +12,13 @@
         : undefined
     "
   >
+    <div
+      v-if="tinted && imageUrls.length"
+      class="detailTint"
+      aria-hidden="true"
+    >
+      <MultiSourceImage :urls="imageUrls" :lazy="false" alt="" />
+    </div>
     <div v-if="banner" class="stickyArtistHeader" aria-hidden="true">
       <div class="stickyArtistTitle">{{ title }}</div>
     </div>
@@ -21,7 +29,7 @@
       @contextmenu="banner && $emit('artwork-contextmenu', $event)"
     >
       <MultiSourceImage
-        v-if="imageUrls.length"
+        v-if="imageUrls.length && !tinted"
         :urls="imageUrls"
         :lazy="false"
         alt=""
@@ -86,6 +94,7 @@ const props = defineProps({
   imageUrls: { type: Array, default: () => [] },
   round: Boolean,
   banner: Boolean,
+  tinted: Boolean,
 });
 const pageElement = ref(null),
   heroElement = ref(null),
@@ -140,6 +149,32 @@ onBeforeUnmount(stopTracking);
 .detailPage {
   min-width: 0;
   color: var(--text-base);
+}
+.tinted {
+  position: relative;
+  isolation: isolate;
+  background: #121212;
+}
+.detailTint {
+  position: absolute;
+  z-index: -1;
+  inset: 0 0 auto;
+  height: 650px;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.5;
+  mask-image: linear-gradient(#000, #000 25%, transparent);
+}
+.detailTint :deep(img) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(70px);
+  transform: scale(1.2);
+}
+.tinted .detailHero,
+.tinted .detailBody {
+  background: transparent;
 }
 .detailHero {
   position: relative;
