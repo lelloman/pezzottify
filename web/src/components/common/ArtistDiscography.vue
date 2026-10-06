@@ -2,13 +2,37 @@
   <div class="discographyContainer">
     <div class="header">
       <h2>{{ appearsOn ? "Appears In" : "Discography" }}</h2>
-      <div class="sortSelector">
-        <label>Sort by:</label>
-        <select v-model="sortOrder" @change="resetAndLoad">
-          <option value="popularity">Popularity</option>
-          <option value="release_date">Release Date</option>
-        </select>
-      </div>
+      <details
+        ref="sortMenu"
+        class="sortSelector"
+        @keydown.esc.stop.prevent="closeSort(true)"
+      >
+        <summary
+          :aria-label="appearsOn ? 'Sort appearances' : 'Sort discography'"
+          title="Sort by"
+        >
+          {{ sortOrder === "popularity" ? "Popularity" : "Release date" }}
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </summary>
+        <div class="sortOptions" @keydown="navigateOptions">
+          <p>Sort by</p>
+          <button
+            v-for="option in sortOptions"
+            :key="option.value"
+            type="button"
+            :aria-pressed="sortOrder === option.value"
+            :disabled="isLoading"
+            @click="selectSort(option.value)"
+          >
+            {{ option.label
+            }}<span v-if="sortOrder === option.value" aria-hidden="true"
+              >✓</span
+            >
+          </button>
+        </div>
+      </details>
     </div>
 
     <div
@@ -63,6 +87,39 @@ const error = ref(null);
 const isLoading = ref(false);
 const sortOrder = ref("popularity");
 const offset = ref(0);
+const sortMenu = ref(null);
+const sortOptions = [
+  { value: "popularity", label: "Popularity" },
+  { value: "release_date", label: "Release date" },
+];
+const closeSort = (restoreFocus = false) => {
+  if (!sortMenu.value) return;
+  sortMenu.value.open = false;
+  if (restoreFocus) sortMenu.value.querySelector("summary")?.focus();
+};
+const outsideSort = (event) => {
+  if (!sortMenu.value?.contains(event.target)) closeSort();
+};
+const selectSort = (value) => {
+  closeSort(true);
+  if (sortOrder.value === value) return;
+  sortOrder.value = value;
+  resetAndLoad();
+};
+const navigateOptions = (event) => {
+  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+  const buttons = [...sortMenu.value.querySelectorAll("button:not(:disabled)")];
+  const index = buttons.indexOf(document.activeElement);
+  const next =
+    event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? buttons.length - 1
+        : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) %
+          buttons.length;
+  event.preventDefault();
+  buttons[next]?.focus();
+};
 
 const sentinelRef = ref(null);
 let observer = null;
@@ -133,11 +190,13 @@ watch(
 );
 
 onMounted(() => {
+  document.addEventListener("pointerdown", outsideSort);
   loadMore();
   setupIntersectionObserver();
 });
 
 onUnmounted(() => {
+  document.removeEventListener("pointerdown", outsideSort);
   if (observer) {
     observer.disconnect();
   }
@@ -162,31 +221,87 @@ onUnmounted(() => {
 }
 
 .sortSelector {
+  position: relative;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+.sortSelector summary {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--text-subtle, #b3b3b3);
-  font-size: var(--text-sm, 14px);
-}
-
-.sortSelector select {
-  padding: 6px 12px;
-  border-radius: var(--radius-md, 4px);
-  border: 1px solid var(--border-default, #333);
-  background: var(--bg-base, #121212);
-  color: var(--text-base, #fff);
-  font-size: var(--text-sm, 14px);
+  min-height: 32px;
+  padding: 4px 0 4px 8px;
+  list-style: none;
+  color: var(--text-subdued);
   cursor: pointer;
 }
-
-.sortSelector select:focus {
-  outline: none;
-  border-color: var(--spotify-green, #1db954);
+.sortSelector summary::-webkit-details-marker {
+  display: none;
 }
-
-.sortSelector select option {
-  background: var(--bg-base, #121212);
-  color: var(--text-base, #fff);
+.sortSelector summary:hover,
+.sortSelector[open] summary {
+  color: var(--text-base);
+}
+.sortSelector summary svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+.sortOptions {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  right: 0;
+  width: 200px;
+  padding: 4px;
+  border-radius: 4px;
+  background: var(--menu-background);
+  box-shadow: var(--shadow-menu);
+}
+.sortOptions p {
+  padding: 12px;
+  margin: 0;
+  color: var(--text-subdued);
+  font-size: 12px;
+  font-weight: 700;
+}
+.sortOptions button {
+  width: 100%;
+  min-height: 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 12px;
+  border-radius: 2px;
+  color: var(--text-base);
+  text-align: left;
+  font-size: 14px;
+}
+.sortOptions button:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+.sortOptions button[aria-pressed="true"] {
+  color: var(--spotify-green);
+}
+.sortOptions button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.sortSelector summary:focus-visible,
+.sortOptions button:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+.header {
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.header h2 {
+  font-size: 24px;
+  font-weight: 700;
 }
 
 .albumsContainer {

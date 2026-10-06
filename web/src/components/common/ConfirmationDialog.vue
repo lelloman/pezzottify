@@ -4,21 +4,26 @@
     :isOpen="props.isOpen"
     :closeCallback="props.closeCallback"
   >
-    <div class="modalContent" style="color: #1a1a1a !important">
-      <h1 style="color: #1a1a1a !important">{{ props.title }}</h1>
-      <p style="color: #333333 !important">
+    <div class="modalContent">
+      <h1>{{ props.title }}</h1>
+      <div class="message">
         <slot name="message"></slot>
-      </p>
+      </div>
       <div class="modal-buttons">
-        <div class="button" @click="props.closeCallback">
+        <button
+          type="button"
+          class="button negativeButton"
+          @click="props.closeCallback"
+        >
           {{ props.negativeButtonText }}
-        </div>
-        <div
+        </button>
+        <button
+          type="button"
           class="button positiveButton"
           @click="props.positiveButtonCallback"
         >
           {{ props.positiveButtonText }}
-        </div>
+        </button>
       </div>
     </div>
   </ModalDialog>
@@ -57,60 +62,70 @@ const props = defineProps({
 
 <style scoped>
 .modalContent {
-  color: #1a1a1a;
+  width: min(420px, calc(100vw - 72px));
+  color: var(--text-base);
 }
-
 .modalContent h1 {
   margin: 0;
-  font-size: 28px;
-  color: #1a1a1a;
+  font-size: 24px;
+  line-height: 1.3;
+  font-weight: 700;
+  color: var(--text-base);
 }
-
-.modalContent p {
-  margin: 8px 0;
+.message {
+  margin: 16px 0 24px;
   font-size: 14px;
-  color: #333;
+  line-height: 1.6;
+  color: var(--text-subdued);
 }
-
 .modal-buttons {
   display: flex;
-  flex-direction: row;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
   justify-content: flex-end;
-  padding: 16px 0;
 }
-
 .button {
+  min-height: 44px;
+  padding: 10px 24px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
-  padding: 8px 16px;
-  border-radius: 4px;
-  background-color: rgba(0, 0, 0, 0.1);
   transition:
-    scale 0.3s ease,
-    background-color 0.3s ease;
+    background-color 150ms,
+    transform 150ms;
 }
-
-.button:hover {
-  background-color: rgba(0, 0, 0, 0.2);
-  scale: 1.05;
-  transition:
-    scale 0.3s ease,
-    background-color 0.3s ease;
+.negativeButton {
+  color: var(--text-base);
+  background: transparent;
+  border: 1px solid var(--text-subtle);
 }
-
-.button:active {
-  background-color: rgba(0, 0, 0, 0.3);
-  scale: 0.95;
-  transition:
-    scale 0.3s ease,
-    background-color 0.3s ease;
+.negativeButton:hover {
+  border-color: var(--text-base);
+  background: var(--surface-hover);
 }
-
 .positiveButton {
-  background-color: var(
-    --accent-color,
-    var(--spotify-green, #1db954)
-  ) !important;
-  color: white;
+  background: var(--spotify-green);
+  color: #000;
+  border: 1px solid transparent;
+}
+.positiveButton:hover {
+  background: var(--spotify-green-hover);
+}
+.button:hover {
+  transform: scale(1.04);
+}
+.button:active {
+  transform: scale(1);
+}
+.button:focus-visible {
+  outline: 2px solid var(--text-base);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .button {
+    transition: none;
+  }
 }
 </style>

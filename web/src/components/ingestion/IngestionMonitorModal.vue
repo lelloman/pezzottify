@@ -70,11 +70,7 @@
       </div>
 
       <footer v-if="session" class="monitor-footer">
-        <button
-          v-if="isComplete"
-          class="dismiss-btn"
-          @click="dismiss"
-        >
+        <button v-if="isComplete" class="dismiss-btn" @click="dismiss">
           Dismiss
         </button>
       </footer>
@@ -215,7 +211,7 @@ async function handleResolve({ jobId, optionId }) {
 .dismiss-btn {
   padding: 8px 16px;
   background: var(--spotify-green);
-  color: var(--text-negative);
+  color: #000;
   border: none;
   border-radius: 4px;
   cursor: pointer;
