@@ -15,8 +15,8 @@
         :style="{ background: genreBackground(genre.name) }"
       >
         <MultiSourceImage
-          v-if="genreArtwork(genre.name)"
-          :urls="[genreArtwork(genre.name)]"
+          v-if="genre.artwork_url"
+          :urls="[genre.artwork_url]"
           class="genrePoster"
           alt=""
         />
@@ -38,7 +38,7 @@
 
 <script setup>
 import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
-import { genreArtwork, genreBackground } from "@/utils/genreArtwork";
+import { genreBackground } from "@/utils/genreArtwork";
 import { ref, onMounted } from "vue";
 import { useRemoteStore } from "@/store/remote";
 

@@ -63,7 +63,7 @@
 </template>
 
 <script setup>
-import { genreArtwork, genreBackground } from "@/utils/genreArtwork";
+import { genreBackground } from "@/utils/genreArtwork";
 import { ref, computed, onMounted, watch } from "vue";
 import { useRemoteStore } from "@/store/remote";
 import { usePlaybackStore } from "@/store/playback";
@@ -90,7 +90,7 @@ const TRACKS_PER_PAGE = 50;
 
 const decodedGenreName = computed(() => decodeURIComponent(props.genreName));
 
-const artwork = computed(() => genreArtwork(decodedGenreName.value));
+const artwork = computed(() => genreData.value?.artwork_url || null);
 
 const formatTrackCount = (count) => {
   if (count === 1) return "1 track";

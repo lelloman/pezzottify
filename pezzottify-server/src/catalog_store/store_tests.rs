@@ -18,6 +18,27 @@ mod tests {
     }
 
     #[test]
+    fn genre_artwork_is_returned_consistently_in_list_and_detail() {
+        let (store, _dir) = create_test_store();
+        {
+            let conn = store.write_conn.lock().unwrap();
+            conn.execute_batch("INSERT INTO artists (id,name,followers_total,popularity) VALUES ('artist','Artist',0,0);
+                INSERT INTO albums (id,name,album_type,label,popularity,release_date,release_date_precision) VALUES ('album','Album','album','',0,'2026','year');
+                INSERT INTO tracks (id,name,album_rowid,track_number,popularity,disc_number,duration_ms,explicit,track_available) VALUES ('track','Track',1,1,0,1,1000,0,1);
+                INSERT INTO track_artists (track_rowid,artist_rowid) VALUES (1,1);
+                INSERT INTO artist_genres (artist_rowid,genre) VALUES (1,'jazz');").unwrap();
+        }
+        assert!(store.get_genres_with_counts().unwrap()[0].artwork_url.is_none());
+        store.write_conn.lock().unwrap().execute("INSERT INTO genre_artwork VALUES ('jazz','artist','artist',123)", []).unwrap();
+        let list = store.get_genres_with_counts().unwrap();
+        let detail = store.get_tracks_by_genre("jazz", 50, 0).unwrap();
+        assert_eq!(list[0].artwork_url.as_deref(), Some("/v1/content/image/artist"));
+        assert_eq!(detail.artwork_url, list[0].artwork_url);
+        assert_eq!(detail.total, 1);
+        assert!(store.get_tracks_by_genre("missing", 50, 0).unwrap().artwork_url.is_none());
+    }
+
+    #[test]
     fn lyrics_candidates_rank_available_tracks_and_respect_retry_windows() {
         let (store, _dir) = create_test_store();
         {

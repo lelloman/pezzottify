@@ -454,6 +454,18 @@ const TRACK_LYRICS_TABLE: Table = Table {
     unique_constraints: &[],
 };
 
+const GENRE_ARTWORK_TABLE: Table = Table {
+    name: "genre_artwork",
+    columns: &[
+        sqlite_column!("genre", &SqlType::Text, is_primary_key = true, non_null = true),
+        sqlite_column!("entity_type", &SqlType::Text, non_null = true),
+        sqlite_column!("entity_id", &SqlType::Text, non_null = true),
+        sqlite_column!("selected_at", &SqlType::Integer, non_null = true),
+    ],
+    indices: &[],
+    unique_constraints: &[],
+};
+
 /// Spotify catalog schema and Pezzottify enrichment tables.
 pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
     VersionedSchema {
@@ -830,12 +842,41 @@ pub const CATALOG_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             Ok(())
         }),
     },
+    VersionedSchema {
+        version: 11,
+        tables: &[
+            ARTISTS_TABLE, ALBUMS_TABLE, TRACKS_TABLE, TRACK_ARTISTS_TABLE,
+            ARTIST_ALBUMS_TABLE, ARTIST_GENRES_TABLE, ALBUM_IMAGES_TABLE,
+            ARTIST_IMAGES_TABLE, RELATED_ARTISTS_TABLE, ENTITY_EMBEDDINGS_TABLE,
+            ARTIST_ENRICHMENT_QUEUE_TABLE, CATALOG_STATS_TABLE, TRACK_LYRICS_TABLE,
+            GENRE_ARTWORK_TABLE,
+        ],
+        migration: Some(|tx: &rusqlite::Connection| {
+            tx.execute_batch(include_str!("genre_artwork.sql"))?;
+            Ok(())
+        }),
+    },
 ];
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use rusqlite::Connection;
+
+    #[test]
+    fn genre_artwork_migration_preserves_preseeded_choices_and_old_schema() {
+        let conn = Connection::open_in_memory().unwrap();
+        let old = &CATALOG_VERSIONED_SCHEMAS[10];
+        old.create(&conn).unwrap();
+        conn.execute_batch(include_str!("genre_artwork.sql")).unwrap();
+        conn.execute("INSERT INTO genre_artwork VALUES ('jazz', 'artist', 'chosen', 123)", []).unwrap();
+        old.validate(&conn).unwrap();
+        let latest = CATALOG_VERSIONED_SCHEMAS.last().unwrap();
+        (latest.migration.unwrap())(&conn).unwrap();
+        latest.validate(&conn).unwrap();
+        let id: String = conn.query_row("SELECT entity_id FROM genre_artwork WHERE genre='jazz'", [], |row| row.get(0)).unwrap();
+        assert_eq!(id, "chosen");
+    }
 
     #[test]
     fn test_schema_creates_successfully() {

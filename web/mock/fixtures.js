@@ -1,3 +1,4 @@
+import { genreArtwork } from "../src/utils/genreArtwork.js";
 // Deliberately fictional catalog: stable IDs, original lyrics, locally drawn covers.
 export const artists = [
   "Mira Sol",
@@ -91,7 +92,7 @@ export const permissions = [
   "UploadContent",
 ];
 export const genres = [...new Set(artists.flatMap((a) => a.genres))].map(
-  (name) => ({ name, track_count: 24 }),
+  (name) => ({ name, artwork_url: genreArtwork(name), track_count: 24 }),
 );
 export const screens = [
   ["Home", "/"],

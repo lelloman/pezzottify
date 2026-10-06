@@ -2245,7 +2245,8 @@ impl CatalogStore for SqliteCatalogStore {
         let conn = conn.lock().unwrap();
 
         let mut stmt = conn.prepare_cached(
-            "SELECT ag.genre, COUNT(DISTINCT t.rowid) as track_count
+            "SELECT ag.genre, COUNT(DISTINCT t.rowid) as track_count,
+                    (SELECT '/v1/content/image/' || ga.entity_id FROM genre_artwork ga WHERE ga.genre = ag.genre)
              FROM artist_genres ag
              JOIN track_artists ta ON ta.artist_rowid = ag.artist_rowid
              JOIN tracks t ON t.rowid = ta.track_rowid
@@ -2258,6 +2259,7 @@ impl CatalogStore for SqliteCatalogStore {
         let genres = stmt
             .query_map([], |row| {
                 Ok(GenreInfo {
+                    artwork_url: row.get(2)?,
                     name: row.get(0)?,
                     track_count: row.get::<_, i64>(1)? as usize,
                 })
@@ -2311,7 +2313,12 @@ impl CatalogStore for SqliteCatalogStore {
         let total = total as usize;
         let has_more = offset + track_ids.len() < total;
 
+        let artwork_url: Option<String> = conn.query_row(
+            "SELECT '/v1/content/image/' || entity_id FROM genre_artwork WHERE genre = ?1",
+            params![genre], |row| row.get(0),
+        ).optional()?;
         Ok(GenreTracksResult {
+            artwork_url,
             track_ids,
             total,
             has_more,

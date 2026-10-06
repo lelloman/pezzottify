@@ -201,6 +201,7 @@ impl CatalogStore for NullCatalogStore {
         _offset: usize,
     ) -> Result<super::GenreTracksResult> {
         Ok(super::GenreTracksResult {
+            artwork_url: None,
             track_ids: Vec::new(),
             total: 0,
             has_more: false,

@@ -257,6 +257,14 @@ export function mockPlugin() {
     if (path === "/v1/content/genres") return json(res, list(genres));
     if (path.startsWith("/v1/content/genre/"))
       return json(res, {
+        artwork_url:
+          genres.find(
+            (g) =>
+              g.name ===
+              decodeURIComponent(
+                path.slice("/v1/content/genre/".length).split("/")[0],
+              ),
+          )?.artwork_url || null,
         track_ids: list(tracks.slice(0, 24).map((t) => t.id)),
         total: 24,
         has_more: false,
