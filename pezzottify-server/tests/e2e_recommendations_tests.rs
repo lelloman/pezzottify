@@ -6,7 +6,7 @@ use common::{TestClient, TestServer, TRACK_1_ID, TRACK_2_ID, TRACK_3_ID, TRACK_4
 use reqwest::{header, StatusCode};
 use serde_json::{json, Value};
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn recommendation_reads_require_authentication() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -20,7 +20,7 @@ async fn recommendation_reads_require_authentication() {
     assert_eq!(radio.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn empty_continuation_preserves_the_no_store_response_contract() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -37,7 +37,7 @@ async fn empty_continuation_preserves_the_no_store_response_contract() {
     assert_eq!(body["track_ids"], json!([]));
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn radio_reads_preserve_validation_and_seed_fallback_behavior() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -95,7 +95,7 @@ fn approx(value: &Value, expected: f64) -> bool {
         .is_some_and(|actual| (actual - expected).abs() < 0.01)
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn continuation_anchors_on_source_tracks() {
     let (_server, client) = server_with_embeddings().await;
     let response = client
@@ -119,7 +119,7 @@ async fn continuation_anchors_on_source_tracks() {
     assert_eq!(body["progress"], Value::Null);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn continuation_destination_progress_reports_diagnostics() {
     let (_server, client) = server_with_embeddings().await;
     let at = |progress: f64| {
@@ -148,7 +148,7 @@ async fn continuation_destination_progress_reports_diagnostics() {
     ));
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn continuation_rejects_invalid_requests_with_json_errors() {
     let (_server, client) = server_with_embeddings().await;
     let reference = json!({"entity_type": "track", "entity_id": TRACK_1_ID});
@@ -167,7 +167,7 @@ async fn continuation_rejects_invalid_requests_with_json_errors() {
     }
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn legacy_continuation_still_works() {
     let (_server, client) = server_with_embeddings().await;
     let response = client
@@ -182,7 +182,7 @@ async fn legacy_continuation_still_works() {
     assert_eq!(body["namespaces"], json!([]));
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn concepts_require_authentication_and_list_as_json() {
     let server = TestServer::spawn().await;
     let anonymous = TestClient::new(server.base_url.clone());
@@ -216,7 +216,7 @@ async fn concepts_require_authentication_and_list_as_json() {
     );
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn continuation_accepts_destination_mixes_and_concept_references() {
     let (_server, client) = server_with_embeddings().await;
     let response = client

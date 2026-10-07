@@ -2,13 +2,13 @@
 
 use super::sender::{send_wakeup, DeliveryOutcome, PushTarget, WakeupOptions};
 use super::{VapidKeys, WakeKind};
-use crate::execution::sync::mpsc;
-use crate::execution::time::Instant;
 use crate::server::websocket::connection::ConnectionManager;
 use crate::user::{FullUserStore, PushDeliveryRecord};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::mpsc;
+use tokio::time::Instant;
 use tracing::{debug, info, warn};
 
 /// Notification wake-ups for one user within this window are sent once.
@@ -81,7 +81,7 @@ impl Coalescer {
 /// Everything needed to deliver wake-ups.
 pub(crate) struct Delivery {
     pub(crate) store: Arc<dyn FullUserStore>,
-    pub(crate) client: simple_server::client::Client,
+    pub(crate) client: reqwest::Client,
     pub(crate) vapid: VapidKeys,
     pub(crate) subject: String,
     /// Live WebSocket connections; those devices already receive events.
@@ -96,15 +96,15 @@ pub(crate) async fn run(
     let mut coalescer = Coalescer::new();
     loop {
         let due = coalescer.next_due();
-        crate::execution::select! {
+        tokio::select! {
             request = requests.recv() => match request {
                 Some((user_id, seq, kind)) => coalescer.push(user_id, seq, kind, Instant::now()),
                 None => break,
             },
-            _ = async { crate::execution::time::sleep_until(due.unwrap()).await }, if due.is_some() => {
+            _ = async { tokio::time::sleep_until(due.unwrap()).await }, if due.is_some() => {
                 for (user_id, seq, kind) in coalescer.take_due(Instant::now()) {
                     let delivery = delivery.clone();
-                    crate::execution::spawn(async move { deliver_to_user(&delivery, user_id, seq, kind).await });
+                    tokio::spawn(async move { deliver_to_user(&delivery, user_id, seq, kind).await });
                 }
             }
         }
@@ -124,7 +124,7 @@ async fn connected_device_uuids(
         return Default::default();
     }
     let store = delivery.store.clone();
-    crate::execution::task::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         connected
             .into_iter()
             .filter_map(|device_id| store.get_device(device_id).ok().flatten())
@@ -139,21 +139,18 @@ async fn connected_device_uuids(
 /// Devices with a live WebSocket are skipped: they already received the events.
 pub(crate) async fn deliver_to_user(delivery: &Delivery, user_id: usize, seq: i64, kind: WakeKind) {
     let store = delivery.store.clone();
-    let registrations = match crate::execution::task::spawn_blocking(move || {
-        store.list_push_registrations(user_id)
-    })
-    .await
-    {
-        Ok(Ok(registrations)) => registrations,
-        Ok(Err(error)) => {
-            warn!("Push: cannot list registrations for user {user_id}: {error:#}");
-            return;
-        }
-        Err(error) => {
-            warn!("Push: registration lookup panicked: {error}");
-            return;
-        }
-    };
+    let registrations =
+        match tokio::task::spawn_blocking(move || store.list_push_registrations(user_id)).await {
+            Ok(Ok(registrations)) => registrations,
+            Ok(Err(error)) => {
+                warn!("Push: cannot list registrations for user {user_id}: {error:#}");
+                return;
+            }
+            Err(error) => {
+                warn!("Push: registration lookup panicked: {error}");
+                return;
+            }
+        };
     if registrations.is_empty() {
         return;
     }
@@ -209,7 +206,7 @@ pub(crate) async fn record_outcome(
     let store = delivery.store.clone();
     let owned_endpoint = endpoint.to_string();
     let stored_outcome = outcome.clone();
-    let result = crate::execution::task::spawn_blocking(move || match stored_outcome {
+    let result = tokio::task::spawn_blocking(move || match stored_outcome {
         DeliveryOutcome::Delivered => store
             .record_push_delivery(
                 &owned_endpoint,
@@ -251,7 +248,7 @@ pub(crate) async fn record_outcome(
 
 /// Host part of an endpoint, safe to log or show: the path is the capability.
 pub fn endpoint_host(endpoint: &str) -> String {
-    url::Url::parse(endpoint)
+    reqwest::Url::parse(endpoint)
         .ok()
         .and_then(|url| url.host_str().map(str::to_string))
         .unwrap_or_default()
@@ -436,7 +433,7 @@ mod tests {
         (
             Delivery {
                 store,
-                client: simple_server::client::Client::new(),
+                client: reqwest::Client::new(),
                 vapid: vapid.clone(),
                 subject: "mailto:test@example.org".into(),
                 connections: None,
@@ -459,7 +456,7 @@ mod tests {
         (store, dir, user)
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn delivers_an_encrypted_vapid_signed_wakeup() {
         let (store, _db, user) = user_store();
         let (url, received) = push_service(vec![201]).await;
@@ -489,7 +486,7 @@ mod tests {
         assert_eq!(registration.first_failure_at, None);
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn test_options_are_high_urgency_and_short_lived() {
         let (url, received) = push_service(vec![201]).await;
         let (keypair, auth) = ece::generate_keypair_and_auth_secret().unwrap();
@@ -499,7 +496,7 @@ mod tests {
         let vapid = VapidKeys::load_or_generate(&dir.path().join("vapid.pem")).unwrap();
 
         let outcome = send_wakeup(
-            &simple_server::client::Client::new(),
+            &reqwest::Client::new(),
             &vapid,
             "mailto:test@example.org",
             PushTarget {
@@ -519,7 +516,7 @@ mod tests {
         assert!(!head.contains("topic:"));
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn gone_endpoints_are_removed_and_failures_are_recorded() {
         let (store, _db, user) = user_store();
         let (keypair, auth) = ece::generate_keypair_and_auth_secret().unwrap();
@@ -551,7 +548,7 @@ mod tests {
         );
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn listener_wakes_only_for_notification_worthy_events() {
         use crate::user::UserEvent;
         let (store, _db, user) = user_store();
@@ -607,7 +604,7 @@ mod tests {
             if !received.lock().unwrap().is_empty() {
                 break;
             }
-            crate::execution::time::sleep(Duration::from_millis(10)).await;
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
         let requests = received.lock().unwrap().clone();
         assert_eq!(requests.len(), 1);
@@ -619,7 +616,7 @@ mod tests {
         );
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn sync_wakeups_are_low_urgency_and_skip_connected_devices() {
         use crate::user::device::{DeviceRegistration, DeviceType};
         use crate::user::DeviceStore;

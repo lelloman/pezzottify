@@ -7,7 +7,7 @@ mod common;
 use common::{TestClient, TestServer, TEST_AUDIO_SIZE_BYTES, TRACK_1_ID, TRACK_2_ID};
 use reqwest::StatusCode;
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_stream_track_returns_audio_data() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -55,7 +55,7 @@ async fn test_stream_track_returns_audio_data() {
     );
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_stream_nonexistent_track_returns_404() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -65,7 +65,7 @@ async fn test_stream_nonexistent_track_returns_404() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_stream_track_requires_authentication() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -75,7 +75,7 @@ async fn test_stream_track_requires_authentication() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_stream_multiple_tracks() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -99,7 +99,7 @@ async fn test_stream_multiple_tracks() {
 // Range Request Tests
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_stream_track_with_range_request() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -131,7 +131,7 @@ async fn test_stream_track_with_range_request() {
     assert_eq!(&bytes[..], &full_bytes[..1024]);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_stream_track_with_open_ended_range() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -157,7 +157,7 @@ async fn test_stream_track_with_open_ended_range() {
     assert_eq!(&bytes[..], &full_bytes[100..]);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_stream_track_with_suffix_range() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -192,7 +192,7 @@ async fn test_stream_track_with_suffix_range() {
     assert_eq!(&bytes[..], &full_bytes[expected_start..]);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_stream_track_clamps_range_end_to_file_length() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -211,7 +211,7 @@ async fn test_stream_track_clamps_range_end_to_file_length() {
     assert_eq!(&bytes[..], &full_bytes[100..]);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_stream_track_rejects_invalid_and_unsatisfiable_ranges() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -255,7 +255,7 @@ async fn test_stream_track_rejects_invalid_and_unsatisfiable_ranges() {
     }
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_stream_track_full_then_partial() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -278,7 +278,7 @@ async fn test_stream_track_full_then_partial() {
     assert_eq!(&full_bytes[0..100], &partial_bytes[..]);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_concurrent_streaming() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;

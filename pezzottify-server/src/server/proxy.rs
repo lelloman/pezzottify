@@ -1183,7 +1183,7 @@ mod tests {
         (temp_dir, catalog_store)
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn test_ensure_artist_complete_fetches_missing_artist() {
         let (temp_dir, catalog_store) = setup_test_env();
         let mock_downloader = Arc::new(MockDownloader::new());
@@ -1214,7 +1214,7 @@ mod tests {
         assert!(stored.is_some());
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn test_ensure_artist_complete_skips_existing_artist_with_related_artists() {
         let (temp_dir, catalog_store) = setup_test_env();
         let mock_downloader = Arc::new(MockDownloader::new());
@@ -1270,7 +1270,7 @@ mod tests {
         assert_eq!(mock_downloader.get_call_count("get_artist"), 0);
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn test_ensure_album_complete_fetches_missing_album() {
         let (temp_dir, catalog_store) = setup_test_env();
         let mock_downloader = Arc::new(MockDownloader::new());
@@ -1301,7 +1301,7 @@ mod tests {
         assert!(stored.is_some());
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn test_fetch_and_store_track() {
         let (temp_dir, catalog_store) = setup_test_env();
         let mock_downloader = Arc::new(MockDownloader::new());
@@ -1343,7 +1343,7 @@ mod tests {
         assert!(stored.is_some());
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn test_mock_downloader_returns_error_for_missing() {
         let mock = MockDownloader::new();
 
@@ -1852,7 +1852,7 @@ mod tests {
         }
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn test_can_user_trigger_download_no_permission() {
         let (temp_dir, catalog_store) = setup_test_env();
         let mock_downloader = Arc::new(MockDownloader::new());
@@ -1881,7 +1881,7 @@ mod tests {
         assert_eq!(mock_downloader.get_call_count("get_artist"), 0);
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn test_can_user_trigger_download_with_permission() {
         let (temp_dir, catalog_store) = setup_test_env();
         let mock_downloader = Arc::new(MockDownloader::new());
@@ -1914,7 +1914,7 @@ mod tests {
         assert!(stored.is_some());
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn test_can_user_trigger_download_album_respects_permission_check() {
         let (temp_dir, catalog_store) = setup_test_env();
         let mock_downloader = Arc::new(MockDownloader::new());

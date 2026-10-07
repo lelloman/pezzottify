@@ -802,7 +802,7 @@ mod tests {
         assert!(temp_dir.path().join(&traversal).exists());
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn cloned_catalog_store_handles_concurrent_reads_consistently() {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let store = SqliteCatalogStore::new(
@@ -815,7 +815,7 @@ mod tests {
 
         let handles: Vec<_> = (0..10)
             .map(|_| {
-                crate::execution::spawn({
+                tokio::spawn({
                     let store = store.clone();
                     async move {
                         for _ in 0..100 {

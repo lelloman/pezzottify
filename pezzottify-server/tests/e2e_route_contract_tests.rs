@@ -9,7 +9,7 @@ mod common;
 use common::{TestClient, TestServer};
 use reqwest::{Method, StatusCode};
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn protected_route_groups_remain_mounted_and_authenticated() {
     let server = TestServer::spawn().await;
     let client = reqwest::Client::new();
@@ -58,7 +58,7 @@ async fn protected_route_groups_remain_mounted_and_authenticated() {
     }
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn intentionally_disabled_changelog_and_image_mutations_return_501() {
     let server = TestServer::spawn().await;
     let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -84,7 +84,7 @@ async fn intentionally_disabled_changelog_and_image_mutations_return_501() {
     );
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_builder_can_toggle_password_auth_and_optional_managers() {
     let password_disabled = TestServer::builder()
         .with_password_auth_disabled()

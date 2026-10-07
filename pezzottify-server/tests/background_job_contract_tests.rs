@@ -12,8 +12,8 @@ use pezzottify_server::user::{
     device::{DeviceRegistration, DeviceType},
     DeviceStore, FullUserStore, SqliteUserStore, UserManager,
 };
-use simple_server::primitives::CancellationToken;
 use tempfile::TempDir;
+use tokio_util::sync::CancellationToken;
 
 struct JobFixture {
     _temp_dir: TempDir,

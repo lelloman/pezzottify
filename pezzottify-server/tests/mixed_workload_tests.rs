@@ -28,7 +28,7 @@ fn p95(samples: &mut [Duration]) -> Duration {
     samples[index]
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn mixed_user_workload_stays_within_latency_and_failure_budget() {
     let server = TestServer::builder()
         .with_available_catalog()

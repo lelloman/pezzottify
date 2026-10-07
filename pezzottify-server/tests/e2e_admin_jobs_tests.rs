@@ -19,7 +19,7 @@ use common::{TestClient, TestServer};
 // evaluated. This is acceptable behavior - the key point is that the endpoint
 // is protected.
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_list_jobs_rejects_unauthenticated() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -29,7 +29,7 @@ async fn test_list_jobs_rejects_unauthenticated() {
     assert_eq!(response.status(), 401);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_list_jobs_rejects_non_admin() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -38,7 +38,7 @@ async fn test_list_jobs_rejects_non_admin() {
     assert_eq!(response.status(), 403);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_job_rejects_unauthenticated() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -48,7 +48,7 @@ async fn test_get_job_rejects_unauthenticated() {
     assert_eq!(response.status(), 401);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_job_rejects_non_admin() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -57,7 +57,7 @@ async fn test_get_job_rejects_non_admin() {
     assert_eq!(response.status(), 403);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_trigger_job_rejects_unauthenticated() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -67,7 +67,7 @@ async fn test_trigger_job_rejects_unauthenticated() {
     assert_eq!(response.status(), 401);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_trigger_job_rejects_non_admin() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -76,7 +76,7 @@ async fn test_trigger_job_rejects_non_admin() {
     assert_eq!(response.status(), 403);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_job_controls_reject_unauthenticated_and_non_admin_users() {
     let server = TestServer::builder().with_scheduler().spawn().await;
 
@@ -101,7 +101,7 @@ async fn test_job_controls_reject_unauthenticated_and_non_admin_users() {
     );
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_job_history_rejects_unauthenticated() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -111,7 +111,7 @@ async fn test_get_job_history_rejects_unauthenticated() {
     assert_eq!(response.status(), 401);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_job_history_rejects_non_admin() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -124,7 +124,7 @@ async fn test_get_job_history_rejects_non_admin() {
 // No Scheduler Configured Tests
 // ============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_list_jobs_returns_503_when_no_scheduler() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -137,7 +137,7 @@ async fn test_list_jobs_returns_503_when_no_scheduler() {
     assert!(body["error"].as_str().unwrap().contains("not available"));
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_job_returns_503_when_no_scheduler() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -149,7 +149,7 @@ async fn test_get_job_returns_503_when_no_scheduler() {
     assert!(body["error"].as_str().unwrap().contains("not available"));
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_trigger_job_returns_503_when_no_scheduler() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -161,7 +161,7 @@ async fn test_trigger_job_returns_503_when_no_scheduler() {
     assert!(body["error"].as_str().unwrap().contains("not available"));
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_job_history_returns_503_when_no_scheduler() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -177,7 +177,7 @@ async fn test_get_job_history_returns_503_when_no_scheduler() {
 // Configured Scheduler Contract Tests
 // ============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn configured_scheduler_lists_registered_jobs() {
     let server = TestServer::builder().with_scheduler().spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -190,7 +190,7 @@ async fn configured_scheduler_lists_registered_jobs() {
     );
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn configured_scheduler_preserves_missing_job_contracts() {
     let server = TestServer::builder().with_scheduler().spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -205,7 +205,7 @@ async fn configured_scheduler_preserves_missing_job_contracts() {
     );
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn configured_scheduler_exposes_and_persists_global_pause_control() {
     let server = TestServer::builder().with_scheduler().spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;

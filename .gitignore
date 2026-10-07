@@ -32,6 +32,3 @@ pezzottify-server/shows.db
 infra/dns-config.json
 infra/.current-ip
 infra/dns-update.log
-
-# Prepared native-engine Docker inputs
-/.engine-build/

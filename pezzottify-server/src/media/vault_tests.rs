@@ -127,7 +127,7 @@ async fn cache(
     f.manager.register_cache_copy(&copy).unwrap();
     (copy, adapter)
 }
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn replacement_invalidates_all_representations_across_vaults_and_restart() {
     let f = fixture();
     let old = publish(&f, b"old").copy.unwrap();
@@ -170,7 +170,7 @@ async fn replacement_invalidates_all_representations_across_vaults_and_restart()
     assert!(adapter_b.objects.lock().unwrap().is_empty());
     assert!(std::fs::read(f.root.path().join(new.locator)).is_ok());
 }
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn authoritative_deletion_invalidates_caches_but_cache_eviction_preserves_authority() {
     let f = fixture();
     let receipt = publish(&f, b"normal audio");
@@ -191,7 +191,7 @@ async fn authoritative_deletion_invalidates_caches_but_cache_eviction_preserves_
         Err(AdapterError::Stale)
     ));
 }
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn unsupported_and_unreachable_are_distinct_from_missing() {
     let f = fixture();
     let authority = publish(&f, b"audio").copy.unwrap();
@@ -258,7 +258,7 @@ fn content_representation_and_copy_identity_are_independent_and_legacy_is_protec
         .register_vault(roles[0].clone(), Arc::new(MemoryAdapter::default()))
         .is_err());
 }
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn local_adapter_preserves_ranges_atomic_publication_and_root_confinement() {
     let root = tempfile::tempdir().unwrap();
     let adapter = adapters::FilesystemAdapter::new(root.path().to_owned());
@@ -288,7 +288,7 @@ async fn local_adapter_preserves_ranges_atomic_publication_and_root_confinement(
     assert_eq!(adapter.presence("audio/copy.ogg").await, Presence::Missing);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn replacement_during_cache_open_is_rejected_and_availability_is_not_deletion() {
     let f = fixture();
     let authority = publish(&f, b"old").copy.unwrap();
@@ -318,7 +318,7 @@ async fn replacement_during_cache_open_is_rejected_and_availability_is_not_delet
     ));
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn explicit_authoritative_deletion_handles_ingested_media_and_stale_requests() {
     let f = fixture();
     let old = publish(&f, b"old").copy.unwrap();
@@ -345,7 +345,7 @@ async fn explicit_authoritative_deletion_handles_ingested_media_and_stale_reques
     ));
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn absent_filesystem_root_is_unreachable_not_missing_content() {
     let root = tempfile::tempdir().unwrap();
     let adapter = adapters::FilesystemAdapter::new(root.path().join("offline-volume"));

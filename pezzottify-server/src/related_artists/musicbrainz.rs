@@ -3,8 +3,8 @@
 //! Rate limited to 1 request per second per MusicBrainz API policy.
 
 use anyhow::Result;
+use reqwest::blocking::Client;
 use serde::Deserialize;
-use simple_server::client::blocking::Client;
 use std::time::Duration;
 
 use super::pacing::RequestPacer;

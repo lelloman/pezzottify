@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
-source scripts/engine-env
-export RUST_MIN_STACK="${RUST_MIN_STACK:-33554432}"
-cargo build --locked --release --bins "$@"
-pezzottify_install_engine release
-bash scripts/check-engine-link

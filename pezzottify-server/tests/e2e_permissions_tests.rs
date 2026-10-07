@@ -12,7 +12,7 @@ use serde_json::json;
 // Unauthenticated Access Tests
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_unauthenticated_cannot_access_catalog() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -22,7 +22,7 @@ async fn test_unauthenticated_cannot_access_catalog() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_unauthenticated_cannot_access_catalog_stats() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -31,7 +31,7 @@ async fn test_unauthenticated_cannot_access_catalog_stats() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_unauthenticated_cannot_stream() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -41,7 +41,7 @@ async fn test_unauthenticated_cannot_stream() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_unauthenticated_cannot_like_content() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -51,7 +51,7 @@ async fn test_unauthenticated_cannot_like_content() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_unauthenticated_cannot_create_playlist() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -61,7 +61,7 @@ async fn test_unauthenticated_cannot_create_playlist() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_unauthenticated_can_access_statics() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -75,7 +75,7 @@ async fn test_unauthenticated_can_access_statics() {
 // Regular User Access Tests
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_regular_user_can_access_catalog() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -84,7 +84,7 @@ async fn test_regular_user_can_access_catalog() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_regular_user_can_access_catalog_stats() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -97,7 +97,7 @@ async fn test_regular_user_can_access_catalog_stats() {
     );
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_regular_user_can_stream() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -106,7 +106,7 @@ async fn test_regular_user_can_stream() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_regular_user_can_like_content() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -115,7 +115,7 @@ async fn test_regular_user_can_like_content() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_regular_user_can_create_playlist() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -126,7 +126,7 @@ async fn test_regular_user_can_create_playlist() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_regular_user_cannot_edit_catalog() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -148,7 +148,7 @@ async fn test_regular_user_cannot_edit_catalog() {
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_regular_user_cannot_delete_catalog_item() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -171,7 +171,7 @@ async fn test_regular_user_cannot_delete_catalog_item() {
 // Admin User Access Tests
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_admin_can_access_catalog() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -180,7 +180,7 @@ async fn test_admin_can_access_catalog() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_admin_can_create_catalog_item() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -202,7 +202,7 @@ async fn test_admin_can_create_catalog_item() {
     assert_eq!(response.status(), StatusCode::CREATED);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_admin_can_update_catalog_item() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -233,7 +233,7 @@ async fn test_admin_can_update_catalog_item() {
     );
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_admin_can_delete_catalog_item() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -271,7 +271,7 @@ async fn test_admin_can_delete_catalog_item() {
 // Cross-User Access Tests
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_user_cannot_access_other_users_playlist() {
     let server = TestServer::spawn().await;
 
@@ -295,7 +295,7 @@ async fn test_user_cannot_access_other_users_playlist() {
     );
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_user_cannot_delete_other_users_playlist() {
     let server = TestServer::spawn().await;
 
@@ -323,7 +323,7 @@ async fn test_user_cannot_delete_other_users_playlist() {
 // Session Management Tests
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_logout_revokes_access() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -342,7 +342,7 @@ async fn test_logout_revokes_access() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_invalid_credentials_denied() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -351,7 +351,7 @@ async fn test_invalid_credentials_denied() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_wrong_password_denied() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());

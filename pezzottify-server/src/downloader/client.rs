@@ -1,15 +1,15 @@
 //! HTTP client for the external downloader service.
 #![allow(dead_code)]
 
-use crate::execution::fs::File;
-use crate::execution::io::AsyncWriteExt;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
-use simple_server::client::header::{ACCEPT_ENCODING, CONTENT_TYPE};
+use reqwest::header::{ACCEPT_ENCODING, CONTENT_TYPE};
 use std::path::Path;
 use std::pin::Pin;
 use std::time::{Duration, Instant};
+use tokio::fs::File;
+use tokio::io::AsyncWriteExt;
 
 use crate::server::metrics;
 
@@ -61,7 +61,7 @@ pub trait Downloader: Send + Sync {
 
 /// HTTP client for communicating with the downloader service.
 pub struct DownloaderClient {
-    client: simple_server::client::Client,
+    client: reqwest::Client,
     base_url: String,
 }
 
@@ -72,7 +72,7 @@ impl DownloaderClient {
     /// * `base_url` - Base URL of the downloader service (e.g., "http://localhost:8080")
     /// * `timeout_sec` - Request timeout in seconds
     pub fn new(base_url: String, timeout_sec: u64) -> Self {
-        let client = simple_server::client::Client::builder()
+        let client = reqwest::Client::builder()
             // Body progress is supervised by TrackMaterializer. A total request
             // timeout would incorrectly abort a healthy, long progressive stream.
             .connect_timeout(Duration::from_secs(timeout_sec))
@@ -107,7 +107,7 @@ impl DownloaderClient {
 
         // Create parent directories if needed
         if let Some(parent) = dest.parent() {
-            crate::execution::fs::create_dir_all(parent)
+            tokio::fs::create_dir_all(parent)
                 .await
                 .context("Failed to create parent directories")?;
         }

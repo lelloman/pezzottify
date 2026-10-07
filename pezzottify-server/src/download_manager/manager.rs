@@ -6,8 +6,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::execution::sync::RwLock;
 use anyhow::{anyhow, Result};
+use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 use crate::catalog_store::{CatalogStore, TrackAvailability};

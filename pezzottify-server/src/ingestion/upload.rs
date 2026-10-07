@@ -51,7 +51,7 @@ impl IngestionManager {
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown");
-            let file_size = crate::execution::fs::metadata(&audio_path)
+            let file_size = tokio::fs::metadata(&audio_path)
                 .await
                 .map(|m| m.len() as i64)
                 .unwrap_or(0);
@@ -356,7 +356,7 @@ impl IngestionManager {
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown");
-            let file_size = crate::execution::fs::metadata(audio_path)
+            let file_size = tokio::fs::metadata(audio_path)
                 .await
                 .map(|m| m.len() as i64)
                 .unwrap_or(0);

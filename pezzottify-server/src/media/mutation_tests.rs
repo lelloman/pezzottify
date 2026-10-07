@@ -503,7 +503,7 @@ fn committed_copy_explicitly_reports_pending_secondary_work() {
     assert!(!pending_path(fixture.root.path(), &receipt.revision).exists());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn ingestion_failure_stays_retryable_and_successful_retry_completes_once() {
     use crate::ingestion::*;
     let fixture = ready_fixture();

@@ -14,8 +14,8 @@ use pezzottify_server::catalog_store::{
 use pezzottify_server::config::CatalogAvailabilityStatsJobSettings;
 use pezzottify_server::server_store::{JobAuditEventType, ServerStore, SqliteServerStore};
 use pezzottify_server::user::{FullUserStore, SqliteUserStore, UserManager};
-use simple_server::primitives::CancellationToken;
 use tempfile::TempDir;
+use tokio_util::sync::CancellationToken;
 
 struct JobFixture {
     temp_dir: TempDir,

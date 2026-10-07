@@ -6,7 +6,6 @@
 //! - JWT validation using JWKS
 //! - Session state management
 
-use crate::execution::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
 use anyhow::{anyhow, Context, Result};
 use openidconnect::core::{CoreAuthenticationFlow, CoreIdTokenClaims, CoreProviderMetadata};
 use openidconnect::{
@@ -17,48 +16,17 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::{Mutex, RwLock};
 use std::time::{Duration, Instant};
+use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
 use tracing::{debug, info, warn};
 
 use crate::config::OidcConfig;
 
 /// HTTP client for OIDC requests
-fn http_client() -> Result<OidcHttp> {
-    simple_server::client::Client::builder()
-        .no_redirect()
+fn http_client() -> Result<reqwest::Client> {
+    reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
         .build()
-        .map(OidcHttp)
         .context("Failed to create HTTP client")
-}
-
-struct OidcHttp(simple_server::client::Client);
-impl<'a> openidconnect::AsyncHttpClient<'a> for OidcHttp {
-    type Error = simple_server::client::Error;
-    type Future = std::pin::Pin<
-        Box<
-            dyn std::future::Future<Output = Result<openidconnect::HttpResponse, Self::Error>>
-                + Send
-                + 'a,
-        >,
-    >;
-    fn call(&'a self, request: openidconnect::HttpRequest) -> Self::Future {
-        Box::pin(async move {
-            let (parts, body) = request.into_parts();
-            let response = self
-                .0
-                .request(parts.method, parts.uri.to_string())
-                .headers(parts.headers)
-                .body(body)
-                .send()
-                .await?;
-            let status = response.status();
-            let headers = response.headers().clone();
-            let bytes = response.bytes().await?;
-            let mut result = openidconnect::http::Response::new(bytes.to_vec());
-            *result.status_mut() = status;
-            *result.headers_mut() = headers;
-            Ok(result)
-        })
-    }
 }
 
 /// State stored during the authorization flow (between /login and /callback)
@@ -636,7 +604,7 @@ mod tests {
 
     #[test]
     fn test_auth_state_store() {
-        let rt = crate::execution::runtime::Runtime::new().unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             let store = AuthStateStore::new();
 
@@ -665,7 +633,7 @@ mod tests {
 
     #[test]
     fn test_auth_state_expiration() {
-        let rt = crate::execution::runtime::Runtime::new().unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             let store = AuthStateStore::new();
 

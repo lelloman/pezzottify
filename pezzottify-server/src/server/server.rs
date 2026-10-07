@@ -33,8 +33,10 @@ use crate::{
         FullUserStore, Permission, UserRole,
     },
 };
+use simple_server::web::static_files::StaticDir;
 
-use crate::web::{
+use serde::{Deserialize, Serialize};
+use simple_server::web::{
     body::Body,
     extract::{Path, Query, State},
     http::{header, response, HeaderMap, HeaderValue, StatusCode},
@@ -43,7 +45,6 @@ use crate::web::{
     routing::{delete, get, post, put},
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
 
 use super::api_error::ApiError;
 use super::filesystem_work::FilesystemWorkPool;

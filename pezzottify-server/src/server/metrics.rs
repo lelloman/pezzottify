@@ -1,14 +1,14 @@
 #![allow(dead_code)]
 
-use crate::web::{
-    extract::{MatchedPath, State},
-    http::{Extensions, StatusCode},
-    response::IntoResponse,
-};
 use lazy_static::lazy_static;
 use prometheus::{
     Counter, CounterVec, Encoder, Gauge, GaugeVec, Histogram, HistogramOpts, HistogramVec, Opts,
     Registry, TextEncoder,
+};
+use simple_server::web::{
+    extract::{MatchedPath, State},
+    http::{Extensions, StatusCode},
+    response::IntoResponse,
 };
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -1040,7 +1040,7 @@ pub fn update_storage_metrics(db_dir: &Path, media_path: &Path) {
 mod tests {
     use super::*;
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn metrics_handler_stays_responsive_when_filesystem_capacity_is_exhausted() {
         let pool = crate::server::filesystem_work::FilesystemWorkPool::with_limits(
             1,
@@ -1048,10 +1048,10 @@ mod tests {
             Duration::from_secs(1),
         );
         let gate = std::sync::Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
-        let (started_tx, started_rx) = crate::execution::sync::oneshot::channel();
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
         let blocker_pool = pool.clone();
         let blocker_gate = gate.clone();
-        let blocker = crate::execution::spawn(async move {
+        let blocker = tokio::spawn(async move {
             blocker_pool
                 .run(move || {
                     started_tx.send(()).unwrap();
@@ -1066,7 +1066,7 @@ mod tests {
         started_rx.await.unwrap();
 
         let started = Instant::now();
-        let response = metrics_handler(crate::web::extract::State(pool))
+        let response = metrics_handler(simple_server::web::extract::State(pool))
             .await
             .into_response();
         assert_eq!(response.status(), StatusCode::OK);

@@ -1,4 +1,4 @@
-use crate::web::extract::FromState;
+use simple_server::web::extract::FromState;
 
 use crate::background_jobs::SchedulerHandle;
 use crate::backup::DbRegistry;

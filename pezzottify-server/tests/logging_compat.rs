@@ -8,22 +8,21 @@ fn probe() {
     let Ok(mode) = std::env::var("LOGGING_PROBE") else {
         return;
     };
+    let filter = if std::env::var("PROBE_ENTRY").unwrap() == "server" {
+        EnvFilter::builder()
+            .with_default_directive(tracing::level_filters::LevelFilter::INFO.into())
+            .with_env_var("LOG_LEVEL")
+            .from_env_lossy()
+    } else {
+        EnvFilter::from_default_env()
+    };
     if mode == "legacy" {
-        let filter = if std::env::var("PROBE_ENTRY").unwrap() == "server" {
-            EnvFilter::builder()
-                .with_default_directive(tracing::level_filters::LevelFilter::INFO.into())
-                .with_env_var("LOG_LEVEL")
-                .from_env_lossy()
-        } else {
-            EnvFilter::from_default_env()
-        };
         tracing_subscriber::registry()
             .with(filter)
             .with(tracing_subscriber::fmt::layer())
             .init();
     } else {
-        let server = std::env::var("PROBE_ENTRY").unwrap() == "server";
-        logging::init_from_env(if server { "LOG_LEVEL" } else { "RUST_LOG" }, server).unwrap();
+        logging::init(filter).unwrap();
     }
     let span = tracing::info_span!("PROBE_span", item = 7);
     let _guard = span.enter();

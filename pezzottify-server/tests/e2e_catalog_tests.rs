@@ -11,7 +11,7 @@ use common::{
 };
 use reqwest::StatusCode;
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_http_metrics_use_bounded_route_templates() {
     pezzottify_server::server::metrics::init_metrics();
     let server = TestServer::spawn().await;
@@ -62,7 +62,7 @@ async fn test_http_metrics_use_bounded_route_templates() {
         .all(|path| !path.contains("attacker-controlled-id")));
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_catalog_conflict_has_stable_error_contract() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -87,7 +87,7 @@ async fn test_catalog_conflict_has_stable_error_contract() {
     assert_eq!(body["request_id"], header_request_id);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_catalog_missing_reference_is_a_bad_request() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -116,7 +116,7 @@ async fn test_catalog_missing_reference_is_a_bad_request() {
     assert!(body["request_id"].as_str().is_some_and(|id| !id.is_empty()));
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_catalog_admin_crud_lifecycle_preserves_relations_and_metadata() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -286,7 +286,7 @@ async fn test_catalog_admin_crud_lifecycle_preserves_relations_and_metadata() {
 // Artist Tests
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_artist_returns_correct_data() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -301,7 +301,7 @@ async fn test_get_artist_returns_correct_data() {
     assert_eq!(resolved["artist"]["name"], ARTIST_1_NAME);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_nonexistent_artist_returns_404() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -311,7 +311,7 @@ async fn test_get_nonexistent_artist_returns_404() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_artist_discography() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -330,7 +330,7 @@ async fn test_get_artist_discography() {
     assert!(album_ids.contains(&ALBUM_1_ID.to_string()));
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_multiple_artists() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -352,7 +352,7 @@ async fn test_get_multiple_artists() {
 // Album Tests
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_album_returns_correct_data() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -369,7 +369,7 @@ async fn test_get_album_returns_correct_data() {
     assert_eq!(album["album_type"], "album");
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_nonexistent_album_returns_404() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -379,7 +379,7 @@ async fn test_get_nonexistent_album_returns_404() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_multiple_albums() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -397,7 +397,7 @@ async fn test_get_multiple_albums() {
     assert_eq!(album2["name"], ALBUM_2_TITLE);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_updating_album_metadata_preserves_availability() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -441,7 +441,7 @@ async fn test_updating_album_metadata_preserves_availability() {
 // Track Tests
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_track_returns_correct_data() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -465,7 +465,7 @@ async fn test_get_track_returns_correct_data() {
     assert_eq!(track["name"], TRACK_1_TITLE);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_updating_all_track_metadata_preserves_playable_media() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -521,7 +521,7 @@ async fn test_updating_all_track_metadata_preserves_playable_media() {
     assert!(!response.bytes().await.unwrap().is_empty());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_resolved_track() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -550,7 +550,7 @@ async fn test_get_resolved_track() {
     );
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_nonexistent_track_returns_404() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -561,7 +561,7 @@ async fn test_get_nonexistent_track_returns_404() {
     assert_eq!(response.headers()["cache-control"], "no-store");
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_all_tracks() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -577,7 +577,7 @@ async fn test_get_all_tracks() {
 // Image Tests
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_image_returns_image_data() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -601,7 +601,7 @@ async fn test_get_image_returns_image_data() {
     assert!(!bytes.is_empty());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_nonexistent_image_returns_404() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -615,7 +615,7 @@ async fn test_get_nonexistent_image_returns_404() {
 // Batch Content Tests
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_batch_content_returns_multiple_items() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -658,7 +658,7 @@ async fn test_batch_content_returns_multiple_items() {
     assert_eq!(track_result["ok"]["track"]["name"], TRACK_1_TITLE);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_batch_content_handles_not_found() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -680,7 +680,7 @@ async fn test_batch_content_handles_not_found() {
     assert_eq!(artist_result["error"], "not_found");
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_batch_content_mixed_success_and_failure() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -707,7 +707,7 @@ async fn test_batch_content_mixed_success_and_failure() {
     assert_eq!(body["artists"]["nonexistent-artist"]["error"], "not_found");
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_batch_content_empty_request() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -730,7 +730,7 @@ async fn test_batch_content_empty_request() {
     assert!(body["tracks"].as_object().unwrap().is_empty());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_batch_content_exceeds_limit() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -751,7 +751,7 @@ async fn test_batch_content_exceeds_limit() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_batch_content_non_resolved() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -776,7 +776,7 @@ async fn test_batch_content_non_resolved() {
     assert!(album_result.get("discs").is_none());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_batch_content_requires_authentication() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());

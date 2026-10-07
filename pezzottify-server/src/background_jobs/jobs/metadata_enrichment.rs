@@ -516,15 +516,10 @@ impl BackgroundJob for MetadataEnrichmentJob {
         let job = self.clone();
         let cancellation_token = ctx.cancellation_token.clone();
         let job_ctx = ctx.clone();
-        let runtime = crate::execution::runtime::Runtime::try_current().ok();
         enrichment_db
             .run_blocking(DbPriority::Background, move |store| {
-                let run = || job.execute_with_store(&job_ctx, params, store);
-                match runtime {
-                    Some(runtime) => runtime.with_current(run),
-                    None => run(),
-                }
-                .map_err(anyhow::Error::new)
+                job.execute_with_store(&job_ctx, params, store)
+                    .map_err(anyhow::Error::new)
             })
             .map_err(|error| {
                 if cancellation_token.is_cancelled() {
@@ -538,24 +533,6 @@ impl BackgroundJob for MetadataEnrichmentJob {
 
 impl MetadataEnrichmentJob {
     pub(super) fn execute_with_store(
-        &self,
-        ctx: &JobContext,
-        params: Option<Value>,
-        store: &dyn EnrichmentStore,
-    ) -> Result<(), JobError> {
-        // Synchronous callers include application-owned database threads. Reuse
-        // the server engine when present; standalone jobs own a small engine.
-        let runtime = crate::execution::runtime::Runtime::try_current()
-            .or_else(|_| {
-                crate::execution::runtime::Builder::new_multi_thread()
-                    .worker_threads(1)
-                    .build()
-            })
-            .map_err(|error| JobError::ExecutionFailed(error.to_string()))?;
-        runtime.with_current(|| self.execute_with_store_scoped(ctx, params, store))
-    }
-
-    fn execute_with_store_scoped(
         &self,
         ctx: &JobContext,
         params: Option<Value>,
@@ -607,7 +584,10 @@ impl MetadataEnrichmentJob {
                     "Work evaluation requires an enabled LLM provider".into(),
                 ));
             }
-            let runtime = crate::execution::runtime::Handle::current();
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
             let provider = build_intervention_provider(&self.agent);
             let audit = JobAuditLogger::new(ctx.server_db.clone(), self.id());
             audit.log_started(Some(
@@ -700,7 +680,14 @@ impl MetadataEnrichmentJob {
             return Ok(());
         }
 
-        let runtime = crate::execution::runtime::Handle::current();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| {
+                JobError::ExecutionFailed(format!(
+                    "Failed to create metadata enrichment runtime: {e}"
+                ))
+            })?;
 
         let provider = if self.agent.enabled {
             Some(build_provider(&self.agent))
@@ -1460,12 +1447,12 @@ pub(super) fn now_secs() -> i64 {
 // Drop an in-flight network future on cancellation, then release every item
 // claimed by this batch that has not yet completed. No transaction spans await.
 async fn enrich_until_cancelled<T>(
-    cancellation: &simple_server::primitives::CancellationToken,
+    cancellation: &tokio_util::sync::CancellationToken,
     store: &dyn EnrichmentStore,
     unfinished: &[EnrichmentQueueItemV1],
     work: impl std::future::Future<Output = T>,
 ) -> Result<T, JobError> {
-    crate::execution::select! {
+    tokio::select! {
         biased;
         _ = cancellation.cancelled() => {
             for item in unfinished {
@@ -1501,7 +1488,7 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn shutdown_cancels_pending_enrichment_and_requeues_unfinished_batch() {
         let temp = tempfile::TempDir::new().unwrap();
         let (ctx, _, store) = test_job_context(&temp);
@@ -1513,11 +1500,11 @@ mod tests {
         let batch = store.claim_enrichment_queue_batch(3).unwrap();
         store.complete_enrichment_queue_item(batch[0].id).unwrap();
         let token = ctx.cancellation_token.clone();
-        let cancel = crate::execution::spawn(async move {
-            crate::execution::time::sleep(Duration::from_millis(20)).await;
+        let cancel = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(20)).await;
             token.cancel();
         });
-        let result = crate::execution::time::timeout(
+        let result = tokio::time::timeout(
             Duration::from_secs(1),
             enrich_until_cancelled(
                 &ctx.cancellation_token,
@@ -1551,7 +1538,7 @@ mod tests {
         assert_eq!(store.claim_enrichment_queue_batch(3).unwrap().len(), 2);
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn completed_enrichment_keeps_its_result() {
         let temp = tempfile::TempDir::new().unwrap();
         let (ctx, _, store) = test_job_context(&temp);
@@ -1730,7 +1717,7 @@ mod tests {
         );
         let enrichment_store: Arc<dyn EnrichmentStore> = enrichment_store_impl.clone();
         let ctx = JobContext::new(
-            simple_server::primitives::CancellationToken::new(),
+            tokio_util::sync::CancellationToken::new(),
             catalog_store,
             user_store,
             server_store,

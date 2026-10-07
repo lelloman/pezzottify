@@ -1,10 +1,10 @@
 //! Audio file conversion using ffmpeg/ffprobe.
 
 use serde::Deserialize;
-use simple_server::process::ManagedCommand as Command;
 use std::path::Path;
 use std::process::Stdio;
 use thiserror::Error;
+use tokio::process::Command;
 
 /// Errors that can occur during audio conversion.
 #[derive(Debug, Error)]
@@ -148,7 +148,7 @@ pub async fn convert_to_ogg(
 ) -> Result<(), ConversionError> {
     // Ensure output directory exists
     if let Some(parent) = output_path.parent() {
-        crate::execution::fs::create_dir_all(parent).await?;
+        tokio::fs::create_dir_all(parent).await?;
     }
 
     let output = Command::new("ffmpeg")

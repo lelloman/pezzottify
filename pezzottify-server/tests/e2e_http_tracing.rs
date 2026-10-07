@@ -23,7 +23,7 @@ impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Buffer {
     }
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn actual_router_preserves_disabled_mode_and_traces_auth_rejections_safely() {
     let bytes = Arc::new(Mutex::new(Vec::new()));
     tracing_subscriber::fmt()

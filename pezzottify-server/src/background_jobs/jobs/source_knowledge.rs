@@ -32,7 +32,7 @@ impl Knowledge {
 }
 
 pub(super) struct ReferenceClient {
-    client: simple_server::client::Client,
+    client: reqwest::Client,
     mb: String,
     wd: String,
     sparql: String,
@@ -76,13 +76,13 @@ impl ReferenceClient {
     }
     pub fn new() -> Result<Self> {
         Ok(Self {
-            client: simple_server::client::Client::builder()
+            client: reqwest::Client::builder()
                 .user_agent(concat!(
                     "pezzottify/",
                     env!("CARGO_PKG_VERSION"),
                     " (https://github.com/lelloman/pezzottify)"
                 ))
-                .no_redirect()
+                .redirect(reqwest::redirect::Policy::none())
                 .timeout(Duration::from_secs(25))
                 .build()?,
             mb: "https://musicbrainz.org/ws/2".into(),
@@ -94,17 +94,16 @@ impl ReferenceClient {
     async fn get(&self, url: &str, query: &[(&str, &str)]) -> Result<Value> {
         // Shared across jobs and clients: respect MusicBrainz's one-request/sec limit.
         if url.starts_with(&self.mb) {
-            static NEXT: OnceLock<
-                crate::execution::sync::Mutex<Option<crate::execution::time::Instant>>,
-            > = OnceLock::new();
+            static NEXT: OnceLock<tokio::sync::Mutex<Option<tokio::time::Instant>>> =
+                OnceLock::new();
             let mut next = NEXT
-                .get_or_init(|| crate::execution::sync::Mutex::new(None))
+                .get_or_init(|| tokio::sync::Mutex::new(None))
                 .lock()
                 .await;
             if let Some(at) = *next {
-                crate::execution::time::sleep_until(at).await;
+                tokio::time::sleep_until(at).await;
             }
-            *next = Some(crate::execution::time::Instant::now() + Duration::from_millis(1100));
+            *next = Some(tokio::time::Instant::now() + Duration::from_millis(1100));
         }
         let mut response = self
             .client
@@ -685,9 +684,9 @@ mod tests {
         assert!(claim_values(&entity, "P569").is_empty());
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn source_knowledge_http_resolves_ids_before_fetching_precise_facts() {
-        use crate::web::{routing::get, Json, Query, Router};
+        use simple_server::web::{routing::get, Json, Query, Router};
         let app = Router::new().route("/sparql",get(|Query(q):Query<std::collections::HashMap<String,String>>| async move {
             assert!(q["query"].contains("wdt:P1902"));
             let ids = if q["query"].contains("ambiguous") {vec!["Q1","Q2"]} else {vec!["Q1"]};
@@ -701,7 +700,7 @@ mod tests {
                 "P569":[{"rank":"normal","mainsnak":{"datavalue":{"value":{"time":"+1970-01-01T00:00:00Z","precision":9,"calendarmodel":"http://www.wikidata.org/entity/Q1985727"}}}}]
             }}}}))
         }));
-        let upstream_server = crate::web::TestServer::tcp(app).await.unwrap();
+        let upstream_server = simple_server::testing::TestServer::tcp(app).await.unwrap();
         let addr = upstream_server.address().unwrap();
         let mut client = ReferenceClient::new().unwrap();
         client.sparql = format!("http://{addr}/sparql");
@@ -726,9 +725,9 @@ mod tests {
         drop(upstream_server);
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn source_knowledge_http_failures_are_not_empty_knowledge() {
-        use crate::web::{routing::get, Json, Router};
+        use simple_server::web::{routing::get, Json, Router};
         let app = Router::new()
             .route(
                 "/lag",
@@ -736,9 +735,9 @@ mod tests {
             )
             .route(
                 "/limited",
-                get(|| async { crate::web::StatusCode::TOO_MANY_REQUESTS }),
+                get(|| async { simple_server::web::StatusCode::TOO_MANY_REQUESTS }),
             );
-        let upstream_server = crate::web::TestServer::tcp(app).await.unwrap();
+        let upstream_server = simple_server::testing::TestServer::tcp(app).await.unwrap();
         let addr = upstream_server.address().unwrap();
         let client = ReferenceClient::new().unwrap();
         assert!(client
@@ -752,9 +751,9 @@ mod tests {
         drop(upstream_server);
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn source_knowledge_http_album_accepts_zero_padded_barcode_but_not_wrong_id() {
-        use crate::web::{routing::get, Json, Router};
+        use simple_server::web::{routing::get, Json, Router};
         const ID: &str = "00000000-0000-0000-0000-000000000010";
         const WRONG: &str = "00000000-0000-0000-0000-000000000011";
         let release = |id: &str, barcode: &str| {
@@ -776,7 +775,7 @@ mod tests {
                 &format!("/release/{WRONG}"),
                 get(move || async move { Json(release(WRONG, "042282501524")) }),
             );
-        let server = crate::web::TestServer::tcp(app).await.unwrap();
+        let server = simple_server::testing::TestServer::tcp(app).await.unwrap();
         let mut client = ReferenceClient::new().unwrap();
         client.mb = format!("http://{}", server.address().unwrap());
         let context = json!({"album":{"name":"Standards, Vol. 2","external_id_upc":"00042282501523"},
@@ -795,9 +794,9 @@ mod tests {
             .is_err());
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn source_knowledge_http_musicbrainz_corroborates_and_reuses_identity() {
-        use crate::web::{routing::get, Json, Query, Router};
+        use simple_server::web::{routing::get, Json, Query, Router};
         const ID: &str = "00000000-0000-0000-0000-000000000001";
         let record = || json!({"id":ID,"title":"If It’s Magic","isrcs":["USAAA1200001"],"artist-credit":[{"artist":{"name":"Artist"}}]});
         let app = Router::new()
@@ -825,7 +824,7 @@ mod tests {
                     },
                 ),
             );
-        let upstream_server = crate::web::TestServer::tcp(app).await.unwrap();
+        let upstream_server = simple_server::testing::TestServer::tcp(app).await.unwrap();
         let addr = upstream_server.address().unwrap();
         let mut client = ReferenceClient::new().unwrap();
         client.mb = format!("http://{addr}");

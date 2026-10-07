@@ -238,7 +238,7 @@ mod tests {
         }
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn intervention_receives_history_and_stops_after_three_failed_attempts() {
         use crate::enrichment_store::SqliteEnrichmentStore;
         let temp = tempfile::tempdir().unwrap();

@@ -1,18 +1,5 @@
 # Pezzottify Server
 
-The backend uses a prebuilt simple-server engine. Keep the pinned bindings in
-`../simple-server` beside this repository (run
-`bash pezzottify-server/scripts/checkout-engine-source` from the repository root
-for a fresh checkout). Rust 1.96 or newer is required. From `pezzottify-server`,
-`bash scripts/build`, `bash scripts/run`, and `bash scripts/test` verify the pin
-and reuse the native artifact. The first invocation builds it if none is supplied.
-Set `SIMPLE_SERVER_ENGINE_DIR` to a prebuilt directory containing
-`libsimple_server_engine.so`, `SOURCE_REVISION`, and `SHA256SUMS` to skip that build.
-See [native-engine setup and limitations](../docs/native-engine-migration.md).
-For raw Cargo commands, first `source scripts/engine-env` and export
-`LD_LIBRARY_PATH="$SIMPLE_SERVER_ENGINE_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"`.
-
-
 A high-performance Rust backend server for the Pezzottify music streaming platform. Handles music catalog management, user authentication, audio streaming, and search functionality.
 
 ## Table of Contents
@@ -214,12 +201,11 @@ in migrated handler groups, and reintroduction of unbounded catalog-event APIs.
    ```bash
    git clone https://github.com/lelloman/pezzottify
    cd pezzottify/pezzottify-server
-   bash scripts/checkout-engine-source
    ```
 
 2. Build the project:
    ```bash
-   bash scripts/build
+   cargo build --release
    ```
 
 ## Media Directory Structure
@@ -244,7 +230,7 @@ The catalog metadata (artists, albums, tracks) is stored in the SQLite catalog d
 ### Standard Build
 
 ```bash
-bash scripts/build
+cargo build --release
 ```
 
 ### Development Builds with Features
@@ -252,9 +238,6 @@ bash scripts/build
 For faster development iteration, use feature flags to skip expensive operations:
 
 ```bash
-source scripts/engine-env
-export LD_LIBRARY_PATH="$SIMPLE_SERVER_ENGINE_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-
 # Skip catalog integrity checks (faster startup)
 cargo build --features no_checks
 
@@ -279,17 +262,16 @@ The Docker image includes both the pezzottify server and web frontend. A wrapper
 
 The script:
 
-1. Prepares pinned bindings and the verified prebuilt engine in `.engine-build`
-2. Detects git commit hash and dirty state on the host
-3. Passes version information as build args to Docker
-4. Runs `docker compose up --build`
+1. Detects git commit hash on the host
+2. Detects dirty state (uncommitted changes)
+3. Passes these as build args to Docker
+4. Runs `docker-compose up --build`
 
 ### Manual Build
 
 If you need to build manually:
 
 ```bash
-bash pezzottify-server/scripts/prepare-docker
 GIT_HASH=$(git rev-parse --short HEAD) \
 GIT_DIRTY=$(git status --porcelain | grep -q . && echo 1 || echo 0) \
 docker-compose up --build pezzottify-server
@@ -312,19 +294,19 @@ cp config.example.toml config.toml
 
 # Edit config.toml to set your paths
 # Then run:
-bash scripts/run --release -- --config ./config.toml
+cargo run --release -- --config ./config.toml
 ```
 
 ### Using CLI Arguments
 
 ```bash
-bash scripts/run --release -- --db-dir /path/to/db-dir --media-path /path/to/media
+cargo run --release -- --db-dir /path/to/db-dir --media-path /path/to/media
 ```
 
 ### Example with CLI Arguments
 
 ```bash
-bash scripts/run --release -- \
+cargo run --release -- \
   --db-dir /path/to/db-dir \
   --media-path /path/to/media \
   --port 3001 \
@@ -335,7 +317,7 @@ bash scripts/run --release -- \
 ### Development Example (Fast Build)
 
 ```bash
-bash scripts/run --features fast -- \
+cargo run --features fast -- \
   --db-dir ../../pezzottify-catalog \
   --media-path ../../pezzottify-catalog \
   --content-cache-age-sec 60 \
@@ -347,7 +329,7 @@ bash scripts/run --features fast -- \
 To serve the web frontend from the server:
 
 ```bash
-bash scripts/run --release -- \
+cargo run --release -- \
   --db-dir /path/to/db-dir \
   --frontend-dir-path /path/to/web/dist
 ```
@@ -878,7 +860,7 @@ The `cli-auth` binary provides user and authentication management.
 ### Build and Run
 
 ```bash
-bash scripts/build --bin cli-auth
+cargo build --release --bin cli-auth
 
 # Using config file
 ./target/release/cli-auth --config /path/to/config.toml
@@ -951,7 +933,7 @@ exit
 
 ```bash
 # Start the CLI tool (using db-dir)
-bash scripts/run --bin cli-auth -- --db-dir /path/to/db-dir
+cargo run --bin cli-auth -- --db-dir /path/to/db-dir
 
 # Create a new admin user
 > add-user admin
@@ -973,13 +955,13 @@ bash scripts/run --bin cli-auth -- --db-dir /path/to/db-dir
 ### Run All Tests
 
 ```bash
-bash scripts/test
+cargo test
 ```
 
 ### Run Specific Test
 
 ```bash
-bash scripts/test <test_name>
+cargo test <test_name>
 ```
 
 ### Test Coverage Areas
@@ -997,18 +979,18 @@ bash scripts/test <test_name>
 1. **Use the `fast` feature** for quick rebuilds:
 
    ```bash
-   bash scripts/run --features fast -- --db-dir /path/to/db
+   cargo run --features fast -- --db-dir /path/to/db
    ```
 
 2. **Use shorter cache times** for frontend development:
 
    ```bash
-   bash scripts/run -- --db-dir /path/to/db --content-cache-age-sec 60
+   cargo run -- --db-dir /path/to/db --content-cache-age-sec 60
    ```
 
 3. **Use `slowdown` feature** to test loading states in frontend:
    ```bash
-   bash scripts/run --features slowdown -- --db-dir /path/to/db
+   cargo run --features slowdown -- --db-dir /path/to/db
    ```
 
 ### Debugging
@@ -1016,7 +998,7 @@ bash scripts/test <test_name>
 Enable detailed logging:
 
 ```bash
-LOG_LEVEL=DEBUG bash scripts/run -- --db-dir /path/to/db --logging-level body
+LOG_LEVEL=DEBUG cargo run -- --db-dir /path/to/db --logging-level body
 ```
 
 Log levels:

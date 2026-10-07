@@ -3,8 +3,8 @@
 //! Rate limited to 5 requests per second per Last.fm API guidelines.
 
 use anyhow::Result;
+use reqwest::blocking::Client;
 use serde::Deserialize;
-use simple_server::client::blocking::Client;
 use std::time::Duration;
 
 use super::pacing::RequestPacer;

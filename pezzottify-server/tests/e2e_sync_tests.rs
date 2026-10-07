@@ -8,7 +8,7 @@ use common::{TestClient, TestServer, TEST_USER, TRACK_1_ID};
 use reqwest::StatusCode;
 use serde_json::json;
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_sync_state_requires_authentication() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -18,7 +18,7 @@ async fn test_get_sync_state_requires_authentication() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_sync_state_empty_user() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -46,7 +46,7 @@ async fn test_get_sync_state_empty_user() {
     assert!(!body["permissions"].as_array().unwrap().is_empty());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_sync_state_with_liked_content() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -75,7 +75,7 @@ async fn test_get_sync_state_with_liked_content() {
     assert!(body["seq"].as_i64().unwrap() > 0);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_sync_state_with_settings() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -102,7 +102,7 @@ async fn test_get_sync_state_with_settings() {
     assert_eq!(settings[0]["value"], true);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_sync_state_with_playlist() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -130,7 +130,7 @@ async fn test_get_sync_state_with_playlist() {
     assert!(tracks.contains(&json!("track-002")));
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_sync_events_requires_authentication() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -140,7 +140,7 @@ async fn test_get_sync_events_requires_authentication() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_sync_events_empty() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -155,7 +155,7 @@ async fn test_get_sync_events_empty() {
     assert!(body["events"].as_array().unwrap().is_empty());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_sync_events_after_like() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -183,7 +183,7 @@ async fn test_get_sync_events_after_like() {
     assert_eq!(body["current_seq"], events[0]["seq"]);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_idempotency_key_prevents_duplicate_mutation_events() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -219,7 +219,7 @@ async fn test_idempotency_key_prevents_duplicate_mutation_events() {
     );
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_sync_events_after_unlike() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -245,7 +245,7 @@ async fn test_get_sync_events_after_unlike() {
     assert_eq!(events[1]["type"], "content_unliked");
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_sync_events_incremental() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -273,7 +273,7 @@ async fn test_get_sync_events_incremental() {
     assert_eq!(events[0]["payload"]["content_id"], "track-002");
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_sync_events_setting_changed() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -297,7 +297,7 @@ async fn test_get_sync_events_setting_changed() {
     assert_eq!(events[0]["type"], "setting_changed");
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_sync_events_playlist_created() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -317,7 +317,7 @@ async fn test_get_sync_events_playlist_created() {
     assert_eq!(events[0]["payload"]["name"], "Test Playlist");
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_sync_events_playlist_deleted() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -341,7 +341,7 @@ async fn test_get_sync_events_playlist_deleted() {
     assert_eq!(events[1]["type"], "playlist_deleted");
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_sync_events_playlist_renamed() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -365,7 +365,7 @@ async fn test_get_sync_events_playlist_renamed() {
     assert_eq!(events[1]["payload"]["name"], "New Name");
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_sync_events_playlist_tracks_updated() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -389,7 +389,7 @@ async fn test_get_sync_events_playlist_tracks_updated() {
     assert_eq!(events[1]["type"], "playlist_tracks_updated");
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_sync_events_returns_410_for_pruned_sequence() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -438,7 +438,7 @@ async fn test_get_sync_events_returns_410_for_pruned_sequence() {
     );
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_sync_events_returns_ok_for_since_zero_when_pruned() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;

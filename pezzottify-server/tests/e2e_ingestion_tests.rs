@@ -3,7 +3,7 @@ mod common;
 use common::{TestClient, TestServer};
 use reqwest::StatusCode;
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn enabled_ingestion_lists_are_empty_and_preserve_response_shapes() {
     let server = TestServer::builder().with_ingestion().spawn().await;
     let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -48,7 +48,7 @@ async fn enabled_ingestion_lists_are_empty_and_preserve_response_shapes() {
     );
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn enabled_ingestion_preserves_permission_and_missing_job_contracts() {
     let server = TestServer::builder().with_ingestion().spawn().await;
     let user = TestClient::authenticated(server.base_url.clone()).await;
@@ -85,7 +85,7 @@ async fn enabled_ingestion_preserves_permission_and_missing_job_contracts() {
     }
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn disabled_ingestion_returns_service_unavailable_after_authorization() {
     let server = TestServer::spawn().await;
     let user = TestClient::authenticated(server.base_url.clone()).await;

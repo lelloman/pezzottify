@@ -91,7 +91,7 @@ mod tests {
     use super::*;
     use crate::user::{FullUserStore, SqliteUserStore};
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn notification_is_persisted_with_its_sync_event_without_connections() {
         let temp = tempfile::tempdir().unwrap();
         let store: Arc<dyn FullUserStore> = Arc::new(

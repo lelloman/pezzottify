@@ -1,10 +1,10 @@
-use crate::web::{
+use simple_server::auth::{Cookie, CookieCredential, SameSite};
+use simple_server::web::{
     extract::{Request, State},
     http::{header, HeaderMap, HeaderValue, Method, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use simple_server::auth::{Cookie, CookieCredential, SameSite};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 

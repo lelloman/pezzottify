@@ -481,7 +481,7 @@ pub(crate) mod tests {
         }
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn wikidata_work_reference_is_supplied_validated_and_retained() {
         let (mut job, store, tmp) = setup();
         job.work_knowledge = std::sync::Arc::new(FixtureKnowledge { fail: false });
@@ -517,7 +517,7 @@ pub(crate) mod tests {
         );
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn contradictory_model_selection_is_only_a_review_suggestion() {
         let (job, store, _temp) = setup();
         let model=provider(vec![json!({"wikidata_id":"Q1","reason":"The creators do not match; there is no matching fetched work."}).to_string()]);
@@ -535,7 +535,7 @@ pub(crate) mod tests {
         assert!(store.search_works("Example Song", 10).unwrap().is_empty());
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn wikidata_work_failure_retries_before_model_or_storage() {
         let (mut job, store, tmp) = setup();
         job.work_knowledge = std::sync::Arc::new(FixtureKnowledge { fail: true });
@@ -549,7 +549,7 @@ pub(crate) mod tests {
         assert!(store.get_work_resolution("a").unwrap().is_none());
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn wikidata_work_fabricated_or_contradictory_citations_are_rejected() {
         let (mut job, store, _tmp) = setup();
         job.work_knowledge = std::sync::Arc::new(FixtureKnowledge { fail: false });
@@ -760,7 +760,7 @@ pub(crate) mod tests {
         );
         let manager = Arc::new(crate::user::UserManager::new(user.clone()));
         JobContext::new(
-            simple_server::primitives::CancellationToken::new(),
+            tokio_util::sync::CancellationToken::new(),
             catalog,
             user,
             server,
@@ -807,7 +807,7 @@ pub(crate) mod tests {
         ));
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn work_resolution_catalog_pipeline_retains_suggestions_without_linking_versions() {
         let (job, store, tmp) = setup();
         let ctx = catalog_context(&tmp);
@@ -831,7 +831,7 @@ pub(crate) mod tests {
         ));
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn work_resolution_evaluation_is_read_only_and_uses_external_identity() {
         let (job, store, _tmp) = setup();
         let _existing = store
@@ -856,7 +856,7 @@ pub(crate) mod tests {
         assert_eq!(evaluation.evidence["prompt_version"], PROMPT_VERSION);
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn work_resolution_no_sources_skips_model_and_abstention_does_not_force_matching() {
         let (mut job, store, _tmp) = setup();
         job.work_knowledge = std::sync::Arc::new(EmptyKnowledge);
@@ -878,7 +878,7 @@ pub(crate) mod tests {
         assert!(store.search_works("Example Song", 100).unwrap().is_empty());
     }
 
-    #[simple_server::test(host_runtime = true)]
+    #[tokio::test]
     async fn work_resolution_malformed_model_output_is_retryable_without_writes() {
         let (job, store, _tmp) = setup();
         for bad in ["not JSON", "{}", "{\"work\":null,\"reason\":\"\"}"] {

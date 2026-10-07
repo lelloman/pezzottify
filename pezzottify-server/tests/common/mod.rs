@@ -10,7 +10,7 @@
 //! use common::{TestServer, TestClient, ARTIST_1_ID};
 //! use reqwest::StatusCode;
 //!
-//! #[simple_server::test(host_runtime = true)]
+//! #[tokio::test]
 //! async fn test_get_artist() {
 //!     let server = TestServer::spawn().await;
 //!     let client = TestClient::authenticated(server.base_url.clone()).await;

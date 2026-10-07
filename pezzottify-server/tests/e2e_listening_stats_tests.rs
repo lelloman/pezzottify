@@ -12,7 +12,7 @@ use reqwest::StatusCode;
 // User Endpoint Tests - POST /v1/user/listening
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_record_listening_event_minimal() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -26,7 +26,7 @@ async fn test_record_listening_event_minimal() {
     assert!(body["created"].as_bool().unwrap());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_record_listening_event_full() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -57,7 +57,7 @@ async fn test_record_listening_event_full() {
     assert!(body["created"].as_bool().unwrap());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_record_listening_event_deduplication() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -123,7 +123,7 @@ async fn test_record_listening_event_deduplication() {
     );
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_record_listening_event_requires_auth() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -133,7 +133,7 @@ async fn test_record_listening_event_requires_auth() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_impression_requires_an_existing_catalog_entity() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -162,7 +162,7 @@ async fn test_impression_requires_an_existing_catalog_entity() {
 // User Endpoint Tests - GET /v1/user/listening/summary
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_listening_summary_empty() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -177,7 +177,7 @@ async fn test_get_listening_summary_empty() {
     assert_eq!(body["unique_tracks"].as_u64().unwrap(), 0);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_listening_summary_with_events() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -200,7 +200,7 @@ async fn test_get_listening_summary_with_events() {
     assert_eq!(body["unique_tracks"].as_u64().unwrap(), 2);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_listening_summary_requires_auth() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -214,7 +214,7 @@ async fn test_get_listening_summary_requires_auth() {
 // User Endpoint Tests - GET /v1/user/listening/history
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_listening_history_empty() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -226,7 +226,7 @@ async fn test_get_listening_history_empty() {
     assert!(body.is_empty());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_listening_history_with_events() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -251,7 +251,7 @@ async fn test_get_listening_history_with_events() {
     ); // 180 + 190
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_listening_history_with_limit() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -273,7 +273,7 @@ async fn test_get_listening_history_with_limit() {
 // User Endpoint Tests - GET /v1/user/listening/events
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_listening_events_empty() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -285,7 +285,7 @@ async fn test_get_listening_events_empty() {
     assert!(body.is_empty());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_listening_events_with_data() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -301,7 +301,7 @@ async fn test_get_listening_events_with_data() {
     assert_eq!(body.len(), 2);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_listening_events_pagination() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -338,7 +338,7 @@ async fn test_get_listening_events_pagination() {
 // Admin Endpoint Tests - GET /v1/admin/listening/daily
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_admin_daily_stats_requires_admin() {
     let server = TestServer::spawn().await;
 
@@ -353,7 +353,7 @@ async fn test_admin_daily_stats_requires_admin() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_admin_daily_stats_with_data() {
     let server = TestServer::spawn().await;
 
@@ -381,7 +381,7 @@ async fn test_admin_daily_stats_with_data() {
 // Admin Endpoint Tests - GET /v1/admin/listening/top-tracks
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_admin_top_tracks_requires_admin() {
     let server = TestServer::spawn().await;
 
@@ -390,7 +390,7 @@ async fn test_admin_top_tracks_requires_admin() {
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_admin_top_tracks_with_data() {
     let server = TestServer::spawn().await;
 
@@ -416,7 +416,7 @@ async fn test_admin_top_tracks_with_data() {
     assert_eq!(body[0]["play_count"].as_u64().unwrap(), 3);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_admin_top_tracks_with_limit() {
     let server = TestServer::spawn().await;
 
@@ -439,7 +439,7 @@ async fn test_admin_top_tracks_with_limit() {
 // Admin Endpoint Tests - GET /v1/admin/listening/track/{track_id}
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_admin_track_stats_requires_admin() {
     let server = TestServer::spawn().await;
 
@@ -450,7 +450,7 @@ async fn test_admin_track_stats_requires_admin() {
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_admin_track_stats_with_data() {
     let server = TestServer::spawn().await;
 
@@ -474,7 +474,7 @@ async fn test_admin_track_stats_with_data() {
     assert_eq!(body["unique_listeners"].as_u64().unwrap(), 1);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_admin_track_stats_nonexistent() {
     let server = TestServer::spawn().await;
 
@@ -493,7 +493,7 @@ async fn test_admin_track_stats_nonexistent() {
 // Admin Endpoint Tests - GET /v1/admin/listening/users/{handle}/summary
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_admin_user_summary_requires_admin() {
     let server = TestServer::spawn().await;
 
@@ -504,7 +504,7 @@ async fn test_admin_user_summary_requires_admin() {
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_admin_user_summary_with_data() {
     let server = TestServer::spawn().await;
 
@@ -525,7 +525,7 @@ async fn test_admin_user_summary_with_data() {
     assert_eq!(body["total_duration_seconds"].as_u64().unwrap(), 340); // 190 + 150
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_admin_user_summary_nonexistent_user() {
     let server = TestServer::spawn().await;
 
@@ -542,7 +542,7 @@ async fn test_admin_user_summary_nonexistent_user() {
 // User Isolation Tests
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_listening_events_user_isolation() {
     let server = TestServer::spawn().await;
 

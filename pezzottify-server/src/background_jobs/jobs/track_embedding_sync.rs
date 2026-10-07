@@ -14,9 +14,9 @@ use crate::background_jobs::{
 use crate::catalog_store::EntityEmbeddingUpsert;
 use crate::config::{AudioEmbeddingSpec, AudioEmbeddingsSettings};
 use crate::db_executor::DbPriority;
+use reqwest::blocking::{multipart, Client};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use simple_server::client::blocking::{multipart, Client};
 use std::time::{Duration, Instant};
 use tracing::{info, warn};
 

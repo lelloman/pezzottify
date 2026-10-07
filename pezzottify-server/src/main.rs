@@ -2,11 +2,12 @@ mod logging;
 use anyhow::Result;
 use chrono::{Duration as ChronoDuration, Utc};
 use clap::Parser;
-use simple_server::primitives::CancellationToken;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{fmt::Debug, path::PathBuf};
-use tracing::{error, info};
+use tokio_util::sync::CancellationToken;
+use tracing::{error, info, level_filters::LevelFilter};
+use tracing_subscriber::EnvFilter;
 
 // Import modules from the library crate
 use pezzottify_server::background_jobs::jobs::{
@@ -128,7 +129,7 @@ impl From<&CliArgs> for config::CliConfig {
     }
 }
 
-#[simple_server::main]
+#[tokio::main]
 async fn main() {
     if let Err(error) = run().await {
         error!(error = ?error, "Server failed");
@@ -141,14 +142,19 @@ async fn main() {
 async fn run() -> Result<()> {
     let cli_args = CliArgs::parse();
 
-    logging::init_from_env("LOG_LEVEL", true).expect("failed to initialize logging");
+    logging::init(
+        EnvFilter::builder()
+            .with_default_directive(LevelFilter::INFO.into())
+            .with_env_var("LOG_LEVEL")
+            .from_env_lossy(),
+    )
+    .expect("failed to initialize logging");
 
-    let signals = simple_server::engine_lifecycle::Signals::install()?;
-    let mut lifecycle = simple_server::engine_lifecycle::Lifecycle::new(
-        simple_server::engine_lifecycle::ShutdownOptions {
+    let signals = simple_server::lifecycle::Signals::install()?;
+    let mut lifecycle =
+        simple_server::lifecycle::Lifecycle::new(simple_server::lifecycle::ShutdownOptions {
             grace_period: Duration::from_secs(30),
-        },
-    );
+        });
     let runtime_tasks =
         pezzottify_server::server::lifecycle::RuntimeTasks::new(lifecycle.shutdown());
 
@@ -282,7 +288,7 @@ async fn run() -> Result<()> {
     // Set up background job scheduler
     let db_executor = DbExecutor::new(DbExecutorConfig::default());
     let shutdown_token = CancellationToken::new();
-    let (hook_sender, hook_receiver) = pezzottify_server::execution::sync::mpsc::channel(100);
+    let (hook_sender, hook_receiver) = tokio::sync::mpsc::channel(100);
 
     // Create enrichment store for metadata enrichment and optional audio analysis.
     info!(
@@ -497,13 +503,13 @@ async fn run() -> Result<()> {
         let shutdown = lifecycle.shutdown();
         lifecycle.service("event-pruning", async move {
             let interval = Duration::from_secs(interval_hours * 60 * 60);
-            let mut ticker = pezzottify_server::execution::time::interval(interval);
+            let mut ticker = tokio::time::interval(interval);
 
             // Skip the first immediate tick, wait for the first interval
             ticker.tick().await;
 
             loop {
-                pezzottify_server::execution::select! {
+                tokio::select! {
                     biased;
                     _ = shutdown.requested() => break,
                     _ = ticker.tick() => {},
@@ -516,11 +522,8 @@ async fn run() -> Result<()> {
                     - (retention_days as i64 * 24 * 60 * 60);
 
                 let store = pruning_user_store.clone();
-                match pezzottify_server::execution::task::spawn_blocking(move || {
-                    store.prune_events_older_than(cutoff)
-                })
-                .await
-                .map_err(|e| std::io::Error::other(e.to_string()))?
+                match tokio::task::spawn_blocking(move || store.prune_events_older_than(cutoff))
+                    .await?
                 {
                     Ok(count) => {
                         if count > 0 {
@@ -548,7 +551,7 @@ async fn run() -> Result<()> {
         // cache cannot stall metrics scrapes and API requests.
         let initial_db_dir = db_dir_for_metrics.clone();
         let initial_media_path = media_path_for_metrics.clone();
-        match pezzottify_server::execution::task::spawn_blocking(move || {
+        match tokio::task::spawn_blocking(move || {
             metrics::update_storage_metrics(&initial_db_dir, &initial_media_path);
         })
         .await
@@ -558,18 +561,17 @@ async fn run() -> Result<()> {
         }
 
         // Then update periodically (every 15 minutes)
-        let mut interval =
-            pezzottify_server::execution::time::interval(Duration::from_secs(15 * 60));
+        let mut interval = tokio::time::interval(Duration::from_secs(15 * 60));
         interval.tick().await;
         loop {
-            pezzottify_server::execution::select! {
+            tokio::select! {
                 biased;
                 _ = shutdown.requested() => break,
                 _ = interval.tick() => {},
             }
             let db_dir = db_dir_for_metrics.clone();
             let media_path = media_path_for_metrics.clone();
-            if let Err(e) = pezzottify_server::execution::task::spawn_blocking(move || {
+            if let Err(e) = tokio::task::spawn_blocking(move || {
                 metrics::update_storage_metrics(&db_dir, &media_path);
             })
             .await
@@ -584,18 +586,17 @@ async fn run() -> Result<()> {
     let checkpoint_registry = db_registry.clone();
     let shutdown = lifecycle.shutdown();
     lifecycle.service("wal-checkpoint", async move {
-        let mut interval =
-            pezzottify_server::execution::time::interval(Duration::from_secs(60 * 60));
+        let mut interval = tokio::time::interval(Duration::from_secs(60 * 60));
         // Skip the first immediate tick
         interval.tick().await;
         loop {
-            pezzottify_server::execution::select! {
+            tokio::select! {
                 biased;
                 _ = shutdown.requested() => break,
                 _ = interval.tick() => {},
             }
             let registry = checkpoint_registry.clone();
-            if let Err(e) = pezzottify_server::execution::task::spawn_blocking(move || {
+            if let Err(e) = tokio::task::spawn_blocking(move || {
                 pezzottify_server::backup::passive_checkpoint_all(&registry);
             })
             .await
@@ -649,8 +650,8 @@ async fn run() -> Result<()> {
     let shutdown = lifecycle.shutdown();
     lifecycle.service("scheduler", async move {
         let task = scheduler.run();
-        pezzottify_server::execution::pin!(task);
-        pezzottify_server::execution::select! {
+        tokio::pin!(task);
+        tokio::select! {
             _ = &mut task => return Ok::<(), std::io::Error>(()),
             _ = shutdown.requested() => shutdown_token.cancel(),
         }

@@ -70,7 +70,7 @@ async fn push_service() -> (String, Arc<Mutex<Vec<Vec<u8>>>>) {
     (url, bodies)
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn push_routes_require_configuration_and_authentication() {
     let server = TestServer::spawn().await;
     let anonymous = TestClient::new(server.base_url.clone());
@@ -96,7 +96,7 @@ async fn push_routes_require_configuration_and_authentication() {
     );
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn registrations_can_be_created_validated_and_removed() {
     let server = TestServer::builder().with_push().spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -165,7 +165,7 @@ async fn registrations_can_be_created_validated_and_removed() {
         .is_empty());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn notification_events_wake_registered_devices() {
     let server = TestServer::builder().with_push().spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -214,7 +214,7 @@ async fn notification_events_wake_registered_devices() {
     );
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn admin_test_notifications_report_disabled_push() {
     let server = TestServer::spawn().await;
     let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -241,7 +241,7 @@ async fn admin_test_notifications_report_disabled_push() {
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn admins_list_registrations_and_send_test_notifications() {
     let server = TestServer::builder().with_push().spawn().await;
     let device_uuid = "6f1c2a7e-3b9d-4c55-9a10-2f7d8e4b1c01";

@@ -19,7 +19,7 @@ check_absent \
 
 check_absent \
     "migrated handler groups must use the shared database executor" \
-    '(tokio|crate::execution)::task::spawn_blocking' \
+    'tokio::task::spawn_blocking' \
     src/server/handlers_account.rs \
     src/server/handlers_admin_users.rs \
     src/server/handlers_catalog.rs \

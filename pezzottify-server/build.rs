@@ -3,8 +3,6 @@ use std::path::Path;
 use std::process::Command;
 
 fn main() {
-    // Bundles and containers place the engine beside each binary in lib/.
-    println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/lib");
     // Get version components
     let base_version = get_base_version().unwrap_or_else(|| "0.0".to_string());
     let commit_count = get_commit_count().unwrap_or(0);

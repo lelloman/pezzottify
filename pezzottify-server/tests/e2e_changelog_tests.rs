@@ -17,7 +17,7 @@ use serde_json::Value;
 // Permission Tests
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_changelog_requires_admin() {
     let server = TestServer::spawn().await;
@@ -28,7 +28,7 @@ async fn test_changelog_requires_admin() {
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_changelog_unauthenticated_unauthorized() {
     let server = TestServer::spawn().await;
@@ -43,7 +43,7 @@ async fn test_changelog_unauthenticated_unauthorized() {
 // Batch Management Tests
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_list_batches() {
     let server = TestServer::spawn().await;
@@ -60,7 +60,7 @@ async fn test_list_batches() {
     );
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_list_batches_filter_open() {
     let server = TestServer::spawn().await;
@@ -76,7 +76,7 @@ async fn test_list_batches_filter_open() {
     }
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_list_batches_filter_closed() {
     let server = TestServer::spawn().await;
@@ -100,7 +100,7 @@ async fn test_list_batches_filter_closed() {
     }
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_create_batch() {
     let server = TestServer::spawn().await;
@@ -127,7 +127,7 @@ async fn test_create_batch() {
     assert!(batch["id"].as_str().is_some());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_create_batch_without_description() {
     let server = TestServer::spawn().await;
@@ -151,7 +151,7 @@ async fn test_create_batch_without_description() {
     assert!(batch["description"].is_null());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_create_batch_conflict_when_active() {
     let server = TestServer::spawn().await;
@@ -165,7 +165,7 @@ async fn test_create_batch_conflict_when_active() {
     assert_eq!(response.status(), StatusCode::CONFLICT);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_get_batch() {
     let server = TestServer::spawn().await;
@@ -183,7 +183,7 @@ async fn test_get_batch() {
     assert_eq!(batch["id"], batch_id);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_get_batch_not_found() {
     let server = TestServer::spawn().await;
@@ -195,7 +195,7 @@ async fn test_get_batch_not_found() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_close_batch() {
     let server = TestServer::spawn().await;
@@ -217,7 +217,7 @@ async fn test_close_batch() {
     assert!(batch["closed_at"].as_i64().is_some());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_close_batch_not_found() {
     let server = TestServer::spawn().await;
@@ -229,7 +229,7 @@ async fn test_close_batch_not_found() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_close_batch_already_closed() {
     let server = TestServer::spawn().await;
@@ -246,7 +246,7 @@ async fn test_close_batch_already_closed() {
     assert_eq!(response.status(), StatusCode::CONFLICT);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_delete_batch_not_empty() {
     let server = TestServer::spawn().await;
@@ -262,7 +262,7 @@ async fn test_delete_batch_not_empty() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_delete_empty_batch() {
     let server = TestServer::spawn().await;
@@ -292,7 +292,7 @@ async fn test_delete_empty_batch() {
     assert_eq!(get_response.status(), StatusCode::NOT_FOUND);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_delete_batch_not_found() {
     let server = TestServer::spawn().await;
@@ -308,7 +308,7 @@ async fn test_delete_batch_not_found() {
 // Change Query Tests
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_get_batch_changes() {
     let server = TestServer::spawn().await;
@@ -337,7 +337,7 @@ async fn test_get_batch_changes() {
     assert!(first_change["operation"].as_str().is_some());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_get_batch_changes_not_found() {
     let server = TestServer::spawn().await;
@@ -349,7 +349,7 @@ async fn test_get_batch_changes_not_found() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_get_entity_history() {
     let server = TestServer::spawn().await;
@@ -374,7 +374,7 @@ async fn test_get_entity_history() {
     }
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_get_entity_history_empty() {
     let server = TestServer::spawn().await;
@@ -393,7 +393,7 @@ async fn test_get_entity_history_empty() {
     );
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_get_entity_history_invalid_type() {
     let server = TestServer::spawn().await;
@@ -405,7 +405,7 @@ async fn test_get_entity_history_invalid_type() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_get_entity_history_all_types() {
     let server = TestServer::spawn().await;
@@ -429,7 +429,7 @@ async fn test_get_entity_history_all_types() {
 // What's New User Endpoint Tests
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_whats_new_requires_authentication() {
     let server = TestServer::spawn().await;
@@ -440,7 +440,7 @@ async fn test_whats_new_requires_authentication() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_whats_new_regular_user_can_access() {
     let server = TestServer::spawn().await;
@@ -450,7 +450,7 @@ async fn test_whats_new_regular_user_can_access() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_whats_new_returns_empty_when_no_closed_batches() {
     let server = TestServer::spawn().await;
@@ -467,7 +467,7 @@ async fn test_whats_new_returns_empty_when_no_closed_batches() {
     );
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_whats_new_returns_closed_batches() {
     let server = TestServer::spawn().await;
@@ -511,7 +511,7 @@ async fn test_whats_new_returns_closed_batches() {
     );
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_whats_new_respects_limit_parameter() {
     let server = TestServer::spawn().await;
@@ -548,7 +548,7 @@ async fn test_whats_new_respects_limit_parameter() {
     assert_eq!(batches.len(), 2, "Should return only 2 batches");
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_whats_new_default_limit() {
     let server = TestServer::spawn().await;
@@ -585,7 +585,7 @@ async fn test_whats_new_default_limit() {
     assert_eq!(batches.len(), 10, "Should return default 10 batches");
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 #[ignore = "Changelog disabled for Spotify schema (read-only catalog)"]
 async fn test_whats_new_orders_by_closed_at_desc() {
     let server = TestServer::spawn().await;
@@ -643,7 +643,7 @@ async fn test_whats_new_orders_by_closed_at_desc() {
 // What's New API Tests (New Implementation)
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_whatsnew_requires_authentication() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -652,7 +652,7 @@ async fn test_whatsnew_requires_authentication() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_whatsnew_returns_empty_initially() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -665,7 +665,7 @@ async fn test_whatsnew_returns_empty_initially() {
     assert!(batches.is_empty(), "Should have no batches initially");
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_whatsnew_returns_batches_with_albums() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -694,7 +694,7 @@ async fn test_whatsnew_returns_batches_with_albums() {
     assert!(batch["summary"]["albums"]["added"].is_array());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_whatsnew_batches_ordered_by_closed_at_desc() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -721,7 +721,7 @@ async fn test_whatsnew_batches_ordered_by_closed_at_desc() {
     assert_eq!(batches[1]["id"], "batch-old");
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_whatsnew_respects_limit() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -742,7 +742,7 @@ async fn test_whatsnew_respects_limit() {
     assert_eq!(batches.len(), 3, "Should respect limit parameter");
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_whatsnew_response_format_compatible_with_android() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -794,7 +794,7 @@ async fn test_whatsnew_response_format_compatible_with_android() {
     assert!(summary["images"]["deleted"].is_array());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_whatsnew_pending_to_batch_flow() {
     let server = TestServer::spawn().await;
 
@@ -854,7 +854,7 @@ async fn test_whatsnew_pending_to_batch_flow() {
     assert_eq!(batches[0]["id"], batch_id);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_whatsnew_already_batched_album_not_re_added() {
     let server = TestServer::spawn().await;
 

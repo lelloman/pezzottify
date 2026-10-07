@@ -11,7 +11,7 @@ use common::{TestClient, TestServer};
 use pezzottify_server::notifications::NotificationType;
 use reqwest::StatusCode;
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_sync_state_includes_notifications_field() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -27,7 +27,7 @@ async fn test_sync_state_includes_notifications_field() {
     assert!(body["notifications"].as_array().unwrap().is_empty());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_sync_state_includes_created_notification() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -76,7 +76,7 @@ async fn test_sync_state_includes_created_notification() {
     assert_eq!(data["request_id"], "req-001");
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_mark_notification_as_read() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -108,7 +108,7 @@ async fn test_mark_notification_as_read() {
     assert!(notifications[0]["read_at"].as_i64().is_some());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_mark_notification_read_idempotent() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -140,7 +140,7 @@ async fn test_mark_notification_read_idempotent() {
     assert_eq!(read_at1, read_at2);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_mark_notification_read_not_found() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -155,7 +155,7 @@ async fn test_mark_notification_read_not_found() {
 // returning NOT_FOUND if the notification doesn't belong to the user.
 // The test_mark_notification_read_not_found test verifies this behavior for non-existent IDs.
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_mark_notification_read_requires_authentication() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -165,7 +165,7 @@ async fn test_mark_notification_read_requires_authentication() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_notification_created_event_in_sync_events() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -221,7 +221,7 @@ async fn test_notification_created_event_in_sync_events() {
     assert_eq!(notif_data["title"], "Album Ready");
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_notification_read_event_in_sync_events() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -264,7 +264,7 @@ async fn test_notification_read_event_in_sync_events() {
     assert!(payload["read_at"].as_i64().is_some());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_notifications_ordered_by_creation_time_desc() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;

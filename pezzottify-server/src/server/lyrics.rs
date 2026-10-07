@@ -1,15 +1,17 @@
 use super::{api_error::ApiError, session::Session, state::ServerState};
-use crate::execution::sync::Semaphore;
-use crate::web::{
-    extract::{Path, State},
-    http::{header, StatusCode},
-    response::{IntoResponse, Response},
-    routing::{get, post},
-    Json, Router,
-};
 use crate::{catalog_store::TrackAvailability, db_executor::DbPriority, lyrics::LyricsFetcher};
-use simple_server::extract::Extract;
+use simple_server::{
+    extract::Extract,
+    web::{
+        extract::{Path, State},
+        http::{header, StatusCode},
+        response::{IntoResponse, Response},
+        routing::{get, post},
+        Json, Router,
+    },
+};
 use std::sync::{Arc, LazyLock};
+use tokio::sync::Semaphore;
 
 // Bound detached user work independently of the daily batch and HTTP read limits.
 static DOWNLOAD_SLOTS: LazyLock<Arc<Semaphore>> = LazyLock::new(|| Arc::new(Semaphore::new(4)));
@@ -116,9 +118,9 @@ async fn download(
         Err(error) => return ApiError::internal("Create lyrics client", error).into_response(),
     };
     let count = ids.len();
-    crate::execution::spawn(async move {
+    tokio::spawn(async move {
         let (_permit, _guard) = (permit, guard);
-        crate::execution::select! {
+        tokio::select! {
             _ = state.runtime_tasks.shutdown.requested() => {},
             result = fetcher.download(&state.database.catalog_write, ids, DbPriority::Interactive, true) => {
                 match result {

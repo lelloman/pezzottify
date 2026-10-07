@@ -54,14 +54,12 @@ impl BackgroundJob for LyricsDownloadJob {
                 .run_blocking(DbPriority::Background, move |store| {
                     store.lyrics_candidates(limit, chrono::Utc::now().timestamp())
                 })?;
-            let runtime = crate::execution::runtime::Runtime::try_current().or_else(|_| {
-                crate::execution::runtime::Builder::new_multi_thread()
-                    .worker_threads(1)
-                    .build()
-            })?;
-            runtime.handle().block_on(async {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?;
+            runtime.block_on(async {
                 let fetcher = LyricsFetcher::new()?;
-                crate::execution::select! {
+                tokio::select! {
                     _ = ctx.cancellation_token.cancelled() => Err(anyhow::anyhow!("Cancelled")),
                     result = fetcher.download(&ctx.catalog_db, ids, DbPriority::Background, false) => result,
                 }

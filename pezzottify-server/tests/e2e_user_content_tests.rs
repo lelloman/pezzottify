@@ -11,7 +11,7 @@ use reqwest::StatusCode;
 // Liked Content Tests
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_like_and_unlike_track() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -39,7 +39,7 @@ async fn test_like_and_unlike_track() {
     assert!(!liked.contains(&TRACK_1_ID.to_string()));
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_like_album() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -55,7 +55,7 @@ async fn test_like_album() {
     assert!(liked.contains(&ALBUM_1_ID.to_string()));
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_like_artist() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -71,7 +71,7 @@ async fn test_like_artist() {
     assert!(liked.contains(&ARTIST_1_ID.to_string()));
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_like_multiple_tracks() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -90,7 +90,7 @@ async fn test_like_multiple_tracks() {
     assert!(liked.contains(&TRACK_3_ID.to_string()));
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn concurrent_user_writes_are_all_committed_and_visible() {
     let server = TestServer::spawn().await;
     let first = TestClient::authenticated_with_device(server.base_url.clone(), "writer-1").await;
@@ -114,7 +114,7 @@ async fn concurrent_user_writes_are_all_committed_and_visible() {
     assert!(liked.contains(&TRACK_3_ID.to_string()));
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_liked_content_invalid_type() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -124,7 +124,7 @@ async fn test_get_liked_content_invalid_type() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_liked_content_requires_authentication() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -139,7 +139,7 @@ async fn test_liked_content_requires_authentication() {
 // Playlist Tests
 // =============================================================================
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_create_playlist() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -155,7 +155,7 @@ async fn test_create_playlist() {
     assert!(!playlist_id.is_empty());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_playlists() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -173,7 +173,7 @@ async fn test_get_playlists() {
     assert!(playlists.contains(&playlist_id));
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_playlist_by_id() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -194,7 +194,7 @@ async fn test_get_playlist_by_id() {
     assert_eq!(tracks.len(), 2);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_update_playlist_name() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -217,7 +217,7 @@ async fn test_update_playlist_name() {
     assert_eq!(playlist["name"], "New Name");
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_update_playlist_tracks() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -239,7 +239,7 @@ async fn test_update_playlist_tracks() {
     assert_eq!(tracks.len(), 2);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_delete_playlist() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -257,7 +257,7 @@ async fn test_delete_playlist() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_delete_missing_playlist_returns_stable_error_without_sync_event() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -280,7 +280,7 @@ async fn test_delete_missing_playlist_returns_stable_error_without_sync_event() 
     assert!(body["events"].as_array().unwrap().is_empty());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_add_tracks_to_playlist() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -302,7 +302,7 @@ async fn test_add_tracks_to_playlist() {
     assert_eq!(tracks.len(), 3);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn missing_track_add_does_not_mutate_playlist_or_append_sync_event() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -336,7 +336,7 @@ async fn missing_track_add_does_not_mutate_playlist_or_append_sync_event() {
     assert!(after["events"].as_array().unwrap().is_empty());
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_remove_tracks_from_playlist() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -360,7 +360,7 @@ async fn test_remove_tracks_from_playlist() {
     assert_eq!(tracks.len(), 2);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_create_empty_playlist() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -378,7 +378,7 @@ async fn test_create_empty_playlist() {
     assert_eq!(tracks.len(), 0);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_playlist_requires_authentication() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -389,7 +389,7 @@ async fn test_playlist_requires_authentication() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[simple_server::test(host_runtime = true)]
+#[tokio::test]
 async fn test_get_nonexistent_playlist() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
