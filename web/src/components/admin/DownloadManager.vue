@@ -1,6 +1,9 @@
 <template>
   <div class="downloadManager">
-    <h2 class="sectionTitle">Download Manager</h2>
+    <header class="pageHeader">
+      <h2 class="sectionTitle">Downloads</h2>
+      <p>Monitor the queue, resolve failures and review download activity.</p>
+    </header>
 
     <!-- Action Buttons -->
     <div class="actionButtons">
@@ -24,7 +27,8 @@
         <strong>{{ stats?.queue?.retry_waiting ?? 0 }}</strong> retrying
       </span>
       <span class="statItem success">
-        <strong>{{ stats?.queue?.completed_today ?? 0 }}</strong> completed today
+        <strong>{{ stats?.queue?.completed_today ?? 0 }}</strong> completed
+        today
       </span>
       <span class="statItem danger">
         <strong>{{ stats?.queue?.failed_today ?? 0 }}</strong> failed today
@@ -38,10 +42,13 @@
         :key="tab.id"
         class="tabButton"
         :class="{ active: activeTab === tab.id }"
+        :aria-pressed="activeTab === tab.id"
         @click="activeTab = tab.id"
       >
         {{ tab.label }}
-        <span v-if="tab.count !== undefined" class="tabCount">{{ tab.count }}</span>
+        <span v-if="tab.count !== undefined" class="tabCount">{{
+          tab.count
+        }}</span>
       </button>
     </div>
 
@@ -60,11 +67,19 @@
             <strong>{{ proxyStatus.active.length }}</strong> active
           </span>
           <span class="statItem">
-            <strong>{{ proxyStatus.foreground_active }}/{{ proxyStatus.foreground_limit }}</strong>
+            <strong
+              >{{ proxyStatus.foreground_active }}/{{
+                proxyStatus.foreground_limit
+              }}</strong
+            >
             foreground slots
           </span>
           <span class="statItem">
-            <strong>{{ proxyStatus.prefetch_active }}/{{ proxyStatus.prefetch_limit }}</strong>
+            <strong
+              >{{ proxyStatus.prefetch_active }}/{{
+                proxyStatus.prefetch_limit
+              }}</strong
+            >
             prefetch slots
           </span>
           <span class="statItem">
@@ -78,38 +93,68 @@
           No tracks are being materialized right now.
         </div>
         <div v-else class="queueList">
-          <div v-for="job in proxyStatus.active" :key="job.track_id" class="queueItem proxyJob">
+          <div
+            v-for="job in proxyStatus.active"
+            :key="job.track_id"
+            class="queueItem proxyJob"
+          >
             <div class="queueItemHeader">
               <div class="queueItemMain">
                 <span class="queueItemType">{{ job.priority }}</span>
-                <span class="queueItemName clickable" @click="goToProxyTrack(job)">
+                <span
+                  class="queueItemName clickable"
+                  role="link"
+                  tabindex="0"
+                  @keydown.enter="goToProxyTrack(job)"
+                  @click="goToProxyTrack(job)"
+                >
                   {{ job.track_name || job.track_id }}
-                  <span v-if="job.album_name" class="proxyAlbum">— {{ job.album_name }}</span>
+                  <span v-if="job.album_name" class="proxyAlbum"
+                    >— {{ job.album_name }}</span
+                  >
                 </span>
               </div>
-              <span class="statusBadge proxyPhase">{{ formatProxyPhase(job.phase) }}</span>
+              <span class="statusBadge proxyPhase">{{
+                formatProxyPhase(job.phase)
+              }}</span>
             </div>
             <div v-if="job.total_bytes" class="progressSection">
               <div class="progressBar">
-                <div class="progressFill" :style="{ width: proxyProgress(job) + '%' }"></div>
+                <div
+                  class="progressFill"
+                  :style="{ width: proxyProgress(job) + '%' }"
+                ></div>
               </div>
               <span class="progressText">
-                Downloaded {{ formatBytes(job.bytes_downloaded) }} / {{ formatBytes(job.total_bytes) }}
-                · {{ formatProxyRate(job) }}
+                Downloaded {{ formatBytes(job.bytes_downloaded) }} /
+                {{ formatBytes(job.total_bytes) }} · {{ formatProxyRate(job) }}
               </span>
             </div>
-            <div v-if="job.total_bytes" class="progressSection retentionProgress">
+            <div
+              v-if="job.total_bytes"
+              class="progressSection retentionProgress"
+            >
               <div class="progressBar">
-                <div class="progressFill" :style="{ width: proxyStreamProgress(job) + '%' }"></div>
+                <div
+                  class="progressFill"
+                  :style="{ width: proxyStreamProgress(job) + '%' }"
+                ></div>
               </div>
               <span class="progressText">
-                Streamed {{ formatBytes(job.bytes_streamed) }}
-                ({{ proxyStreamProgress(job) }}%)
+                Streamed {{ formatBytes(job.bytes_streamed) }} ({{
+                  proxyStreamProgress(job)
+                }}%)
               </span>
             </div>
             <div class="queueItemDetails">
-              <span class="detailItem">Running for {{ formatProxyDuration(job) }}</span>
-              <span class="detailItem">{{ job.active_streams }} active stream{{ job.active_streams === 1 ? "" : "s" }}</span>
+              <span class="detailItem"
+                >Running for {{ formatProxyDuration(job) }}</span
+              >
+              <span class="detailItem"
+                >{{ job.active_streams }} active stream{{
+                  job.active_streams === 1 ? "" : "s"
+                }}</span
+              >
               <span class="detailItem mono">{{ job.track_id }}</span>
             </div>
           </div>
@@ -129,23 +174,39 @@
             <div class="queueItemHeader">
               <div class="queueItemMain">
                 <span class="queueItemType">{{ job.priority }}</span>
-                <span class="queueItemName clickable" @click="goToProxyTrack(job)">
+                <span
+                  class="queueItemName clickable"
+                  role="link"
+                  tabindex="0"
+                  @keydown.enter="goToProxyTrack(job)"
+                  @click="goToProxyTrack(job)"
+                >
                   {{ job.track_name || job.track_id }}
-                  <span v-if="job.album_name" class="proxyAlbum">— {{ job.album_name }}</span>
+                  <span v-if="job.album_name" class="proxyAlbum"
+                    >— {{ job.album_name }}</span
+                  >
                 </span>
               </div>
               <span
                 class="statusBadge"
-                :class="job.phase === 'failed' ? 'status-failed' : 'status-completed'"
+                :class="
+                  job.phase === 'failed' ? 'status-failed' : 'status-completed'
+                "
               >
                 {{ formatProxyPhase(job.phase) }}
               </span>
             </div>
             <div class="queueItemDetails">
-              <span class="detailItem">{{ formatBytes(job.bytes_downloaded) }}</span>
-              <span class="detailItem">{{ proxyStreamProgress(job) }}% streamed</span>
+              <span class="detailItem">{{
+                formatBytes(job.bytes_downloaded)
+              }}</span>
+              <span class="detailItem"
+                >{{ proxyStreamProgress(job) }}% streamed</span
+              >
               <span class="detailItem">{{ formatProxyDuration(job) }}</span>
-              <span class="detailItem">{{ formatProxyDate(job.finished_at_ms) }}</span>
+              <span class="detailItem">{{
+                formatProxyDate(job.finished_at_ms)
+              }}</span>
             </div>
             <div v-if="job.error" class="queueItemError">{{ job.error }}</div>
           </div>
@@ -159,11 +220,24 @@
         Queue is empty.
       </div>
       <div v-else class="queueList">
-        <div v-for="item in queueItems" :key="item.id" class="queueItem" :class="statusClass(item.status)">
+        <div
+          v-for="item in queueItems"
+          :key="item.id"
+          class="queueItem"
+          :class="statusClass(item.status)"
+        >
           <div class="queueItemHeader">
             <div class="queueItemMain">
-              <span class="queueItemType">{{ formatContentType(item.content_type) }}</span>
-              <span class="queueItemName clickable" @click="goToContent(item)">
+              <span class="queueItemType">{{
+                formatContentType(item.content_type)
+              }}</span>
+              <span
+                class="queueItemName clickable"
+                role="link"
+                tabindex="0"
+                @keydown.enter="goToContent(item)"
+                @click="goToContent(item)"
+              >
                 {{ formatItemName(item) }}
                 <span class="linkIcon">→</span>
               </span>
@@ -189,7 +263,10 @@
                 {{ retryingItems[item.id] ? "..." : "Retry" }}
               </button>
               <button
-                v-if="item.status === 'IN_PROGRESS' || item.status === 'RETRY_WAITING'"
+                v-if="
+                  item.status === 'IN_PROGRESS' ||
+                  item.status === 'RETRY_WAITING'
+                "
                 class="forceRetryButton"
                 @click="handleRetry(item.id, true)"
                 :disabled="retryingItems[item.id]"
@@ -206,7 +283,10 @@
             </div>
           </div>
           <!-- Progress bar for requests with children -->
-          <div v-if="item.progress && item.progress.total_children > 0" class="progressSection">
+          <div
+            v-if="item.progress && item.progress.total_children > 0"
+            class="progressSection"
+          >
             <div class="progressBar">
               <div
                 class="progressFill"
@@ -215,7 +295,10 @@
               ></div>
             </div>
             <span class="progressText">
-              {{ item.progress.completed }}/{{ item.progress.total_children }} completed
+              {{ item.progress.completed }}/{{
+                item.progress.total_children
+              }}
+              completed
               <span v-if="item.progress.failed > 0" class="progressFailed">
                 ({{ item.progress.failed }} failed)
               </span>
@@ -227,7 +310,9 @@
           <div class="queueItemDetails">
             <span class="detailItem">
               <span class="detailLabel">Priority:</span>
-              <span class="detailValue">{{ formatPriority(item.priority) }}</span>
+              <span class="detailValue">{{
+                formatPriority(item.priority)
+              }}</span>
             </span>
             <span class="detailItem">
               <span class="detailLabel">Created:</span>
@@ -235,19 +320,30 @@
             </span>
             <span v-if="item.last_attempt_at" class="detailItem">
               <span class="detailLabel">Last attempt:</span>
-              <span class="detailValue">{{ formatDate(item.last_attempt_at) }}</span>
+              <span class="detailValue">{{
+                formatDate(item.last_attempt_at)
+              }}</span>
             </span>
             <span v-if="item.next_retry_at" class="detailItem">
               <span class="detailLabel">Next retry:</span>
-              <span class="detailValue">{{ formatDate(item.next_retry_at) }}</span>
+              <span class="detailValue">{{
+                formatDate(item.next_retry_at)
+              }}</span>
             </span>
             <span v-if="item.retry_count > 0" class="detailItem">
               <span class="detailLabel">Retries:</span>
-              <span class="detailValue">{{ item.retry_count }} / {{ item.max_retries }}</span>
+              <span class="detailValue"
+                >{{ item.retry_count }} / {{ item.max_retries }}</span
+              >
             </span>
           </div>
-          <div v-if="item.error_type || item.error_message" class="queueItemError">
-            <span v-if="item.error_type" class="errorType">{{ item.error_type }}</span>
+          <div
+            v-if="item.error_type || item.error_message"
+            class="queueItemError"
+          >
+            <span v-if="item.error_type" class="errorType">{{
+              item.error_type
+            }}</span>
             <span v-if="item.error_message">{{ item.error_message }}</span>
           </div>
         </div>
@@ -260,11 +356,23 @@
         No failed downloads.
       </div>
       <div v-else class="queueList">
-        <div v-for="item in failedItems" :key="item.id" class="queueItem status-failed">
+        <div
+          v-for="item in failedItems"
+          :key="item.id"
+          class="queueItem status-failed"
+        >
           <div class="queueItemHeader">
             <div class="queueItemMain">
-              <span class="queueItemType">{{ formatContentType(item.content_type) }}</span>
-              <span class="queueItemName clickable" @click="goToContent(item)">
+              <span class="queueItemType">{{
+                formatContentType(item.content_type)
+              }}</span>
+              <span
+                class="queueItemName clickable"
+                role="link"
+                tabindex="0"
+                @keydown.enter="goToContent(item)"
+                @click="goToContent(item)"
+              >
                 {{ formatItemName(item) }}
                 <span class="linkIcon">→</span>
               </span>
@@ -287,10 +395,15 @@
             </div>
           </div>
           <!-- Progress info for failed requests with children -->
-          <div v-if="item.progress && item.progress.total_children > 0" class="progressSection">
+          <div
+            v-if="item.progress && item.progress.total_children > 0"
+            class="progressSection"
+          >
             <span class="progressText">
-              {{ item.progress.completed }}/{{ item.progress.total_children }} completed,
-              {{ item.progress.failed }} failed
+              {{ item.progress.completed }}/{{
+                item.progress.total_children
+              }}
+              completed, {{ item.progress.failed }} failed
             </span>
           </div>
           <div class="queueItemDetails">
@@ -300,15 +413,24 @@
             </span>
             <span v-if="item.last_attempt_at" class="detailItem">
               <span class="detailLabel">Last attempt:</span>
-              <span class="detailValue">{{ formatDate(item.last_attempt_at) }}</span>
+              <span class="detailValue">{{
+                formatDate(item.last_attempt_at)
+              }}</span>
             </span>
             <span class="detailItem">
               <span class="detailLabel">Retries:</span>
-              <span class="detailValue">{{ item.retry_count }} / {{ item.max_retries }}</span>
+              <span class="detailValue"
+                >{{ item.retry_count }} / {{ item.max_retries }}</span
+              >
             </span>
           </div>
-          <div v-if="item.error_type || item.error_message" class="queueItemError">
-            <span v-if="item.error_type" class="errorType">{{ item.error_type }}</span>
+          <div
+            v-if="item.error_type || item.error_message"
+            class="queueItemError"
+          >
+            <span v-if="item.error_type" class="errorType">{{
+              item.error_type
+            }}</span>
             <span v-if="item.error_message">{{ item.error_message }}</span>
           </div>
         </div>
@@ -321,17 +443,31 @@
         No completed downloads yet.
       </div>
       <div v-else class="queueList">
-        <div v-for="item in completedItems" :key="item.id" class="queueItem completed">
+        <div
+          v-for="item in completedItems"
+          :key="item.id"
+          class="queueItem completed"
+        >
           <div class="queueItemMain">
-            <span class="queueItemType">{{ formatContentType(item.content_type) }}</span>
-            <span class="queueItemName clickable" @click="goToContent(item)">
+            <span class="queueItemType">{{
+              formatContentType(item.content_type)
+            }}</span>
+            <span
+              class="queueItemName clickable"
+              role="link"
+              tabindex="0"
+              @keydown.enter="goToContent(item)"
+              @click="goToContent(item)"
+            >
               {{ formatItemName(item) }}
               <span class="linkIcon">→</span>
             </span>
           </div>
           <div class="queueItemMeta">
             <span class="statusBadge status-completed">completed</span>
-            <span class="queueItemTime">{{ formatDate(item.completed_at || item.updated_at) }}</span>
+            <span class="queueItemTime">{{
+              formatDate(item.completed_at || item.updated_at)
+            }}</span>
           </div>
         </div>
       </div>
@@ -342,31 +478,41 @@
       <div v-if="auditLog.length === 0" class="emptyState">
         No audit log entries.
       </div>
-      <table v-else class="auditTable">
-        <thead>
-          <tr>
-            <th class="colTime">Time</th>
-            <th class="colEvent">Event</th>
-            <th class="colUser">User</th>
-            <th class="colDetails">Details</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="entry in auditLog" :key="entry.id" class="auditRow">
-            <td class="colTime">{{ formatDate(entry.timestamp) }}</td>
-            <td class="colEvent">
-              <span class="eventBadge" :class="eventClass(entry.event_type)">
-                {{ formatEventType(entry.event_type) }}
-              </span>
-            </td>
-            <td class="colUser">
-              <span v-if="entry.user_id" class="auditUser">{{ entry.user_id }}</span>
-              <span v-else class="textMuted">—</span>
-            </td>
-            <td class="colDetails">{{ formatAuditDetails(entry) }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <div
+        v-else
+        class="tableWrapper"
+        tabindex="0"
+        role="region"
+        aria-label="Download audit log"
+      >
+        <table class="auditTable">
+          <thead>
+            <tr>
+              <th class="colTime">Time</th>
+              <th class="colEvent">Event</th>
+              <th class="colUser">User</th>
+              <th class="colDetails">Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="entry in auditLog" :key="entry.id" class="auditRow">
+              <td class="colTime">{{ formatDate(entry.timestamp) }}</td>
+              <td class="colEvent">
+                <span class="eventBadge" :class="eventClass(entry.event_type)">
+                  {{ formatEventType(entry.event_type) }}
+                </span>
+              </td>
+              <td class="colUser">
+                <span v-if="entry.user_id" class="auditUser">{{
+                  entry.user_id
+                }}</span>
+                <span v-else class="textMuted">—</span>
+              </td>
+              <td class="colDetails">{{ formatAuditDetails(entry) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- Statistics Tab -->
@@ -378,6 +524,7 @@
           :key="p.id"
           class="periodButton"
           :class="{ active: selectedPeriod === p.id }"
+          :aria-pressed="selectedPeriod === p.id"
           @click="selectPeriod(p.id)"
         >
           {{ p.label }}
@@ -436,7 +583,9 @@
           <span class="totalLabel">Images</span>
         </div>
         <div class="totalCard">
-          <span class="totalValue">{{ formatBytes(statsHistory.total_bytes) }}</span>
+          <span class="totalValue">{{
+            formatBytes(statsHistory.total_bytes)
+          }}</span>
           <span class="totalLabel">Downloaded</span>
         </div>
         <div class="totalCard totalFailures">
@@ -474,13 +623,18 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="entry in statsHistory.entries" :key="entry.period_start">
+              <tr
+                v-for="entry in statsHistory.entries"
+                :key="entry.period_start"
+              >
                 <td>{{ formatPeriodDate(entry.period_start) }}</td>
                 <td>{{ entry.albums }}</td>
                 <td>{{ entry.tracks }}</td>
                 <td>{{ entry.images }}</td>
                 <td>{{ formatBytes(entry.bytes) }}</td>
-                <td :class="{ 'text-danger': entry.failures > 0 }">{{ entry.failures }}</td>
+                <td :class="{ 'text-danger': entry.failures > 0 }">
+                  {{ entry.failures }}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -490,22 +644,36 @@
       <div v-if="!statsHistory && !isLoadingStats" class="emptyState">
         No statistics data available.
       </div>
-      <div v-if="isLoadingStats" class="emptyState">
-        Loading statistics...
-      </div>
+      <div v-if="isLoadingStats" class="emptyState">Loading statistics...</div>
     </div>
 
     <!-- Download Request Modal -->
-    <div v-if="showDownloadModal" class="detailOverlay" @click.self="closeDownloadModal">
-      <div class="detailPanel downloadModal">
+    <div
+      v-if="showDownloadModal"
+      class="detailOverlay"
+      @click.self="closeDownloadModal"
+    >
+      <div
+        class="detailPanel downloadModal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Download album"
+      >
         <div class="detailHeader">
           <h3 class="detailTitle">Download Album</h3>
-          <button class="closeDetailButton" @click="closeDownloadModal">×</button>
+          <button
+            class="closeDetailButton"
+            aria-label="Close download dialog"
+            @click="closeDownloadModal"
+          >
+            ×
+          </button>
         </div>
         <div class="modalContent">
           <div class="formGroup">
-            <label class="formLabel">Album ID</label>
+            <label class="formLabel" for="download-album-id">Album ID</label>
             <input
+              id="download-album-id"
               v-model="downloadForm.id"
               type="text"
               class="formInput"
@@ -513,8 +681,11 @@
             />
           </div>
           <div class="formGroup">
-            <label class="formLabel">Album Name</label>
+            <label class="formLabel" for="download-album-name"
+              >Album Name</label
+            >
             <input
+              id="download-album-name"
               v-model="downloadForm.albumName"
               type="text"
               class="formInput"
@@ -522,8 +693,11 @@
             />
           </div>
           <div class="formGroup">
-            <label class="formLabel">Artist Name</label>
+            <label class="formLabel" for="download-artist-name"
+              >Artist Name</label
+            >
             <input
+              id="download-artist-name"
               v-model="downloadForm.artistName"
               type="text"
               class="formInput"
@@ -537,7 +711,9 @@
             {{ downloadSuccess }}
           </div>
           <div class="modalActions">
-            <button class="cancelButton" @click="closeDownloadModal">Cancel</button>
+            <button class="cancelButton" @click="closeDownloadModal">
+              Cancel
+            </button>
             <button
               class="confirmButton"
               @click="submitDownloadRequest"
@@ -551,25 +727,46 @@
     </div>
 
     <!-- Delete Confirmation Modal -->
-    <div v-if="showDeleteModal" class="detailOverlay" @click.self="closeDeleteModal">
-      <div class="detailPanel deleteModal">
+    <div
+      v-if="showDeleteModal"
+      class="detailOverlay"
+      @click.self="closeDeleteModal"
+    >
+      <div
+        class="detailPanel deleteModal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Delete download request"
+      >
         <div class="detailHeader">
           <h3 class="detailTitle">Delete Download Request</h3>
-          <button class="closeDetailButton" @click="closeDeleteModal">×</button>
+          <button
+            class="closeDetailButton"
+            aria-label="Close delete dialog"
+            @click="closeDeleteModal"
+          >
+            ×
+          </button>
         </div>
         <div class="modalContent">
           <p class="deleteWarning">
             Are you sure you want to delete this download request?
           </p>
           <div class="deleteItemInfo">
-            <span class="queueItemType">{{ formatContentType(itemToDelete?.content_type) }}</span>
-            <span class="queueItemName">{{ formatItemName(itemToDelete) }}</span>
+            <span class="queueItemType">{{
+              formatContentType(itemToDelete?.content_type)
+            }}</span>
+            <span class="queueItemName">{{
+              formatItemName(itemToDelete)
+            }}</span>
           </div>
           <div v-if="deleteError" class="modalError">
             {{ deleteError }}
           </div>
           <div class="modalActions">
-            <button class="cancelButton" @click="closeDeleteModal">Cancel</button>
+            <button class="cancelButton" @click="closeDeleteModal">
+              Cancel
+            </button>
             <button
               class="deleteConfirmButton"
               @click="executeDelete"
@@ -583,21 +780,44 @@
     </div>
 
     <!-- Upload Modal -->
-    <div v-if="showUploadModal" class="detailOverlay" @click.self="closeUploadModal">
-      <div class="detailPanel uploadModal">
+    <div
+      v-if="showUploadModal"
+      class="detailOverlay"
+      @click.self="closeUploadModal"
+    >
+      <div
+        class="detailPanel uploadModal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Upload files"
+      >
         <div class="detailHeader">
-          <h3 class="detailTitle">Upload Files for {{ formatItemName(itemToUpload) }}</h3>
-          <button class="closeDetailButton" @click="closeUploadModal">×</button>
+          <h3 class="detailTitle">
+            Upload Files for {{ formatItemName(itemToUpload) }}
+          </h3>
+          <button
+            class="closeDetailButton"
+            aria-label="Close upload dialog"
+            @click="closeUploadModal"
+          >
+            ×
+          </button>
         </div>
         <div class="modalContent">
           <p class="uploadDescription">
-            Upload audio files (ZIP archive or individual audio files) to fulfill this download request.
-            The files will be analyzed and ingested automatically.
+            Upload audio files (ZIP archive or individual audio files) to
+            fulfill this download request. The files will be analyzed and
+            ingested automatically.
           </p>
 
           <div
             class="uploadDropzone"
-            :class="{ 'dragging': isDragging }"
+            role="button"
+            tabindex="0"
+            aria-label="Choose audio files"
+            @keydown.enter.self="triggerFileInput"
+            @keydown.space.self.prevent="triggerFileInput"
+            :class="{ dragging: isDragging }"
             @click="triggerFileInput"
             @dragover.prevent="isDragging = true"
             @dragleave="isDragging = false"
@@ -621,9 +841,13 @@
             <div class="dropzoneContent">
               <span class="dropzoneIcon">+</span>
               <span class="dropzoneText">
-                Drag files/folders here or <span class="browseLink">browse files</span>
+                Drag files/folders here or
+                <span class="browseLink">browse files</span>
               </span>
-              <span class="dropzoneHint">Supports MP3, FLAC, WAV, OGG, M4A, AAC, OPUS, ZIP, or folders</span>
+              <span class="dropzoneHint"
+                >Supports MP3, FLAC, WAV, OGG, M4A, AAC, OPUS, ZIP, or
+                folders</span
+              >
               <button class="folderButton" @click.stop="triggerFolderInput">
                 Select Folder
               </button>
@@ -631,12 +855,19 @@
           </div>
 
           <!-- Upload Progress -->
-          <div v-if="uploadState.uploading || uploadState.zipping" class="uploadProgress">
+          <div
+            v-if="uploadState.uploading || uploadState.zipping"
+            class="uploadProgress"
+          >
             <div class="progressBar">
-              <div class="progressFill" :style="{ width: uploadState.progress + '%' }"></div>
+              <div
+                class="progressFill"
+                :style="{ width: uploadState.progress + '%' }"
+              ></div>
             </div>
             <span class="progressText">
-              {{ uploadState.zipping ? 'Zipping' : 'Uploading' }} {{ uploadState.filename }}...
+              {{ uploadState.zipping ? "Zipping" : "Uploading" }}
+              {{ uploadState.filename }}...
             </span>
           </div>
 
@@ -649,7 +880,11 @@
           </div>
 
           <div class="modalActions">
-            <button class="cancelButton" @click="closeUploadModal" :disabled="uploadState.uploading">
+            <button
+              class="cancelButton"
+              @click="closeUploadModal"
+              :disabled="uploadState.uploading"
+            >
               Close
             </button>
           </div>
@@ -679,7 +914,16 @@ import { useIngestionStore } from "@/store/ingestion";
 import JSZip from "jszip";
 
 // Supported audio extensions
-const AUDIO_EXTENSIONS = ["mp3", "flac", "wav", "ogg", "m4a", "aac", "wma", "opus"];
+const AUDIO_EXTENSIONS = [
+  "mp3",
+  "flac",
+  "wav",
+  "ogg",
+  "m4a",
+  "aac",
+  "wma",
+  "opus",
+];
 
 // Register Chart.js components
 ChartJS.register(
@@ -720,7 +964,8 @@ const downloadSuccess = ref(null);
 
 const isFormValid = computed(() => {
   if (!downloadForm.id || !downloadForm.artistName) return false;
-  if (downloadModalType.value === "album" && !downloadForm.albumName) return false;
+  if (downloadModalType.value === "album" && !downloadForm.albumName)
+    return false;
   return true;
 });
 
@@ -753,7 +998,10 @@ const submitDownloadRequest = async () => {
   isSubmitting.value = false;
 
   if (result.error) {
-    downloadError.value = typeof result.error === "string" ? result.error : JSON.stringify(result.error);
+    downloadError.value =
+      typeof result.error === "string"
+        ? result.error
+        : JSON.stringify(result.error);
   } else {
     downloadSuccess.value = "Album queued for download!";
     await loadData();
@@ -810,8 +1058,18 @@ const customGranularity = ref("hourly");
 
 const periods = [
   { id: "24h", label: "Last 24h", seconds: 24 * 3600, granularity: "hourly" },
-  { id: "7d", label: "Last 7 days", seconds: 7 * 24 * 3600, granularity: "hourly" },
-  { id: "30d", label: "Last 30 days", seconds: 30 * 24 * 3600, granularity: "daily" },
+  {
+    id: "7d",
+    label: "Last 7 days",
+    seconds: 7 * 24 * 3600,
+    granularity: "hourly",
+  },
+  {
+    id: "30d",
+    label: "Last 30 days",
+    seconds: 30 * 24 * 3600,
+    granularity: "daily",
+  },
   { id: "custom", label: "Custom Range" },
 ];
 
@@ -845,7 +1103,11 @@ const loadStatsHistory = async () => {
     }
   }
 
-  const result = await remoteStore.fetchDownloadStatsHistory(period, since, until);
+  const result = await remoteStore.fetchDownloadStatsHistory(
+    period,
+    since,
+    until,
+  );
   statsHistory.value = result;
   isLoadingStats.value = false;
 };
@@ -1026,7 +1288,11 @@ const lineChartOptions = {
 
 const tabs = computed(() => [
   { id: "queue", label: "Queue", count: queueItems.value.length },
-  { id: "proxy", label: "Track Proxy", count: proxyStatus.value?.active?.length || 0 },
+  {
+    id: "proxy",
+    label: "Track Proxy",
+    count: proxyStatus.value?.active?.length || 0,
+  },
   { id: "failed", label: "Failed", count: failedItems.value.length },
   { id: "downloaded", label: "Downloaded", count: completedItems.value.length },
   { id: "audit", label: "Audit Log" },
@@ -1038,7 +1304,14 @@ const loadData = async () => {
   loadError.value = null;
 
   try {
-    const [statsResult, proxyResult, queueResult, failedResult, completedResult, auditResult] = await Promise.all([
+    const [
+      statsResult,
+      proxyResult,
+      queueResult,
+      failedResult,
+      completedResult,
+      auditResult,
+    ] = await Promise.all([
       remoteStore.fetchDownloadStats(),
       remoteStore.fetchProxyDownloadStatus(),
       remoteStore.fetchDownloadQueue(),
@@ -1050,9 +1323,15 @@ const loadData = async () => {
     stats.value = statsResult;
     proxyStatus.value = proxyResult;
     // API returns arrays directly, not wrapped in { items: [...] }
-    queueItems.value = Array.isArray(queueResult) ? queueResult : (queueResult?.items || []);
-    failedItems.value = Array.isArray(failedResult) ? failedResult : (failedResult?.items || []);
-    completedItems.value = Array.isArray(completedResult) ? completedResult : (completedResult?.items || []);
+    queueItems.value = Array.isArray(queueResult)
+      ? queueResult
+      : queueResult?.items || [];
+    failedItems.value = Array.isArray(failedResult)
+      ? failedResult
+      : failedResult?.items || [];
+    completedItems.value = Array.isArray(completedResult)
+      ? completedResult
+      : completedResult?.items || [];
     auditLog.value = auditResult?.entries || [];
 
     if (!statsResult) {
@@ -1077,12 +1356,18 @@ const formatProxyPhase = (phase) =>
 
 const proxyProgress = (job) => {
   if (!job.total_bytes) return 0;
-  return Math.min(100, Math.round((job.bytes_downloaded / job.total_bytes) * 100));
+  return Math.min(
+    100,
+    Math.round((job.bytes_downloaded / job.total_bytes) * 100),
+  );
 };
 
 const proxyStreamProgress = (job) => {
   if (!job.total_bytes) return 0;
-  return Math.min(100, Math.round((job.bytes_streamed / job.total_bytes) * 100));
+  return Math.min(
+    100,
+    Math.round((job.bytes_streamed / job.total_bytes) * 100),
+  );
 };
 
 const formatProxyDuration = (job) => {
@@ -1093,7 +1378,10 @@ const formatProxyDuration = (job) => {
 };
 
 const formatProxyRate = (job) => {
-  const seconds = Math.max(0.001, (job.updated_at_ms - job.started_at_ms) / 1000);
+  const seconds = Math.max(
+    0.001,
+    (job.updated_at_ms - job.started_at_ms) / 1000,
+  );
   return `${formatBytes(job.bytes_downloaded / seconds)}/s`;
 };
 
@@ -1197,7 +1485,7 @@ const handleFolderSelect = async (event) => {
 
 // Check if a file is a supported audio format
 const isAudioFile = (filename) => {
-  const ext = filename.split('.').pop()?.toLowerCase();
+  const ext = filename.split(".").pop()?.toLowerCase();
   return AUDIO_EXTENSIONS.includes(ext);
 };
 
@@ -1231,7 +1519,7 @@ const uploadFolder = async (files) => {
   if (!itemToUpload.value) return;
 
   // Filter to only audio files
-  const audioFiles = Array.from(files).filter(f => isAudioFile(f.name));
+  const audioFiles = Array.from(files).filter((f) => isAudioFile(f.name));
 
   if (audioFiles.length === 0) {
     uploadState.error = "No audio files found in folder";
@@ -1239,7 +1527,8 @@ const uploadFolder = async (files) => {
   }
 
   // Get folder name from webkitRelativePath
-  const folderName = audioFiles[0].webkitRelativePath?.split('/')[0] || 'folder';
+  const folderName =
+    audioFiles[0].webkitRelativePath?.split("/")[0] || "folder";
 
   uploadState.zipping = true;
   uploadState.progress = 0;
@@ -1260,19 +1549,18 @@ const uploadFolder = async (files) => {
     }
 
     // Generate zip blob
-    const zipBlob = await zip.generateAsync(
-      { type: "blob" },
-      (metadata) => {
-        uploadState.progress = 50 + Math.round(metadata.percent / 2);
-      }
-    );
+    const zipBlob = await zip.generateAsync({ type: "blob" }, (metadata) => {
+      uploadState.progress = 50 + Math.round(metadata.percent / 2);
+    });
 
     uploadState.zipping = false;
     uploadState.uploading = true;
     uploadState.progress = 0;
 
     // Upload the zip
-    const zipFile = new File([zipBlob], `${folderName}.zip`, { type: "application/zip" });
+    const zipFile = new File([zipBlob], `${folderName}.zip`, {
+      type: "application/zip",
+    });
 
     const result = await remoteStore.uploadIngestionFile(
       zipFile,
@@ -1332,7 +1620,7 @@ const uploadDirectoryEntry = async (dirEntry) => {
   try {
     // Recursively read all files from the directory
     const files = await readDirectoryRecursive(dirEntry);
-    const audioFiles = files.filter(f => isAudioFile(f.path));
+    const audioFiles = files.filter((f) => isAudioFile(f.path));
 
     if (audioFiles.length === 0) {
       uploadState.error = "No audio files found in folder";
@@ -1351,19 +1639,18 @@ const uploadDirectoryEntry = async (dirEntry) => {
     }
 
     // Generate zip blob
-    const zipBlob = await zip.generateAsync(
-      { type: "blob" },
-      (metadata) => {
-        uploadState.progress = 50 + Math.round(metadata.percent / 2);
-      }
-    );
+    const zipBlob = await zip.generateAsync({ type: "blob" }, (metadata) => {
+      uploadState.progress = 50 + Math.round(metadata.percent / 2);
+    });
 
     uploadState.zipping = false;
     uploadState.uploading = true;
     uploadState.progress = 0;
 
     // Upload the zip
-    const zipFile = new File([zipBlob], `${folderName}.zip`, { type: "application/zip" });
+    const zipFile = new File([zipBlob], `${folderName}.zip`, {
+      type: "application/zip",
+    });
 
     const result = await remoteStore.uploadIngestionFile(
       zipFile,
@@ -1626,7 +1913,10 @@ const formatAuditDetails = (entry) => {
     case "REQUEST_CREATED": {
       const name = details.content_name || contentName;
       const artist = details.artist_name ? ` by ${details.artist_name}` : "";
-      const pos = details.queue_position != null ? `, queue #${details.queue_position}` : "";
+      const pos =
+        details.queue_position != null
+          ? `, queue #${details.queue_position}`
+          : "";
       return `${name}${artist}${pos}`;
     }
 
@@ -1693,9 +1983,12 @@ const formatAuditDetails = (entry) => {
 
     default:
       // Fallback: show raw details as key-value pairs
-      return prefix + Object.entries(details)
-        .map(([k, v]) => `${k}: ${v}`)
-        .join(", ");
+      return (
+        prefix +
+        Object.entries(details)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(", ")
+      );
   }
 };
 
@@ -1726,1037 +2019,674 @@ onUnmounted(() => {
 <style scoped>
 .downloadManager {
   width: 100%;
-}
-
-.sectionTitle {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
+  min-width: 0;
   color: var(--text-base);
-  margin: 0 0 var(--spacing-4) 0;
 }
-
+.pageHeader {
+  margin-bottom: 28px;
+}
+.sectionTitle {
+  margin: 0 0 10px;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+.pageHeader p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-subdued);
+}
+button {
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+.actionButtons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.actionButton,
+.confirmButton {
+  min-height: 44px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--spotify-green);
+  color: #000;
+  font-weight: 700;
+}
+.actionButton:hover:not(:disabled),
+.confirmButton:hover:not(:disabled) {
+  background: var(--spotify-green-hover);
+}
+.refreshButton,
+.retryButton,
+.forceRetryButton,
+.uploadButton,
+.deleteButton,
+.folderButton {
+  min-height: 36px;
+  padding: 6px 16px;
+  border: 1px solid #727272;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-base);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.refreshButton {
+  margin-left: auto;
+  min-height: 40px;
+}
+.refreshButton:hover:not(:disabled),
+.retryButton:hover:not(:disabled),
+.forceRetryButton:hover:not(:disabled),
+.uploadButton:hover:not(:disabled),
+.deleteButton:hover:not(:disabled),
+.folderButton:hover:not(:disabled) {
+  border-color: #fff;
+  background: #ffffff0c;
+}
+.deleteButton {
+  color: #f3727f;
+}
+.forceRetryButton {
+  color: #f0bc65;
+}
+.statsSummary,
 .proxySummary {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--spacing-3);
-  margin-bottom: var(--spacing-5);
-}
-
-.proxySectionTitle {
-  margin: var(--spacing-5) 0 var(--spacing-3);
-  color: var(--text-base);
-  font-size: var(--font-size-base);
-}
-
-.proxyJob .progressSection {
-  margin-top: var(--spacing-3);
-}
-
-.retentionProgress .progressBar {
-  position: relative;
-}
-
-.retentionProgress .progressFill {
-  background-color: #60a5fa;
-}
-
-.proxyAlbum {
+  gap: 12px 28px;
+  margin-bottom: 24px;
+  font-size: 14px;
   color: var(--text-subdued);
-  font-weight: normal;
 }
-
-.proxyPhase {
-  background: rgba(59, 130, 246, 0.15);
-  color: #60a5fa;
-}
-
-.emptyState.compact {
-  padding: var(--spacing-4);
-}
-
-.mono {
-  font-family: monospace;
-}
-
-/* Action Buttons */
-.actionButtons {
-  display: flex;
-  gap: var(--spacing-3);
-  margin-bottom: var(--spacing-4);
-}
-
-.actionButton {
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--spotify-green);
-  color: white;
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
-}
-
-.actionButton:hover {
-  background-color: #1ed760;
-}
-
-.refreshButton {
-  margin-left: auto;
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--bg-elevated-base);
-  border: 1px solid var(--border-subdued);
-  border-radius: var(--radius-md);
-  color: var(--text-subdued);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.refreshButton:hover:not(:disabled) {
-  border-color: var(--text-base);
-  color: var(--text-base);
-}
-
-.refreshButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Stats Summary */
 .statsSummary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-4);
-  padding: var(--spacing-3) var(--spacing-4);
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
-  margin-bottom: var(--spacing-4);
-  font-size: var(--text-sm);
-  color: var(--text-subdued);
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--surface-border);
 }
-
 .statItem strong {
   color: var(--text-base);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
-
-.statItem.success strong {
-  color: #22c55e;
-}
-
 .statItem.danger strong {
-  color: #dc2626;
+  color: #f3727f;
 }
-
-/* Tab Navigation */
-.tabNav {
+.tabNav,
+.periodSelector {
   display: flex;
-  gap: var(--spacing-2);
-  margin-bottom: var(--spacing-4);
-  border-bottom: 1px solid var(--border-subdued);
-  padding-bottom: var(--spacing-2);
+  gap: 8px;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 4px 2px;
+  margin: -4px -2px 24px;
+  scrollbar-width: none;
 }
-
-.tabButton {
-  display: flex;
+.tabNav::-webkit-scrollbar,
+.periodSelector::-webkit-scrollbar {
+  display: none;
+}
+.tabButton,
+.periodButton {
+  display: inline-flex;
   align-items: center;
-  gap: var(--spacing-2);
-  padding: var(--spacing-2) var(--spacing-4);
-  background: none;
-  border: none;
-  color: var(--text-subdued);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  border-radius: var(--radius-md);
-  transition: all var(--transition-fast);
-}
-
-.tabButton:hover {
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 8px 16px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: #242424;
   color: var(--text-base);
-  background-color: var(--bg-highlight);
 }
-
-.tabButton.active {
-  color: var(--text-base);
-  background-color: var(--bg-elevated-base);
+.tabButton:hover,
+.periodButton:hover {
+  background: #333;
 }
-
+.tabButton.active,
+.periodButton.active {
+  color: #000;
+  background: #fff;
+}
 .tabCount {
-  background-color: var(--bg-highlight);
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  font-size: var(--text-xs);
+  font-size: 12px;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
 }
-
-/* Error Message */
-.errorMessage {
-  padding: var(--spacing-3) var(--spacing-4);
-  background-color: rgba(220, 38, 38, 0.1);
-  border: 1px solid #dc2626;
-  border-radius: var(--radius-md);
-  color: #dc2626;
-  font-size: var(--text-sm);
-  margin-bottom: var(--spacing-4);
-}
-
-/* Tab Content */
 .tabContent {
   min-height: 200px;
 }
-
 .emptyState {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 200px;
+  display: grid;
+  place-items: center;
+  min-height: 160px;
+  padding: 32px;
+  border-radius: 8px;
+  background: #181818;
   color: var(--text-subdued);
-  font-size: var(--font-size-base);
+  font-size: 14px;
+  text-align: center;
 }
-
-/* Queue List */
+.emptyState.compact {
+  min-height: 100px;
+}
 .queueList {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-2);
+  gap: 8px;
 }
-
 .queueItem {
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-3) var(--spacing-4);
-  border-left: 3px solid var(--border-subdued);
+  background: #181818;
+  border-radius: 8px;
+  padding: 20px;
+  min-width: 0;
 }
-
-.queueItem.status-pending { border-left-color: #9ca3af; }
-.queueItem.status-progress { border-left-color: #3b82f6; }
-.queueItem.status-completed { border-left-color: #22c55e; }
-.queueItem.status-failed { border-left-color: #dc2626; }
-.queueItem.status-retry { border-left-color: #f97316; }
-
+.queueItemHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+}
 .queueItemMain {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-3);
-  margin-bottom: var(--spacing-2);
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+  flex: 1 1 240px;
 }
-
 .queueItemType {
-  font-size: var(--text-xs);
-  text-transform: uppercase;
+  font-size: 12px;
   color: var(--text-subdued);
-  background-color: var(--bg-highlight);
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  text-transform: capitalize;
 }
-
 .queueItemName {
-  font-weight: var(--font-medium);
   color: var(--text-base);
+  font-size: 16px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
 }
-
 .queueItemName.clickable {
   cursor: pointer;
-  transition: color var(--transition-fast);
+  border-radius: 2px;
 }
-
 .queueItemName.clickable:hover {
-  color: var(--spotify-green);
+  text-decoration: underline;
 }
-
 .linkIcon {
-  font-size: var(--text-xs);
-  margin-left: var(--spacing-1);
-  opacity: 0.5;
-  transition: opacity var(--transition-fast);
-}
-
-.queueItemName.clickable:hover .linkIcon {
-  opacity: 1;
-}
-
-.queueItemArtist {
   color: var(--text-subdued);
-  font-size: var(--text-sm);
+  font-size: 13px;
+  margin-left: 4px;
 }
-
+.queueItemActions,
 .queueItemMeta {
   display: flex;
   align-items: center;
-  gap: var(--spacing-3);
-  font-size: var(--text-sm);
+  flex-wrap: wrap;
+  gap: 12px;
 }
-
-.queueItemTime {
-  color: var(--text-subdued);
-  font-size: var(--text-xs);
+.queueItemMeta {
+  margin-top: 10px;
 }
-
-.queueItemError {
-  margin-top: var(--spacing-2);
-  font-size: var(--text-xs);
-  color: #dc2626;
-}
-
-/* Status Badge */
-.statusBadge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-}
-
-.status-completed {
-  background-color: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
-}
-
-.status-progress {
-  background-color: rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
-}
-
-.status-pending {
-  background-color: rgba(156, 163, 175, 0.15);
-  color: #9ca3af;
-}
-
-.status-failed {
-  background-color: rgba(220, 38, 38, 0.15);
-  color: #dc2626;
-}
-
-.status-retry {
-  background-color: rgba(249, 115, 22, 0.15);
-  color: #f97316;
-}
-
-/* Progress Bar */
-.progressSection {
-  margin: var(--spacing-2) 0;
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-}
-
-.progressBar {
-  flex: 1;
-  height: 6px;
-  background-color: var(--bg-highlight);
-  border-radius: 3px;
-  overflow: hidden;
-  max-width: 200px;
-}
-
-.progressFill {
-  height: 100%;
-  background-color: var(--spotify-green);
-  border-radius: 3px;
-  transition: width 0.3s ease;
-}
-
-.progressFill.has-failed {
-  background-color: #f97316;
-}
-
-.progressText {
-  font-size: var(--text-xs);
-  color: var(--text-subdued);
-}
-
-.progressFailed {
-  color: #dc2626;
-}
-
-.progressActive {
-  color: #3b82f6;
-}
-
-/* Retry Button */
-.retryButton {
-  padding: 2px 10px;
-  background-color: var(--spotify-green);
-  color: white;
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--text-xs);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
-}
-
-.retryButton:hover:not(:disabled) {
-  background-color: #1ed760;
-}
-
-.retryButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.forceRetryButton {
-  padding: 2px 10px;
-  background-color: #f97316;
-  color: white;
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--text-xs);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
-}
-
-.forceRetryButton:hover:not(:disabled) {
-  background-color: #ea580c;
-}
-
-.forceRetryButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.deleteButton {
-  padding: 2px 10px;
-  background-color: transparent;
-  color: #dc2626;
-  border: 1px solid #dc2626;
-  border-radius: var(--radius-md);
-  font-size: var(--text-xs);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.deleteButton:hover:not(:disabled) {
-  background-color: #dc2626;
-  color: white;
-}
-
-.deleteButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Queue Item Layout */
-.queueItemHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--spacing-3);
-}
-
-.queueItemActions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  flex-shrink: 0;
-}
-
 .queueItemDetails {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--spacing-3);
-  margin-top: var(--spacing-2);
-  font-size: var(--text-xs);
+  gap: 8px 20px;
+  margin-top: 14px;
+  font-size: 12px;
 }
-
 .detailItem {
   display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-1);
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
-
-.detailLabel {
-  color: var(--text-subdued);
-}
-
-.detailValue {
-  color: var(--text-base);
-}
-
-.queueItemError .errorType {
-  display: inline-block;
-  padding: 1px 6px;
-  background-color: rgba(220, 38, 38, 0.15);
-  border-radius: var(--radius-sm);
-  margin-right: var(--spacing-2);
-  font-weight: var(--font-medium);
-}
-
-/* Delete Modal */
-.deleteWarning {
-  color: var(--text-subdued);
-  margin: 0 0 var(--spacing-4) 0;
-}
-
-.deleteItemInfo {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-3);
-  padding: var(--spacing-3);
-  background-color: var(--bg-base);
-  border-radius: var(--radius-md);
-  margin-bottom: var(--spacing-4);
-}
-
-.deleteConfirmButton {
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: #dc2626;
-  border: none;
-  border-radius: var(--radius-md);
-  color: white;
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-}
-
-.deleteConfirmButton:hover:not(:disabled) {
-  background-color: #b91c1c;
-}
-
-.deleteConfirmButton:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Audit Table */
-.auditTable {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--text-sm);
-}
-
-.auditTable thead {
-  position: sticky;
-  top: 0;
-  background-color: var(--bg-base);
-}
-
-.auditTable th {
-  text-align: left;
-  padding: var(--spacing-2) var(--spacing-3);
-  color: var(--text-subdued);
-  font-weight: var(--font-medium);
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  border-bottom: 1px solid var(--border-subdued);
-}
-
-.auditTable td {
-  padding: var(--spacing-2) var(--spacing-3);
-  border-bottom: 1px solid var(--border-subdued);
-  vertical-align: top;
-}
-
-.auditRow:hover {
-  background-color: var(--bg-highlight);
-}
-
-.colTime {
-  width: 140px;
-  white-space: nowrap;
-  color: var(--text-subdued);
-  font-size: var(--text-xs);
-}
-
-.colEvent {
-  width: 160px;
-}
-
-.colUser {
-  width: 120px;
-}
-
-.colDetails {
-  color: var(--text-base);
-}
-
-.auditUser {
-  color: var(--spotify-green);
-  font-size: var(--text-xs);
-}
-
+.detailLabel,
+.detailItem,
+.proxyAlbum,
+.queueItemArtist,
+.queueItemTime,
 .textMuted {
   color: var(--text-subdued);
 }
-
-/* Event Badge */
+.detailValue {
+  color: var(--text-base);
+}
+.queueItemTime {
+  font-size: 12px;
+}
+.queueItemError {
+  margin-top: 12px;
+  color: #f3727f;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.errorType {
+  margin-right: 8px;
+  font-weight: 600;
+}
+.statusBadge,
 .eventBadge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: var(--radius-md);
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--text-subdued);
 }
-
-.event-success {
-  background-color: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
+.statusBadge::before,
+.eventBadge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
 }
-
-.event-error {
-  background-color: rgba(220, 38, 38, 0.15);
-  color: #dc2626;
+.statusBadge.status-progress,
+.proxyPhase,
+.progressActive {
+  color: var(--spotify-green);
 }
-
+.statusBadge.status-failed,
+.event-error,
+.progressFailed,
+.text-danger {
+  color: #f3727f;
+}
+.statusBadge.status-retry,
 .event-retry {
-  background-color: rgba(249, 115, 22, 0.15);
-  color: #f97316;
+  color: #f0bc65;
 }
-
-.event-info {
-  background-color: rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
+.progressSection {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin: 14px 0;
 }
-
-/* Modal */
+.progressBar {
+  flex: 1 1 160px;
+  max-width: 320px;
+  height: 4px;
+  background: #535353;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progressFill {
+  height: 100%;
+  background: var(--spotify-green);
+  border-radius: inherit;
+}
+.retentionProgress .progressFill {
+  background: #b3b3b3;
+}
+.progressFill.has-failed {
+  background: #f0bc65;
+}
+.progressText {
+  color: var(--text-subdued);
+  font-size: 12px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+.proxySectionTitle,
+.chartTitle {
+  margin: 24px 0 16px;
+  color: var(--text-base);
+  font-size: 18px;
+  font-weight: 700;
+}
+.mono {
+  font-family: monospace;
+  overflow-wrap: anywhere;
+}
+.tableWrapper {
+  width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  border-radius: 4px;
+}
+.auditTable,
+.dataTable {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.auditTable th,
+.dataTable th {
+  text-align: left;
+  padding: 12px 16px;
+  color: var(--text-subdued);
+  font-weight: 500;
+  background: #181818;
+  border-bottom: 1px solid var(--surface-border);
+}
+.auditTable td,
+.dataTable td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--surface-border);
+  vertical-align: top;
+}
+.auditRow:hover,
+.dataTable tbody tr:hover {
+  background: #ffffff08;
+}
+.colTime {
+  width: 160px;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-subdued);
+}
+.colEvent {
+  width: 160px;
+}
+.colUser {
+  width: 100px;
+}
+.colDetails {
+  overflow-wrap: anywhere;
+}
+.auditUser {
+  color: var(--text-base);
+}
+.customDateRange {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 20px;
+  border-radius: 8px;
+  background: #181818;
+}
+.dateInputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.dateInputGroup label,
+.formLabel {
+  font-size: 14px;
+  color: var(--text-subdued);
+}
+input,
+select {
+  min-height: 44px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 10px 12px;
+  background: #333;
+  border: 1px solid #727272;
+  border-radius: 4px;
+  color: var(--text-base);
+  color-scheme: dark;
+  font: inherit;
+  font-size: 14px;
+}
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+}
+.statsTotals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.totalCard {
+  padding: 20px;
+  background: #181818;
+  border-radius: 8px;
+}
+.totalValue {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.totalLabel {
+  color: var(--text-subdued);
+  font-size: 13px;
+}
+.totalFailures .totalValue {
+  color: #f3727f;
+}
+.chartSection,
+.tableSection {
+  margin-bottom: 28px;
+  min-width: 0;
+}
+.chartContainer {
+  height: 300px;
+  padding: 16px;
+  background: #181818;
+  border-radius: 8px;
+}
+.noData {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--text-subdued);
+}
 .detailOverlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.7);
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 16px;
+  background: #000b;
   z-index: 1000;
-  padding: var(--spacing-4);
 }
-
 .detailPanel {
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
-  max-width: 450px;
-  width: 100%;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  width: 480px;
+  max-width: 100%;
+  max-height: calc(100dvh - 32px);
+  background: #282828;
+  border-radius: 8px;
+  box-shadow: var(--shadow-menu);
 }
-
 .detailHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-4);
-  border-bottom: 1px solid var(--border-subdued);
+  flex-shrink: 0;
+  gap: 16px;
+  padding: 24px 24px 16px;
 }
-
 .detailTitle {
-  font-size: var(--text-lg);
-  font-weight: var(--font-bold);
-  color: var(--text-base);
   margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
 }
-
 .closeDetailButton {
-  background: none;
-  border: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
   color: var(--text-subdued);
-  font-size: var(--text-2xl);
-  cursor: pointer;
-  padding: var(--spacing-1);
+  font-size: 28px;
   line-height: 1;
 }
-
 .closeDetailButton:hover {
-  color: var(--text-base);
+  background: #ffffff12;
+  color: #fff;
 }
-
 .modalContent {
-  padding: var(--spacing-4);
+  padding: 8px 24px 24px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
-
 .formGroup {
-  margin-bottom: var(--spacing-4);
+  margin-bottom: 20px;
 }
-
 .formLabel {
   display: block;
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  color: var(--text-subdued);
-  margin-bottom: var(--spacing-2);
+  margin-bottom: 8px;
 }
-
 .formInput {
   width: 100%;
-  padding: var(--spacing-3);
-  background-color: var(--bg-base);
-  border: 1px solid var(--border-subdued);
-  border-radius: var(--radius-md);
-  color: var(--text-base);
-  font-size: var(--text-sm);
 }
-
-.formInput:focus {
-  outline: none;
-  border-color: var(--spotify-green);
-}
-
-.formInput::placeholder {
-  color: var(--text-subdued);
-}
-
-.modalError {
-  padding: var(--spacing-3);
-  background-color: rgba(220, 38, 38, 0.1);
-  border: 1px solid #dc2626;
-  border-radius: var(--radius-md);
-  color: #dc2626;
-  font-size: var(--text-sm);
-  margin-bottom: var(--spacing-4);
-}
-
-.modalSuccess {
-  padding: var(--spacing-3);
-  background-color: rgba(34, 197, 94, 0.1);
-  border: 1px solid #22c55e;
-  border-radius: var(--radius-md);
-  color: #22c55e;
-  font-size: var(--text-sm);
-  margin-bottom: var(--spacing-4);
-}
-
 .modalActions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
-  gap: var(--spacing-3);
+  gap: 12px;
+  margin-top: 24px;
 }
-
+.cancelButton,
+.deleteConfirmButton {
+  min-height: 44px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 999px;
+  font-weight: 700;
+}
 .cancelButton {
-  padding: var(--spacing-2) var(--spacing-4);
-  background: none;
-  border: 1px solid var(--border-subdued);
-  border-radius: var(--radius-md);
   color: var(--text-subdued);
-  font-size: var(--text-sm);
-  cursor: pointer;
+  background: transparent;
 }
-
 .cancelButton:hover {
-  border-color: var(--text-base);
-  color: var(--text-base);
+  color: #fff;
 }
-
-.confirmButton {
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--spotify-green);
-  border: none;
-  border-radius: var(--radius-md);
-  color: white;
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
+.deleteConfirmButton {
+  background: #f3727f;
+  color: #000;
 }
-
-.confirmButton:hover:not(:disabled) {
-  background-color: #1ed760;
+.deleteConfirmButton:hover:not(:disabled) {
+  background: #ff8e99;
 }
-
-.confirmButton:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-@media (max-width: 768px) {
-  .actionButtons {
-    flex-wrap: wrap;
-  }
-
-  .refreshButton {
-    margin-left: 0;
-    width: 100%;
-  }
-
-  .statsSummary {
-    flex-direction: column;
-    gap: var(--spacing-2);
-  }
-}
-
-/* Statistics Tab */
-.periodSelector {
-  display: flex;
-  gap: var(--spacing-2);
-  margin-bottom: var(--spacing-4);
-}
-
-.periodButton {
-  padding: var(--spacing-2) var(--spacing-4);
-  background: none;
-  border: 1px solid var(--border-subdued);
-  border-radius: var(--radius-md);
-  color: var(--text-subdued);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.periodButton:hover {
-  border-color: var(--text-base);
-  color: var(--text-base);
-}
-
-.periodButton.active {
-  background-color: var(--spotify-green);
-  border-color: var(--spotify-green);
-  color: white;
-}
-
-.customDateRange {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-4);
-  margin-bottom: var(--spacing-4);
-  padding: var(--spacing-4);
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
-}
-
-.dateInputGroup {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-1);
-}
-
-.dateInputGroup label {
-  font-size: var(--text-sm);
-  color: var(--text-subdued);
-}
-
-.dateInput,
-.granularitySelect {
-  padding: var(--spacing-2) var(--spacing-3);
-  background-color: var(--bg-base);
-  border: 1px solid var(--border-subdued);
-  border-radius: var(--radius-md);
-  color: var(--text-base);
-  font-size: var(--text-sm);
-}
-
-.dateInput:focus,
-.granularitySelect:focus {
-  outline: none;
-  border-color: var(--spotify-green);
-}
-
-.granularitySelect {
-  min-width: 100px;
-  cursor: pointer;
-}
-
-.statsTotals {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-3);
-  margin-bottom: var(--spacing-6);
-}
-
-.totalCard {
-  flex: 1;
-  min-width: 120px;
-  padding: var(--spacing-4);
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
-  text-align: center;
-}
-
-.totalValue {
-  display: block;
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
-  color: var(--text-base);
-  margin-bottom: var(--spacing-1);
-}
-
-.totalLabel {
-  font-size: var(--text-sm);
-  color: var(--text-subdued);
-}
-
-.totalFailures .totalValue {
-  color: #dc2626;
-}
-
-.chartSection {
-  margin-bottom: var(--spacing-6);
-}
-
-.chartTitle {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-semibold);
-  color: var(--text-base);
-  margin: 0 0 var(--spacing-3) 0;
-}
-
-.chartContainer {
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-4);
-  height: 300px;
-}
-
-.noData {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--text-subdued);
-}
-
-.tableSection {
-  margin-bottom: var(--spacing-6);
-}
-
-.tableWrapper {
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
-  overflow-x: auto;
-}
-
-.dataTable {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--text-sm);
-}
-
-.dataTable th,
-.dataTable td {
-  padding: var(--spacing-3) var(--spacing-4);
-  text-align: left;
-  border-bottom: 1px solid var(--border-subdued);
-}
-
-.dataTable th {
-  font-weight: var(--font-semibold);
-  color: var(--text-subdued);
-  background-color: rgba(0, 0, 0, 0.2);
-}
-
-.dataTable td {
-  color: var(--text-base);
-}
-
-.dataTable tr:last-child td {
-  border-bottom: none;
-}
-
-.dataTable tr:hover td {
-  background-color: var(--bg-highlight);
-}
-
-.text-danger {
-  color: #dc2626;
-  font-weight: var(--font-semibold);
-}
-
-/* Upload Button */
-.uploadButton {
-  padding: 2px 10px;
-  background-color: #3b82f6;
-  color: white;
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--text-xs);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
-}
-
-.uploadButton:hover:not(:disabled) {
-  background-color: #2563eb;
-}
-
-.uploadButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Upload Modal */
+.deleteWarning,
 .uploadDescription {
   color: var(--text-subdued);
-  font-size: var(--text-sm);
-  margin: 0 0 var(--spacing-4) 0;
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0 0 20px;
 }
-
+.deleteItemInfo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px;
+  background: #181818;
+  border-radius: 4px;
+}
+.errorMessage,
+.modalError,
+.modalSuccess {
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.errorMessage,
+.modalError {
+  color: #f3727f;
+  background: #f3727f12;
+}
+.modalSuccess {
+  color: var(--spotify-green);
+  background: #1ed76012;
+}
 .uploadDropzone {
-  border: 2px dashed var(--border-subdued);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-6);
-  text-align: center;
+  padding: 24px 16px;
+  border: 1px dashed #727272;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all var(--transition-fast);
-  margin-bottom: var(--spacing-4);
+  margin-bottom: 20px;
 }
-
 .uploadDropzone:hover,
 .uploadDropzone.dragging {
-  border-color: var(--spotify-green);
-  background-color: rgba(29, 185, 84, 0.05);
+  border-color: #fff;
+  background: #ffffff08;
 }
-
 .dropzoneContent {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--spacing-2);
+  gap: 12px;
+  text-align: center;
 }
-
 .dropzoneIcon {
   font-size: 32px;
   color: var(--text-subdued);
 }
-
 .dropzoneText {
-  font-size: var(--font-size-base);
-  color: var(--text-base);
+  font-size: 14px;
 }
-
 .browseLink {
-  color: var(--spotify-green);
   text-decoration: underline;
 }
-
 .dropzoneHint {
-  font-size: var(--text-xs);
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--text-subdued);
 }
-
-.folderButton {
-  margin-top: var(--spacing-2);
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--bg-elevated-base);
-  border: 1px solid var(--border-subdued);
-  border-radius: var(--radius-md);
-  color: var(--text-subdued);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.folderButton:hover {
-  border-color: var(--spotify-green);
-  color: var(--spotify-green);
-}
-
 .uploadProgress {
-  margin-bottom: var(--spacing-4);
+  margin-bottom: 20px;
 }
-
 .uploadProgress .progressBar {
   width: 100%;
-  height: 8px;
-  background-color: var(--bg-highlight);
-  border-radius: 4px;
-  overflow: hidden;
-  margin-bottom: var(--spacing-2);
+  max-width: none;
+  margin-bottom: 8px;
 }
-
-.uploadProgress .progressFill {
-  height: 100%;
-  background-color: var(--spotify-green);
-  border-radius: 4px;
-  transition: width 0.3s ease;
-}
-
-.uploadProgress .progressText {
-  font-size: var(--text-sm);
-  color: var(--text-subdued);
+@media (max-width: 600px) {
+  .queueItem {
+    padding: 16px;
+  }
+  .queueItemActions {
+    width: 100%;
+  }
+  .progressBar {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .dateInputGroup {
+    width: 100%;
+  }
+  .detailHeader {
+    padding: 20px 16px 12px;
+  }
+  .modalContent {
+    padding: 8px 16px 20px;
+  }
+  .detailTitle {
+    font-size: 22px;
+  }
 }
 </style>
