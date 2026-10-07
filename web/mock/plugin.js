@@ -74,11 +74,40 @@ export function mockPlugin() {
       created_at: 1780000000,
       queue_position: status === "PENDING" ? 2 : null,
       progress:
-        status === "IN_PROGRESS" ? { completed: 3, total_children: 6 } : null,
+        status === "IN_PROGRESS"
+          ? {
+              completed: 3,
+              failed: 0,
+              in_progress: 1,
+              pending: 2,
+              total_children: 6,
+            }
+          : null,
     })),
   );
   const initialRequests = structuredClone(requests);
   const ingestionJobs = [
+    {
+      id: "ingestion-2",
+      original_filename: "Golden Hour — album upload.zip",
+      file_count: 6,
+      total_size_bytes: 62914560,
+      status: "AWAITING_REVIEW",
+      upload_type: "ZIP",
+      detected_artist: "Mira Sol",
+      detected_album: "Golden Hour",
+      created_at: 1780000300000,
+    },
+    {
+      id: "ingestion-3",
+      original_filename: "Sunday in Rome.flac",
+      file_count: 1,
+      total_size_bytes: 10485760,
+      status: "PENDING",
+      upload_type: "FILE",
+      created_at: 1780000500000,
+    },
+
     {
       id: "ingestion-1",
       original_filename: "Golden Hour.flac",
@@ -88,7 +117,7 @@ export function mockPlugin() {
       upload_type: "FILE",
       detected_artist: "Mira Sol",
       detected_album: "Golden Hour",
-      created_at: 1780000000,
+      created_at: 1780000000000,
     },
   ];
   const json = (res, value, status = 200) => {
@@ -544,8 +573,8 @@ export function mockPlugin() {
           },
         ]),
       );
-    if (path.endsWith("/roles")) return json(res, ["admin"]);
-    if (path.endsWith("/permissions")) return json(res, permissions);
+    if (path.endsWith("/roles")) return json(res, { roles: ["Admin"] });
+    if (path.endsWith("/permissions")) return json(res, { permissions });
     if (path.endsWith("/credentials"))
       return json(res, { has_password: true, oidc_subject: null });
     if (path === "/v1/admin/listening/daily")
@@ -569,36 +598,88 @@ export function mockPlugin() {
           tracks.slice(0, 8).map((t, i) => ({
             track_id: t.id,
             play_count: 30 - i,
+            completed_count: 25 - i,
+            unique_listeners: 3,
             total_duration_seconds: 3600 - i * 120,
           })),
         ),
       );
     if (path === "/v1/admin/online-users")
-      return json(res, { count: 1, users: ["design-demo"] });
+      return json(res, { count: 1, handles: ["design-demo"] });
     if (path === "/v1/admin/storage")
       return json(res, {
         total_bytes: 1234567890,
         database_total_bytes: 12345678,
         filesystem_total_bytes: 1222222212,
-        databases: [],
-        components: [],
+        databases: list([
+          {
+            id: "catalog",
+            label: "Catalog database",
+            path: "/data/catalog.sqlite",
+            main_bytes: 12000000,
+            wal_bytes: 345678,
+            shm_bytes: 0,
+            total_bytes: 12345678,
+          },
+        ]),
+        components: list([
+          {
+            id: "media",
+            label: "Audio and artwork",
+            path: "/data/media",
+            bytes: 1222222212,
+          },
+        ]),
       });
     if (path === "/v1/admin/embeddings/coverage")
       return json(res, {
+        enabled: true,
+        specs: [
+          { namespace: "musicfm.mean.v1", model: "MusicFM" },
+          { namespace: "ast.audioset.v2", model: "AST AudioSet" },
+        ],
         coverage: {
           available_tracks: 66,
           fully_embedded_tracks: 60,
           tracks_missing_any_embedding: 6,
-          namespaces: [],
+          namespaces: list([
+            {
+              namespace: "musicfm.mean.v1",
+              embedded_tracks: 60,
+              missing_tracks: 6,
+            },
+            {
+              namespace: "ast.audioset.v2",
+              embedded_tracks: 64,
+              missing_tracks: 2,
+            },
+          ]),
         },
       });
     if (path === "/v1/admin/jobs")
       return json(res, {
         jobs: list([
           {
+            id: "track_embedding_sync",
+            name: "Audio embedding sync",
+            description:
+              "Generate missing sound profiles for available tracks.",
+            is_running: true,
+            last_run: null,
+          },
+          {
+            id: "missing_files_watchdog",
+            name: "Missing files watchdog",
+            description:
+              "Check catalog media and queue missing files for download.",
+            is_running: false,
+            last_run: null,
+          },
+          {
             id: "metadata_enrichment_v1",
             name: "Metadata enrichment",
-            description: "Local fixture job",
+            description:
+              "Resolve catalog metadata and link artists, albums and tracks to their sources.",
             enabled: true,
             is_running: false,
             last_run: null,
@@ -608,6 +689,48 @@ export function mockPlugin() {
       });
     if (path === "/v1/admin/search/relevance-filter")
       return json(res, { config: { method: "none", threshold: 0.5 } });
+    if (path === "/v1/download/admin/audit")
+      return json(res, {
+        entries: list([
+          {
+            id: 1,
+            timestamp: 1780000000,
+            event_type: "REQUEST_CREATED",
+            user_id: "design-demo",
+            content_type: "ALBUM",
+            content_id: "album-12",
+            details: {
+              content_name: "A Little Further",
+              artist_name: "Luca Moretti",
+              queue_position: 1,
+            },
+          },
+        ]),
+      });
+    if (path === "/v1/admin/jobs/audit")
+      return json(res, {
+        entries: list([
+          {
+            id: 1,
+            timestamp: 1780000000,
+            job_id: "metadata_enrichment_v1",
+            event_type: "completed",
+            duration_ms: 42000,
+            details: { processed: 25, enriched: 23 },
+            error: null,
+          },
+          {
+            id: 2,
+            timestamp: 1780000100,
+            job_id: "track_embedding_sync",
+            event_type: "started",
+            duration_ms: null,
+            details: null,
+            error: null,
+          },
+        ]),
+        total: 2,
+      });
     if (path.includes("/audit")) return json(res, { entries: [], total: 0 });
     if (path === "/v1/admin/push/registrations")
       return json(res, {
@@ -621,13 +744,76 @@ export function mockPlugin() {
             connected: true,
             endpoint_host: "mock.local",
             created_at: 1780000000,
+            last_success_at: 1780000300,
+          },
+          {
+            id: "push-2",
+            device_name: "Marco’s phone",
+            device_type: "android",
+            user_handle: "marco",
+            connected: false,
+            endpoint_host: "push.mock.local",
+            created_at: 1779900000,
+            first_failure_at: 1780000200,
+          },
+          {
+            id: "push-3",
+            device_name: "Kitchen tablet",
+            device_type: "android",
+            user_handle: "design-demo",
+            connected: false,
+            endpoint_host: "mock.local",
+            created_at: 1780000500,
           },
         ]),
       });
+    if (
+      method === "POST" &&
+      /^\/v1\/admin\/push\/registrations\/push-[123]\/test$/.test(path)
+    )
+      return json(
+        res,
+        path.includes("push-2")
+          ? { outcome: "failed", detail: "The mock distributor is unavailable" }
+          : { outcome: "delivered" },
+      );
+    if (/^\/v1\/admin\/changelog\/batch\/[^/]+\/changes$/.test(path))
+      return json(
+        res,
+        list([
+          {
+            id: "change-1",
+            operation: "create",
+            entity_type: "album",
+            created_at: 1780000000,
+            display_summary: "Added Golden Hour by Mira Sol",
+            field_changes: null,
+          },
+          {
+            id: "change-2",
+            operation: "update",
+            entity_type: "artist",
+            created_at: 1780000300,
+            display_summary: "Updated Mira Sol’s catalog metadata",
+            field_changes: {
+              genres: { old: ["pop"], new: ["indie pop", "soul"] },
+            },
+          },
+        ]),
+      );
     if (path === "/v1/admin/changelog/batches")
       return json(
         res,
         list([
+          {
+            id: "batch-2",
+            name: "Summer catalog cleanup",
+            description: "Corrected artist names and album metadata.",
+            is_open: false,
+            created_at: 1779000000,
+            last_activity_at: 1779003600,
+            closed_at: 1779003600,
+          },
           {
             id: "batch-1",
             name: "Autumn arrivals",
@@ -644,19 +830,69 @@ export function mockPlugin() {
         list([
           {
             id: "report-1",
-            title: "Lyrics follow-up example",
+            title: "Lyrics stop following after seeking",
             user_handle: "design-demo",
             client_type: "web",
             created_at: 1780000000000,
-            size_bytes: 2048,
+            size_bytes: 12480,
+          },
+          {
+            id: "report-2",
+            title: "Playback pauses when switching devices",
+            user_handle: "marco",
+            client_type: "android",
+            created_at: 1779900000000,
+            size_bytes: 3200,
           },
         ]),
       );
+    if (/^\/v1\/admin\/bug-report\/report-[12]$/.test(path)) {
+      const isWeb = path.endsWith("report-1");
+      return json(res, {
+        id: isWeb ? "report-1" : "report-2",
+        description: isWeb
+          ? "After seeking forward during a song, the lyrics stay on the previous verse.\nClosing and reopening the lyrics view makes them follow playback again."
+          : "I transferred playback from my phone to the browser. The new device showed the song but playback remained paused.",
+        client_version: isWeb
+          ? "web · design preview"
+          : "android · design preview",
+        device_info: isWeb
+          ? "Chromium · Linux · 1440 × 900"
+          : "Pixel 8 · Android 15",
+        logs: Array.from(
+          { length: 36 },
+          (_, i) =>
+            `[12:34:${String(i).padStart(2, "0")}] ${i === 8 ? "WARN lyrics position has not advanced after seek" : "DEBUG playback state: playing, position=" + i * 1000 + "ms, device=browser"}`,
+        ).join("\n"),
+        attachments: isWeb
+          ? JSON.stringify([
+              "data:image/svg+xml," +
+                encodeURIComponent(
+                  '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300"><rect width="480" height="300" fill="#121212"/><text x="28" y="48" fill="white" font-size="24" font-family="sans-serif">Golden Hour</text><text x="28" y="95" fill="#b3b3b3" font-size="16" font-family="sans-serif">Lyrics preview</text><text x="28" y="165" fill="white" font-size="22" font-family="sans-serif">We watch the morning light</text><rect x="28" y="248" width="424" height="4" fill="#535353"/><rect x="28" y="248" width="170" height="4" fill="#1ed760"/></svg>',
+                ),
+            ])
+          : null,
+      });
+    }
     if (path === "/v1/download/admin/proxy")
       return json(res, {
-        active: [],
+        enabled: true,
+        active: list([
+          {
+            track_id: "track-7",
+            track_name: "Sunday in Rome",
+            album_name: "Sunday in Rome",
+            priority: "foreground",
+            phase: "downloading",
+            bytes_downloaded: 6291456,
+            bytes_streamed: 3145728,
+            total_bytes: 12582912,
+            started_at_ms: Date.now() - 30000,
+            active_streams: 1,
+          },
+        ]),
         recent: [],
-        foreground_active: 0,
+        foreground_active: state.scenario === "empty" ? 0 : 1,
         foreground_limit: 4,
         prefetch_active: 0,
         prefetch_limit: 2,
@@ -665,14 +901,40 @@ export function mockPlugin() {
       });
     if (path === "/v1/download/admin/stats")
       return json(res, {
-        pending: 0,
-        in_progress: 0,
-        completed: 72,
-        failed: 2,
-        queue_size: 0,
+        queue: {
+          pending: list(requests.filter((r) => r.status === "PENDING")).length,
+          in_progress: list(requests.filter((r) => r.status === "IN_PROGRESS"))
+            .length,
+          retry_waiting: 0,
+          completed_today: list(
+            requests.filter((r) => r.status === "COMPLETED"),
+          ).length,
+          failed_today: list(requests.filter((r) => r.status === "FAILED"))
+            .length,
+        },
       });
-    if (path === "/v1/download/admin/stats/history")
-      return json(res, { points: [] });
+    if (path === "/v1/download/admin/stats/history") {
+      const entries = list(
+        Array.from({ length: 7 }, (_, i) => ({
+          period_start: 1780000000 + i * 86400,
+          albums: i + 1,
+          tracks: (i + 1) * 6,
+          images: i + 1,
+          bytes: (i + 1) * 12582912,
+          failures: i % 3 === 0 ? 1 : 0,
+        })),
+      );
+      const sum = (key) =>
+        entries.reduce((total, entry) => total + entry[key], 0);
+      return json(res, {
+        entries,
+        total_albums: sum("albums"),
+        total_tracks: sum("tracks"),
+        total_images: sum("images"),
+        total_bytes: sum("bytes"),
+        total_failures: sum("failures"),
+      });
+    }
     if (path === "/v1/download/admin/requests")
       return json(
         res,
@@ -687,7 +949,37 @@ export function mockPlugin() {
     if (path === "/v1/download/admin/activity") return json(res, []);
     if (path === "/v1/ingestion/my-jobs" || path === "/v1/ingestion/admin/jobs")
       return json(res, list(ingestionJobs));
-    if (path === "/v1/ingestion/reviews") return json(res, []);
+    if (path === "/v1/ingestion/reviews")
+      return json(res, {
+        items: list([
+          {
+            id: "review-1",
+            job_id: "ingestion-2",
+            question: "Does this upload match Golden Hour?",
+            created_at: 1780000300000,
+            options: JSON.stringify([
+              {
+                id: "album:album-1",
+                label: "Mira Sol - Golden Hour (fingerprint 94%, metadata 98%)",
+                description: "Use this catalog album for the uploaded tracks.",
+              },
+            ]),
+          },
+        ]),
+      });
+    if (path === "/v1/ingestion/job/ingestion-2/details")
+      return json(res, {
+        job: ingestionJobs[0],
+        files: tracks
+          .filter((t) => t.album_id === "album-1")
+          .map((t, i) => ({
+            id: `upload-${i}`,
+            filename: `${i + 1} - ${t.name}.flac`,
+            tag_track_num: i + 1,
+            tag_disc_num: 1,
+            duration_ms: t.duration_ms + 150,
+          })),
+      });
     misses.add(`${method} ${path}`);
     console.warn(`[mock] Unhandled: ${method} ${path}`);
     return json(res, { error: `Not simulated: ${method} ${path}` }, 501);
