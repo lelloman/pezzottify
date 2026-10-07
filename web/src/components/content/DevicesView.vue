@@ -1,86 +1,26 @@
 <template>
   <div class="devicesPage">
-    <h1 class="pageTitle">Devices</h1>
-
-    <div v-if="policyLoaded || policyError" class="sharePolicyCard">
-      <div class="sharePolicyHeader">
-        <span class="sectionTitle">Device Sharing (This Device)</span>
-        <span v-if="policySaving" class="policyStatus">Saving…</span>
-        <span v-if="policyError" class="policyError">{{ policyError }}</span>
-      </div>
-      <div class="policyModeRow">
-        <label class="policyOption">
-          <input
-            type="radio"
-            value="deny_everyone"
-            v-model="policyState.mode"
-          />
-          <span>Deny everyone</span>
-        </label>
-        <label class="policyOption">
-          <input
-            type="radio"
-            value="allow_everyone"
-            v-model="policyState.mode"
-          />
-          <span>Allow everyone</span>
-        </label>
-        <label class="policyOption">
-          <input type="radio" value="custom" v-model="policyState.mode" />
-          <span>Custom</span>
-        </label>
-      </div>
-
-      <div v-if="policyState.mode === 'custom'" class="policyRules">
-        <div class="policyField">
-          <label>Allow users (IDs, comma separated)</label>
-          <input
-            v-model="policyState.allowUsers"
-            type="text"
-            placeholder="e.g. 12, 34"
-          />
-        </div>
-        <div class="policyField">
-          <label>Deny users (IDs, comma separated)</label>
-          <input
-            v-model="policyState.denyUsers"
-            type="text"
-            placeholder="e.g. 56"
-          />
-        </div>
-        <div class="policyField">
-          <label>Allow roles</label>
-          <div class="policyRoleRow">
-            <label class="policyOption">
-              <input type="checkbox" v-model="policyState.allowRoles.admin" />
-              <span>Admin</span>
-            </label>
-            <label class="policyOption">
-              <input type="checkbox" v-model="policyState.allowRoles.regular" />
-              <span>Regular</span>
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <div class="policyActions">
-        <button class="primaryBtn" @click="savePolicy" :disabled="policySaving">
-          Save Policy
-        </button>
-      </div>
-    </div>
+    <header class="pageHeader">
+      <h1 class="pageTitle">Devices</h1>
+      <p>See what’s playing and control your connected devices.</p>
+    </header>
 
     <div v-if="allDevices.length === 0" class="emptyState">
       No devices connected.
     </div>
 
-    <div v-if="myDevices.length > 0" class="sectionHeader">Your Devices</div>
+    <div v-if="myDevices.length > 0" class="sectionHeader">Your devices</div>
     <div v-if="myDevices.length > 0" class="deviceCards">
       <div
         v-for="device in myDevices"
         :key="device.id"
         class="deviceCard"
-        :class="{ thisDevice: device.isThisDevice }"
+        :class="{
+          thisDevice: device.isThisDevice,
+          playing: device.isThisDevice
+            ? playback.isPlaying
+            : device.state?.is_playing,
+        }"
       >
         <div class="deviceHeader">
           <svg
@@ -107,7 +47,16 @@
               d="M16 1H8C6.34 1 5 2.34 5 4v16c0 1.66 1.34 3 3 3h8c1.66 0 3-1.34 3-3V4c0-1.66-1.34-3-3-3zm-2 20h-4v-1h4v1zm3.25-3H6.75V4h10.5v14z"
             />
           </svg>
-          <span class="deviceName">{{ device.name }}</span>
+          <span class="deviceName">{{ device.name }}</span
+          ><span
+            v-if="
+              device.isThisDevice
+                ? playback.isPlaying
+                : device.state?.is_playing
+            "
+            class="playingLabel"
+            >Playing</span
+          >
           <span v-if="device.isThisDevice" class="thisDeviceBadge"
             >this device</span
           >
@@ -162,30 +111,41 @@
             </div>
           </div>
           <div v-if="device.state?.current_track" class="controlsRow">
-            <div
+            <button
+              type="button"
               class="controlBtn scaleClickFeedback"
               @click="sendCmd('prev', device.id)"
               title="Previous"
             >
               <SkipPrevious />
-            </div>
-            <div
+            </button>
+            <button
+              type="button"
               class="controlBtn playPauseBtn scaleClickFeedback"
               @click="
                 sendCmd(device.state.is_playing ? 'pause' : 'play', device.id)
               "
               :title="device.state.is_playing ? 'Pause' : 'Play'"
             >
-              <PauseIcon v-if="device.state.is_playing" />
-              <PlayIcon v-else />
-            </div>
-            <div
+              <svg
+                v-if="device.state.is_playing"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path d="M7 5h4v14H7zm6 0h4v14h-4z" />
+              </svg>
+              <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m8 5 11 7-11 7z" />
+              </svg>
+            </button>
+            <button
+              type="button"
               class="controlBtn scaleClickFeedback"
               @click="sendCmd('next', device.id)"
               title="Next"
             >
               <SkipNext />
-            </div>
+            </button>
           </div>
           <div v-if="device.state?.current_track" class="progressRow">
             <ProgressBar
@@ -210,10 +170,15 @@
     </div>
 
     <div v-if="sharedDevices.length > 0" class="sectionHeader">
-      Shared Devices
+      Shared devices
     </div>
     <div v-if="sharedDevices.length > 0" class="deviceCards">
-      <div v-for="device in sharedDevices" :key="device.id" class="deviceCard">
+      <div
+        v-for="device in sharedDevices"
+        :key="device.id"
+        class="deviceCard"
+        :class="{ playing: device.state?.is_playing }"
+      >
         <div class="deviceHeader">
           <svg
             v-if="device.device_type === 'web'"
@@ -239,7 +204,16 @@
               d="M16 1H8C6.34 1 5 2.34 5 4v16c0 1.66 1.34 3 3 3h8c1.66 0 3-1.34 3-3V4c0-1.66-1.34-3-3-3zm-2 20h-4v-1h4v1zm3.25-3H6.75V4h10.5v14z"
             />
           </svg>
-          <span class="deviceName">{{ device.name }}</span>
+          <span class="deviceName">{{ device.name }}</span
+          ><span
+            v-if="
+              device.isThisDevice
+                ? playback.isPlaying
+                : device.state?.is_playing
+            "
+            class="playingLabel"
+            >Playing</span
+          >
           <span v-if="device.is_shared" class="sharedBadge">
             shared by {{ device.owner_handle || "unknown" }}
           </span>
@@ -262,30 +236,41 @@
           </div>
         </div>
         <div v-if="device.state?.current_track" class="controlsRow">
-          <div
+          <button
+            type="button"
             class="controlBtn scaleClickFeedback"
             @click="sendCmd('prev', device.id)"
             title="Previous"
           >
             <SkipPrevious />
-          </div>
-          <div
+          </button>
+          <button
+            type="button"
             class="controlBtn playPauseBtn scaleClickFeedback"
             @click="
               sendCmd(device.state.is_playing ? 'pause' : 'play', device.id)
             "
             :title="device.state.is_playing ? 'Pause' : 'Play'"
           >
-            <PauseIcon v-if="device.state.is_playing" />
-            <PlayIcon v-else />
-          </div>
-          <div
+            <svg
+              v-if="device.state.is_playing"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path d="M7 5h4v14H7zm6 0h4v14h-4z" />
+            </svg>
+            <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m8 5 11 7-11 7z" />
+            </svg>
+          </button>
+          <button
+            type="button"
             class="controlBtn scaleClickFeedback"
             @click="sendCmd('next', device.id)"
             title="Next"
           >
             <SkipNext />
-          </div>
+          </button>
         </div>
         <div v-if="device.state?.current_track" class="progressRow">
           <ProgressBar
@@ -305,6 +290,78 @@
         </div>
       </div>
     </div>
+    <div v-if="policyLoaded || policyError" class="sharePolicyCard">
+      <div class="sharePolicyHeader">
+        <span class="sectionTitle">Sharing this device</span>
+        <span v-if="policySaving" class="policyStatus">Saving…</span>
+        <span v-if="policyError" class="policyError">{{ policyError }}</span>
+      </div>
+      <p class="sectionDescription">
+        Choose who can control playback on this device.
+      </p>
+      <div class="policyModeRow">
+        <label class="policyOption">
+          <input
+            type="radio"
+            value="deny_everyone"
+            v-model="policyState.mode"
+          />
+          <span>Deny everyone</span>
+        </label>
+        <label class="policyOption">
+          <input
+            type="radio"
+            value="allow_everyone"
+            v-model="policyState.mode"
+          />
+          <span>Allow everyone</span>
+        </label>
+        <label class="policyOption">
+          <input type="radio" value="custom" v-model="policyState.mode" />
+          <span>Custom</span>
+        </label>
+      </div>
+
+      <div v-if="policyState.mode === 'custom'" class="policyRules">
+        <div class="policyField">
+          <label for="allow-users">Allow users (IDs, comma separated)</label>
+          <input
+            id="allow-users"
+            v-model="policyState.allowUsers"
+            type="text"
+            placeholder="e.g. 12, 34"
+          />
+        </div>
+        <div class="policyField">
+          <label for="deny-users">Deny users (IDs, comma separated)</label>
+          <input
+            id="deny-users"
+            v-model="policyState.denyUsers"
+            type="text"
+            placeholder="e.g. 56"
+          />
+        </div>
+        <div class="policyField">
+          <label>Allow roles</label>
+          <div class="policyRoleRow">
+            <label class="policyOption">
+              <input type="checkbox" v-model="policyState.allowRoles.admin" />
+              <span>Admin</span>
+            </label>
+            <label class="policyOption">
+              <input type="checkbox" v-model="policyState.allowRoles.regular" />
+              <span>Regular</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="policyActions">
+        <button class="primaryBtn" @click="savePolicy" :disabled="policySaving">
+          Save sharing settings
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -322,8 +379,6 @@ import { usePlaybackSessionStore } from "@/store/playbackSession";
 import { usePlaybackStore } from "@/store/playback";
 import MultiSourceImage from "@/components/common/MultiSourceImage.vue";
 import ProgressBar from "@/components/common/ProgressBar.vue";
-import PlayIcon from "@/components/icons/PlayIcon.vue";
-import PauseIcon from "@/components/icons/PauseIcon.vue";
 import SkipNext from "@/components/icons/SkipNext.vue";
 import SkipPrevious from "@/components/icons/SkipPrevious.vue";
 
@@ -559,379 +614,306 @@ const sharedDevices = computed(() =>
   flex-direction: column;
   gap: 24px;
   width: 100%;
-  min-height: 100%;
-  padding: clamp(18px, 2vw, 30px);
   color: var(--text-base);
 }
-
+.pageHeader {
+  padding: 16px 0 8px;
+}
 .pageTitle {
-  margin: 0;
-  color: #9eddb7;
-  font-size: clamp(1.25rem, 1.8vw, 1.65rem);
-  font-weight: 900;
+  margin: 0 0 12px;
+  font-size: clamp(32px, 4cqw, 48px);
+  font-weight: 750;
+  letter-spacing: -0.035em;
   line-height: 1.1;
-  text-transform: uppercase;
 }
-
-.emptyState {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 140px;
-  border: 1px dashed var(--surface-border);
-  border-radius: 8px;
+.pageHeader p,
+.sectionDescription {
+  margin: 0;
   color: var(--text-subdued);
-  font-size: 0.9rem;
-  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.6;
 }
-
 .sectionHeader {
-  margin: 8px 0 -10px;
-  color: #9eddb7;
-  font-size: clamp(1rem, 1.35vw, 1.32rem);
-  font-weight: 900;
-  line-height: 1.15;
-  text-transform: uppercase;
-}
-
-.sharePolicyCard {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 16px;
-  border: 1px solid var(--surface-border);
-  border-radius: 8px;
-  background: var(--surface-panel);
-}
-
-.sharePolicyHeader {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-
-.sectionTitle {
-  color: #9eddb7;
-  font-size: 0.82rem;
-  font-weight: 900;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.policyStatus {
-  color: var(--text-subdued);
-  font-size: 0.76rem;
+  margin: 8px 0 -8px;
+  font-size: 24px;
   font-weight: 700;
+  letter-spacing: -0.02em;
 }
-
-.policyError {
-  color: #ffb4a8;
-  font-size: 0.76rem;
-  font-weight: 750;
-}
-
-.policyModeRow,
-.policyRoleRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.policyOption {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 0 10px;
-  border: 1px solid var(--surface-border);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.035);
-  color: var(--text-base);
-  font-size: 0.84rem;
-  font-weight: 750;
-}
-
-.policyOption input {
-  accent-color: var(--spotify-green);
-}
-
-.policyRules {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  padding-top: 2px;
-}
-
-.policyField {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 8px;
-  color: rgba(255, 255, 255, 0.68);
-  font-size: 0.82rem;
-  font-weight: 700;
-}
-
-.policyField:last-child {
-  grid-column: 1 / -1;
-}
-
-.policyField input {
-  min-height: 38px;
-  padding: 0 10px;
-  border: 1px solid var(--surface-border);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.045);
-  color: var(--text-base);
-}
-
-.policyField input:focus {
-  outline: 2px solid var(--spotify-green);
-  outline-offset: 1px;
-}
-
-.policyActions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.primaryBtn {
-  min-height: 38px;
-  padding: 0 16px;
-  border: none;
-  border-radius: 999px;
-  background-color: var(--spotify-green);
-  color: #071108;
-  cursor: pointer;
-  font-size: 0.86rem;
-  font-weight: 850;
-}
-
-.primaryBtn:hover:not(:disabled) {
-  background-color: var(--spotify-green-hover);
-}
-
-.primaryBtn:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
 .deviceCards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 14px;
-}
-
-.deviceCard {
   display: flex;
-  min-width: 0;
   flex-direction: column;
-  gap: 14px;
-  padding: 14px;
-  border: 1px solid var(--surface-border);
+  gap: 8px;
+}
+.deviceCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px 24px;
+  padding: 20px;
   border-radius: 8px;
-  background: var(--surface-panel);
+  background: #181818;
+  min-width: 0;
 }
-
-.deviceCard.thisDevice {
-  border-color: rgba(29, 185, 84, 0.5);
-  box-shadow: inset 0 0 0 1px rgba(29, 185, 84, 0.16);
-}
-
 .deviceHeader {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 12px;
   min-width: 0;
 }
-
 .deviceTypeIcon {
-  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
   color: var(--text-subdued);
 }
-
-.thisDevice .deviceTypeIcon {
-  color: var(--spotify-green);
-}
-
 .deviceName {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-base);
-  font-size: 0.96rem;
-  font-weight: 850;
+  font-size: 16px;
+  font-weight: 700;
 }
-
-.thisDeviceBadge,
-.sharedBadge {
-  flex: 0 0 auto;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 0.68rem;
-  font-weight: 850;
-}
-
-.thisDeviceBadge {
-  background-color: rgba(29, 185, 84, 0.16);
+.playing .deviceTypeIcon,
+.playing .deviceName,
+.playingLabel {
   color: var(--spotify-green);
 }
-
-.sharedBadge {
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  background-color: rgba(255, 255, 255, 0.07);
-  color: var(--text-subdued);
+.playingLabel {
+  margin-left: auto;
+  font-size: 13px;
 }
-
+.thisDeviceBadge,
+.sharedBadge {
+  color: var(--text-subdued);
+  font-size: 12px;
+}
 .playbackInfo {
-  display: grid;
-  grid-template-columns: 52px minmax(0, 1fr);
+  display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
-
 .albumArt {
-  width: 52px;
-  height: 52px;
-  min-width: 52px;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 4px;
   overflow: hidden;
-  border-radius: 7px;
-  background: #242424;
+  background: #282828;
 }
-
 .trackDetails {
   display: flex;
-  min-width: 0;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
+  min-width: 0;
 }
-
-.trackTitle {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-base);
-  font-size: 0.9rem;
-  font-weight: 850;
-}
-
+.trackTitle,
 .trackArtist {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: rgba(255, 255, 255, 0.58);
-  font-size: 0.76rem;
-  font-weight: 620;
 }
-
+.trackTitle {
+  font-size: 14px;
+  font-weight: 500;
+}
+.trackArtist {
+  font-size: 13px;
+  color: var(--text-subdued);
+}
 .controlsRow {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  gap: 12px;
 }
-
 .controlBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
   color: var(--text-subdued);
   cursor: pointer;
-  transition:
-    color var(--transition-fast),
-    background-color var(--transition-fast);
 }
-
 .controlBtn:hover {
-  background-color: var(--surface-hover);
-  color: var(--text-base);
+  color: #fff;
 }
-
 .controlBtn svg {
   width: 20px;
   height: 20px;
   fill: currentColor;
 }
-
 .playPauseBtn {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background-color: var(--spotify-green);
-  color: #071108;
+  background: #fff;
+  color: #000;
 }
-
 .playPauseBtn:hover {
-  background-color: var(--spotify-green-hover);
-  color: #071108;
+  background: #fff;
+  color: #000;
+  transform: scale(1.06);
 }
-
-.playPauseBtn svg {
-  width: 22px;
-  height: 22px;
-}
-
 .progressRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-}
-
-.deviceProgressBar {
-  min-width: 0;
-}
-
-.progressTime {
-  min-width: 94px;
-  color: var(--text-subdued);
-  font-size: 0.72rem;
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.notPlaying {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
-  min-height: 52px;
-  padding: 0 12px;
-  border: 1px dashed var(--surface-border);
-  border-radius: 8px;
-  color: var(--text-subdued);
-  font-size: 0.84rem;
-  font-weight: 700;
+  gap: 16px;
 }
-
-@media (max-width: 720px) {
-  .devicesPage {
-    padding: 14px;
-    gap: 18px;
+.deviceProgressBar {
+  flex: 1;
+  min-width: 0;
+}
+.progressTime {
+  color: var(--text-subdued);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.notPlaying {
+  color: var(--text-subdued);
+  font-size: 14px;
+  grid-column: 1 / -1;
+}
+.emptyState {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-subdued);
+  background: #181818;
+  border-radius: 8px;
+}
+.sharePolicyCard {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-top: 16px;
+  padding-top: 28px;
+  border-top: 1px solid var(--surface-border);
+}
+.sharePolicyHeader {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.sectionTitle {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.policyStatus {
+  font-size: 13px;
+  color: var(--text-subdued);
+}
+.policyError {
+  font-size: 13px;
+  color: #f3727f;
+}
+.policyModeRow,
+.policyRoleRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+}
+.policyOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.policyOption input {
+  accent-color: var(--spotify-green);
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+.policyRules {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.policyField {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  font-size: 14px;
+}
+.policyField:last-child {
+  grid-column: 1 / -1;
+}
+.policyField input[type="text"] {
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #727272;
+  border-radius: 4px;
+  background: #242424;
+  color: var(--text-base);
+  font: inherit;
+}
+.policyField input[type="text"]:focus {
+  outline: 2px solid white;
+  outline-offset: -2px;
+}
+.policyActions {
+  display: flex;
+  justify-content: flex-end;
+}
+.primaryBtn {
+  min-height: 48px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--spotify-green);
+  color: #000;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+.primaryBtn:hover:not(:disabled) {
+  background: var(--spotify-green-hover);
+  transform: scale(1.02);
+}
+.primaryBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+@container (max-width: 550px) {
+  .deviceCard {
+    padding: 16px;
+    gap: 16px;
   }
-
+  .playbackInfo {
+    grid-column: 1 / -1;
+  }
+  .controlsRow {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
   .policyRules {
     grid-template-columns: 1fr;
   }
-
-  .deviceCards {
-    grid-template-columns: 1fr;
+  .deviceName {
+    max-width: calc(100% - 48px);
   }
-
   .progressRow {
-    grid-template-columns: 1fr;
+    flex-wrap: wrap;
+    gap: 8px;
   }
-
-  .progressTime {
-    text-align: left;
+  .deviceProgressBar {
+    flex-basis: 100%;
   }
 }
 </style>
