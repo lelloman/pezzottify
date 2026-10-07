@@ -278,7 +278,9 @@ watch(
 }
 
 .mainContent
-  > :not(.homePage):not(.nowPlaying):not(.detailPage):not(.detailPageHost) {
+  > :not(.homePage):not(.nowPlaying):not(.detailPage):not(.detailPageHost):not(
+    .steeringPage
+  ) {
   padding: clamp(18px, 2vw, 30px);
 }
 </style>

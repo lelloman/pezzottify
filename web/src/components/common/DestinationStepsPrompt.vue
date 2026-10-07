@@ -10,7 +10,7 @@
         />
         <div class="promptTitle">
           <span class="promptKicker">Heading to</span>
-          <h2>{{ label || "Set as playback destination" }}</h2>
+          <h2>{{ label || "Steer here" }}</h2>
         </div>
       </header>
       <p class="promptText">
@@ -64,13 +64,15 @@
         <span>Turn on smart continuation</span>
       </label>
       <footer class="promptActions">
-        <button type="button" class="pill" @click="close">Cancel</button>
+        <button type="button" class="pill cancelButton" @click="close">
+          Cancel
+        </button>
         <button
           type="submit"
           class="pill primary"
           :disabled="!canSteer || !validSteps"
         >
-          Steer
+          Steer here
         </button>
       </footer>
     </form>
@@ -125,7 +127,7 @@ const blockedReason = computed(() =>
     : "Start playing something first: steering applies to the current queue.",
 );
 const validSteps = computed(
-  () => Number.isInteger(steps.value) && steps.value >= 1,
+  () => Number.isInteger(steps.value) && steps.value >= 1 && steps.value <= 500,
 );
 
 watch(
@@ -155,10 +157,10 @@ const confirm = async () => {
 @import "@/components/steering/steeringCard.css";
 
 .destinationPrompt {
-  width: min(440px, 86vw);
+  width: min(440px, calc(100vw - 80px));
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
   color: var(--text-bright);
   color-scheme: dark;
 }
@@ -180,8 +182,7 @@ const confirm = async () => {
   color: var(--text-subdued);
   font-size: var(--text-xs);
   font-weight: var(--font-bold);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 h2 {
@@ -197,7 +198,7 @@ h2 {
   margin: 0;
   color: var(--text-subdued);
   font-size: var(--text-sm);
-  line-height: 1.45;
+  line-height: 1.6;
 }
 
 .promptWarning {
@@ -221,5 +222,39 @@ input[type="checkbox"] {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 4px;
+}
+
+.promptActions {
+  padding-top: 8px;
+  gap: 16px;
+}
+.promptActions .pill {
+  min-height: 48px;
+  padding-inline: 24px;
+}
+.cancelButton {
+  border-color: transparent;
+  color: var(--text-subdued);
+}
+.cancelButton:hover:not(:disabled) {
+  border-color: transparent;
+  color: var(--text-base);
+}
+.stepper {
+  justify-content: space-between;
+  padding: 16px 0;
+  border-block: 1px solid var(--surface-border);
+}
+.stepperControl {
+  border-radius: 6px;
+  background: var(--bg-highlight);
+}
+.stepperControl button {
+  width: 40px;
+  height: 40px;
+}
+.promptText strong {
+  color: var(--text-base);
+  font-weight: 600;
 }
 </style>

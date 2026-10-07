@@ -3,7 +3,16 @@
     <div class="radioBuilder">
       <header class="builderHeader">
         <h2>Customize radio</h2>
-        <button class="iconButton" @click="handleClose">x</button>
+        <button
+          type="button"
+          class="iconButton"
+          aria-label="Close radio customization"
+          @click="handleClose"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m6 6 12 12M18 6 6 18" />
+          </svg>
+        </button>
       </header>
 
       <div v-if="isLoading" class="loadingState">Loading...</div>
@@ -12,7 +21,11 @@
         <section class="controlGroup">
           <label>
             <span>Recipe</span>
-            <select v-model="selectedRecipeId" @change="applySelectedRecipe">
+            <select
+              v-model="selectedRecipeId"
+              aria-label="Recipe"
+              @change="applySelectedRecipe"
+            >
               <option
                 v-for="recipe in options?.recipes || []"
                 :key="recipe.id"
@@ -25,7 +38,7 @@
 
           <label>
             <span>Mode</span>
-            <select v-model="mode">
+            <select v-model="mode" aria-label="Mode">
               <option value="similar">Similar</option>
               <option value="explore">Explore</option>
             </select>
@@ -39,9 +52,15 @@
 
         <section class="controlGroup">
           <label>
-            <span>Diversity</span>
+            <span class="sliderLabel"
+              >Diversity
+              <output>{{ Math.round(diversity * 100) }}%</output></span
+            >
             <input
               v-model.number="diversity"
+              aria-label="Diversity"
+              class="steerRange"
+              :style="{ '--fill': `${diversity * 100}%` }"
               type="range"
               min="0"
               max="1"
@@ -49,9 +68,15 @@
             />
           </label>
           <label>
-            <span>Randomness</span>
+            <span class="sliderLabel"
+              >Randomness
+              <output>{{ Math.round(randomness * 100) }}%</output></span
+            >
             <input
               v-model.number="randomness"
+              aria-label="Randomness"
+              class="steerRange"
+              :style="{ '--fill': `${randomness * 100}%` }"
               type="range"
               min="0"
               max="1"
@@ -74,65 +99,79 @@
             <span>{{ criterionLabel(criterion.namespace) }}</span>
             <input
               v-model.number="criterion.weight"
+              class="steerRange"
+              :style="{ '--fill': `${criterion.weight * 100}%` }"
+              :aria-label="`${criterionLabel(criterion.namespace)} importance`"
               type="range"
               min="0"
               max="1"
               step="0.05"
             />
-            <strong>{{ criterion.weight.toFixed(2) }}</strong>
+            <strong>{{ Math.round(criterion.weight * 100) }}%</strong>
           </div>
         </section>
 
         <section class="referenceGrid">
-          <ReferenceEditor title="Toward" v-model="toward" />
-          <ReferenceEditor title="Away" v-model="away" />
+          <ReferenceEditor
+            title="Toward"
+            v-model="toward"
+            emptyText="Add influences to lean toward."
+          />
+          <ReferenceEditor
+            title="Away"
+            v-model="away"
+            emptyText="Add influences to avoid."
+          />
         </section>
 
-        <section class="filtersGrid">
-          <label>
-            <span>Genres</span>
-            <input v-model="genres" type="text" />
-          </label>
-          <label>
-            <span>Year from</span>
-            <input v-model.number="releaseYearMin" type="number" min="0" />
-          </label>
-          <label>
-            <span>Year to</span>
-            <input v-model.number="releaseYearMax" type="number" min="0" />
-          </label>
-          <label>
-            <span>Popularity from</span>
-            <input
-              v-model.number="popularityMin"
-              type="number"
-              min="0"
-              max="100"
-            />
-          </label>
-          <label>
-            <span>Popularity to</span>
-            <input
-              v-model.number="popularityMax"
-              type="number"
-              min="0"
-              max="100"
-            />
-          </label>
-          <label>
-            <span>Explicit</span>
-            <select v-model="explicitFilter">
-              <option value="include">Include</option>
-              <option value="exclude">Exclude</option>
-              <option value="only">Only</option>
-            </select>
-          </label>
+        <section class="filtersSection">
+          <h3>Filters</h3>
+          <div class="filtersGrid">
+            <label>
+              <span>Genres</span>
+              <input v-model="genres" type="text" />
+            </label>
+            <label>
+              <span>Year from</span>
+              <input v-model.number="releaseYearMin" type="number" min="0" />
+            </label>
+            <label>
+              <span>Year to</span>
+              <input v-model.number="releaseYearMax" type="number" min="0" />
+            </label>
+            <label>
+              <span>Popularity from</span>
+              <input
+                v-model.number="popularityMin"
+                type="number"
+                min="0"
+                max="100"
+              />
+            </label>
+            <label>
+              <span>Popularity to</span>
+              <input
+                v-model.number="popularityMax"
+                type="number"
+                min="0"
+                max="100"
+              />
+            </label>
+            <label>
+              <span>Explicit</span>
+              <select v-model="explicitFilter" aria-label="Explicit">
+                <option value="include">Include</option>
+                <option value="exclude">Exclude</option>
+                <option value="only">Only</option>
+              </select>
+            </label>
+          </div>
         </section>
       </div>
 
       <footer class="builderActions">
         <span v-if="validationError" role="alert">{{ validationError }}</span>
-        <button @click="handleClose">Cancel</button>
+        <button class="cancelButton" @click="handleClose">Cancel</button>
         <button
           class="primaryButton"
           :disabled="isSubmitting || isLoading || !options"
@@ -317,12 +356,13 @@ watch(
 </script>
 
 <style scoped>
+@import "@/components/steering/steeringCard.css";
 .radioBuilder {
-  width: min(760px, 88vw);
-  max-height: 84vh;
+  width: min(760px, calc(100vw - 80px));
+  max-height: min(820px, calc(100dvh - 80px));
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
   color: var(--text-bright);
   color-scheme: dark;
 }
@@ -346,13 +386,16 @@ watch(
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 28px;
+  min-height: 0;
+  padding: 2px 4px;
+  overscroll-behavior: contain;
 }
 
 .controlGroup,
 .filtersGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -373,12 +416,6 @@ label {
   flex-direction: row;
   align-items: center;
   justify-content: flex-start;
-}
-
-input,
-select,
-button {
-  min-height: 34px;
 }
 
 input:not([type="range"]):not([type="checkbox"]),
@@ -483,5 +520,144 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.builderHeader {
+  flex-shrink: 0;
+}
+.builderHeader h2 {
+  font-size: 28px;
+  font-weight: 750;
+  letter-spacing: -0.025em;
+}
+h3 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 14px;
+}
+label {
+  font-size: 14px;
+  gap: 10px;
+}
+label > span,
+.criterionRow > span {
+  color: var(--text-base);
+}
+input:not([type="range"]):not([type="checkbox"]),
+select {
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 4px;
+  background: #333;
+  border: 1px solid #727272;
+  font: inherit;
+}
+input:not([type="range"]):not([type="checkbox"]):focus,
+select:focus {
+  border-color: #fff;
+  box-shadow: inset 0 0 0 1px #fff;
+}
+input[type="range"] {
+  min-width: 0;
+}
+input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.sliderLabel {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+output,
+.criterionRow strong {
+  color: var(--text-subdued);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+.criteriaSection {
+  gap: 18px;
+}
+.criteriaSection h3 {
+  margin-bottom: 0;
+}
+.criterionRow {
+  gap: 16px;
+  font-size: 14px;
+}
+.criterionRow > span {
+  width: 130px;
+  flex-shrink: 0;
+}
+.referenceGrid,
+.filtersSection {
+  border-top: 1px solid var(--surface-border);
+  padding-top: 24px;
+}
+.builderActions {
+  flex-shrink: 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--surface-border);
+  flex-wrap: wrap;
+}
+.builderActions > span {
+  color: var(--text-negative, #f3727f);
+  font-size: 14px;
+  flex: 1 1 180px;
+}
+.builderActions button {
+  min-height: 48px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 999px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.builderActions .cancelButton {
+  background: transparent;
+  color: var(--text-subdued);
+}
+.builderActions .cancelButton:hover {
+  color: var(--text-base);
+}
+.iconButton {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+.iconButton svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+@media (max-width: 600px) {
+  .builderHeader h2 {
+    font-size: 24px;
+  }
+  .controlGroup,
+  .filtersGrid,
+  .referenceGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .criterionRow > span {
+    width: 110px;
+  }
+  .criterionRow {
+    gap: 10px;
+  }
 }
 </style>

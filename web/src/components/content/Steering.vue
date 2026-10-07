@@ -101,33 +101,35 @@
       </div>
     </header>
 
-    <div v-if="!playlist" class="emptyState">
-      Nothing is playing. Start an album, playlist or track to steer its
-      continuation.
+    <div class="steeringContent">
+      <div v-if="!playlist" class="emptyState">
+        Nothing is playing. Start an album, playlist or track to steer its
+        continuation.
+      </div>
+      <div v-else-if="isRadio" class="emptyState">
+        Radio queues continue from their own seed and cannot be steered.
+      </div>
+      <template v-else-if="gravity">
+        <div v-if="!smartContinuationEnabled" class="notice" role="status">
+          <span>
+            Smart continuation is off, so nothing will be added to the queue.
+          </span>
+          <button type="button" class="noticeButton" @click="enableSmart">
+            Turn it on
+          </button>
+        </div>
+        <div v-if="isRemote" class="notice" role="status">
+          <span>
+            You are controlling another device. Changes are sent to it.
+          </span>
+        </div>
+        <div class="steeringGrid">
+          <GravitySourceCard :gravity="gravity" :tracksIds="tracksIds" />
+          <GravityDestinationCard ref="destinationCard" :gravity="gravity" />
+        </div>
+        <GravityJourneyCard :gravity="gravity" />
+      </template>
     </div>
-    <div v-else-if="isRadio" class="emptyState">
-      Radio queues continue from their own seed and cannot be steered.
-    </div>
-    <template v-else-if="gravity">
-      <div v-if="!smartContinuationEnabled" class="notice" role="status">
-        <span>
-          Smart continuation is off, so nothing will be added to the queue.
-        </span>
-        <button type="button" class="noticeButton" @click="enableSmart">
-          Turn it on
-        </button>
-      </div>
-      <div v-if="isRemote" class="notice" role="status">
-        <span>
-          You are controlling another device. Changes are sent to it.
-        </span>
-      </div>
-      <div class="steeringGrid">
-        <GravitySourceCard :gravity="gravity" :tracksIds="tracksIds" />
-        <GravityDestinationCard ref="destinationCard" :gravity="gravity" />
-      </div>
-      <GravityJourneyCard :gravity="gravity" />
-    </template>
   </div>
 </template>
 
@@ -174,7 +176,9 @@ const chosenTracksIds = computed(() => {
   return tracksIds.value.filter((id) => !auto.has(id));
 });
 const sourceTitle = computed(() =>
-  sourceReferences.value.length ? mixTitle(sourceReferences.value) : "Your queue",
+  sourceReferences.value.length
+    ? mixTitle(sourceReferences.value)
+    : "Your queue",
 );
 const progressPercent = computed(() =>
   gravity.value ? Math.round(progress(gravity.value) * 100) : 0,
@@ -218,7 +222,7 @@ const openDestinationPicker = async () => {
   flex-direction: column;
   gap: 28px;
   padding: 32px 32px 28px;
-  border-radius: var(--radius-xl);
+  border-radius: 0;
   transition: background var(--transition-slow);
 }
 
@@ -232,14 +236,13 @@ const openDestinationPicker = async () => {
   color: var(--text-bright);
   font-size: var(--text-xs);
   font-weight: var(--font-bold);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .heroTitle {
   margin: 0;
   color: var(--text-bright);
-  font-size: clamp(2.25rem, 6vw, 4.5rem);
+  font-size: clamp(2.5rem, 6cqw, 4.5rem);
   font-weight: var(--font-black);
   line-height: 1;
   letter-spacing: -0.04em;
@@ -284,7 +287,7 @@ const openDestinationPicker = async () => {
   width: 100%;
   aspect-ratio: 1;
   overflow: hidden;
-  border-radius: var(--radius-lg);
+  border-radius: 8px;
   box-shadow: var(--shadow-xl);
 }
 
@@ -302,7 +305,8 @@ const openDestinationPicker = async () => {
 
 /* Two parts side by side; with three, the first takes the left half. */
 .mixArt :deep(.steeringArtwork:first-child:nth-last-child(2)),
-.mixArt :deep(.steeringArtwork:first-child:nth-last-child(2) ~ .steeringArtwork),
+.mixArt
+  :deep(.steeringArtwork:first-child:nth-last-child(2) ~ .steeringArtwork),
 .mixArt :deep(.steeringArtwork:first-child:nth-last-child(3)) {
   grid-row: span 2;
 }
@@ -312,8 +316,8 @@ const openDestinationPicker = async () => {
   place-items: center;
   width: 100%;
   height: 100%;
-  border: 2px dashed rgba(255, 255, 255, 0.3);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--surface-border-strong);
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.6);
   font-size: 3rem;
@@ -333,8 +337,7 @@ const openDestinationPicker = async () => {
   color: rgba(255, 255, 255, 0.7);
   font-size: var(--text-xs);
   font-weight: var(--font-bold);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .journeyName {
@@ -451,13 +454,13 @@ const openDestinationPicker = async () => {
   align-items: start;
 }
 
-@media (max-width: 900px) {
+@container (max-width: 850px) {
   .steeringGrid {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-@media (max-width: 600px) {
+@container (max-width: 560px) {
   .hero {
     gap: 22px;
     padding: 24px 16px 20px;
@@ -484,6 +487,26 @@ const openDestinationPicker = async () => {
 
   .destinationPlaceholder {
     font-size: 2rem;
+  }
+}
+
+.steeringContent {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 0 32px 40px;
+}
+.steeringGrid {
+  gap: 16px;
+}
+.heroIntro {
+  font-size: 16px;
+  line-height: 1.6;
+}
+@container (max-width:560px) {
+  .steeringContent {
+    padding: 0 16px 24px;
+    gap: 16px;
   }
 }
 </style>
