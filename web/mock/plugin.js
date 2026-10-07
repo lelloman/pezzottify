@@ -62,7 +62,13 @@ export function mockPlugin() {
       id: `request-${id}`,
       content_id: id,
       content_type: id.startsWith("album") ? "ALBUM" : "TRACK",
-      content_name: "Preview download",
+      content_name:
+        [...albums, ...tracks].find((item) => item.id === id)?.name ||
+        "Preview download",
+      error_message:
+        status === "FAILED"
+          ? "The download source is currently unavailable."
+          : null,
       status,
       priority: "USER",
       created_at: 1780000000,
