@@ -2,8 +2,15 @@
   <section class="referenceSection">
     <div class="referenceHeader">
       <h3>{{ title }}</h3>
-      <button v-if="allowManualAdd" type="button" @click="addReference">
-        +
+      <button
+        v-if="allowManualAdd"
+        type="button"
+        :aria-label="`Add ${title.toLowerCase()} reference`"
+        @click="addReference"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
       </button>
     </div>
     <p v-if="!modelValue.length && emptyText" class="referenceEmpty">
@@ -15,6 +22,7 @@
       class="referenceRow"
     >
       <select
+        aria-label="Reference type"
         :value="reference.entity_type"
         :disabled="Boolean(reference.label)"
         @change="updateReference(index, { entity_type: $event.target.value })"
@@ -35,6 +43,7 @@
       </span>
       <input
         v-else
+        aria-label="Reference ID"
         :value="reference.entity_id"
         placeholder="ID"
         @input="updateReference(index, { entity_id: $event.target.value })"
@@ -54,7 +63,9 @@
         :aria-label="`Remove ${reference.label || reference.entity_id || 'reference'}`"
         @click="removeReference(index)"
       >
-        x
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m6 6 12 12M18 6 6 18" />
+        </svg>
       </button>
     </div>
   </section>
@@ -125,6 +136,8 @@ const removeReference = (index) => {
 
 .referenceHeader h3 {
   margin: 0;
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .referenceEmpty {
@@ -135,7 +148,7 @@ const removeReference = (index) => {
 
 .referenceRow {
   display: grid;
-  grid-template-columns: 82px 1fr 70px 34px;
+  grid-template-columns: 82px minmax(0, 1fr) 58px 32px;
   align-items: center;
   gap: 8px;
 }
@@ -156,29 +169,49 @@ button {
 
 input,
 select {
+  min-width: 0;
   width: 100%;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-highlight);
+  border: 1px solid #727272;
+  border-radius: 4px;
+  background: #333;
   color: var(--text-bright);
-  padding: 6px 10px;
+  padding: 6px;
+  font: inherit;
+  font-size: 13px;
   outline: none;
 }
 
 input:focus,
 select:focus {
-  border-color: var(--spotify-green);
-  box-shadow: 0 0 0 2px var(--bg-tinted);
+  border-color: #fff;
+  box-shadow: inset 0 0 0 1px #fff;
 }
 
 button {
-  border-radius: var(--radius-md);
-  background: var(--bg-highlight);
-  color: var(--text-bright);
-  padding: 0 12px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-subdued);
+  padding: 0;
+  cursor: pointer;
 }
 
 button:hover {
   background: var(--bg-press);
+  color: var(--text-bright);
+}
+button:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+button svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
 }
 </style>

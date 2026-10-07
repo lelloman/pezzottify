@@ -404,9 +404,39 @@ export function mockPlugin() {
       return json(res, { tracks: 1 });
     if (path === "/v1/content/radio/options")
       return json(res, {
-        genres: genres.map((g) => g.name),
-        moods: ["calm", "bright"],
-        eras: ["2020s"],
+        default_recipe_id: "balanced",
+        recipes: [
+          {
+            id: "classic",
+            name: "Classic",
+            mode: "similar",
+            diversity: 0.2,
+            randomness: 0.3,
+            criteria: [{ namespace: "musicfm.mean.v1", weight: 1 }],
+          },
+          {
+            id: "balanced",
+            name: "Balanced",
+            mode: "similar",
+            diversity: 0.3,
+            randomness: 0.3,
+            criteria: [
+              { namespace: "musicfm.mean.v1", weight: 0.55 },
+              { namespace: "ast.audioset.v2", weight: 0.3 },
+              { namespace: "ast.instruments.v2", weight: 0.15 },
+            ],
+          },
+        ],
+        criteria: [
+          { namespace: "musicfm.mean.v1", label: "Sound profile" },
+          { namespace: "ast.audioset.v2", label: "Audio scene" },
+          { namespace: "ast.instruments.v2", label: "Instrumentation" },
+        ],
+        modes: ["similar", "explore"],
+        explicit_filters: ["include", "exclude", "only"],
+        count: { min: 1, max: 200, default: 50 },
+        diversity: { min: 0, max: 1, default: 0.3 },
+        randomness: { min: 0, max: 1, default: 0.3 },
       });
     if (
       path.includes("/radio/") ||
