@@ -1,12 +1,16 @@
 <template>
   <div class="bugReports">
-    <h2 class="sectionTitle">Bug Reports</h2>
-
-    <div class="actionButtons">
+    <header class="pageHeader">
+      <div>
+        <h2 class="sectionTitle">Bug reports</h2>
+        <p>
+          Review issues reported by listeners, including logs and attachments.
+        </p>
+      </div>
       <button class="refreshButton" :disabled="isLoading" @click="loadReports">
-        {{ isLoading ? "Loading..." : "Refresh" }}
+        {{ isLoading ? "Loading…" : "Refresh" }}
       </button>
-    </div>
+    </header>
 
     <div v-if="deleteError" class="errorMessage">
       {{ deleteError }}
@@ -31,42 +35,73 @@
         class="reportCard"
         :class="{ expanded: expandedReportId === report.id }"
       >
-        <div class="reportHeader" @click="toggleReport(report.id)">
-          <div class="reportInfo">
-            <div class="reportTitle">
-              {{ report.title || "(No title)" }}
-            </div>
-            <div class="reportMeta">
-              <span class="reportUser">{{ report.user_handle }}</span>
-              <span class="separator">•</span>
-              <span class="clientBadge" :class="report.client_type">
-                {{ report.client_type }}
+        <div class="reportHeader">
+          <button
+            class="reportToggle"
+            :aria-expanded="expandedReportId === report.id"
+            :aria-controls="`report-details-${report.id}`"
+            @click="toggleReport(report.id)"
+          >
+            <span class="reportInfo">
+              <span class="reportTitle">
+                {{ report.title || "(No title)" }}
               </span>
-              <span class="separator">•</span>
-              <span class="reportDate">{{ formatDate(report.created_at) }}</span>
-              <span class="separator">•</span>
-              <span class="reportSize">{{ formatSize(report.size_bytes) }}</span>
-            </div>
-          </div>
+              <span class="reportMeta">
+                <span class="reportUser">{{ report.user_handle }}</span>
+                <span class="separator">•</span>
+                <span class="clientBadge" :class="report.client_type">
+                  {{ report.client_type }}
+                </span>
+                <span class="separator">•</span>
+                <span class="reportDate">{{
+                  formatDate(report.created_at)
+                }}</span>
+                <span class="separator">•</span>
+                <span class="reportSize">{{
+                  formatSize(report.size_bytes)
+                }}</span>
+              </span>
+            </span>
+            <svg
+              class="expandIcon"
+              :class="{ open: expandedReportId === report.id }"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path d="m9 5 7 7-7 7" />
+            </svg>
+          </button>
           <div class="reportActions">
             <button
               class="deleteButton"
+              :aria-label="`Delete report: ${report.title || report.id}`"
               :disabled="deletingId === report.id"
               @click.stop="confirmDelete(report)"
             >
-              {{ deletingId === report.id ? "Deleting..." : "Delete" }}
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7m4-7v7" />
+              </svg>
             </button>
-            <span class="expandIcon">{{ expandedReportId === report.id ? "▼" : "▶" }}</span>
           </div>
         </div>
 
-        <div v-if="expandedReportId === report.id" class="reportDetails">
-          <div v-if="loadingDetails" class="detailsLoading">Loading details...</div>
-          <div v-else-if="detailsError" class="detailsError">{{ detailsError }}</div>
+        <div
+          v-if="expandedReportId === report.id"
+          class="reportDetails"
+          :id="`report-details-${report.id}`"
+        >
+          <div v-if="loadingDetails" class="detailsLoading">
+            Loading details...
+          </div>
+          <div v-else-if="detailsError" class="detailsError">
+            {{ detailsError }}
+          </div>
           <div v-else-if="expandedReport" class="detailsContent">
-            <div class="detailSection">
+            <div class="detailSection wide">
               <h4 class="detailLabel">Description</h4>
-              <div class="detailValue description">{{ expandedReport.description }}</div>
+              <div class="detailValue description">
+                {{ expandedReport.description }}
+              </div>
             </div>
 
             <div v-if="expandedReport.client_version" class="detailSection">
@@ -79,9 +114,14 @@
               <div class="detailValue">{{ expandedReport.device_info }}</div>
             </div>
 
-            <div v-if="expandedReport.logs" class="detailSection">
+            <div v-if="expandedReport.logs" class="detailSection wide">
               <h4 class="detailLabel">Logs</h4>
-              <div class="detailValue logs">
+              <div
+                class="detailValue logs"
+                tabindex="0"
+                role="region"
+                aria-label="Report logs"
+              >
                 <pre>{{ truncateLogs(expandedReport.logs) }}</pre>
                 <button
                   v-if="expandedReport.logs.length > 2000"
@@ -93,17 +133,20 @@
               </div>
             </div>
 
-            <div v-if="parsedAttachments.length > 0" class="detailSection">
-              <h4 class="detailLabel">Attachments ({{ parsedAttachments.length }})</h4>
+            <div v-if="parsedAttachments.length > 0" class="detailSection wide">
+              <h4 class="detailLabel">
+                Attachments ({{ parsedAttachments.length }})
+              </h4>
               <div class="attachmentsGrid">
-                <div
+                <button
                   v-for="(attachment, index) in parsedAttachments"
                   :key="index"
                   class="attachmentItem"
+                  :aria-label="`Open attachment ${index + 1}`"
                   @click="openAttachment(attachment)"
                 >
-                  <img :src="attachment" alt="Attachment" class="attachmentThumb" />
-                </div>
+                  <img :src="attachment" alt="" class="attachmentThumb" />
+                </button>
               </div>
             </div>
 
@@ -117,11 +160,7 @@
     </div>
 
     <div v-if="reports.length > 0" class="pagination">
-      <button
-        class="pageButton"
-        :disabled="offset === 0"
-        @click="prevPage"
-      >
+      <button class="pageButton" :disabled="offset === 0" @click="prevPage">
         Previous
       </button>
       <span class="pageInfo">
@@ -146,8 +185,8 @@
     >
       <template #message>
         Are you sure you want to delete this bug report from
-        <strong>{{ reportToDelete?.user_handle }}</strong>?
-        This action cannot be undone.
+        <strong>{{ reportToDelete?.user_handle }}</strong
+        >? This action cannot be undone.
       </template>
     </ConfirmationDialog>
   </div>
@@ -220,6 +259,8 @@ const toggleReport = async (reportId) => {
   showFullLogs.value = false;
 
   const result = await remoteStore.getBugReport(reportId);
+  if (expandedReportId.value !== reportId) return;
+
   if (result === null) {
     detailsError.value = "Failed to load report details.";
   } else {
@@ -245,7 +286,9 @@ const handleDelete = async () => {
 
   if (result.success) {
     // Remove from list
-    reports.value = reports.value.filter((r) => r.id !== reportToDelete.value.id);
+    reports.value = reports.value.filter(
+      (r) => r.id !== reportToDelete.value.id,
+    );
     if (expandedReportId.value === reportToDelete.value.id) {
       expandedReportId.value = null;
       expandedReport.value = null;
@@ -295,310 +338,303 @@ onMounted(() => {
 
 <style scoped>
 .bugReports {
-  max-width: 900px;
-}
-
-.sectionTitle {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
+  width: 100%;
+  min-width: 0;
   color: var(--text-base);
-  margin: 0 0 var(--spacing-6) 0;
 }
-
-.actionButtons {
-  display: flex;
-  gap: var(--spacing-2);
-  margin-bottom: var(--spacing-4);
-}
-
-.refreshButton {
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--highlight);
-  color: var(--text-base);
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
-}
-
-.refreshButton:hover:not(:disabled) {
-  filter: brightness(1.1);
-}
-
-.refreshButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.loadingMessage,
-.emptyMessage {
-  padding: var(--spacing-4);
-  color: var(--text-subdued);
-  font-size: var(--text-sm);
-}
-
-.errorMessage {
-  padding: var(--spacing-3) var(--spacing-4);
-  background-color: rgba(220, 38, 38, 0.1);
-  border: 1px solid #dc2626;
-  border-radius: var(--radius-md);
-  color: #dc2626;
-  font-size: var(--text-sm);
+.pageHeader {
   display: flex;
   align-items: center;
-  gap: var(--spacing-3);
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 28px;
 }
-
-.retryButton {
-  padding: var(--spacing-1) var(--spacing-3);
-  background-color: #dc2626;
-  color: white;
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
+.sectionTitle {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+.pageHeader p {
+  margin: 8px 0 0;
+  color: var(--text-subdued);
+  font-size: 14px;
+  line-height: 1.5;
+}
+button {
+  font: inherit;
   cursor: pointer;
 }
-
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+button:focus-visible,
+.logs:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+}
+.refreshButton,
+.pageButton,
+.retryButton {
+  min-height: 40px;
+  border: 1px solid #727272;
+  border-radius: 999px;
+  padding: 9px 20px;
+  background: transparent;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+.refreshButton:hover:not(:disabled),
+.pageButton:hover:not(:disabled),
+.retryButton:hover {
+  border-color: #fff;
+  background: #242424;
+}
+.loadingMessage,
+.emptyMessage {
+  padding: 40px 20px;
+  text-align: center;
+  background: #181818;
+  border-radius: 8px;
+  color: var(--text-subdued);
+  font-size: 14px;
+}
+.errorMessage {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px;
+  margin-bottom: 20px;
+  border-radius: 8px;
+  background: #281a1d;
+  color: #f3727f;
+  font-size: 14px;
+}
 .reportsList {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-3);
+  gap: 8px;
 }
-
 .reportCard {
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
+  background: #181818;
+  border-radius: 8px;
   overflow: hidden;
 }
-
 .reportHeader {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: var(--spacing-4);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
 }
-
-.reportHeader:hover {
-  background-color: var(--bg-highlight);
+.reportToggle {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex: 1;
+  min-width: 0;
+  padding: 20px;
+  border: 0;
+  text-align: left;
+  background: transparent;
+  color: inherit;
 }
-
+.reportToggle:hover {
+  background: #242424;
+}
 .reportInfo {
+  display: block;
   flex: 1;
   min-width: 0;
 }
-
 .reportTitle {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-semibold);
-  color: var(--text-base);
-  margin-bottom: var(--spacing-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: block;
+  margin-bottom: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
-
 .reportMeta {
-  font-size: var(--text-xs);
-  color: var(--text-subdued);
   display: flex;
   align-items: center;
-  gap: var(--spacing-2);
   flex-wrap: wrap;
+  gap: 8px;
+  color: var(--text-subdued);
+  font-size: 12px;
 }
-
 .separator {
-  color: var(--border-subdued);
+  color: #727272;
 }
-
 .clientBadge {
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: #2a2a2a;
+  color: #b3b3b3;
+  text-transform: capitalize;
 }
-
-.clientBadge.android {
-  background-color: rgba(61, 220, 132, 0.2);
-  color: #3ddc84;
-}
-
-.clientBadge.web {
-  background-color: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
-}
-
 .reportActions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-3);
+  padding-right: 12px;
+}
+.deleteButton {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #b3b3b3;
+}
+.deleteButton:hover:not(:disabled) {
+  background: #302024;
+  color: #f3727f;
+}
+.deleteButton svg,
+.expandIcon {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
   flex-shrink: 0;
 }
-
-.deleteButton {
-  padding: var(--spacing-1) var(--spacing-3);
-  background-color: transparent;
-  color: #dc2626;
-  border: 1px solid #dc2626;
-  border-radius: var(--radius-md);
-  font-size: var(--text-xs);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.deleteButton:hover:not(:disabled) {
-  background-color: #dc2626;
-  color: white;
-}
-
-.deleteButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
 .expandIcon {
-  color: var(--text-subdued);
-  font-size: var(--text-xs);
+  width: 16px;
+  height: 16px;
+  color: #b3b3b3;
+  transition: transform 0.15s;
 }
-
+.expandIcon.open {
+  transform: rotate(90deg);
+}
 .reportDetails {
-  padding: var(--spacing-4);
-  border-top: 1px solid var(--border-subdued);
-  background-color: var(--bg-base);
+  padding: 24px;
+  border-top: 1px solid #333;
 }
-
+.detailsContent {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.detailSection {
+  min-width: 0;
+}
+.detailSection.wide {
+  grid-column: 1 / -1;
+}
 .detailsLoading,
 .detailsError {
-  font-size: var(--text-sm);
+  font-size: 14px;
   color: var(--text-subdued);
-  padding: var(--spacing-2);
 }
-
 .detailsError {
-  color: #dc2626;
+  color: #f3727f;
 }
-
-.detailSection {
-  margin-bottom: var(--spacing-4);
-}
-
-.detailSection:last-child {
-  margin-bottom: 0;
-}
-
 .detailLabel {
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
+  margin: 0 0 8px;
   color: var(--text-subdued);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin: 0 0 var(--spacing-1) 0;
+  font-size: 13px;
+  font-weight: 600;
 }
-
 .detailValue {
-  font-size: var(--text-sm);
-  color: var(--text-base);
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
-
-.detailValue.description {
+.description {
   white-space: pre-wrap;
-  word-break: break-word;
 }
-
-.detailValue.logs {
-  background-color: var(--bg-elevated-base);
-  padding: var(--spacing-3);
-  border-radius: var(--radius-md);
-  max-height: 300px;
-  overflow-y: auto;
+.logs {
+  padding: 16px;
+  background: #101010;
+  border-radius: 4px;
+  max-height: 320px;
+  overflow: auto;
 }
-
-.detailValue.logs pre {
+.logs pre {
   margin: 0;
   font-family: monospace;
-  font-size: var(--text-xs);
+  font-size: 12px;
   white-space: pre-wrap;
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
-
-.detailValue.mono {
+.mono {
   font-family: monospace;
-  font-size: var(--text-xs);
+  font-size: 12px;
   color: var(--text-subdued);
 }
-
 .showMoreButton {
-  margin-top: var(--spacing-2);
-  padding: var(--spacing-1) var(--spacing-2);
-  background-color: transparent;
-  color: var(--highlight);
-  border: none;
-  font-size: var(--text-xs);
-  cursor: pointer;
+  margin-top: 12px;
+  padding: 8px 0;
+  color: #fff;
+  background: none;
+  border: 0;
+  font-size: 13px;
+  font-weight: 700;
 }
-
+.showMoreButton:hover {
+  text-decoration: underline;
+}
 .attachmentsGrid {
   display: flex;
-  gap: var(--spacing-2);
   flex-wrap: wrap;
+  gap: 12px;
 }
-
 .attachmentItem {
-  width: 80px;
-  height: 80px;
-  border-radius: var(--radius-md);
+  padding: 0;
+  width: 120px;
+  height: 90px;
+  border-radius: 4px;
+  border: 1px solid #535353;
   overflow: hidden;
-  cursor: pointer;
-  border: 1px solid var(--border-subdued);
-  transition: border-color var(--transition-fast);
+  background: #101010;
 }
-
 .attachmentItem:hover {
-  border-color: var(--highlight);
+  border-color: #fff;
 }
-
 .attachmentThumb {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-
 .pagination {
   display: flex;
-  justify-content: center;
   align-items: center;
-  gap: var(--spacing-4);
-  margin-top: var(--spacing-6);
+  justify-content: flex-end;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #282828;
+  flex-wrap: wrap;
 }
-
-.pageButton {
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--bg-elevated-base);
-  color: var(--text-base);
-  border: 1px solid var(--border-subdued);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.pageButton:hover:not(:disabled) {
-  background-color: var(--bg-highlight);
-  border-color: var(--border-default);
-}
-
-.pageButton:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .pageInfo {
-  font-size: var(--text-sm);
+  font-size: 13px;
   color: var(--text-subdued);
+}
+@media (max-width: 600px) {
+  .pageHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .reportToggle {
+    padding: 16px;
+    gap: 12px;
+  }
+  .reportActions {
+    padding-right: 8px;
+  }
+  .reportDetails {
+    padding: 16px;
+  }
+  .detailsContent {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pagination {
+    justify-content: center;
+    gap: 10px;
+  }
+  .pageButton {
+    padding: 9px 14px;
+  }
 }
 </style>
