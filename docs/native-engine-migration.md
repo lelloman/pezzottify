@@ -80,7 +80,12 @@ intervening frontend commit. Shared implementation/source pin:
   package names**. No host Axum/Hyper/Reqwest/Rustls/tracing-subscriber; host Tokio
   retains only synchronization/macros.
 
-Implementation commit: `0b666437`; branch integration remains pending.
+**Integrated locally into `dev`.** Implementation `0b666437`, packaging and
+measurements `ced628ea`; the original development branch was rebased onto the
+migration branch. Ancestry and exact tested-tree equality were verified, and the
+frontend commit `5fab6e4f` was preserved. Both original checkouts were clean.
+The temporary consumer worktree/branch are removed after this final record is
+integrated. The shared tracker records cleanup and the final branch revisions.
 No push, publication or deployment is claimed. The new source revision must be made
 available remotely separately before a fresh remote CI checkout can fetch it.
 
