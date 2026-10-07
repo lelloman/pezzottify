@@ -1,48 +1,65 @@
 <template>
   <div class="pushNotifications">
-    <h2 class="sectionTitle">Push</h2>
-    <p class="sectionHint">
-      Devices registered for UnifiedPush. A test notification goes straight to
-      the device's push distributor and shows up as a system notification.
-    </p>
-
-    <div class="messageForm">
-      <label class="field">
-        <span class="fieldLabel">Title</span>
-        <input
-          v-model="title"
-          class="textInput"
-          type="text"
-          maxlength="100"
-          placeholder="Test notification"
-        />
-      </label>
-      <label class="field">
-        <span class="fieldLabel">Message</span>
-        <input
-          v-model="body"
-          class="textInput"
-          type="text"
-          maxlength="300"
-          placeholder="Sent from the Pezzottify admin panel"
-        />
-      </label>
-    </div>
-
-    <div class="actionButtons">
-      <input
-        v-model="filter"
-        class="textInput filterInput"
-        type="search"
-        placeholder="Filter by user or device"
-      />
+    <header class="pageHeader">
+      <div>
+        <h2 class="sectionTitle">Push notifications</h2>
+        <p>
+          Check registered devices and send a test notification through
+          UnifiedPush.
+        </p>
+      </div>
       <button
         class="refreshButton"
         :disabled="isLoading"
         @click="loadRegistrations"
       >
-        {{ isLoading ? "Loading..." : "Refresh" }}
+        {{ isLoading ? "Loading…" : "Refresh" }}
       </button>
+    </header>
+
+    <section class="messageSection" aria-labelledby="message-heading">
+      <h3 id="message-heading">Test message</h3>
+      <p class="sectionHint">
+        Choose a device below to send it a system notification. Leave these
+        fields empty to use the default message.
+      </p>
+      <div class="messageForm">
+        <label class="field">
+          <span class="fieldLabel">Title</span>
+          <input
+            v-model="title"
+            class="textInput"
+            type="text"
+            maxlength="100"
+            placeholder="Test notification"
+          />
+        </label>
+        <label class="field">
+          <span class="fieldLabel">Message</span>
+          <textarea
+            v-model="body"
+            class="textInput"
+            rows="3"
+            maxlength="300"
+            placeholder="Sent from the Pezzottify admin panel"
+          ></textarea>
+        </label>
+      </div>
+    </section>
+    <div class="listHeader">
+      <h3>
+        Registered devices
+        <span v-if="!isLoading && !loadError && enabled" class="deviceCount">{{
+          registrations.length
+        }}</span>
+      </h3>
+      <input
+        v-model="filter"
+        class="textInput filterInput"
+        type="search"
+        aria-label="Filter registered devices"
+        placeholder="Filter by user or device"
+      />
     </div>
 
     <div v-if="isLoading && registrations.length === 0" class="loadingMessage">
@@ -109,6 +126,7 @@
           <div
             v-if="results[registration.id]"
             class="sendResult"
+            role="status"
             :class="results[registration.id].kind"
           >
             {{ results[registration.id].text }}
@@ -116,7 +134,7 @@
         </div>
         <button
           class="sendButton"
-          :disabled="sendingId === registration.id"
+          :disabled="sendingId !== null || !enabled"
           @click="sendTest(registration)"
         >
           {{ sendingId === registration.id ? "Sending..." : "Send test" }}
@@ -169,6 +187,7 @@ const loadRegistrations = async () => {
 };
 
 const sendTest = async (registration) => {
+  if (sendingId.value !== null) return;
   sendingId.value = registration.id;
   delete results[registration.id];
   const result = await remoteStore.sendTestPushNotification(registration.id, {
@@ -212,232 +231,258 @@ onMounted(loadRegistrations);
 
 <style scoped>
 .pushNotifications {
-  max-width: 900px;
-}
-
-.sectionTitle {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
+  width: 100%;
+  min-width: 0;
   color: var(--text-base);
-  margin: 0 0 var(--spacing-2) 0;
 }
-
+.pageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+.sectionTitle {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+.pageHeader p,
 .sectionHint {
+  margin: 8px 0 0;
   color: var(--text-subdued);
-  font-size: var(--text-sm);
-  margin: 0 0 var(--spacing-6) 0;
+  font-size: 14px;
+  line-height: 1.5;
 }
-
+h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.messageSection {
+  padding: 24px;
+  margin-bottom: 28px;
+  background: #181818;
+  border-radius: 8px;
+}
 .messageForm {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
-  gap: var(--spacing-3);
-  margin-bottom: var(--spacing-4);
+  align-items: start;
+  gap: 24px;
+  margin-top: 24px;
 }
-
 .field {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-1);
-}
-
-.fieldLabel {
-  font-size: var(--text-xs);
-  color: var(--text-subdued);
-}
-
-.textInput {
-  padding: var(--spacing-2) var(--spacing-3);
-  background-color: var(--bg-elevated-base);
-  color: var(--text-base);
-  border: 1px solid var(--border-subdued);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
+  gap: 8px;
   min-width: 0;
 }
-
+.fieldLabel {
+  font-size: 13px;
+  font-weight: 600;
+}
+.textInput {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 44px;
+  padding: 12px;
+  border: 1px solid #727272;
+  border-radius: 4px;
+  color: #fff;
+  background: #242424;
+  font: inherit;
+  font-size: 14px;
+}
+.textInput::placeholder {
+  color: #b3b3b3;
+  opacity: 1;
+}
+.textInput:hover {
+  border-color: #b3b3b3;
+}
 .textInput:focus {
-  outline: none;
-  border-color: var(--highlight);
+  outline: 2px solid #fff;
+  outline-offset: -2px;
 }
-
-.actionButtons {
-  display: flex;
-  gap: var(--spacing-2);
-  margin-bottom: var(--spacing-4);
+textarea.textInput {
+  resize: vertical;
+  line-height: 1.5;
 }
-
-.filterInput {
-  flex: 1;
-}
-
-.refreshButton {
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--highlight);
-  color: var(--text-base);
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
-}
-
-.refreshButton:hover:not(:disabled) {
-  filter: brightness(1.1);
-}
-
-.refreshButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.loadingMessage,
-.emptyMessage {
-  padding: var(--spacing-4);
-  color: var(--text-subdued);
-  font-size: var(--text-sm);
-}
-
-.errorMessage {
-  padding: var(--spacing-3) var(--spacing-4);
-  background-color: rgba(220, 38, 38, 0.1);
-  border: 1px solid #dc2626;
-  border-radius: var(--radius-md);
-  color: #dc2626;
-  font-size: var(--text-sm);
+.listHeader {
   display: flex;
   align-items: center;
-  gap: var(--spacing-3);
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #282828;
 }
-
-.retryButton {
-  padding: var(--spacing-1) var(--spacing-3);
-  background-color: #dc2626;
-  color: white;
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
+.deviceCount {
+  margin-left: 8px;
+  font-size: 14px;
+  color: var(--text-subdued);
+  font-weight: 400;
+}
+.filterInput {
+  width: min(100%, 340px);
+}
+button {
+  font: inherit;
   cursor: pointer;
 }
-
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+button:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 3px;
+}
+.refreshButton,
+.retryButton,
+.sendButton {
+  min-height: 40px;
+  padding: 9px 20px;
+  border: 1px solid #727272;
+  border-radius: 999px;
+  background: transparent;
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.refreshButton:hover:not(:disabled),
+.retryButton:hover,
+.sendButton:hover:not(:disabled) {
+  border-color: #fff;
+  background: #242424;
+}
+.loadingMessage,
+.emptyMessage {
+  padding: 40px 20px;
+  border-radius: 8px;
+  background: #181818;
+  color: var(--text-subdued);
+  font-size: 14px;
+  text-align: center;
+}
+.errorMessage {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 8px;
+  color: #f3727f;
+  background: #281a1d;
+  font-size: 14px;
+}
 .registrationList {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-3);
+  gap: 8px;
 }
-
 .registrationCard {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--spacing-4);
-  padding: var(--spacing-4);
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
+  gap: 24px;
+  padding: 20px;
+  border-radius: 8px;
+  background: #181818;
 }
-
 .registrationInfo {
   flex: 1;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
-
 .registrationTitle {
   display: flex;
   align-items: center;
-  gap: var(--spacing-2);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-semibold);
-  color: var(--text-base);
-  margin-bottom: var(--spacing-1);
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 10px;
 }
-
 .registrationMeta {
-  font-size: var(--text-xs);
-  color: var(--text-subdued);
   display: flex;
   align-items: center;
-  gap: var(--spacing-2);
+  gap: 8px;
   flex-wrap: wrap;
-  margin-top: 2px;
-}
-
-.separator {
-  color: var(--border-subdued);
-}
-
-.failing {
-  color: #dc2626;
-}
-
-.clientBadge,
-.onlineBadge {
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  text-transform: uppercase;
-  background-color: var(--bg-highlight);
+  margin-top: 6px;
   color: var(--text-subdued);
+  font-size: 12px;
+  line-height: 1.5;
 }
-
-.clientBadge.android {
-  background-color: rgba(61, 220, 132, 0.2);
-  color: #3ddc84;
+.separator {
+  color: #727272;
 }
-
-.clientBadge.web {
-  background-color: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
+.clientBadge {
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: #2a2a2a;
+  color: #b3b3b3;
+  text-transform: capitalize;
+  font-size: 12px;
+  font-weight: 400;
 }
-
 .onlineBadge {
-  text-transform: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #b3b3b3;
+  font-size: 12px;
+  font-weight: 400;
 }
-
-.sendResult {
-  margin-top: var(--spacing-2);
-  font-size: var(--text-xs);
+.onlineBadge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #1ed760;
 }
-
-.sendResult.success {
-  color: #3ddc84;
-}
-
+.failing,
 .sendResult.failure {
-  color: #dc2626;
+  color: #f3727f;
 }
-
-.sendButton {
-  flex-shrink: 0;
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: transparent;
-  color: var(--text-base);
-  border: 1px solid var(--border-subdued);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition: all var(--transition-fast);
+.sendResult {
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.5;
 }
-
-.sendButton:hover:not(:disabled) {
-  border-color: var(--highlight);
-  background-color: var(--bg-highlight);
+.sendResult.success {
+  color: #1ed760;
 }
-
-.sendButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-@media (max-width: 768px) {
-  .messageForm {
-    grid-template-columns: 1fr;
+@media (max-width: 700px) {
+  .pageHeader {
+    flex-direction: column;
+    align-items: flex-start;
   }
-
+  .messageForm {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+  .messageSection {
+    padding: 20px;
+  }
   .registrationCard {
     flex-direction: column;
-    align-items: stretch;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .filterInput {
+    width: 100%;
+  }
+}
+@media (max-width: 400px) {
+  .messageSection,
+  .registrationCard {
+    padding: 16px;
   }
 }
 </style>
