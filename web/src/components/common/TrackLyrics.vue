@@ -71,6 +71,7 @@ const props = defineProps({
   trackId: { type: String, required: true },
   compact: Boolean,
 });
+const emit = defineEmits(["availability"]);
 const expanded = ref(false);
 const remote = useRemoteStore();
 const playback = usePlaybackStore();
@@ -96,6 +97,15 @@ const visiblePlainLyrics = computed(() =>
     ? plainLines.value.slice(0, 4)
     : plainLines.value
   ).join("\n"),
+);
+watch(
+  () =>
+    Boolean(
+      lyrics.value?.status === "found" &&
+        (lines.value.length || lyrics.value.plain_lyrics?.trim()),
+    ),
+  (available) => emit("availability", available),
+  { immediate: true },
 );
 const isCurrent = computed(() => playback.currentTrackId === props.trackId);
 const canSeek = computed(

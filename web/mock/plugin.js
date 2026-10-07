@@ -390,6 +390,13 @@ export function mockPlugin() {
         kind
       ].find((x) => x.id === id);
       if (!value) return json(res, { error: "Unknown fixture ID" }, 404);
+      if (
+        suffix === "lyrics" &&
+        new URL(req.headers.referer || "http://localhost").searchParams.get(
+          "lyrics",
+        ) === "missing"
+      )
+        return json(res, { track_id: id, status: "not_found" });
       if (suffix === "lyrics")
         return json(
           res,
