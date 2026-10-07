@@ -6,11 +6,11 @@
 use super::provider::{CompletionOptions, LlmError, LlmProvider};
 use super::types::{CompletionResponse, FinishReason, Message, MessageRole, TokenUsage, ToolCall};
 use crate::agent::tools::ToolDefinition;
+use crate::execution::process::Command;
 use async_trait::async_trait;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use simple_server::client::Client;
 use std::time::Duration;
-use tokio::process::Command;
 use tracing::{debug, warn};
 
 /// Timeout for api_key_command execution.
@@ -36,7 +36,7 @@ impl ApiKeySource {
             ApiKeySource::Command(cmd) => {
                 debug!(command = %cmd, "Fetching API key via command");
 
-                let result = tokio::time::timeout(
+                let result = crate::execution::time::timeout(
                     API_KEY_COMMAND_TIMEOUT,
                     Command::new("sh").arg("-c").arg(cmd).output(),
                 )

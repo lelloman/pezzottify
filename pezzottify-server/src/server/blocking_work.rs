@@ -3,8 +3,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::execution::sync::Semaphore;
 use thiserror::Error;
-use tokio::sync::Semaphore;
 
 #[derive(Clone)]
 pub(super) struct BoundedBlockingPool {
@@ -102,7 +102,7 @@ impl BoundedBlockingPool {
         };
         let queue_started = Instant::now();
         let waiting = BlockingWaitingGuard::new(self.name);
-        let permit_result = tokio::time::timeout(
+        let permit_result = crate::execution::time::timeout(
             self.queue_timeout,
             Arc::clone(&self.permits).acquire_owned(),
         )
@@ -128,7 +128,7 @@ impl BoundedBlockingPool {
         super::metrics::blocking_work_started(self.name, queue_started.elapsed());
 
         let pool_name = self.name;
-        let worker = tokio::task::spawn_blocking(move || {
+        let worker = crate::execution::task::spawn_blocking(move || {
             let _admission = admission;
             let _permit = permit;
             let _metrics = BlockingExecutionGuard {
@@ -138,17 +138,18 @@ impl BoundedBlockingPool {
             work()
         });
 
-        let (result, outcome) = match tokio::time::timeout(self.execution_timeout, worker).await {
-            Ok(Ok(result)) => (Ok(result), super::metrics::ExecutorOutcome::Success),
-            Ok(Err(_)) => (
-                Err(BlockingWorkError::WorkerPanicked),
-                super::metrics::ExecutorOutcome::Panicked,
-            ),
-            Err(_) => (
-                Err(BlockingWorkError::ExecutionTimeout),
-                super::metrics::ExecutorOutcome::ExecutionTimeout,
-            ),
-        };
+        let (result, outcome) =
+            match crate::execution::time::timeout(self.execution_timeout, worker).await {
+                Ok(Ok(result)) => (Ok(result), super::metrics::ExecutorOutcome::Success),
+                Ok(Err(_)) => (
+                    Err(BlockingWorkError::WorkerPanicked),
+                    super::metrics::ExecutorOutcome::Panicked,
+                ),
+                Err(_) => (
+                    Err(BlockingWorkError::ExecutionTimeout),
+                    super::metrics::ExecutorOutcome::ExecutionTimeout,
+                ),
+            };
         super::metrics::record_blocking_work_outcome(self.name, outcome);
         result
     }
@@ -163,7 +164,7 @@ const _: fn() = || {
 mod tests {
     use super::*;
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn admission_stays_bounded_after_execution_timeout() {
         let pool = BoundedBlockingPool::new(
             "test_admission_timeout",
@@ -187,9 +188,9 @@ mod tests {
             1.0
         );
         release.send(()).unwrap();
-        tokio::time::timeout(Duration::from_secs(2), async {
+        crate::execution::time::timeout(Duration::from_secs(2), async {
             while pool.admitted.as_ref().unwrap().available_permits() == 0 {
-                tokio::task::yield_now().await;
+                crate::execution::task::yield_now().await;
             }
         })
         .await
@@ -197,7 +198,7 @@ mod tests {
         assert_eq!(pool.run(|| 42).await, Ok(42));
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn bounded_queue_releases_cancelled_waiters_but_keeps_running_work() {
         let pool = BoundedBlockingPool::new(
             "test_admission_cancel",
@@ -207,9 +208,9 @@ mod tests {
         )
         .with_admission_limit(2);
         let (release, wait) = std::sync::mpsc::channel();
-        let (started, ready) = tokio::sync::oneshot::channel();
+        let (started, ready) = crate::execution::sync::oneshot::channel();
         let active_pool = pool.clone();
-        let active = tokio::spawn(async move {
+        let active = crate::execution::spawn(async move {
             active_pool
                 .run(move || {
                     let _ = started.send(());
@@ -219,10 +220,10 @@ mod tests {
         });
         ready.await.unwrap();
         let waiting_pool = pool.clone();
-        let waiting = tokio::spawn(async move { waiting_pool.run(|| ()).await });
-        tokio::time::timeout(Duration::from_secs(2), async {
+        let waiting = crate::execution::spawn(async move { waiting_pool.run(|| ()).await });
+        crate::execution::time::timeout(Duration::from_secs(2), async {
             while pool.admitted.as_ref().unwrap().available_permits() != 0 {
-                tokio::task::yield_now().await;
+                crate::execution::task::yield_now().await;
             }
         })
         .await

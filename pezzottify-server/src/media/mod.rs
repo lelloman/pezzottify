@@ -15,6 +15,8 @@ pub use availability::{directory_size, probe, MediaCatalogView, MediaPresence};
 use crate::catalog_store::{CatalogStore, Track};
 use crate::db_executor::{DbExecutor, DbHandle, DbLane, DbPriority, DbRunError};
 use crate::downloader::DownloadPriority;
+use crate::execution::io::{AsyncReadExt, AsyncSeekExt, BufReader, SeekFrom};
+use crate::execution::ReaderStream;
 use crate::server::filesystem_work::{FilesystemWorkError, FilesystemWorkPool};
 use bytes::Bytes;
 use futures::Stream;
@@ -22,8 +24,6 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::{Arc, OnceLock};
-use tokio::io::{AsyncReadExt, AsyncSeekExt, BufReader, SeekFrom};
-use tokio_util::io::ReaderStream;
 use tracing::{debug, error, warn};
 
 use track_materializer::{InFlightTrack, TrackMaterializer};
@@ -92,7 +92,7 @@ impl LocalAudio {
     }
 
     pub async fn metadata(&self) -> io::Result<TrackStreamMetadata> {
-        let file = tokio::fs::File::from_std(self.file.try_clone()?);
+        let file = crate::execution::fs::File::from_std(self.file.try_clone()?);
         Ok(TrackStreamMetadata {
             content_length: file.metadata().await?.len(),
             content_type: self.content_type.to_owned(),
@@ -100,7 +100,7 @@ impl LocalAudio {
     }
 
     pub async fn range_stream(self, start: u64, length: u64) -> io::Result<MediaStream> {
-        let mut file = tokio::fs::File::from_std(self.file);
+        let mut file = crate::execution::fs::File::from_std(self.file);
         if start != 0 {
             file.seek(SeekFrom::Start(start)).await?;
         }

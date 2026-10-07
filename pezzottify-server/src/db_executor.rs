@@ -5,6 +5,7 @@
 //! Lanes cap database-specific concurrency while the weighted scheduler prevents
 //! background maintenance from starving user-facing work (and vice versa).
 
+use crate::execution::sync::{oneshot, Notify};
 use anyhow::Error as AnyhowError;
 use std::{
     collections::{HashMap, VecDeque},
@@ -16,7 +17,6 @@ use std::{
     time::{Duration, Instant},
 };
 use thiserror::Error;
-use tokio::sync::{oneshot, Notify};
 
 const PRIORITY_COUNT: usize = 3;
 const WEIGHTED_SCHEDULE: [DbPriority; 13] = [
@@ -340,9 +340,12 @@ impl DbExecutor {
             if Instant::now() >= deadline {
                 return Err(DbRunError::QueueTimeout);
             }
-            if tokio::time::timeout_at(tokio::time::Instant::from_std(deadline), notified)
-                .await
-                .is_err()
+            if crate::execution::time::timeout(
+                deadline.saturating_duration_since(Instant::now()),
+                notified,
+            )
+            .await
+            .is_err()
             {
                 return Err(DbRunError::QueueTimeout);
             }
@@ -457,8 +460,11 @@ where
             return Err(error);
         }
 
-        match tokio::time::timeout_at(tokio::time::Instant::from_std(queue_deadline), started_rx)
-            .await
+        match crate::execution::time::timeout(
+            queue_deadline.saturating_duration_since(Instant::now()),
+            started_rx,
+        )
+        .await
         {
             Ok(Ok(())) => {}
             Ok(Err(_)) => {
@@ -475,14 +481,15 @@ where
             }
         }
 
-        let result = match tokio::time::timeout(config.execution_timeout, result_rx).await {
-            Ok(Ok(result)) => result,
-            Ok(Err(_)) => Err(DbRunError::ShuttingDown),
-            Err(_) => {
-                cancelled.store(true, Ordering::Release);
-                Err(DbRunError::ExecutionTimeout)
-            }
-        };
+        let result =
+            match crate::execution::time::timeout(config.execution_timeout, result_rx).await {
+                Ok(Ok(result)) => result,
+                Ok(Err(_)) => Err(DbRunError::ShuttingDown),
+                Err(_) => {
+                    cancelled.store(true, Ordering::Release);
+                    Err(DbRunError::ExecutionTimeout)
+                }
+            };
         record_db_outcome(self.lane, priority, &result);
         result
     }
@@ -682,7 +689,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn async_handle_returns_values_and_typed_store_errors() {
         let executor = DbExecutor::new(test_config(1));
         let handle = DbHandle::new(Arc::new(41_u32), executor, DbLane::User);
@@ -712,7 +719,7 @@ mod tests {
         assert_eq!(result, 42);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn panics_are_isolated_and_reported() {
         let executor = DbExecutor::new(test_config(1));
         let handle = DbHandle::new(Arc::new(()), executor, DbLane::User);
@@ -728,15 +735,15 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn execution_timeout_does_not_block_the_async_runtime() {
         let mut config = test_config(1);
         config.interactive.execution_timeout = Duration::from_millis(20);
         let executor = DbExecutor::new(config);
         let handle = DbHandle::new(Arc::new(()), executor, DbLane::User);
 
-        let heartbeat = tokio::spawn(async {
-            tokio::time::sleep(Duration::from_millis(5)).await;
+        let heartbeat = crate::execution::spawn(async {
+            crate::execution::time::sleep(Duration::from_millis(5)).await;
             42
         });
         let error = handle
@@ -758,7 +765,7 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn bounded_queue_times_out_when_lane_cannot_drain() {
         let mut config = test_config(2);
         config.interactive.queue_capacity = 1;
@@ -770,7 +777,7 @@ mod tests {
 
         let blocker_release = release.clone();
         let blocker_handle = handle.clone();
-        let blocker = tokio::spawn(async move {
+        let blocker = crate::execution::spawn(async move {
             blocker_handle
                 .run(DbPriority::Interactive, move |_| {
                     let (lock, condvar) = &*blocker_release;
@@ -782,14 +789,13 @@ mod tests {
                 })
                 .await
         });
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        crate::execution::time::sleep(Duration::from_millis(10)).await;
 
         let queued_handle = handle.clone();
-        let queued =
-            tokio::spawn(
-                async move { queued_handle.run(DbPriority::Interactive, |_| Ok(())).await },
-            );
-        tokio::time::sleep(Duration::from_millis(5)).await;
+        let queued = crate::execution::spawn(async move {
+            queued_handle.run(DbPriority::Interactive, |_| Ok(())).await
+        });
+        crate::execution::time::sleep(Duration::from_millis(5)).await;
         let error = handle
             .run(DbPriority::Interactive, |_| Ok(()))
             .await
@@ -814,7 +820,7 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn lane_limits_serialize_one_store_and_parallelize_distinct_lanes() {
         let mut config = test_config(4);
         config.lane_limits.insert(DbLane::CatalogRead, 2);
@@ -833,7 +839,7 @@ mod tests {
                     let handle = handle.clone();
                     let active = active.clone();
                     let peak = peak.clone();
-                    tasks.push(tokio::spawn(async move {
+                    tasks.push(crate::execution::spawn(async move {
                         handle
                             .run(DbPriority::Interactive, move |_| {
                                 let now = active.fetch_add(1, Ordering::SeqCst) + 1;
@@ -858,7 +864,7 @@ mod tests {
         assert_eq!(peak.load(Ordering::SeqCst), 2);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn critical_work_overtakes_queued_background_work() {
         let executor = DbExecutor::new(test_config(1));
         let handle = DbHandle::new(Arc::new(()), executor, DbLane::User);
@@ -867,7 +873,7 @@ mod tests {
 
         let blocker_release = release.clone();
         let blocker_handle = handle.clone();
-        let blocker = tokio::spawn(async move {
+        let blocker = crate::execution::spawn(async move {
             blocker_handle
                 .run(DbPriority::Critical, move |_| {
                     let (lock, condvar) = &*blocker_release;
@@ -880,11 +886,11 @@ mod tests {
                 .await
                 .unwrap();
         });
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        crate::execution::time::sleep(Duration::from_millis(10)).await;
 
         let background_order = order.clone();
         let background_handle = handle.clone();
-        let background = tokio::spawn(async move {
+        let background = crate::execution::spawn(async move {
             background_handle
                 .run(DbPriority::Background, move |_| {
                     background_order.lock().unwrap().push("background");
@@ -895,7 +901,7 @@ mod tests {
         });
         let critical_order = order.clone();
         let critical_handle = handle.clone();
-        let critical = tokio::spawn(async move {
+        let critical = crate::execution::spawn(async move {
             critical_handle
                 .run(DbPriority::Critical, move |_| {
                     critical_order.lock().unwrap().push("critical");
@@ -904,7 +910,7 @@ mod tests {
                 .await
                 .unwrap();
         });
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        crate::execution::time::sleep(Duration::from_millis(10)).await;
 
         let (lock, condvar) = &*release;
         *lock.lock().unwrap() = true;
@@ -915,7 +921,7 @@ mod tests {
         assert_eq!(*order.lock().unwrap(), ["critical", "background"]);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn weighted_schedule_runs_background_under_critical_load() {
         let mut config = test_config(1);
         config.critical.queue_capacity = 32;
@@ -927,7 +933,7 @@ mod tests {
 
         let blocker_release = release.clone();
         let blocker_handle = handle.clone();
-        let blocker = tokio::spawn(async move {
+        let blocker = crate::execution::spawn(async move {
             blocker_handle
                 .run(DbPriority::Critical, move |_| {
                     let (lock, condvar) = &*blocker_release;
@@ -940,13 +946,13 @@ mod tests {
                 .await
                 .unwrap();
         });
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        crate::execution::time::sleep(Duration::from_millis(10)).await;
 
         let mut tasks = Vec::new();
         for index in 0..16 {
             let handle = handle.clone();
             let order = order.clone();
-            tasks.push(tokio::spawn(async move {
+            tasks.push(crate::execution::spawn(async move {
                 handle
                     .run(DbPriority::Critical, move |_| {
                         order.lock().unwrap().push(format!("critical-{index}"));
@@ -958,7 +964,7 @@ mod tests {
         }
         let background_handle = handle.clone();
         let background_order = order.clone();
-        tasks.push(tokio::spawn(async move {
+        tasks.push(crate::execution::spawn(async move {
             background_handle
                 .run(DbPriority::Background, move |_| {
                     background_order
@@ -970,7 +976,7 @@ mod tests {
                 .await
                 .unwrap();
         }));
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        crate::execution::time::sleep(Duration::from_millis(10)).await;
 
         let (lock, condvar) = &*release;
         *lock.lock().unwrap() = true;

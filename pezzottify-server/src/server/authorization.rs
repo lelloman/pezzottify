@@ -1,14 +1,14 @@
 //! Named authorization policies used at HTTP route boundaries.
 
-use simple_server::auth::Access;
-use simple_server::extract::Extract;
-use simple_server::web::{
+use crate::web::{
     body::Body,
     extract::Request,
     http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use simple_server::auth::Access;
+use simple_server::extract::Extract;
 use tracing::debug;
 
 use crate::user::Permission;

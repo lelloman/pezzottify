@@ -10,7 +10,7 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 type McpSocket =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn mcp_rejects_calls_after_session_logout() {
     let server = TestServer::spawn().await;
     let token = login_token(&server, ADMIN_USER, ADMIN_PASS, "mcp-revoked").await;
@@ -39,7 +39,7 @@ async fn mcp_rejects_calls_after_session_logout() {
     assert!(matches!(response, None | Some(Ok(Message::Close(_)))));
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn mcp_refreshes_permissions_on_an_existing_connection() {
     let server = TestServer::spawn().await;
     let token = login_token(&server, ADMIN_USER, ADMIN_PASS, "mcp-demoted").await;
@@ -126,7 +126,7 @@ async fn initialize(socket: &mut McpSocket) {
     assert_eq!(response["result"]["protocolVersion"], "2024-11-05");
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn mcp_requires_initialization_before_database_tools() {
     let server = TestServer::spawn().await;
     let token = login_token(&server, ADMIN_USER, ADMIN_PASS, "mcp-pre-init").await;
@@ -145,7 +145,7 @@ async fn mcp_requires_initialization_before_database_tools() {
     assert_eq!(response["error"]["code"], -32600);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn mcp_admin_database_tool_returns_catalog_and_user_stats() {
     let server = TestServer::spawn().await;
     let token = login_token(&server, ADMIN_USER, ADMIN_PASS, "mcp-admin-stats").await;
@@ -173,7 +173,7 @@ async fn mcp_admin_database_tool_returns_catalog_and_user_stats() {
     assert_eq!(stats["users"]["total_users"], 2);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn mcp_regular_user_can_search_but_cannot_query_server_stats() {
     let server = TestServer::spawn().await;
     let token = login_token(&server, TEST_USER, TEST_PASS, "mcp-regular").await;
@@ -206,7 +206,7 @@ async fn mcp_regular_user_can_search_but_cannot_query_server_stats() {
     assert_eq!(denied["error"]["code"], -32601);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn mcp_control_frames_and_invalid_messages_preserve_connection() {
     let server = TestServer::spawn().await;
     let token = login_token(&server, ADMIN_USER, ADMIN_PASS, "mcp-protocol-contract").await;

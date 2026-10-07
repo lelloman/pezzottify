@@ -5,7 +5,7 @@ use common::{TestClient, TestServer, TRACK_1_ID};
 use reqwest::StatusCode;
 use serde_json::{json, Value};
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn embedding_crud_search_and_query_contracts() {
     let server = TestServer::spawn().await;
     let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -74,7 +74,7 @@ async fn embedding_crud_search_and_query_contracts() {
     assert_eq!(error["request_id"], request_id);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn embedding_routes_preserve_auth_permissions_and_csrf() {
     let server = TestServer::spawn().await;
     let user = TestClient::authenticated(server.base_url.clone()).await;
@@ -103,7 +103,7 @@ async fn embedding_routes_preserve_auth_permissions_and_csrf() {
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn embedding_routes_preserve_extractor_and_application_rejections() {
     let server = TestServer::spawn().await;
     let admin = TestClient::authenticated_admin(server.base_url.clone()).await;

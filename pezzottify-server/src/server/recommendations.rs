@@ -3,15 +3,15 @@
 use simple_server::extract::Extract;
 use std::collections::{HashMap, HashSet};
 
-use rand::Rng;
-use serde::{Deserialize, Serialize};
-use simple_server::web::{
+use crate::web::{
     extract::{Path, Query, State},
     http::{header, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
+use rand::Rng;
+use serde::{Deserialize, Serialize};
 use tracing::error;
 
 use crate::catalog_store::{CatalogStore, ResolvedTrack, TrackAvailability};

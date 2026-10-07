@@ -5,19 +5,19 @@
 #![allow(dead_code)]
 
 use crate::server::metrics::{record_rate_limit_hit, request_route_label};
-use serde::Deserialize;
-use sha2::{Digest, Sha256};
-use simple_server::extract::Extract;
-use simple_server::rate_limit::{
-    Admission, AsyncPolicy, KeyedLimiter, Policy, Quota, RateLimitLayer, StoreConfig,
-};
-use simple_server::web::http::{request::Parts, Extensions, HeaderMap};
-use simple_server::web::{
+use crate::web::http::{request::Parts, Extensions, HeaderMap};
+use crate::web::{
     body::{to_bytes, Body},
     extract::{ConnectInfo, Request},
     http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
+};
+use serde::Deserialize;
+use sha2::{Digest, Sha256};
+use simple_server::extract::Extract;
+use simple_server::rate_limit::{
+    Admission, AsyncPolicy, KeyedLimiter, Policy, Quota, RateLimitLayer, StoreConfig,
 };
 use std::net::{IpAddr, SocketAddr};
 use std::{hash::Hash, num::NonZeroU32, time::Duration};
@@ -329,7 +329,7 @@ pub async fn extract_user_id_for_rate_limit(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use simple_server::web::{http::Method, middleware, routing::post, Router};
+    use crate::web::{http::Method, middleware, routing::post, Router};
     use std::{
         net::{IpAddr, Ipv4Addr},
         sync::Arc,
@@ -337,7 +337,7 @@ mod tests {
     use tower::ServiceExt;
 
     fn create_test_request() -> Request<Body> {
-        Request::builder()
+        crate::web::http::Request::builder()
             .method(Method::GET)
             .uri("/test")
             .body(Body::empty())
@@ -472,7 +472,7 @@ mod tests {
         assert!(!format!("{:?}", first.0).contains("alice"));
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_ip_limiter_cannot_be_bypassed_by_reconnecting_from_another_port() {
         let config = Arc::new(RouteRateLimit::new(
             std::time::Duration::from_secs(60),
@@ -500,7 +500,7 @@ mod tests {
         assert_eq!(app.oneshot(reconnect).await.unwrap().status(), 429);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_account_limiter_applies_across_different_peer_ips() {
         let config = Arc::new(RouteRateLimit::new(
             std::time::Duration::from_secs(60),
@@ -530,11 +530,9 @@ mod tests {
         assert_eq!(app.oneshot(other_ip).await.unwrap().status(), 429);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_account_extraction_restores_body_for_login_handler() {
-        async fn handler(
-            simple_server::web::Json(body): simple_server::web::Json<LoginAccountBody>,
-        ) -> String {
+        async fn handler(crate::web::Json(body): crate::web::Json<LoginAccountBody>) -> String {
             body.user_handle
         }
 
@@ -552,7 +550,7 @@ mod tests {
         assert_eq!(body, "alice");
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_account_extraction_rejects_oversized_login_body() {
         let app = Router::new()
             .route("/login", post(|| async { StatusCode::OK }))
@@ -728,10 +726,10 @@ mod tests {
 #[cfg(test)]
 mod wire_contract {
     use super::*;
-    use simple_server::web::{routing::post, Router};
+    use crate::web::{routing::post, Router};
     use std::sync::Arc;
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn real_http_default_wire_response_and_public_route() {
         let config = Arc::new(RouteRateLimit::new(
             std::time::Duration::from_secs(60),
@@ -742,18 +740,21 @@ mod wire_contract {
             .route("/limited", post(|body: String| async move { body }))
             .layer(config.layer())
             .route("/public", post(|| async { "public" }));
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let listener = crate::web::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        let task = tokio::spawn(async move {
-            simple_server::web::serve_with_connect_info(
+        let task = crate::execution::spawn(async move {
+            crate::web::serve_with_connect_info(
                 listener,
                 app,
-                simple_server::lifecycle::Shutdown::new(),
+                simple_server::engine_lifecycle::Shutdown::new(),
             )
             .await
             .unwrap()
         });
-        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        let client = simple_server::client::Client::builder()
+            .no_proxy()
+            .build()
+            .unwrap();
         let url = format!("http://{addr}/limited");
         let ok = client
             .post(&url)
@@ -789,7 +790,7 @@ mod wire_contract {
         let _ = task.await;
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn missing_identity_retains_500_text_response() {
         use tower::ServiceExt;
         let config = Arc::new(RouteRateLimit::new(
@@ -802,7 +803,7 @@ mod wire_contract {
             .layer(config.layer());
         let response = app
             .oneshot(
-                Request::builder()
+                crate::web::http::Request::builder()
                     .method("POST")
                     .uri("/limited")
                     .body(Body::empty())

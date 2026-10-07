@@ -3,6 +3,8 @@
 
 set -e
 
+bash "$(dirname "$0")/pezzottify-server/scripts/prepare-docker"
+
 # Detect git hash (short)
 export GIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 

@@ -3,7 +3,7 @@ use common::{TestClient, TestServer, ALBUM_1_ID, TRACK_1_ID};
 use reqwest::StatusCode;
 use serde_json::Value;
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn lyrics_routes_require_auth_csrf_and_available_catalog_items() {
     let server = TestServer::builder().with_download_manager().spawn().await;
     let user = TestClient::authenticated(server.base_url.clone()).await;
@@ -63,7 +63,7 @@ async fn lyrics_routes_require_auth_csrf_and_available_catalog_items() {
     }
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn lyrics_track_and_album_downloads_accept_and_reuse_stored_results() {
     use pezzottify_server::{catalog_store::CatalogStore, lyrics::TrackLyrics};
     let server = TestServer::builder().with_available_catalog().spawn().await;

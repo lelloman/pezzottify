@@ -597,8 +597,8 @@ mod tests {
     };
     use crate::server_store::SqliteServerStore;
     use crate::user::{SqliteUserStore, UserManager};
+    use simple_server::primitives::CancellationToken;
     use std::sync::Arc;
-    use tokio_util::sync::CancellationToken;
 
     #[test]
     fn median_and_q25_are_computed_per_dimension() {

@@ -2,14 +2,14 @@
 //!
 //! Handles WebSocket connections for MCP protocol.
 
-use simple_server::web::ws::{Message, WebSocket, WebSocketUpgrade};
+use crate::web::ws::{Message, WebSocket, WebSocketUpgrade};
 use std::sync::Arc;
 
-use futures::{SinkExt, StreamExt};
-use simple_server::web::{
+use crate::web::{
     extract::State,
     response::{IntoResponse, Response},
 };
+use futures::{SinkExt, StreamExt};
 use tracing::{debug, error, info};
 
 use super::context::ToolContext;
@@ -47,7 +47,7 @@ pub async fn mcp_handler(
 
     let token = match server_state.runtime_tasks.tasks.token() {
         Ok(token) => token,
-        Err(_) => return simple_server::web::http::StatusCode::SERVICE_UNAVAILABLE.into_response(),
+        Err(_) => return crate::web::http::StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
     ws.on_upgrade(move |socket| async move {
         let _token = token;
@@ -71,7 +71,7 @@ async fn handle_mcp_socket(
     let mut initialized = false;
 
     loop {
-        let result = tokio::select! {
+        let result = crate::execution::select! {
             biased;
             _ = server_state.runtime_tasks.shutdown.requested() => {
                 let _ = ws_sink.send(Message::Close(None)).await;
@@ -323,7 +323,7 @@ async fn handle_tools_call(
     // Execute the tool
     let arguments = params.arguments.unwrap_or(serde_json::json!({}));
     let handler = tool.handler.clone();
-    let runtime = tokio::runtime::Handle::current();
+    let runtime = crate::execution::runtime::Handle::current();
     let result = server_state
         .database
         .mcp
@@ -401,7 +401,7 @@ async fn handle_resources_read(
     // Read the resource
     let handler = resource.handler.clone();
     let uri = params.uri;
-    let runtime = tokio::runtime::Handle::current();
+    let runtime = crate::execution::runtime::Handle::current();
     let contents = server_state
         .database
         .mcp

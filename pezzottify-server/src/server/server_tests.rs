@@ -13,11 +13,10 @@ mod tests {
     use crate::user::{
         UserAuthCredentialsStore, UserAuthTokenStore, UserBandwidthStore, UserStore,
     };
-    use simple_server::web::extract::ConnectInfo;
-    use simple_server::web::{body::Body, http::Request};
+    use crate::web::extract::ConnectInfo;
+    use crate::web::body::Body;
     use std::collections::HashMap;
     use std::sync::RwLock;
-    use tower::ServiceExt; // for `call`, `oneshot`, and `ready
 
     fn blocking_metric_has_labels(metric_name: &str, expected_labels: &[(&str, &str)]) -> bool {
         crate::server::metrics::init_metrics();
@@ -39,7 +38,7 @@ mod tests {
             })
     }
 
-    #[tokio::test(flavor = "current_thread")]
+    #[simple_server::test(host_runtime = true, flavor = "current_thread")]
     async fn password_work_runs_off_the_async_runtime_thread() {
         let runtime_thread = std::thread::current().id();
         let pool =
@@ -53,16 +52,16 @@ mod tests {
         assert_ne!(worker_thread, runtime_thread);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn password_work_rejects_when_its_bounded_queue_times_out() {
         let pool =
             PasswordWorkPool::with_limits(1, Duration::from_millis(20), Duration::from_secs(1));
         let gate = Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
-        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let (started_tx, started_rx) = crate::execution::sync::oneshot::channel();
 
         let first_pool = pool.clone();
         let first_gate = Arc::clone(&gate);
-        let first = tokio::spawn(async move {
+        let first = crate::execution::spawn(async move {
             first_pool
                 .run(move || {
                     started_tx
@@ -94,7 +93,7 @@ mod tests {
         first.await.unwrap().unwrap();
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn password_work_reports_panics_without_panicking_the_runtime() {
         let pool =
             PasswordWorkPool::with_limits(1, Duration::from_millis(100), Duration::from_secs(1));
@@ -111,7 +110,7 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn filesystem_work_reads_and_atomically_replaces_cache_files() {
         let temp = tempfile::tempdir().unwrap();
         let cache_path = temp.path().join("nested").join("cover.jpg");
@@ -419,7 +418,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn responds_forbidden_on_protected_routes() {
         let user_store: Arc<dyn FullUserStore> = Arc::new(InMemoryUserStore::default());
         let catalog_store: Arc<dyn CatalogStore> = Arc::new(NullCatalogStore);
@@ -461,7 +460,7 @@ mod tests {
 
         for route in protected_routes.into_iter() {
             println!("Trying route {}", route);
-            let mut request = Request::builder().uri(route).body(Body::empty()).unwrap();
+            let mut request = crate::web::http::Request::builder().uri(route).body(Body::empty()).unwrap();
             // Add ConnectInfo extension for rate limiting
             request.extensions_mut().insert(ConnectInfo(test_addr));
             let response = app.oneshot(request).await.unwrap();
@@ -469,7 +468,7 @@ mod tests {
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         }
 
-        let mut request = Request::builder()
+        let mut request = crate::web::http::Request::builder()
             .method("POST")
             .uri("/v1/auth/logout")
             .body(Body::empty())
@@ -479,7 +478,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
         // Test search route
-        let mut request = Request::builder()
+        let mut request = crate::web::http::Request::builder()
             .method("POST")
             .uri("/v1/content/search")
             .body(Body::empty())

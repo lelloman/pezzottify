@@ -1,6 +1,6 @@
 //! Route-level HTTP cache policy middleware.
 
-use simple_server::web::{
+use crate::web::{
     body::Body,
     extract::State,
     http::{
@@ -93,7 +93,7 @@ fn is_private_cacheable(method: &Method, response: &Response) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use simple_server::web::{
+    use crate::web::{
         body::Body,
         http::{
             header::{AUTHORIZATION, VARY},
@@ -138,11 +138,11 @@ mod tests {
             .layer(middleware::from_fn_with_state(60usize, http_cache))
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn successful_catalog_response_is_private_and_varies_by_credentials() {
         let response = cache_test_app()
             .oneshot(
-                Request::builder()
+                crate::web::http::Request::builder()
                     .uri("/ok")
                     .header("Cookie", "session=secret")
                     .header(AUTHORIZATION, "Bearer secret")
@@ -165,7 +165,7 @@ mod tests {
         assert!(vary.contains("Authorization"));
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn errors_streams_and_mutations_are_not_stored() {
         for (method, uri) in [
             (Method::GET, "/missing"),
@@ -174,7 +174,7 @@ mod tests {
         ] {
             let response = cache_test_app()
                 .oneshot(
-                    Request::builder()
+                    crate::web::http::Request::builder()
                         .method(method)
                         .uri(uri)
                         .body(Body::empty())
@@ -186,7 +186,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn api_default_does_not_override_an_explicit_route_policy() {
         let app = Router::new()
             .route(
@@ -215,7 +215,7 @@ mod tests {
         assert_eq!(sensitive.headers()[CACHE_CONTROL], "no-store");
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn api_safety_net_does_not_change_frontend_responses() {
         let app = Router::new()
             .route("/v1/error", get(|| async { StatusCode::UNAUTHORIZED }))
@@ -236,9 +236,9 @@ mod tests {
         assert!(!asset.headers().contains_key(CACHE_CONTROL));
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn cache_contract_covers_head_partial_sse_and_existing_repeated_headers() {
-        use simple_server::web::body::to_bytes;
+        use crate::web::body::to_bytes;
         for (method, status, content_type, range, explicit, cacheable) in [
             (Method::GET, 200, "application/json", false, false, true),
             (Method::HEAD, 200, "application/json", false, false, true),
@@ -254,7 +254,7 @@ mod tests {
             let app = Router::new()
                 .route(
                     "/v1/check",
-                    simple_server::web::routing::any(move || async move {
+                    crate::web::routing::any(move || async move {
                         let mut response = HttpResponse::builder()
                             .status(status)
                             .header(CONTENT_TYPE, content_type)
@@ -285,7 +285,7 @@ mod tests {
                 .layer(middleware::from_fn(http_api_no_store));
             let response = app
                 .oneshot(
-                    Request::builder()
+                    crate::web::http::Request::builder()
                         .method(method.clone())
                         .uri("/v1/check")
                         .body(Body::empty())
@@ -333,7 +333,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn outer_policy_covers_early_auth_errors_and_respects_api_path_boundary() {
         let app = Router::new()
             .route("/v1", get(|| async { "unreachable" }))

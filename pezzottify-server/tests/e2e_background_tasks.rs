@@ -151,7 +151,7 @@ async fn cancel(client: &TestClient, id: &str) -> reqwest::Response {
         .unwrap()
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn manual_payload_history_and_immediate_retrigger_round_trip() {
     let job = Arc::new(Probe::new("manual"));
     let (mut server, client) = spawn(&[job.clone()]).await;
@@ -184,7 +184,7 @@ async fn manual_payload_history_and_immediate_retrigger_round_trip() {
     server.drain_scheduler().await;
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn overlapping_http_triggers_execute_exactly_once() {
     let job = Arc::new(Probe::blocked("unique"));
     let (mut server, client) = spawn(&[job.clone()]).await;
@@ -198,7 +198,7 @@ async fn overlapping_http_triggers_execute_exactly_once() {
     server.drain_scheduler().await;
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn cancellation_finishes_history_and_releases_overlap_slot() {
     let job = Arc::new(Probe::blocked("cancel"));
     let (mut server, client) = spawn(&[job.clone()]).await;
@@ -219,7 +219,7 @@ async fn cancellation_finishes_history_and_releases_overlap_slot() {
     server.drain_scheduler().await;
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn global_and_class_capacity_and_queue_expiry_are_enforced() {
     let mut first = Probe::blocked("first");
     first.policy.resource_class = JobResourceClass::CpuBound;
@@ -255,7 +255,7 @@ async fn global_and_class_capacity_and_queue_expiry_are_enforced() {
     server.drain_scheduler().await;
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn global_limit_serializes_different_resource_classes() {
     let first = Arc::new(Probe::blocked("global_a"));
     let mut second = Probe::new("global_b");
@@ -288,7 +288,7 @@ async fn global_limit_serializes_different_resource_classes() {
     server.drain_scheduler().await;
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn runtime_expiry_keeps_blocking_work_owned_and_capacity_reserved() {
     let mut slow = Probe::blocked("overrun");
     slow.ignore_cancel = true;
@@ -320,7 +320,7 @@ async fn runtime_expiry_keeps_blocking_work_owned_and_capacity_reserved() {
     server.drain_scheduler().await;
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn errors_and_panics_are_persisted_without_stopping_scheduler() {
     let bad = Arc::new(Probe::new("bad"));
     let good = Arc::new(Probe::new("good"));
@@ -346,7 +346,7 @@ async fn errors_and_panics_are_persisted_without_stopping_scheduler() {
     server.drain_scheduler().await;
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn pause_scopes_compose_and_keep_existing_wire_format() {
     let mut a = Probe::new("cpu");
     a.policy.resource_class = JobResourceClass::CpuBound;
@@ -383,7 +383,7 @@ async fn pause_scopes_compose_and_keep_existing_wire_format() {
     server.drain_scheduler().await;
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn pause_cancel_respects_wait_for_completion_jobs() {
     let cancellable = Arc::new(Probe::blocked("cancellable"));
     let mut wait_job = Probe::blocked("wait");
@@ -405,7 +405,7 @@ async fn pause_cancel_respects_wait_for_completion_jobs() {
     server.drain_scheduler().await;
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn shutdown_waits_for_uncooperative_blocking_execution_and_history() {
     let mut job = Probe::blocked("drain");
     job.ignore_cancel = true;
@@ -429,7 +429,7 @@ async fn shutdown_waits_for_uncooperative_blocking_execution_and_history() {
     );
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn circuit_threshold_rejection_cooldown_and_successful_recovery() {
     let mut job = Probe::new("breaker");
     job.policy = JobExecutionPolicy::default().with_circuit_breaker(2, Duration::from_millis(400));
@@ -471,7 +471,7 @@ async fn circuit_threshold_rejection_cooldown_and_successful_recovery() {
     server.drain_scheduler().await;
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn restart_restores_pause_circuit_and_marks_abandoned_history_failed() {
     let mut bad = Probe::new("persistent_breaker");
     bad.policy = JobExecutionPolicy::default().with_circuit_breaker(1, Duration::from_secs(30));
@@ -508,7 +508,7 @@ async fn restart_restores_pause_circuit_and_marks_abandoned_history_failed() {
     second.drain_scheduler().await;
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn hooks_record_trigger_and_do_not_overlap_or_bypass_pause() {
     let mut job = Probe::blocked("hook");
     job.schedule = JobSchedule::Hook(HookEvent::OnCatalogChange);
@@ -536,7 +536,7 @@ async fn hooks_record_trigger_and_do_not_overlap_or_bypass_pause() {
     assert_eq!(job.count(), 2);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn interval_recurrence_wakes_on_completion_and_never_overlaps() {
     let mut job = Probe::blocked("interval");
     job.schedule = JobSchedule::Interval(Duration::from_millis(150));
@@ -566,7 +566,7 @@ async fn interval_recurrence_wakes_on_completion_and_never_overlaps() {
     server.drain_scheduler().await;
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn deferred_jittered_schedule_and_manual_reset_survive_restart() {
     let mut job = Probe::new("deferred");
     job.immediate = false;
@@ -621,7 +621,7 @@ async fn deferred_jittered_schedule_and_manual_reset_survive_restart() {
     second.drain_scheduler().await;
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn rejected_history_insert_never_executes_and_recovers_after_storage_repair() {
     let job = Arc::new(Probe::new("history_failure"));
     let (mut server, client) = spawn(&[job.clone()]).await;
@@ -643,7 +643,7 @@ async fn rejected_history_insert_never_executes_and_recovers_after_storage_repai
     server.drain_scheduler().await;
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn failed_pause_write_does_not_change_live_admission() {
     let job = Arc::new(Probe::new("pause_failure"));
     let (mut server, client) = spawn(&[job.clone()]).await;
@@ -673,7 +673,7 @@ async fn failed_pause_write_does_not_change_live_admission() {
     server.drain_scheduler().await;
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn cancelling_queued_job_never_calls_blocking_factory_or_trips_circuit() {
     let mut holding = Probe::blocked("holding");
     holding.policy.resource_class = JobResourceClass::CpuBound;
@@ -702,7 +702,7 @@ async fn cancelling_queued_job_never_calls_blocking_factory_or_trips_circuit() {
     server.drain_scheduler().await;
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn panic_and_runtime_timeout_each_trip_breaker_without_automatic_retry() {
     let mut panic_job = Probe::new("panic_breaker");
     panic_job.policy =
@@ -724,7 +724,7 @@ async fn panic_and_runtime_timeout_each_trip_breaker_without_automatic_retry() {
     server.drain_scheduler().await;
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn combined_startup_hook_and_deferred_interval_keep_trigger_provenance() {
     let mut job = Probe::new("combined");
     job.immediate = false;
@@ -748,7 +748,7 @@ async fn combined_startup_hook_and_deferred_interval_keep_trigger_provenance() {
     server.drain_scheduler().await;
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn old_due_schedule_runs_once_then_reschedules_without_replaying_backlog() {
     let mut first = TestServer::builder().with_scheduler().spawn().await;
     first.drain_scheduler().await;
@@ -785,7 +785,7 @@ async fn old_due_schedule_runs_once_then_reschedules_without_replaying_backlog()
     assert_eq!(job.count(), 1);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn authentication_and_unknown_pause_scopes_cannot_mutate_controls() {
     let job = Arc::new(Probe::new("protected"));
     let (mut server, client) = spawn(&[job.clone()]).await;
@@ -815,7 +815,7 @@ async fn authentication_and_unknown_pause_scopes_cannot_mutate_controls() {
     server.drain_scheduler().await;
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn lowered_circuit_threshold_accepts_old_closed_state_without_panicking() {
     let mut first = TestServer::builder().with_scheduler().spawn().await;
     first.drain_scheduler().await;

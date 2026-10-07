@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Materialize the pinned bindings and prebuilt engine in the Docker context.
+set -euo pipefail
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
+source scripts/engine-env
+stage="${pezzottify_component_dir}/../.engine-build"
+mkdir -p "$stage"
+staging="$(mktemp -d "$stage/prepare.XXXXXX")"
+trap 'rm -rf -- "$staging"' EXIT
+mkdir -p "$staging/source" "$staging/artifact"
+git -C "$pezzottify_source" archive "$pezzottify_revision" | tar -xf - -C "$staging/source"
+cp "$SIMPLE_SERVER_ENGINE_DIR/libsimple_server_engine.so" "$SIMPLE_SERVER_ENGINE_DIR/SOURCE_REVISION" "$SIMPLE_SERVER_ENGINE_DIR/SHA256SUMS" "$staging/artifact/"
+# Replace only generated inputs; never merge stale source files into an export.
+rm -rf -- "$stage/source" "$stage/artifact"
+mv "$staging/source" "$stage/source"
+mv "$staging/artifact" "$stage/artifact"

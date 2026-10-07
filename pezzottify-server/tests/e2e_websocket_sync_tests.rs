@@ -76,7 +76,7 @@ async fn wait_for_message(
     result.ok().flatten()
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_websocket_sync_broadcast_on_like() {
     let server = TestServer::spawn().await;
 
@@ -134,7 +134,7 @@ async fn test_websocket_sync_broadcast_on_like() {
     ws2.close(None).await.ok();
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_websocket_sync_broadcast_on_unlike() {
     let server = TestServer::spawn().await;
 
@@ -186,7 +186,7 @@ async fn test_websocket_sync_broadcast_on_unlike() {
     ws2.close(None).await.ok();
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_websocket_sync_broadcast_on_playlist_create() {
     let server = TestServer::spawn().await;
 
@@ -242,7 +242,7 @@ async fn test_websocket_sync_broadcast_on_playlist_create() {
     ws2.close(None).await.ok();
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_websocket_no_broadcast_to_source_device() {
     let server = TestServer::spawn().await;
 
@@ -276,7 +276,7 @@ async fn test_websocket_no_broadcast_to_source_device() {
 
 // ==================== WebSocket Connection Integration Tests ====================
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_websocket_connect_and_receive_connected_message() {
     let server = TestServer::spawn().await;
 
@@ -305,7 +305,7 @@ async fn test_websocket_connect_and_receive_connected_message() {
     ws.close(None).await.ok();
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_websocket_graceful_disconnect() {
     let server = TestServer::spawn().await;
 
@@ -335,7 +335,7 @@ async fn test_websocket_graceful_disconnect() {
     );
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_websocket_reconnect_after_disconnect() {
     let server = TestServer::spawn().await;
 
@@ -367,7 +367,7 @@ async fn test_websocket_reconnect_after_disconnect() {
     }
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_websocket_multiple_devices_connected() {
     let server = TestServer::spawn().await;
 
@@ -409,7 +409,7 @@ async fn test_websocket_multiple_devices_connected() {
     ws2.close(None).await.ok();
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_websocket_unauthenticated_connection_rejected() {
     let server = TestServer::spawn().await;
 
@@ -461,7 +461,7 @@ async fn connect_ws_with_auth_header(
     ws_stream
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_websocket_connect_with_authorization_header() {
     let server = TestServer::spawn().await;
 
@@ -493,7 +493,7 @@ async fn test_websocket_connect_with_authorization_header() {
     ws.close(None).await.ok();
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_websocket_control_frames_and_invalid_messages_preserve_connection() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());

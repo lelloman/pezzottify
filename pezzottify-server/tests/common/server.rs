@@ -11,11 +11,10 @@ use pezzottify_server::server::state::GuardedSearchVault;
 use pezzottify_server::server::{server::make_app, RequestsLoggingLevel, ServerConfig};
 use pezzottify_server::server_store::{ServerStore, SqliteServerStore};
 use pezzottify_server::user::{FullUserStore, SqliteUserStore, UserManager};
-use std::net::SocketAddr;
+use pezzottify_server::web::TcpListener;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
-use tokio::net::TcpListener;
 
 #[derive(Clone, Default)]
 pub struct TestServerBuilder {
@@ -194,8 +193,8 @@ pub struct TestServer {
     _temp_catalog_dir: TempDir,
     _temp_db_dir: TempDir,
     _shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
-    _scheduler_shutdown: Option<tokio_util::sync::CancellationToken>,
-    scheduler_join: Option<tokio::task::JoinHandle<()>>,
+    _scheduler_shutdown: Option<simple_server::primitives::CancellationToken>,
+    scheduler_join: Option<simple_server::runtime::JoinHandle<()>>,
     _scheduler_hook_sender:
         Option<tokio::sync::mpsc::Sender<pezzottify_server::background_jobs::HookEvent>>,
 }
@@ -336,7 +335,7 @@ impl TestServer {
 
         let (scheduler_handle, scheduler_shutdown, scheduler_hook_sender, scheduler_join) =
             if options.scheduler_enabled {
-                let scheduler_shutdown = tokio_util::sync::CancellationToken::new();
+                let scheduler_shutdown = simple_server::primitives::CancellationToken::new();
                 let (hook_sender, hook_receiver) = tokio::sync::mpsc::channel(16);
                 let context = pezzottify_server::background_jobs::JobContext::with_search_vault(
                     scheduler_shutdown.child_token(),
@@ -358,7 +357,7 @@ impl TestServer {
                 for job in options.scheduler_jobs {
                     scheduler.register_job(job).await;
                 }
-                let join = tokio::spawn(async move { scheduler.run().await });
+                let join = simple_server::runtime::spawn(async move { scheduler.run().await });
                 (
                     Some(handle),
                     Some(scheduler_shutdown),
@@ -386,10 +385,10 @@ impl TestServer {
         .expect("Failed to build app");
 
         // Spawn server in background task with graceful shutdown
-        tokio::spawn(async move {
-            let shutdown = simple_server::lifecycle::Shutdown::new();
+        simple_server::runtime::spawn(async move {
+            let shutdown = simple_server::engine_lifecycle::Shutdown::new();
             let signal = shutdown.clone();
-            let server = simple_server::web::serve_with_connect_info(listener, app, shutdown);
+            let server = pezzottify_server::web::serve_with_connect_info(listener, app, shutdown);
             let stop = async move {
                 shutdown_rx.await.ok();
                 signal.request();

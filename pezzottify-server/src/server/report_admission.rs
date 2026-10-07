@@ -1,8 +1,6 @@
 //! Shared admission for modern and legacy reports, before any body buffering.
 use super::{http_layers::requests_logging::is_report_path, session::Session, state::ServerState};
-use crate::{db_executor::DbPriority, server_store::reports::MAX_BODY_BYTES, user::Permission};
-use simple_server::extract::{FromRequestParts, IntoRejectionResponse};
-use simple_server::web::{
+use crate::web::{
     self,
     body::{to_bytes, Body},
     extract::{Request, State},
@@ -11,6 +9,8 @@ use simple_server::web::{
     response::{IntoResponse, Response},
     Json,
 };
+use crate::{db_executor::DbPriority, server_store::reports::MAX_BODY_BYTES, user::Permission};
+use simple_server::extract::{FromRequestParts, IntoRejectionResponse};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -59,9 +59,9 @@ impl Admission {
         let weak = Arc::downgrade(&state);
         let shutdown = state.server.runtime_tasks.shutdown.clone();
         state.server.runtime_tasks.tasks.spawn(async move {
-            let mut timer = tokio::time::interval(Duration::from_secs(60));
+            let mut timer = crate::execution::time::interval(Duration::from_secs(60));
             loop {
-                tokio::select! {
+                crate::execution::select! {
                     biased;
                     _ = shutdown.requested() => break,
                     _ = timer.tick() => {},
@@ -292,7 +292,7 @@ async fn read_body(
     max: usize,
     deadline: Duration,
 ) -> Result<web::body::Bytes, StatusCode> {
-    match tokio::time::timeout(deadline, to_bytes(body, max)).await {
+    match crate::execution::time::timeout(deadline, to_bytes(body, max)).await {
         Ok(Ok(bytes)) => Ok(bytes),
         Ok(Err(_)) => Err(StatusCode::PAYLOAD_TOO_LARGE),
         Err(_) => Err(StatusCode::BAD_REQUEST),
@@ -344,7 +344,7 @@ mod tests {
         reserve_slot(&mut c, 4096, true, now + Duration::from_secs(61)).unwrap();
         assert_eq!(c.users.len(), 1);
     }
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn report_body_size_is_incremental_and_reads_have_deadlines() {
         let bytes = web::body::Bytes::from_static(b"12345678");
         let stream = futures::stream::iter(vec![

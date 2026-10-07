@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use tokio::sync::{mpsc, RwLock};
+use crate::execution::sync::{mpsc, RwLock};
 
 use super::messages::ServerMessage;
 
@@ -239,7 +239,7 @@ impl ConnectionManager {
 mod tests {
     use super::*;
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn register_creates_valid_receiver() {
         let manager = ConnectionManager::new();
         let mut rx = manager.register(1, 100, "web".to_string()).await;
@@ -252,7 +252,7 @@ mod tests {
         assert_eq!(received.msg_type, "test");
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn unregister_removes_connection() {
         let manager = ConnectionManager::new();
         let _rx = manager.register(1, 100, "web".to_string()).await;
@@ -264,7 +264,7 @@ mod tests {
         assert!(!manager.is_device_connected(1, 100).await);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn send_to_device_delivers_message() {
         let manager = ConnectionManager::new();
         let mut rx = manager.register(1, 100, "web".to_string()).await;
@@ -277,7 +277,7 @@ mod tests {
         assert_eq!(received.payload["text"], "hello");
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn send_to_device_returns_not_connected_for_unknown() {
         let manager = ConnectionManager::new();
 
@@ -287,7 +287,7 @@ mod tests {
         assert_eq!(result, Err(SendError::NotConnected));
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn send_to_other_devices_excludes_source() {
         let manager = ConnectionManager::new();
         let mut rx1 = manager.register(1, 100, "web".to_string()).await;
@@ -306,7 +306,7 @@ mod tests {
         assert_eq!(received.msg_type, "sync");
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn send_to_other_devices_returns_failed() {
         let manager = ConnectionManager::new();
         let _rx1 = manager.register(1, 100, "web".to_string()).await;
@@ -322,7 +322,7 @@ mod tests {
         assert_eq!(failed, vec![200]);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn broadcast_to_user_sends_to_all() {
         let manager = ConnectionManager::new();
         let mut rx1 = manager.register(1, 100, "web".to_string()).await;
@@ -340,7 +340,7 @@ mod tests {
         assert_eq!(received2.msg_type, "notification");
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn get_connected_devices_returns_correct_list() {
         let manager = ConnectionManager::new();
         let _rx1 = manager.register(1, 100, "web".to_string()).await;
@@ -356,7 +356,7 @@ mod tests {
         assert_eq!(devices2, vec![300]);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn is_device_connected_returns_correct_boolean() {
         let manager = ConnectionManager::new();
         let _rx = manager.register(1, 100, "web".to_string()).await;
@@ -366,7 +366,7 @@ mod tests {
         assert!(!manager.is_device_connected(2, 100).await);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn drop_and_replace_replaces_old_connection() {
         let manager = ConnectionManager::new();
         let mut rx1 = manager.register(1, 100, "web".to_string()).await;
@@ -386,7 +386,7 @@ mod tests {
         assert_eq!(received.msg_type, "test");
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn connection_count_is_correct() {
         let manager = ConnectionManager::new();
 
@@ -402,7 +402,7 @@ mod tests {
         assert_eq!(manager.connection_count(1).await, 1);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn total_connections_counts_all_users() {
         let manager = ConnectionManager::new();
 
@@ -415,7 +415,7 @@ mod tests {
         assert_eq!(manager.total_connections().await, 3);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn unregister_cleans_up_empty_user_map() {
         let manager = ConnectionManager::new();
         let _rx = manager.register(1, 100, "web".to_string()).await;

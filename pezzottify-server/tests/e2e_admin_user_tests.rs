@@ -5,7 +5,7 @@ mod common;
 use common::{TestClient, TestServer};
 use reqwest::StatusCode;
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn admin_user_role_permission_and_password_lifecycle() {
     let server = TestServer::spawn().await;
     let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -182,7 +182,7 @@ async fn admin_user_role_permission_and_password_lifecycle() {
     assert_eq!(missing.status(), StatusCode::NOT_FOUND);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn admin_mutable_database_read_contracts_preserve_response_shapes() {
     let server = TestServer::spawn().await;
     let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -236,7 +236,7 @@ async fn admin_mutable_database_read_contracts_preserve_response_shapes() {
     assert!(playback.is_array());
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn admin_user_mutations_preserve_validation_and_ownership_guards() {
     let server = TestServer::spawn().await;
     let admin = TestClient::authenticated_admin(server.base_url.clone()).await;

@@ -3,7 +3,7 @@ use common::{TestClient, TestServer};
 use reqwest::StatusCode;
 use serde_json::{json, Value};
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn report_limits_legacy_parity_and_explicit_permissions() {
     let server = TestServer::spawn().await;
     let user = TestClient::authenticated(server.base_url.clone()).await;
@@ -183,7 +183,7 @@ async fn report_limits_legacy_parity_and_explicit_permissions() {
     );
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn reports_owner_api_and_legacy_submission() {
     let server = TestServer::spawn().await;
     let user = TestClient::authenticated(server.base_url.clone()).await;

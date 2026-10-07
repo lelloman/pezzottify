@@ -219,7 +219,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_tool_registry() {
         let mut registry = AgentToolRegistry::new();
         registry.register(EchoTool);
@@ -236,7 +236,7 @@ mod tests {
         assert_eq!(result, serde_json::json!({"echo": "hello"}));
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_tool_not_found() {
         let registry = AgentToolRegistry::new();
         let ctx = ToolContext::new();

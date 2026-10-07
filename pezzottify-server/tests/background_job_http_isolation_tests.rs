@@ -55,7 +55,7 @@ impl BackgroundJob for SyntheticCpuJob {
     }
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn user_facing_http_stays_responsive_during_cpu_bound_job() {
     let started = Arc::new(AtomicBool::new(false));
     let server = TestServer::builder()

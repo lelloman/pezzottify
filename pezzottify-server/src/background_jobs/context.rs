@@ -5,8 +5,8 @@ use crate::enrichment_store::EnrichmentStore;
 use crate::search::SearchVault;
 use crate::server_store::ServerStore;
 use crate::user::{FullUserStore, UserManager};
+use simple_server::primitives::CancellationToken;
 use std::sync::Arc;
-use tokio_util::sync::CancellationToken;
 
 /// Type alias for thread-safe UserManager access.
 pub type GuardedUserManager = Arc<UserManager>;

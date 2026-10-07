@@ -1,9 +1,9 @@
-use serde::Serialize;
-use simple_server::extract::{IntoRejectionResponse, RejectionResponse};
-use simple_server::web::{
+use crate::web::{
     http::{header::HeaderName, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
+use serde::Serialize;
+use simple_server::extract::{IntoRejectionResponse, RejectionResponse};
 use tracing::error;
 
 use crate::{catalog_store::CatalogMutationError, db_executor::DbRunError, user::UserServiceError};
@@ -208,7 +208,7 @@ impl IntoRejectionResponse for ApiError {
         if let Some(retry_after) = self.retry_after {
             response
                 .headers_mut()
-                .insert(simple_server::web::http::header::RETRY_AFTER, retry_after);
+                .insert(crate::web::http::header::RETRY_AFTER, retry_after);
         }
         response
     }
@@ -224,7 +224,7 @@ impl IntoResponse for ApiError {
 mod tests {
     use super::*;
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn image_read_overload_is_a_retryable_filesystem_error() {
         for failure in [
             BlockingWorkError::QueueFull,
@@ -234,7 +234,7 @@ mod tests {
             let response = ApiError::from(FilesystemWorkError(failure)).into_response();
             assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
             assert_eq!(response.headers()[http::header::RETRY_AFTER], "1");
-            let bytes = simple_server::web::body::to_bytes(response.into_body(), 4096)
+            let bytes = crate::web::body::to_bytes(response.into_body(), 4096)
                 .await
                 .unwrap();
             let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
@@ -242,7 +242,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn buffered_rejections_match_owned_json_renderer() {
         for error in [
             ApiError::from(DbRunError::QueueTimeout),
@@ -258,7 +258,7 @@ mod tests {
             // using the same request ID so headers and body bytes are comparable.
             let mut rendered = (
                 error.status,
-                simple_server::web::Json(ApiErrorBody {
+                crate::web::Json(ApiErrorBody {
                     code: error.code,
                     message: error.message.clone(),
                     request_id: error.request_id.clone(),
@@ -276,10 +276,10 @@ mod tests {
             let current = error.into_rejection_response().into_response();
             assert_eq!(current.status(), rendered.status());
             assert_eq!(current.headers(), rendered.headers());
-            let rendered = simple_server::web::body::to_bytes(rendered.into_body(), usize::MAX)
+            let rendered = crate::web::body::to_bytes(rendered.into_body(), usize::MAX)
                 .await
                 .unwrap();
-            let current = simple_server::web::body::to_bytes(current.into_body(), usize::MAX)
+            let current = crate::web::body::to_bytes(current.into_body(), usize::MAX)
                 .await
                 .unwrap();
             assert_eq!(current, rendered);
@@ -314,12 +314,12 @@ mod tests {
         let response = ApiError::user_database(DbRunError::QueueTimeout).into_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(
-            response.headers()[simple_server::web::http::header::RETRY_AFTER],
+            response.headers()[crate::web::http::header::RETRY_AFTER],
             RETRY_AFTER_SECONDS
         );
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn internal_errors_do_not_expose_their_source() {
         let response = ApiError::internal(
             "Test database operation failed",
@@ -330,7 +330,7 @@ mod tests {
             .to_str()
             .unwrap()
             .to_owned();
-        let body = simple_server::web::body::to_bytes(response.into_body(), usize::MAX)
+        let body = crate::web::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -341,7 +341,7 @@ mod tests {
         assert!(!body.to_string().contains("secret_column"));
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn executor_capacity_failures_have_a_stable_retryable_contract() {
         for error in [
             DbRunError::QueueTimeout,
@@ -351,12 +351,12 @@ mod tests {
             let response = ApiError::from(error).into_response();
             assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
             assert_eq!(
-                response.headers()[simple_server::web::http::header::RETRY_AFTER],
+                response.headers()[crate::web::http::header::RETRY_AFTER],
                 RETRY_AFTER_SECONDS
             );
             assert!(response.headers().contains_key(REQUEST_ID_HEADER));
 
-            let body = simple_server::web::body::to_bytes(response.into_body(), usize::MAX)
+            let body = crate::web::body::to_bytes(response.into_body(), usize::MAX)
                 .await
                 .unwrap();
             let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -368,17 +368,17 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn password_verification_capacity_is_retryable_without_exposing_details() {
         let response = ApiError::password_work_unavailable().into_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(
-            response.headers()[simple_server::web::http::header::RETRY_AFTER],
+            response.headers()[crate::web::http::header::RETRY_AFTER],
             RETRY_AFTER_SECONDS
         );
         assert!(response.headers().contains_key(REQUEST_ID_HEADER));
 
-        let body = simple_server::web::body::to_bytes(response.into_body(), usize::MAX)
+        let body = crate::web::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -389,7 +389,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn executor_internal_failures_remain_opaque() {
         let response = ApiError::from(DbRunError::Store(anyhow::anyhow!(
             "SQLITE_CONSTRAINT users.secret_column"
@@ -398,9 +398,9 @@ mod tests {
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
         assert!(!response
             .headers()
-            .contains_key(simple_server::web::http::header::RETRY_AFTER));
+            .contains_key(crate::web::http::header::RETRY_AFTER));
 
-        let body = simple_server::web::body::to_bytes(response.into_body(), usize::MAX)
+        let body = crate::web::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();

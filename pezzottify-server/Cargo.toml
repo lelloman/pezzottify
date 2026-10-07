@@ -15,7 +15,6 @@ mock = ["mockall"] # dev feature, enables mockall for trait mocking in tests
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tracing-log = "0.2"
 mime_guess = "2"
 anyhow = "1.0.75"
 base64 = "0.22"
@@ -27,7 +26,7 @@ libc = "0.2"
 ctrlc = "3.4"
 argon2 = "0.5.3"
 async-trait = "0.1.85"
-simple-server = { package = "lelloman-simple-server", version = "=0.1.3", features = ["static-files", "ws", "sse", "multipart", "lifecycle", "logging", "http-tracing", "body-limit", "response-headers", "tasks", "task-scheduling", "task-policies", "auth", "auth-cookies", "extract", "rate-limit", "database-sqlite", "database-migrations", "database-sqlite-schema"] }
+simple-server = { package = "lelloman-simple-server", path = "../../simple-server", default-features = false, features = ["engine-web", "engine-io", "engine-tracing", "engine-logging", "engine-tasks", "engine-scheduling", "runtime-primitives", "client", "process", "auth", "auth-cookies", "response-headers", "rate-limit", "database-sqlite", "database-migrations", "database-sqlite-schema"] }
 byte-unit = "5.1.6"
 chrono = "0.4.39"
 clap = { version = "4.4.11", features = ["derive"] }
@@ -54,17 +53,14 @@ tempfile = "3.17.1"
 thiserror = "1.0"
 time = "0.3.37"
 toml = "0.8"
-tokio = { version = "1.43.0", features = ["full"] }
-tokio-util = { version = "0.7.13", features = ["io", "rt"] }
 tracing = { version = "0.1.40", features = ["log"] }
-tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 unicode-segmentation = "1.12.0"
 urlencoding = "2.1"
 uuid = { version = "1.11", features = ["v4"] }
 walkdir = "2.5"
 zip = "2.2"
-reqwest = { version = "0.12", features = ["json", "stream", "blocking", "multipart"] }
-openidconnect = "4.0"
+openidconnect = { version = "4.0", default-features = false }
+url = "2.5"
 jsonwebtoken = "9"
 indicatif = "0.17"
 mockall = { version = "0.13", optional = true }
@@ -72,8 +68,11 @@ mockall = { version = "0.13", optional = true }
 # rustentia = "0.1"
 
 [dev-dependencies]
+tokio = { version = "1.43.0", features = ["full"] }
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+tracing-log = "0.2"
 tower = { version = "0.5.2", features = ["util"] }
-simple-server = { package = "lelloman-simple-server", version = "=0.1.3", features = ["test-harness"] }
+simple-server = { package = "lelloman-simple-server", path = "../../simple-server", default-features = false, features = ["engine-tokio"] }
 log = "0.4"
 reqwest = { version = "0.12", features = ["json", "cookies"] }
 tokio-tungstenite = { version = "0.26", features = ["native-tls"] }

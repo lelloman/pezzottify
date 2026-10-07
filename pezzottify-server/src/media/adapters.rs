@@ -1,5 +1,6 @@
 //! Initial adapters. Local paths are confined to this backend and staging leases.
 use super::{local, vault::*, LocalAudio, MediaStream};
+use crate::execution::io::AsyncWriteExt;
 use async_trait::async_trait;
 use futures::StreamExt;
 use std::{
@@ -7,7 +8,6 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use tokio::io::AsyncWriteExt;
 
 fn storage(error: impl std::fmt::Display) -> AdapterError {
     AdapterError::Storage(error.to_string())
@@ -97,7 +97,7 @@ impl VaultAdapter for FilesystemAdapter {
     async fn read(&self, request: ReadRequest) -> AdapterResult<AdapterRead> {
         let adapter = self.clone();
         let locator = request.locator;
-        let (file, path) = tokio::task::spawn_blocking(move || {
+        let (file, path) = crate::execution::task::spawn_blocking(move || {
             adapter.reachable_root()?;
             adapter.open_file(&locator).map_err(local_error)
         })
@@ -133,7 +133,7 @@ impl VaultAdapter for FilesystemAdapter {
     async fn publish(&self, locator: &str, mut stream: MediaStream) -> AdapterResult<()> {
         local::normalized_media_identifier(locator).map_err(storage)?;
         let adapter = self.clone();
-        tokio::task::spawn_blocking(move || {
+        crate::execution::task::spawn_blocking(move || {
             super::mutations::prepare_directory(&adapter.root, ".media/staging")
         })
         .await
@@ -149,7 +149,7 @@ impl VaultAdapter for FilesystemAdapter {
             }
         }
         let _cleanup = Cleanup(path.clone());
-        let mut file = tokio::fs::OpenOptions::new()
+        let mut file = crate::execution::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&path)
@@ -168,7 +168,7 @@ impl VaultAdapter for FilesystemAdapter {
         drop(file);
         let adapter = self.clone();
         let locator = locator.to_owned();
-        tokio::task::spawn_blocking(move || adapter.expose(&staging, &locator))
+        crate::execution::task::spawn_blocking(move || adapter.expose(&staging, &locator))
             .await
             .map_err(storage)?
             .map_err(storage)
@@ -176,7 +176,7 @@ impl VaultAdapter for FilesystemAdapter {
     async fn delete(&self, locator: &str) -> AdapterResult<()> {
         let adapter = self.clone();
         let locator = locator.to_owned();
-        tokio::task::spawn_blocking(move || adapter.remove_file(&locator))
+        crate::execution::task::spawn_blocking(move || adapter.remove_file(&locator))
             .await
             .map_err(storage)?
             .map_err(local_error)
@@ -184,7 +184,7 @@ impl VaultAdapter for FilesystemAdapter {
     async fn presence(&self, locator: &str) -> Presence {
         let adapter = self.clone();
         let locator = locator.to_owned();
-        match tokio::task::spawn_blocking(move || {
+        match crate::execution::task::spawn_blocking(move || {
             adapter.reachable_root()?;
             adapter.open_file(&locator).map_err(local_error)
         })
@@ -202,12 +202,12 @@ impl VaultAdapter for FilesystemAdapter {
 }
 
 pub struct HttpImageAdapter {
-    client: reqwest::Client,
+    client: simple_server::client::Client,
 }
 impl Default for HttpImageAdapter {
     fn default() -> Self {
         Self {
-            client: reqwest::Client::builder()
+            client: simple_server::client::Client::builder()
                 .timeout(std::time::Duration::from_secs(30))
                 .build()
                 .expect("image HTTP client"),
@@ -232,7 +232,7 @@ impl VaultAdapter for HttpImageAdapter {
             .send()
             .await
             .map_err(|e| AdapterError::Unreachable(e.to_string()))?;
-        if response.status() == reqwest::StatusCode::NOT_FOUND {
+        if response.status() == simple_server::client::StatusCode::NOT_FOUND {
             return Err(AdapterError::Missing);
         }
         if !response.status().is_success() {
@@ -280,15 +280,17 @@ impl VaultAdapter for ProxyAudioAdapter {
             .downloader
             .open_track_audio(&request.locator, request.priority)
             .await
-            .map_err(|error| match error.downcast_ref::<reqwest::Error>() {
-                Some(e) if e.status() == Some(reqwest::StatusCode::NOT_FOUND) => {
-                    AdapterError::Missing
-                }
-                Some(e) if e.is_connect() || e.is_timeout() => {
-                    AdapterError::Unreachable(error.to_string())
-                }
-                _ => storage(error),
-            })?;
+            .map_err(
+                |error| match error.downcast_ref::<simple_server::client::Error>() {
+                    Some(e) if e.status() == Some(simple_server::client::StatusCode::NOT_FOUND) => {
+                        AdapterError::Missing
+                    }
+                    Some(e) if e.is_connect() || e.is_timeout() => {
+                        AdapterError::Unreachable(error.to_string())
+                    }
+                    _ => storage(error),
+                },
+            )?;
         Ok(AdapterRead {
             metadata: ReadMetadata {
                 content_length: download.content_length,

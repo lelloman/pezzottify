@@ -635,7 +635,7 @@ async fn get_image(
     Path(id): Path<String>,
 ) -> Response {
     match media.read_image(&id).await {
-        Ok(image) => Response::builder()
+        Ok(image) => crate::web::http::Response::builder()
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, image.content_type)
             .body(image.bytes.into())

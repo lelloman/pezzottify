@@ -167,19 +167,19 @@ async fn shutdown(signal: Option<i32>) {
             .is_err());
     }
 }
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn sigterm_drains_both_listeners_and_websockets() {
     shutdown(Some(libc::SIGTERM)).await;
 }
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn sigint_drains_both_listeners_and_websockets() {
     shutdown(Some(libc::SIGINT)).await;
 }
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn admin_reboot_uses_graceful_shutdown() {
     shutdown(None).await;
 }
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn occupied_listener_fails_without_panicking() {
     for metrics_occupied in [false, true] {
         let occupied = TcpListener::bind("0.0.0.0:0").unwrap();
@@ -197,7 +197,7 @@ async fn occupied_listener_fails_without_panicking() {
     }
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn production_restart_restores_persisted_pause_before_manual_admission() {
     let (port, metrics_port) = ports();
     let mut server = Process::start(port, metrics_port);

@@ -478,7 +478,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn grounded_metadata_one_missing_fact_per_call_and_bad_evidence_retries() {
         let job = MetadataEnrichmentJob::from_settings(
             &MetadataEnrichmentJobSettings::default(),

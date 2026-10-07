@@ -5,14 +5,14 @@ use super::super::state::ServerState;
 use crate::server::metrics::{
     categorize_endpoint, record_bandwidth, record_http_request, request_route_label,
 };
-use chrono::Datelike;
-use serde_json::Value;
-use simple_server::web::extract::State;
-use simple_server::web::{
+use crate::web::extract::State;
+use crate::web::{
     body::Body,
     http::{header::HeaderMap, Request, Response},
     middleware::Next,
 };
+use chrono::Datelike;
+use serde_json::Value;
 use std::time::Instant;
 use tracing::{debug, error, info};
 
@@ -226,17 +226,17 @@ where
     if *level == RequestsLoggingLevel::None {
         next(request).await
     } else {
-        simple_server::web::tracing::trace_with_observer(request, RequestObserver, next).await
+        crate::web::tracing::trace_with_observer(request, RequestObserver, next).await
     }
 }
 
 // Preserve immediate INFO response visibility, including long-lived streams.
 struct RequestObserver;
-impl simple_server::web::tracing::Observer for RequestObserver {
+impl crate::web::tracing::Observer for RequestObserver {
     fn on_response(
         &mut self,
         span: &tracing::Span,
-        response: &simple_server::web::tracing::ResponseInfo<'_>,
+        response: &crate::web::tracing::ResponseInfo<'_>,
         latency: std::time::Duration,
     ) {
         info!(target: "simple_server::http_tracing", parent: span,
@@ -247,12 +247,12 @@ impl simple_server::web::tracing::Observer for RequestObserver {
     fn on_finish(
         &mut self,
         span: &tracing::Span,
-        outcome: simple_server::web::tracing::Outcome,
-        phase: simple_server::web::tracing::Phase,
+        outcome: crate::web::tracing::Outcome,
+        phase: crate::web::tracing::Phase,
         duration: std::time::Duration,
     ) {
-        simple_server::web::tracing::Observer::on_finish(
-            &mut simple_server::web::tracing::TracingObserver,
+        crate::web::tracing::Observer::on_finish(
+            &mut crate::web::tracing::TracingObserver,
             span,
             outcome,
             phase,
@@ -294,15 +294,13 @@ async fn log_request_details(
             ContentLengthParseResult::Ok(size) => {
                 if size < MAX_LOGGABLE_BODY_LENGTH {
                     let (parts, body) = request.into_parts();
-                    let bytes = match simple_server::web::body::to_bytes(body, size).await {
+                    let bytes = match crate::web::body::to_bytes(body, size).await {
                         Ok(bytes) => bytes,
                         Err(err) => {
                             error!("Failed to read request body: {:?}", err);
-                            return Response::builder()
+                            return crate::web::http::Response::builder()
                                 .status(500)
-                                .body(simple_server::web::body::Body::from(
-                                    "Internal Server Error",
-                                ))
+                                .body(crate::web::body::Body::from("Internal Server Error"))
                                 .unwrap();
                         }
                     };
@@ -338,15 +336,13 @@ async fn log_request_details(
             ContentLengthParseResult::Ok(size) => {
                 if size < MAX_LOGGABLE_BODY_LENGTH {
                     let (parts, body) = response.into_parts();
-                    let bytes = match simple_server::web::body::to_bytes(body, size).await {
+                    let bytes = match crate::web::body::to_bytes(body, size).await {
                         Ok(bytes) => bytes,
                         Err(err) => {
                             error!("Failed to read response body: {:?}", err);
-                            return Response::builder()
+                            return crate::web::http::Response::builder()
                                 .status(500)
-                                .body(simple_server::web::body::Body::from(
-                                    "Internal Server Error",
-                                ))
+                                .body(crate::web::body::Body::from("Internal Server Error"))
                                 .unwrap();
                         }
                     };
@@ -409,7 +405,7 @@ mod tests {
         format_loggable_body, format_safe_headers, is_authentication_path, with_request_trace,
         RequestsLoggingLevel, SAFE_REQUEST_HEADERS, SAFE_RESPONSE_HEADERS,
     };
-    use simple_server::web::http::{HeaderMap, HeaderValue};
+    use crate::web::http::{HeaderMap, HeaderValue};
 
     #[test]
     fn level_ordering() {
@@ -512,9 +508,9 @@ mod tests {
         assert!(!rendered.contains("sentinel-plain-secret"));
     }
 
-    #[tokio::test(flavor = "current_thread")]
+    #[simple_server::test(host_runtime = true, flavor = "current_thread")]
     async fn configured_modes_trace_safe_routes_and_preserve_response() {
-        use simple_server::web::{
+        use crate::web::{
             body::{to_bytes, Body},
             http::{Request, Response},
             middleware::{self, Next},
@@ -561,7 +557,7 @@ mod tests {
                     .route(
                         "/probe/{id}",
                         get(|| async {
-                            Response::builder()
+                            crate::web::http::Response::builder()
                                 .status(201)
                                 .header("x-preserved", "yes")
                                 .body(Body::from("unchanged"))
@@ -579,7 +575,7 @@ mod tests {
                     ));
                 let response = app
                     .oneshot(
-                        Request::builder()
+                        crate::web::http::Request::builder()
                             .uri("/probe/private-id?token=secret")
                             .body(Body::empty())
                             .unwrap(),

@@ -15,12 +15,12 @@ pub use sender::{
 pub use vapid::VapidKeys;
 
 use crate::config::PushSettings;
+use crate::execution::sync::mpsc;
 use crate::server::websocket::connection::ConnectionManager;
 use crate::user::{FullUserStore, PushRegistration, UserEvent};
 use anyhow::Result;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc;
 
 /// Why a user's devices are woken. Ordered: a notification outranks a sync.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -68,10 +68,10 @@ impl PushService {
         connections: Option<Arc<ConnectionManager>>,
     ) -> Result<Arc<Self>> {
         let vapid = VapidKeys::load_or_generate(&settings.vapid_private_key_file)?;
-        let client = reqwest::Client::builder()
+        let client = simple_server::client::Client::builder()
             .timeout(Duration::from_secs(15))
             .connect_timeout(Duration::from_secs(10))
-            .redirect(reqwest::redirect::Policy::none())
+            .no_redirect()
             .build()?;
         let (requests, receiver) = mpsc::unbounded_channel();
         let delivery = Arc::new(dispatcher::Delivery {
@@ -81,7 +81,7 @@ impl PushService {
             subject: settings.vapid_subject.clone(),
             connections,
         });
-        tokio::spawn(dispatcher::run(receiver, delivery.clone()));
+        crate::execution::spawn(dispatcher::run(receiver, delivery.clone()));
         Ok(Arc::new(Self {
             settings,
             vapid,

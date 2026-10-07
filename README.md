@@ -174,8 +174,8 @@ existing `simple_server` imports. Cargo.lock pins the registry artifact and chec
 
 ```bash
 cd pezzottify-server
-cargo run --features fast -- --config ./config.toml
-cargo test
+bash scripts/run --features fast -- --config ./config.toml
+bash scripts/test
 ```
 
 Web:

@@ -601,7 +601,7 @@ mod tests {
     }
 
     fn create_parts_with_headers(headers: HeaderMap) -> Parts {
-        let request = simple_server::web::http::Request::builder()
+        let request = crate::web::http::Request::builder()
             .method(Method::GET)
             .uri("/")
             .body(())

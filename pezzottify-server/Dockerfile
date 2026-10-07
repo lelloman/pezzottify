@@ -23,7 +23,7 @@ RUN npm run build
 # ------------------------------------------
 # 2️⃣ Rust build stage
 # ------------------------------------------
-FROM rust:1.91.1 AS rust-builder
+FROM rust:1.96-trixie AS rust-builder
 
 # Give rustc worker threads more stack for optimized release compilation.
 ENV RUST_MIN_STACK=33554432
@@ -35,10 +35,17 @@ ARG COMMIT_COUNT=0
 
 WORKDIR /app
 
+# Prepared by scripts/prepare-docker; the consumer never builds the engine here.
+COPY .engine-build/source/ /simple-server/
+COPY .engine-build/artifact/ /engine/
+ENV SIMPLE_SERVER_ENGINE_DIR=/engine
 COPY pezzottify-server/ pezzottify-server/
 COPY VERSION VERSION
 
 WORKDIR /app/pezzottify-server
+
+RUN test "$(cat /engine/SOURCE_REVISION)" = "$(cat simple-server.rev)" \
+    && cd /engine && sha256sum -c SHA256SUMS
 
 # Build with version info from build args
 RUN GIT_HASH="$GIT_HASH" GIT_DIRTY="$GIT_DIRTY" COMMIT_COUNT="$COMMIT_COUNT" cargo build --release --locked
@@ -47,7 +54,7 @@ RUN GIT_HASH="$GIT_HASH" GIT_DIRTY="$GIT_DIRTY" COMMIT_COUNT="$COMMIT_COUNT" car
 # ------------------------------------------
 # 3️⃣ Runtime stage (slim)
 # ------------------------------------------
-FROM debian:stable-slim
+FROM debian:trixie-slim
 
 # Install runtime dependencies:
 # - libsqlite3-dev: SQLite dynamic loading
@@ -60,6 +67,8 @@ WORKDIR /app
 # Copy the binaries from the builder stage
 COPY --from=rust-builder /app/pezzottify-server/target/release/cli-auth /usr/local/bin/cli-auth
 COPY --from=rust-builder /app/pezzottify-server/target/release/pezzottify-server /usr/local/bin/pezzottify-server
+
+COPY --from=rust-builder /engine/libsimple_server_engine.so /usr/local/bin/lib/libsimple_server_engine.so.1
 
 # Copy the web frontend from the web builder stage
 COPY --from=web-builder /web/dist /app/web
@@ -80,7 +89,8 @@ CMD ["pezzottify-server", "--db-dir", "/data/db", "--media-path", "/data/media",
 # NOTE: Build context must be the repository root (not pezzottify-server/)
 # Build with (from repo root):
 #   ./build-docker.sh pezzottify-server
-# Direct build: docker build -f pezzottify-server/Dockerfile .
+# Direct build: bash pezzottify-server/scripts/prepare-docker
+#               docker build -f pezzottify-server/Dockerfile .
 # Or manually:
 #   GIT_HASH=$(git rev-parse --short HEAD) GIT_DIRTY=$(git status --porcelain | grep -q . && echo 1 || echo 0) \
 #   docker compose up --build pezzottify-server

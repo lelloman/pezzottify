@@ -1,5 +1,18 @@
 # Pezzottify Server
 
+The backend uses a prebuilt simple-server engine. Keep the pinned bindings in
+`../simple-server` beside this repository (run
+`bash pezzottify-server/scripts/checkout-engine-source` from the repository root
+for a fresh checkout). Rust 1.96 or newer is required. From `pezzottify-server`,
+`bash scripts/build`, `bash scripts/run`, and `bash scripts/test` verify the pin
+and reuse the native artifact. The first invocation builds it if none is supplied.
+Set `SIMPLE_SERVER_ENGINE_DIR` to a prebuilt directory containing
+`libsimple_server_engine.so`, `SOURCE_REVISION`, and `SHA256SUMS` to skip that build.
+See [native-engine setup and limitations](../docs/native-engine-migration.md).
+For raw Cargo commands, first `source scripts/engine-env` and export
+`LD_LIBRARY_PATH="$SIMPLE_SERVER_ENGINE_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"`.
+
+
 A high-performance Rust backend server for the Pezzottify music streaming platform. Handles music catalog management, user authentication, audio streaming, and search functionality.
 
 ## Table of Contents
@@ -205,7 +218,7 @@ in migrated handler groups, and reintroduction of unbounded catalog-event APIs.
 
 2. Build the project:
    ```bash
-   cargo build --release
+   bash scripts/build
    ```
 
 ## Media Directory Structure
@@ -230,7 +243,7 @@ The catalog metadata (artists, albums, tracks) is stored in the SQLite catalog d
 ### Standard Build
 
 ```bash
-cargo build --release
+bash scripts/build
 ```
 
 ### Development Builds with Features
@@ -294,19 +307,19 @@ cp config.example.toml config.toml
 
 # Edit config.toml to set your paths
 # Then run:
-cargo run --release -- --config ./config.toml
+bash scripts/run --release -- --config ./config.toml
 ```
 
 ### Using CLI Arguments
 
 ```bash
-cargo run --release -- --db-dir /path/to/db-dir --media-path /path/to/media
+bash scripts/run --release -- --db-dir /path/to/db-dir --media-path /path/to/media
 ```
 
 ### Example with CLI Arguments
 
 ```bash
-cargo run --release -- \
+bash scripts/run --release -- \
   --db-dir /path/to/db-dir \
   --media-path /path/to/media \
   --port 3001 \
@@ -317,7 +330,7 @@ cargo run --release -- \
 ### Development Example (Fast Build)
 
 ```bash
-cargo run --features fast -- \
+bash scripts/run --features fast -- \
   --db-dir ../../pezzottify-catalog \
   --media-path ../../pezzottify-catalog \
   --content-cache-age-sec 60 \
@@ -329,7 +342,7 @@ cargo run --features fast -- \
 To serve the web frontend from the server:
 
 ```bash
-cargo run --release -- \
+bash scripts/run --release -- \
   --db-dir /path/to/db-dir \
   --frontend-dir-path /path/to/web/dist
 ```
@@ -860,7 +873,7 @@ The `cli-auth` binary provides user and authentication management.
 ### Build and Run
 
 ```bash
-cargo build --release --bin cli-auth
+bash scripts/build --bin cli-auth
 
 # Using config file
 ./target/release/cli-auth --config /path/to/config.toml
@@ -933,7 +946,7 @@ exit
 
 ```bash
 # Start the CLI tool (using db-dir)
-cargo run --bin cli-auth -- --db-dir /path/to/db-dir
+bash scripts/run --bin cli-auth -- --db-dir /path/to/db-dir
 
 # Create a new admin user
 > add-user admin
@@ -955,13 +968,13 @@ cargo run --bin cli-auth -- --db-dir /path/to/db-dir
 ### Run All Tests
 
 ```bash
-cargo test
+bash scripts/test
 ```
 
 ### Run Specific Test
 
 ```bash
-cargo test <test_name>
+bash scripts/test <test_name>
 ```
 
 ### Test Coverage Areas
@@ -979,18 +992,18 @@ cargo test <test_name>
 1. **Use the `fast` feature** for quick rebuilds:
 
    ```bash
-   cargo run --features fast -- --db-dir /path/to/db
+   bash scripts/run --features fast -- --db-dir /path/to/db
    ```
 
 2. **Use shorter cache times** for frontend development:
 
    ```bash
-   cargo run -- --db-dir /path/to/db --content-cache-age-sec 60
+   bash scripts/run -- --db-dir /path/to/db --content-cache-age-sec 60
    ```
 
 3. **Use `slowdown` feature** to test loading states in frontend:
    ```bash
-   cargo run --features slowdown -- --db-dir /path/to/db
+   bash scripts/run --features slowdown -- --db-dir /path/to/db
    ```
 
 ### Debugging
@@ -998,7 +1011,7 @@ cargo test <test_name>
 Enable detailed logging:
 
 ```bash
-LOG_LEVEL=DEBUG cargo run -- --db-dir /path/to/db --logging-level body
+LOG_LEVEL=DEBUG bash scripts/run -- --db-dir /path/to/db --logging-level body
 ```
 
 Log levels:

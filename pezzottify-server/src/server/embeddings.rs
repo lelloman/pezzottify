@@ -1,12 +1,12 @@
 //! Generic embedding API routes.
 
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use simple_server::extract::Extract;
-use simple_server::web::{
+use crate::web::{
     routing::{get, post, put},
     IntoResponse, Json, Path, Query, Router, State, StatusCode,
 };
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use simple_server::extract::Extract;
 
 use crate::catalog_store::{EntityEmbedding, EntityEmbeddingSearchResult, EntityEmbeddingUpsert};
 

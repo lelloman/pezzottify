@@ -6,18 +6,18 @@ use crate::search::streaming::{SearchSection, StreamingSearchPipeline};
 use crate::search::{
     HashedItemType, RelevanceFilterConfig, ResolvedSearchResult, SearchResult, SearchVault,
 };
+use crate::web::sse::{Event, KeepAlive, Sse};
 use simple_server::extract::Extract;
-use simple_server::web::sse::{Event, KeepAlive, Sse};
 
-use futures::stream;
-use serde::{Deserialize, Serialize};
-use simple_server::web::{
+use crate::web::{
     extract::{Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post, put},
     Json, Router,
 };
+use futures::stream;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::convert::Infallible;
 use std::time::{Duration, Instant};
@@ -72,7 +72,7 @@ enum SearchResponse {
 }
 
 impl IntoResponse for SearchResponse {
-    fn into_response(self) -> simple_server::web::response::Response {
+    fn into_response(self) -> crate::web::response::Response {
         match self {
             SearchResponse::Raw(t) => t.into_response(),
             SearchResponse::Resolved(t) => t.into_response(),
@@ -384,7 +384,7 @@ async fn streaming_search(
     let desired_results = server_state.config.streaming_search.top_results_limit
         + server_state.config.streaming_search.other_results_limit;
     let max_results = desired_results + 50;
-    let (sender, receiver) = tokio::sync::mpsc::channel::<Result<Event, Infallible>>(32);
+    let (sender, receiver) = crate::execution::sync::mpsc::channel::<Result<Event, Infallible>>(32);
     let tasks = server_state.runtime_tasks.tasks.clone();
     tasks.spawn(async move {
         let started = Instant::now();

@@ -4,6 +4,8 @@ use super::vault::{ReadRequest, VaultAdapter};
 use crate::catalog_store::{CatalogStore, TrackAvailability};
 use crate::config::ProxyModeSettings;
 use crate::downloader::DownloadPriority;
+use crate::execution::io::AsyncWriteExt;
+use crate::execution::sync::{Notify, Semaphore};
 use anyhow::{Context, Result};
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
@@ -14,8 +16,6 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex, Weak};
 use std::task::{Context as TaskContext, Poll};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::io::AsyncWriteExt;
-use tokio::sync::{Notify, Semaphore};
 use tracing::{info, warn};
 
 const RESPONSE_CHUNK_SIZE: usize = 64 * 1024;
@@ -377,7 +377,7 @@ impl MemoryBudget {
                 notified.await;
             }
         };
-        tokio::time::timeout(timeout, reserve)
+        crate::execution::time::timeout(timeout, reserve)
             .await
             .context("proxy memory capacity timed out")
     }
@@ -489,7 +489,7 @@ impl TrackMaterializer {
 
         let materializer = self.clone();
         let task_track = track.clone();
-        tokio::spawn(async move {
+        crate::execution::spawn(async move {
             if let Err(error) = materializer
                 .download_and_publish(task_track.clone(), priority)
                 .await
@@ -538,7 +538,7 @@ impl TrackMaterializer {
             track.set_metadata_status(resolved.track.name, resolved.album.id, resolved.album.name);
         }
         track.set_phase(ProxyJobPhase::Connecting);
-        let mut download = tokio::time::timeout(
+        let mut download = crate::execution::time::timeout(
             timeout,
             self.downloader.read(ReadRequest {
                 locator: track.track_id.clone(),
@@ -579,7 +579,7 @@ impl TrackMaterializer {
         track.set_phase(ProxyJobPhase::Downloading);
         track.changed.notify_waiters();
 
-        while let Some(chunk) = tokio::time::timeout(timeout, download.stream.next())
+        while let Some(chunk) = crate::execution::time::timeout(timeout, download.stream.next())
             .await
             .context("downloader made no progress")?
         {
@@ -635,7 +635,7 @@ impl TrackMaterializer {
                 },
             )
             .await?;
-        let mut file = tokio::fs::OpenOptions::new()
+        let mut file = crate::execution::fs::OpenOptions::new()
             .write(true)
             .truncate(true)
             .open(stage.path())
@@ -696,7 +696,7 @@ mod tests {
     use super::*;
     use futures::StreamExt;
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn range_stream_releases_bytes_as_the_buffer_grows() {
         let track = Arc::new(InFlightTrack::new(
             "track".into(),
@@ -717,8 +717,8 @@ mod tests {
         );
 
         let producer = track.clone();
-        tokio::spawn(async move {
-            tokio::task::yield_now().await;
+        crate::execution::spawn(async move {
+            crate::execution::task::yield_now().await;
             let mut state = producer.state.lock().unwrap();
             state.bytes.extend_from_slice(b"def");
             state.complete = true;
@@ -735,7 +735,7 @@ mod tests {
         assert_eq!(track.status().active_streams, 0);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn range_stream_propagates_download_failure() {
         let track = Arc::new(InFlightTrack::new(
             "track".into(),
@@ -743,7 +743,7 @@ mod tests {
         ));
         let mut stream = track.clone().range_stream(0, 1);
         let producer = track.clone();
-        tokio::spawn(async move {
+        crate::execution::spawn(async move {
             producer.state.lock().unwrap().error = Some("source failed".into());
             producer.changed.notify_waiters();
         });

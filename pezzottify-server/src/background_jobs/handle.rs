@@ -2,12 +2,12 @@ use super::circuit_breaker::CircuitBreakerRegistry;
 use super::controls::JobPauseScope;
 use super::job::{BackgroundJob, JobError, JobExecutionPolicy, JobResourceClass, JobSchedule};
 use super::JobPauseState;
+use crate::execution::sync::{mpsc, oneshot, RwLock};
 use crate::server_store::{JobAuditEntry, JobRun, ServerStore};
 use anyhow::Result;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{mpsc, oneshot, RwLock};
 
 /// Information about a registered job for API responses.
 #[derive(Debug, Clone, Serialize)]

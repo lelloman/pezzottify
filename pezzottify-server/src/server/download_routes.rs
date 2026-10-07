@@ -5,15 +5,15 @@
 //! - User rate limit status
 //! - Admin queue management and audit logs
 
-use serde::{Deserialize, Serialize};
-use simple_server::extract::Extract;
-use simple_server::web::{
+use crate::web::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{delete, get, post},
     Json, Router,
 };
+use serde::{Deserialize, Serialize};
+use simple_server::extract::Extract;
 use tracing::{debug, warn};
 
 use crate::db_executor::{DbHandle, DbPriority, DbRunError};

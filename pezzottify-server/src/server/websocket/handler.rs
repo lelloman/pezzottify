@@ -2,16 +2,16 @@
 //!
 //! Handles WebSocket upgrade, message loop, and cleanup.
 
+use crate::web::ws::{Message, WebSocket, WebSocketUpgrade};
 use simple_server::extract::Extract;
-use simple_server::web::ws::{Message, WebSocket, WebSocketUpgrade};
 use std::sync::Arc;
 
-use futures::{SinkExt, StreamExt};
-use simple_server::web::{
+use crate::execution::sync::mpsc;
+use crate::web::{
     extract::State,
     response::{IntoResponse, Response},
 };
-use tokio::sync::mpsc;
+use futures::{SinkExt, StreamExt};
 use tracing::{debug, error, warn};
 
 use super::{
@@ -53,7 +53,7 @@ pub async fn ws_handler(
                 session.user_id
             );
             // Return a 400 Bad Request - can't use WS without device tracking
-            return Response::builder()
+            return crate::web::http::Response::builder()
                 .status(400)
                 .body("Device ID required for WebSocket connection".into())
                 .unwrap();
@@ -72,7 +72,7 @@ pub async fn ws_handler(
 
     let token = match runtime_tasks.tasks.token() {
         Ok(token) => token,
-        Err(_) => return simple_server::web::http::StatusCode::SERVICE_UNAVAILABLE.into_response(),
+        Err(_) => return crate::web::http::StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
     ws.on_upgrade(move |socket| async move {
         let _token = token;
@@ -95,7 +95,7 @@ async fn handle_socket(
     device_id: usize,
     device_type_str: String,
     state: Arc<WsState>,
-    shutdown: simple_server::lifecycle::Shutdown,
+    shutdown: simple_server::engine_lifecycle::Shutdown,
 ) {
     debug!(
         "WebSocket connected: user {} device {} ({})",
@@ -121,7 +121,7 @@ async fn handle_socket(
     );
 
     // Spawn task to forward outgoing messages to WebSocket
-    let outgoing_handle = tokio::spawn(forward_outgoing(
+    let outgoing_handle = crate::execution::spawn(forward_outgoing(
         ws_sink,
         outgoing_rx,
         raw_rx,
@@ -168,7 +168,7 @@ async fn forward_outgoing(
     mut outgoing_rx: mpsc::Receiver<ServerMessage>,
     mut raw_rx: mpsc::Receiver<Message>,
     initial_msg: ServerMessage,
-    shutdown: simple_server::lifecycle::Shutdown,
+    shutdown: simple_server::engine_lifecycle::Shutdown,
 ) {
     // Send initial connected message
     if let Ok(json) = serde_json::to_string(&initial_msg) {
@@ -179,7 +179,7 @@ async fn forward_outgoing(
 
     // Forward all subsequent messages
     loop {
-        tokio::select! {
+        crate::execution::select! {
             biased;
             _ = shutdown.requested() => {
                 let _ = ws_sink.send(Message::Close(None)).await;
@@ -214,10 +214,10 @@ async fn process_incoming(
     device_id: usize,
     state: &WsState,
     raw_tx: mpsc::Sender<Message>,
-    shutdown: simple_server::lifecycle::Shutdown,
+    shutdown: simple_server::engine_lifecycle::Shutdown,
 ) {
     loop {
-        let result = tokio::select! {
+        let result = crate::execution::select! {
             biased;
             _ = shutdown.requested() => break,
             result = ws_stream.next() => match result {

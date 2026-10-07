@@ -11,13 +11,16 @@ const JPEG: &[u8] = include_bytes!("../../tests/fixtures/test-image.jpg");
 async fn occupy_filesystem(
     pool: FilesystemWorkPool,
     workers: usize,
-) -> Vec<(std::sync::mpsc::Sender<()>, tokio::task::JoinHandle<()>)> {
+) -> Vec<(
+    std::sync::mpsc::Sender<()>,
+    crate::execution::task::JoinHandle<()>,
+)> {
     let mut held = Vec::new();
     for _ in 0..workers {
         let pool = pool.clone();
         let (release, wait) = std::sync::mpsc::channel();
-        let (started, ready) = tokio::sync::oneshot::channel();
-        let task = tokio::spawn(async move {
+        let (started, ready) = crate::execution::sync::oneshot::channel();
+        let task = crate::execution::spawn(async move {
             pool.run(move || {
                 let _ = started.send(());
                 let _ = wait.recv_timeout(std::time::Duration::from_secs(20));
@@ -31,7 +34,7 @@ async fn occupy_filesystem(
     held
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn image_burst_survives_cold_disk_and_competing_filesystem_work() {
     use std::time::{Duration, Instant};
 
@@ -73,15 +76,15 @@ async fn image_burst_survives_cold_disk_and_competing_filesystem_work() {
     let timeouts = crate::server::metrics::BLOCKING_WORK_OPERATIONS_TOTAL
         .with_label_values(&["image_read", "queue_timeout"])
         .get();
-    let release_disk = tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(7)).await;
+    let release_disk = crate::execution::spawn(async move {
+        crate::execution::time::sleep(Duration::from_secs(7)).await;
         for (release, task) in cold_disk {
             release.send(()).unwrap();
             task.await.unwrap();
         }
     });
     let started = Instant::now();
-    let mut burst = tokio::task::JoinSet::new();
+    let mut burst = crate::execution::task::JoinSet::new();
     for id in 0..64 {
         let manager = fixture.manager.clone();
         burst.spawn(async move { manager.read_image(&format!("image-{id}")).await });
@@ -139,14 +142,14 @@ impl Fixture {
 
 async fn upstream(
     bytes: &'static [u8],
-    status: simple_server::web::StatusCode,
+    status: crate::web::StatusCode,
     block_cache_path: Option<PathBuf>,
-) -> (String, Arc<AtomicUsize>, simple_server::testing::TestServer) {
+) -> (String, Arc<AtomicUsize>, crate::web::TestServer) {
     let calls = Arc::new(AtomicUsize::new(0));
     let count = calls.clone();
-    let app = simple_server::web::Router::new().route(
+    let app = crate::web::Router::new().route(
         "/image",
-        simple_server::web::routing::get(move || {
+        crate::web::routing::get(move || {
             let count = count.clone();
             let block_cache_path = block_cache_path.clone();
             async move {
@@ -159,16 +162,15 @@ async fn upstream(
             }
         }),
     );
-    let server = simple_server::testing::TestServer::tcp(app).await.unwrap();
+    let server = crate::web::TestServer::tcp(app).await.unwrap();
     let url = format!("{}/image", server.base_url().unwrap());
     (url, calls, server)
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn image_cache_miss_fetches_validates_and_persists_then_hits_locally() {
     let fixture = Fixture::new();
-    let (url, calls, upstream_server) =
-        upstream(JPEG, simple_server::web::StatusCode::OK, None).await;
+    let (url, calls, upstream_server) = upstream(JPEG, crate::web::StatusCode::OK, None).await;
     fixture.image_url(&url);
     for _ in 0..2 {
         let image = fixture.manager.read_image("album").await.unwrap();
@@ -191,11 +193,10 @@ async fn image_cache_miss_fetches_validates_and_persists_then_hits_locally() {
     drop(upstream_server);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn invalid_local_image_does_not_fall_back_to_origin() {
     let fixture = Fixture::new();
-    let (url, calls, upstream_server) =
-        upstream(JPEG, simple_server::web::StatusCode::OK, None).await;
+    let (url, calls, upstream_server) = upstream(JPEG, crate::web::StatusCode::OK, None).await;
     fixture.image_url(&url);
     std::fs::create_dir(fixture.root.path().join("images")).unwrap();
     std::fs::write(
@@ -211,14 +212,11 @@ async fn invalid_local_image_does_not_fall_back_to_origin() {
     drop(upstream_server);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn upstream_errors_and_invalid_images_are_not_cached() {
     for (bytes, status) in [
-        (
-            b"not an image".as_slice(),
-            simple_server::web::StatusCode::OK,
-        ),
-        (JPEG, simple_server::web::StatusCode::SERVICE_UNAVAILABLE),
+        (b"not an image".as_slice(), crate::web::StatusCode::OK),
+        (JPEG, crate::web::StatusCode::SERVICE_UNAVAILABLE),
     ] {
         let fixture = Fixture::new();
         let (url, _, upstream_server) = upstream(bytes, status, None).await;
@@ -232,12 +230,12 @@ async fn upstream_errors_and_invalid_images_are_not_cached() {
     }
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn image_persistence_failure_does_not_fail_valid_response() {
     let fixture = Fixture::new();
     let (url, _, upstream_server) = upstream(
         JPEG,
-        simple_server::web::StatusCode::OK,
+        crate::web::StatusCode::OK,
         Some(fixture.root.path().join(".media/images/album.json")),
     )
     .await;
@@ -249,7 +247,7 @@ async fn image_persistence_failure_does_not_fail_valid_response() {
     drop(upstream_server);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn missing_image_and_local_io_failure_remain_distinct() {
     let fixture = Fixture::new();
     assert!(matches!(
@@ -263,7 +261,7 @@ async fn missing_image_and_local_io_failure_remain_distinct() {
     ));
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn local_audio_ranges_are_bounded_and_missing_track_is_distinct() {
     let fixture = Fixture::new();
     assert!(fixture
@@ -312,17 +310,17 @@ fn blocking_audio_reader_keeps_validated_file_after_path_replacement() {
     assert!(fixture.manager.open_local_audio_blocking("track1").is_err());
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn progressive_readers_share_download_and_publication_and_release_on_drop() {
     let fixture = Fixture::new();
     std::fs::remove_file(fixture.root.path().join("audio/track.mp3")).unwrap();
     let calls = Arc::new(AtomicUsize::new(0));
-    let release = Arc::new(tokio::sync::Notify::new());
+    let release = Arc::new(crate::execution::sync::Notify::new());
     let count = calls.clone();
     let gate = release.clone();
-    let app = simple_server::web::Router::new().route(
+    let app = crate::web::Router::new().route(
         "/track/{id}/audio",
-        simple_server::web::routing::get(move || {
+        crate::web::routing::get(move || {
             let count = count.clone();
             let gate = gate.clone();
             async move {
@@ -333,16 +331,16 @@ async fn progressive_readers_share_download_and_publication_and_release_on_drop(
                             gate.notified().await;
                             Ok::<_, io::Error>(Bytes::from_static(b"def"))
                         }));
-                simple_server::web::Response::builder()
+                crate::web::http::Response::builder()
                     .header("content-length", "6")
                     .header("content-type", "audio/mpeg")
                     .header("X-Pezzottify-Audio-Extension", "mp3")
-                    .body(simple_server::web::Body::from_stream(stream))
+                    .body(crate::web::Body::from_stream(stream))
                     .unwrap()
             }
         }),
     );
-    let upstream_server = simple_server::testing::TestServer::tcp(app).await.unwrap();
+    let upstream_server = crate::web::TestServer::tcp(app).await.unwrap();
     let url = upstream_server.base_url().unwrap();
     let registry = DbRegistry::new();
     let search = Arc::new(
@@ -388,7 +386,7 @@ async fn progressive_readers_share_download_and_publication_and_release_on_drop(
         .open_remote_audio("track1", DownloadPriority::Foreground)
         .unwrap();
     assert_eq!(
-        tokio::time::timeout(std::time::Duration::from_secs(5), first.metadata())
+        crate::execution::time::timeout(std::time::Duration::from_secs(5), first.metadata())
             .await
             .unwrap()
             .unwrap()
@@ -412,7 +410,7 @@ async fn progressive_readers_share_download_and_publication_and_release_on_drop(
     );
     release.notify_one();
     assert_eq!(
-        tokio::time::timeout(std::time::Duration::from_secs(5), second.next())
+        crate::execution::time::timeout(std::time::Duration::from_secs(5), second.next())
             .await
             .unwrap()
             .unwrap()
@@ -422,7 +420,7 @@ async fn progressive_readers_share_download_and_publication_and_release_on_drop(
     assert!(second.next().await.is_none());
     drop(second);
 
-    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+    crate::execution::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
             if fixture
                 .manager
@@ -435,7 +433,7 @@ async fn progressive_readers_share_download_and_publication_and_release_on_drop(
             {
                 break;
             }
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            crate::execution::time::sleep(std::time::Duration::from_millis(10)).await;
         }
     })
     .await

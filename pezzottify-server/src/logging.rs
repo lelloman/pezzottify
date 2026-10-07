@@ -1,26 +1,24 @@
-//! Keep application logging policy while sharing subscriber installation.
-use simple_server::logging::{self, AnsiMode, LogOutput, LoggingOptions};
-use tracing_subscriber::EnvFilter;
-
-pub fn init(filter: EnvFilter) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let rendered = filter.to_string();
-    let mut options = LoggingOptions::new(if rendered.is_empty() {
-        "off"
-    } else {
-        &rendered
-    });
+//! Preserve the application's environment, output and ANSI policy in the engine.
+use simple_server::engine_logging::{self, AnsiMode, FilterMode, LogOutput, LoggingOptions};
+pub fn init_from_env(
+    variable: &str,
+    default_info: bool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut options = LoggingOptions::new(std::env::var(variable).unwrap_or_default());
     options.output = LogOutput::Stdout;
-    options.ansi = if std::env::var("NO_COLOR").is_ok_and(|value| !value.is_empty()) {
+    options.ansi = if std::env::var("NO_COLOR").is_ok_and(|v| !v.is_empty()) {
         AnsiMode::Never
     } else {
         AnsiMode::Always
     };
-    logging::try_init(options)?;
-    // SubscriberInitExt previously installed this bridge implicitly.
-    tracing_log::LogTracer::builder()
-        .with_max_level(tracing_log::AsLog::as_log(
-            &tracing::level_filters::LevelFilter::current(),
-        ))
-        .init()?;
+    engine_logging::try_init(
+        options,
+        if default_info {
+            FilterMode::LossyOrInfo
+        } else {
+            FilterMode::Lossy
+        },
+    )?;
+    engine_logging::init_log_bridge()?;
     Ok(())
 }

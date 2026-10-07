@@ -3,7 +3,7 @@ mod common;
 use common::{TestClient, TestServer};
 use reqwest::StatusCode;
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn actual_http_preserves_small_json_and_large_multipart_route_limits() {
     let server = TestServer::builder().with_ingestion().spawn().await;
     let admin = TestClient::authenticated_admin(server.base_url.clone()).await;

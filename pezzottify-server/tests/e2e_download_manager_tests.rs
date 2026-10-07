@@ -8,7 +8,7 @@ mod common;
 
 use common::{TestClient, TestServer, ALBUM_1_ID, ALBUM_1_TITLE, ARTIST_1_NAME};
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn requesting_fully_available_album_records_completed_keep_request() {
     let server = TestServer::builder()
         .with_download_manager()
@@ -27,7 +27,7 @@ async fn requesting_fully_available_album_records_completed_keep_request() {
     assert_eq!(requests[0]["status"], "COMPLETED");
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn external_attempt_status_contract() {
     let server = TestServer::builder().with_download_manager().spawn().await;
     let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -108,7 +108,7 @@ async fn external_attempt_status_contract() {
     );
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn enabled_manager_preserves_queue_limits_audit_and_delete_contracts() {
     let server = TestServer::builder().with_download_manager().spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -162,7 +162,7 @@ async fn enabled_manager_preserves_queue_limits_audit_and_delete_contracts() {
 // User Endpoint Authorization Tests
 // ============================================================================
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_limits_rejects_unauthenticated() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -172,7 +172,7 @@ async fn test_download_limits_rejects_unauthenticated() {
     assert_eq!(response.status(), 401);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_my_requests_rejects_unauthenticated() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -182,7 +182,7 @@ async fn test_download_my_requests_rejects_unauthenticated() {
     assert_eq!(response.status(), 401);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_request_album_rejects_unauthenticated() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -198,7 +198,7 @@ async fn test_download_request_album_rejects_unauthenticated() {
 // Admin Endpoint Authorization Tests
 // ============================================================================
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_stats_rejects_unauthenticated() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -208,7 +208,7 @@ async fn test_download_admin_stats_rejects_unauthenticated() {
     assert_eq!(response.status(), 401);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_stats_rejects_non_admin() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -217,7 +217,7 @@ async fn test_download_admin_stats_rejects_non_admin() {
     assert_eq!(response.status(), 403);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_failed_rejects_unauthenticated() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -227,7 +227,7 @@ async fn test_download_admin_failed_rejects_unauthenticated() {
     assert_eq!(response.status(), 401);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_failed_rejects_non_admin() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -236,7 +236,7 @@ async fn test_download_admin_failed_rejects_non_admin() {
     assert_eq!(response.status(), 403);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 #[ignore = "The legacy admin activity route is not implemented"]
 async fn test_download_admin_activity_rejects_unauthenticated() {
     let server = TestServer::spawn().await;
@@ -247,7 +247,7 @@ async fn test_download_admin_activity_rejects_unauthenticated() {
     assert_eq!(response.status(), 401);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 #[ignore = "The legacy admin activity route is not implemented"]
 async fn test_download_admin_activity_rejects_non_admin() {
     let server = TestServer::spawn().await;
@@ -257,7 +257,7 @@ async fn test_download_admin_activity_rejects_non_admin() {
     assert_eq!(response.status(), 403);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_requests_rejects_unauthenticated() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -267,7 +267,7 @@ async fn test_download_admin_requests_rejects_unauthenticated() {
     assert_eq!(response.status(), 401);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_requests_rejects_non_admin() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -276,7 +276,7 @@ async fn test_download_admin_requests_rejects_non_admin() {
     assert_eq!(response.status(), 403);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_retry_rejects_unauthenticated() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -286,7 +286,7 @@ async fn test_download_admin_retry_rejects_unauthenticated() {
     assert_eq!(response.status(), 401);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_retry_rejects_non_admin() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -295,7 +295,7 @@ async fn test_download_admin_retry_rejects_non_admin() {
     assert_eq!(response.status(), 403);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_audit_rejects_unauthenticated() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -305,7 +305,7 @@ async fn test_download_admin_audit_rejects_unauthenticated() {
     assert_eq!(response.status(), 401);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_audit_rejects_non_admin() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -314,7 +314,7 @@ async fn test_download_admin_audit_rejects_non_admin() {
     assert_eq!(response.status(), 403);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_audit_item_rejects_unauthenticated() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -324,7 +324,7 @@ async fn test_download_admin_audit_item_rejects_unauthenticated() {
     assert_eq!(response.status(), 401);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_audit_item_rejects_non_admin() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -333,7 +333,7 @@ async fn test_download_admin_audit_item_rejects_non_admin() {
     assert_eq!(response.status(), 403);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_audit_user_rejects_unauthenticated() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -343,7 +343,7 @@ async fn test_download_admin_audit_user_rejects_unauthenticated() {
     assert_eq!(response.status(), 401);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_audit_user_rejects_non_admin() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -359,7 +359,7 @@ async fn test_download_admin_audit_user_rejects_non_admin() {
 // Regular authenticated users (without this permission) get 403 Forbidden.
 // Admin users have RequestContent permission implicitly.
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_limits_rejects_user_without_request_content_permission() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -368,7 +368,7 @@ async fn test_download_limits_rejects_user_without_request_content_permission() 
     assert_eq!(response.status(), 403);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_proxy_rejects_user_without_admin_permission() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -377,7 +377,7 @@ async fn test_download_admin_proxy_rejects_user_without_admin_permission() {
     assert_eq!(response.status(), 403);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_my_requests_rejects_user_without_request_content_permission() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -386,7 +386,7 @@ async fn test_download_my_requests_rejects_user_without_request_content_permissi
     assert_eq!(response.status(), 403);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_request_album_rejects_user_without_request_content_permission() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -401,7 +401,7 @@ async fn test_download_request_album_rejects_user_without_request_content_permis
 // No Download Manager Configured Tests (Admin has RequestContent permission)
 // ============================================================================
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_limits_returns_503_when_not_configured() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -410,7 +410,7 @@ async fn test_download_limits_returns_503_when_not_configured() {
     assert_eq!(response.status(), 503);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_my_requests_returns_503_when_not_configured() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -419,7 +419,7 @@ async fn test_download_my_requests_returns_503_when_not_configured() {
     assert_eq!(response.status(), 503);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_request_album_returns_503_when_not_configured() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -434,7 +434,7 @@ async fn test_download_request_album_returns_503_when_not_configured() {
 // No Download Manager Configured Tests (Admin Endpoints)
 // ============================================================================
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_stats_returns_503_when_not_configured() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -443,7 +443,7 @@ async fn test_download_admin_stats_returns_503_when_not_configured() {
     assert_eq!(response.status(), 503);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_proxy_reports_disabled_when_not_configured() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -455,7 +455,7 @@ async fn test_download_admin_proxy_reports_disabled_when_not_configured() {
     assert_eq!(body["active"], serde_json::json!([]));
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_failed_returns_503_when_not_configured() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -464,7 +464,7 @@ async fn test_download_admin_failed_returns_503_when_not_configured() {
     assert_eq!(response.status(), 503);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 #[ignore = "The legacy admin activity route is not implemented"]
 async fn test_download_admin_activity_returns_503_when_not_configured() {
     let server = TestServer::spawn().await;
@@ -474,7 +474,7 @@ async fn test_download_admin_activity_returns_503_when_not_configured() {
     assert_eq!(response.status(), 503);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_requests_returns_503_when_not_configured() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -483,7 +483,7 @@ async fn test_download_admin_requests_returns_503_when_not_configured() {
     assert_eq!(response.status(), 503);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_retry_returns_503_when_not_configured() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -492,7 +492,7 @@ async fn test_download_admin_retry_returns_503_when_not_configured() {
     assert_eq!(response.status(), 503);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_audit_returns_503_when_not_configured() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -501,7 +501,7 @@ async fn test_download_admin_audit_returns_503_when_not_configured() {
     assert_eq!(response.status(), 503);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_audit_item_returns_503_when_not_configured() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -510,7 +510,7 @@ async fn test_download_admin_audit_item_returns_503_when_not_configured() {
     assert_eq!(response.status(), 503);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_download_admin_audit_user_returns_503_when_not_configured() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;

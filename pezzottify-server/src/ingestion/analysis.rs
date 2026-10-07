@@ -159,7 +159,7 @@ impl IngestionManager {
 
     /// Extract embedded tags from an audio file using ffprobe.
     async fn extract_tags(&self, path: &Path) -> Result<HashMap<String, String>> {
-        use tokio::process::Command;
+        use crate::execution::process::Command;
 
         let output = Command::new("ffprobe")
             .args(["-v", "quiet", "-print_format", "json", "-show_format"])

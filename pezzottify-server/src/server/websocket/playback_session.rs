@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use tokio::sync::RwLock;
+use crate::execution::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use super::connection::ConnectionManager;
@@ -912,10 +912,10 @@ mod tests {
     use super::*;
     use crate::catalog_store::NullCatalogStore;
     use crate::db_executor::{DbExecutor, DbExecutorConfig, DbLane};
+    use crate::execution::sync::mpsc;
     use crate::user::SqliteUserStore;
     use std::sync::{Arc, Mutex};
     use tempfile::tempdir;
-    use tokio::sync::mpsc;
 
     async fn setup() -> (Arc<ConnectionManager>, PlaybackSessionManager) {
         let conn_manager = Arc::new(ConnectionManager::new());
@@ -986,7 +986,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn policy_allow_everyone_allows_any_user() {
         let (_temp, _conn, manager, user_manager) = setup_with_user_manager().await;
 
@@ -1016,7 +1016,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn policy_deny_everyone_denies_non_owner() {
         let (_temp, _conn, manager, user_manager) = setup_with_user_manager().await;
 
@@ -1051,7 +1051,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn policy_disallow_overrides_allow_user() {
         let (_temp, _conn, manager, user_manager) = setup_with_user_manager().await;
 
@@ -1088,7 +1088,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn policy_allows_by_role_when_not_denied() {
         let (_temp, _conn, manager, user_manager) = setup_with_user_manager().await;
 
@@ -1143,7 +1143,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn handle_hello_returns_welcome() {
         let (_, manager) = setup().await;
 
@@ -1155,7 +1155,7 @@ mod tests {
         assert!(welcome.session.active_devices.is_empty());
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn any_device_can_send_state() {
         let (conn_manager, manager) = setup().await;
 
@@ -1183,7 +1183,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn multiple_devices_independent_state() {
         let (conn_manager, manager) = setup().await;
 
@@ -1229,7 +1229,7 @@ mod tests {
         assert!(!session.device_states[&200].state.is_playing);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn welcome_includes_active_device_states() {
         let (conn_manager, manager) = setup().await;
 
@@ -1262,7 +1262,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn device_state_removed_on_disconnect() {
         let (conn_manager, manager) = setup().await;
 
@@ -1290,7 +1290,7 @@ mod tests {
         assert!(!session.device_states.contains_key(&100));
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn device_stopped_via_empty_state() {
         let (conn_manager, manager) = setup().await;
 
@@ -1313,7 +1313,7 @@ mod tests {
         assert!(!session.device_states.contains_key(&100));
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn queue_update_rejects_oversized_queue() {
         let (conn_manager, manager) = setup().await;
 
@@ -1338,7 +1338,7 @@ mod tests {
         while rx.try_recv().is_ok() {}
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn command_forwards_to_target_device() {
         let (conn_manager, manager) = setup().await;
 
@@ -1370,7 +1370,7 @@ mod tests {
         assert!(payload.target_device_id.is_none());
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn command_returns_device_not_found_for_unknown_target() {
         let (conn_manager, manager) = setup().await;
 
@@ -1386,7 +1386,7 @@ mod tests {
         assert!(matches!(result, Err(PlaybackError::DeviceNotFound)));
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn command_forwards_payload_to_target() {
         let (conn_manager, manager) = setup().await;
 
@@ -1415,7 +1415,7 @@ mod tests {
         assert_eq!(payload.payload["position"], 45.5);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn stale_device_cleanup() {
         let (conn_manager, manager) = setup().await;
 

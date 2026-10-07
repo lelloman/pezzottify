@@ -11,7 +11,6 @@ use std::time::Duration;
 use tracing::info;
 #[path = "../logging.rs"]
 mod logging;
-use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
 #[command(about = "Build or resume the FTS search index without starting the server")]
@@ -50,7 +49,7 @@ struct Args {
 }
 
 fn main() -> Result<()> {
-    logging::init(EnvFilter::from_default_env()).ok();
+    logging::init_from_env("RUST_LOG", false).ok();
 
     let args = Args::parse();
     if !args.catalog_db.is_file() {

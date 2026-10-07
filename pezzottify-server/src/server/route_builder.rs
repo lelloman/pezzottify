@@ -5,7 +5,7 @@
 
 use super::*;
 use crate::server::RouteRateLimit;
-use simple_server::body_limit::BodyLimit;
+use simple_server::engine_web::BodyLimit;
 
 type UserRateLimit = Arc<RouteRateLimit<UserOrIpKeyExtractor>>;
 type AnalyticsRateLimit = Arc<RouteRateLimit<AnalyticsDeviceKeyExtractor>>;
@@ -454,10 +454,7 @@ pub(super) fn assemble_app(
     let home_router = match config.frontend_dir_path.as_ref() {
         Some(frontend_path) => {
             let index_path = std::path::Path::new(frontend_path).join("index.html");
-            let static_files_service = StaticDir::new(frontend_path)
-                .append_index_html_on_directories(true)
-                .fallback_file(index_path);
-            Router::new().fallback_service(static_files_service)
+            Router::new().fallback_static_dir_with_index(frontend_path, &index_path)
         }
         None => Router::new()
             .route("/", get(home))
@@ -547,10 +544,10 @@ pub(super) fn auth_routes(state: &ServerState) -> Router {
     let account_sustained_limiter = login_account_sustained_limit.limiter().clone();
     let shutdown = state.runtime_tasks.shutdown.clone();
     state.runtime_tasks.tasks.spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(600));
+        let mut interval = crate::execution::time::interval(Duration::from_secs(600));
         interval.tick().await;
         loop {
-            tokio::select! {
+            crate::execution::select! {
                 biased;
                 _ = shutdown.requested() => break,
                 _ = interval.tick() => {},

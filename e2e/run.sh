@@ -58,6 +58,8 @@ cleanup() {
 # Set up cleanup trap
 trap cleanup EXIT
 
+bash "$REPO_ROOT/pezzottify-server/scripts/prepare-docker"
+
 echo "=== Building pezzottify-server image (needed by seed container) ==="
 docker compose build pezzottify-server
 

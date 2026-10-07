@@ -3,7 +3,7 @@ mod common;
 use common::TestServer;
 use reqwest::{Client, StatusCode};
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn frontend_assets_spa_and_api_keep_their_contracts() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::create_dir(dir.path().join("frontend")).unwrap();

@@ -1,11 +1,11 @@
 //! Shared LRCLIB acquisition for scheduled and user-requested lyrics downloads.
 use crate::catalog_store::{CatalogStore, ResolvedTrack, TrackAvailability};
 use crate::db_executor::{DbHandle, DbPriority};
+use crate::execution::sync::Mutex;
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
 use std::time::Duration;
-use tokio::sync::Mutex;
 
 // Share pacing and cache rechecks across the daily job and interactive requests.
 static PROVIDER_GATE: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
@@ -102,13 +102,13 @@ fn matched(result: ProviderLyrics, track: &ResolvedTrack, now: i64) -> Result<Tr
 }
 
 pub struct LyricsFetcher {
-    client: reqwest::Client,
+    client: simple_server::client::Client,
     base_url: String,
 }
 impl LyricsFetcher {
     pub fn new() -> Result<Self> {
         Ok(Self {
-            client: reqwest::Client::builder()
+            client: simple_server::client::Client::builder()
                 .user_agent("Pezzottify/lyrics (https://github.com/lelloman/pezzottify)")
                 .timeout(Duration::from_secs(20))
                 .build()?,
@@ -142,10 +142,10 @@ impl LyricsFetcher {
             .send()
             .await?;
         let now = chrono::Utc::now().timestamp();
-        if response.status() == reqwest::StatusCode::NOT_FOUND {
+        if response.status() == simple_server::client::StatusCode::NOT_FOUND {
             return Ok(TrackLyrics::empty(track.track.id.clone(), "not_found", now));
         }
-        response.error_for_status_ref()?;
+        response = response.error_for_status()?;
         let mut bytes = Vec::new();
         while let Some(chunk) = response.chunk().await? {
             if bytes.len() + chunk.len() > MAX_RESPONSE_BYTES {
@@ -192,7 +192,7 @@ impl LyricsFetcher {
                 continue;
             };
             // Bound provider traffic even when many users request different albums.
-            tokio::time::sleep(Duration::from_millis(300)).await;
+            crate::execution::time::sleep(Duration::from_millis(300)).await;
             let result = self.lookup(&track).await;
             let lyrics = match &result {
                 Ok(lyrics) => lyrics.clone(),
@@ -263,7 +263,7 @@ mod tests {
         assert!(result.plain_lyrics.is_none());
         assert!(result.synced_lyrics.is_none());
     }
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn lyrics_http_distinguishes_missing_from_provider_errors() {
         for (status, body, expected) in [
             ("200 OK", provider().to_string(), Some("found")),
@@ -307,7 +307,7 @@ mod tests {
         lyrics.status = "found".into();
         assert!(lyrics.cached(i64::MAX));
     }
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn lyrics_concurrent_downloads_fetch_once_and_persist() {
         use crate::catalog_store::SqliteCatalogStore;
         use crate::db_executor::{DbExecutor, DbExecutorConfig, DbLane};
@@ -348,7 +348,7 @@ mod tests {
         });
         let mut fetcher = LyricsFetcher::new().unwrap();
         fetcher.base_url = format!("http://{address}");
-        let (first, second) = tokio::join!(
+        let (first, second) = crate::execution::join!(
             fetcher.download(&db, vec!["track".into()], DbPriority::Interactive, true),
             fetcher.download(&db, vec!["track".into()], DbPriority::Background, false),
         );

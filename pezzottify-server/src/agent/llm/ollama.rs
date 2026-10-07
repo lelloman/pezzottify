@@ -4,8 +4,8 @@ use super::provider::{CompletionOptions, LlmError, LlmProvider};
 use super::types::{CompletionResponse, FinishReason, Message, MessageRole, TokenUsage, ToolCall};
 use crate::agent::tools::ToolDefinition;
 use async_trait::async_trait;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use simple_server::client::Client;
 use tracing::{debug, warn};
 
 /// Ollama LLM provider.

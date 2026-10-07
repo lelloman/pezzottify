@@ -4,19 +4,19 @@ use super::controls::{JobPauseScope, PAUSE_STATE_KEY};
 use super::handle::{SchedulerCommand, SharedJobState};
 use super::job::{BackgroundJob, HookEvent, JobError, JobSchedule, ShutdownBehavior};
 use super::JobPauseState;
+use crate::execution::sync::{mpsc, RwLock};
 use crate::server::metrics;
 use crate::server_store::{JobRunStatus, ServerStore};
 use rand::Rng;
+use simple_server::engine_scheduling::{ExecutionCapacity, FirstRun, Schedule};
+use simple_server::engine_tasks::{ShutdownBehavior as TaskShutdown, TaskExit, TaskId, TaskSet};
 use simple_server::task_policies::{CircuitOutcome, CircuitPolicy, ExecutionBudget};
-use simple_server::task_scheduling::{ExecutionCapacity, FirstRun, Schedule};
-use simple_server::tasks::{ShutdownBehavior as TaskShutdown, TaskExit, TaskId, TaskSet};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::{convert::Infallible, num::NonZeroUsize};
-use tokio::sync::{mpsc, RwLock};
 
-use tokio_util::sync::CancellationToken;
+use simple_server::primitives::CancellationToken;
 use tracing::{debug, error, info, warn};
 
 /// One owned execution per registered job; results remain owned until consumed.
@@ -90,7 +90,7 @@ fn execution_capacity(config: &JobSchedulerConfig) -> ExecutionCapacity {
 fn classify_job_result(
     job_id: &str,
     elapsed: Duration,
-    result: Result<Result<(), JobError>, tokio::task::JoinError>,
+    result: Result<Result<(), JobError>, crate::execution::task::JoinError>,
 ) -> (JobRunStatus, Option<String>, &'static str) {
     match result {
         Ok(Ok(())) => {
@@ -311,7 +311,7 @@ impl JobScheduler {
                 sleep_duration
             );
 
-            tokio::select! {
+            crate::execution::select! {
                 biased;
                 _ = self.shutdown_token.cancelled() => {
                     info!("Scheduler received shutdown signal");
@@ -323,7 +323,7 @@ impl JobScheduler {
                     self.job_cancel_tokens.remove(&job_id);
                     self.update_schedule_after_run(&job_id).await;
                 }
-                _ = tokio::time::sleep(sleep_duration) => {
+                _ = crate::execution::time::sleep(sleep_duration) => {
                     self.run_due_jobs().await;
                 }
                 Some(event) = self.hook_receiver.recv() => {
@@ -807,9 +807,9 @@ impl JobScheduler {
                 max_runtime: policy.max_runtime,
             };
             let acquire_capacity = execution_limits.acquire(Some(resource_class));
-            let permits = tokio::select! {
+            let permits = crate::execution::select! {
                 _ = run_cancel_token.cancelled() => Err(JobError::Cancelled),
-                result = tokio::time::timeout_at(budget.queue_deadline(start_time).expect("validated queue budget").into(), acquire_capacity) => {
+                result = crate::execution::time::timeout(budget.queue_deadline(start_time).expect("validated queue budget").saturating_duration_since(Instant::now()), acquire_capacity) => {
                     match result {
                         Ok(result) => result.map_err(|_| JobError::Cancelled),
                         Err(_) => Err(JobError::Timeout),
@@ -839,16 +839,17 @@ impl JobScheduler {
                 Ok(_permits) => {
                     metrics::background_job_started(resource_class, queue_wait);
                     let execution_started = Instant::now();
-                    let mut blocking_task =
-                        tokio::task::spawn_blocking(move || job.execute_with_params(&ctx, params));
+                    let mut blocking_task = crate::execution::task::spawn_blocking(move || {
+                        job.execute_with_params(&ctx, params)
+                    });
                     let completion = if let Some(runtime_deadline) =
                         budget.runtime_deadline(execution_started)
                     {
-                        tokio::select! {
+                        crate::execution::select! {
                             result = &mut blocking_task => {
                                 classify_job_result(&job_id_owned, execution_started.elapsed(), result)
                             }
-                            _ = tokio::time::sleep_until(runtime_deadline.into()) => {
+                            _ = crate::execution::time::sleep(runtime_deadline.saturating_duration_since(Instant::now())) => {
                                 warn!(
                                     "Job {} exceeded its {:?} runtime budget; requesting cancellation",
                                     job_id_owned, policy.max_runtime
@@ -1399,7 +1400,7 @@ mod tests {
         )
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_register_job() {
         let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
 
@@ -1417,7 +1418,7 @@ mod tests {
         assert_eq!(jobs[0].id, "test_job");
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_first_run_policy_defers_heavy_interval_job() {
         let (mut scheduler, _handle, _temp_dir, _hook_sender) = create_test_scheduler();
         scheduler
@@ -1448,7 +1449,7 @@ mod tests {
         assert_eq!(unchanged.next_run_at, original_next_run);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_job_exists_check() {
         let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
 
@@ -1469,7 +1470,7 @@ mod tests {
         assert!(!handle.job_exists("nonexistent").await);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_list_jobs() {
         let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
 
@@ -1499,7 +1500,7 @@ mod tests {
         assert_eq!(jobs[0].policy.max_runtime_secs, None);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn explicit_execution_policy_is_exposed_by_scheduler_handle() {
         let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
         scheduler.register_job(Arc::new(PolicyTestJob)).await;
@@ -1510,7 +1511,7 @@ mod tests {
         assert_eq!(job.policy.max_runtime_secs, Some(90));
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_get_job() {
         let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
 
@@ -1535,7 +1536,7 @@ mod tests {
         assert_eq!(job.name, "Test Job");
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_is_job_running() {
         let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
 
@@ -1552,7 +1553,7 @@ mod tests {
         assert!(!handle.is_job_running("test_job").await);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_get_job_history_empty() {
         let (_scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
 
@@ -1561,7 +1562,7 @@ mod tests {
         assert!(history.is_empty());
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_multiple_jobs() {
         let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
 
@@ -1618,7 +1619,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_job_schedule_info_interval() {
         let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
 
@@ -1665,7 +1666,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_job_schedule_info_combined() {
         let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
 
@@ -1682,7 +1683,7 @@ mod tests {
         assert!(hooks.contains(&"OnCatalogChange".to_string()));
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_job_count() {
         let (mut scheduler, _handle, _temp_dir, _hook_sender) = create_test_scheduler();
 
@@ -1699,7 +1700,7 @@ mod tests {
         assert_eq!(scheduler.job_count().await, 1);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_job_execution_on_startup_hook() {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("server.db");
@@ -1742,13 +1743,13 @@ mod tests {
         scheduler.register_job(job).await;
 
         // Run scheduler in background
-        let sched_handle = tokio::spawn(async move {
+        let sched_handle = crate::execution::spawn(async move {
             scheduler.run().await;
         });
 
         // Wait for persisted completion, not a fixed delay: loaded CI runners
         // may take longer to schedule the job or finish writing its history.
-        let history = tokio::time::timeout(Duration::from_secs(10), async {
+        let history = crate::execution::time::timeout(Duration::from_secs(10), async {
             loop {
                 let history = handle.get_job_history("startup_job", 10).unwrap();
                 if history
@@ -1757,7 +1758,7 @@ mod tests {
                 {
                     break history;
                 }
-                tokio::time::sleep(Duration::from_millis(10)).await;
+                crate::execution::time::sleep(Duration::from_millis(10)).await;
             }
         })
         .await
@@ -1776,12 +1777,12 @@ mod tests {
 
         // Shut down scheduler
         shutdown_token.cancel();
-        let _ = tokio::time::timeout(Duration::from_secs(2), sched_handle).await;
+        let _ = crate::execution::time::timeout(Duration::from_secs(2), sched_handle).await;
 
         drop(hook_sender);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_failed_job_records_error() {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("server.db");
@@ -1824,13 +1825,13 @@ mod tests {
         scheduler.register_job(job).await;
 
         // Run scheduler briefly
-        let sched_handle = tokio::spawn(async move {
+        let sched_handle = crate::execution::spawn(async move {
             scheduler.run().await;
         });
 
         // Wait for persisted completion, not a fixed delay: loaded CI runners
         // may take longer to schedule the job or finish writing its history.
-        let history = tokio::time::timeout(Duration::from_secs(10), async {
+        let history = crate::execution::time::timeout(Duration::from_secs(10), async {
             loop {
                 let history = handle.get_job_history("failing_job", 10).unwrap();
                 if history
@@ -1839,7 +1840,7 @@ mod tests {
                 {
                     break history;
                 }
-                tokio::time::sleep(Duration::from_millis(10)).await;
+                crate::execution::time::sleep(Duration::from_millis(10)).await;
             }
         })
         .await
@@ -1862,10 +1863,10 @@ mod tests {
             .contains("Test failure"));
 
         shutdown_token.cancel();
-        let _ = tokio::time::timeout(Duration::from_secs(2), sched_handle).await;
+        let _ = crate::execution::time::timeout(Duration::from_secs(2), sched_handle).await;
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_cancel_running_job() {
         let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
         let shutdown_token = scheduler.shutdown_token.clone();
@@ -1879,7 +1880,7 @@ mod tests {
         });
         scheduler.register_job(job).await;
 
-        let sched_handle = tokio::spawn(async move {
+        let sched_handle = crate::execution::spawn(async move {
             scheduler.run().await;
         });
 
@@ -1889,7 +1890,7 @@ mod tests {
             if started.load(Ordering::SeqCst) {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(20)).await;
+            crate::execution::time::sleep(Duration::from_millis(20)).await;
         }
         assert!(started.load(Ordering::SeqCst), "Job should have started");
 
@@ -1899,7 +1900,7 @@ mod tests {
             if cancelled.load(Ordering::SeqCst) {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(20)).await;
+            crate::execution::time::sleep(Duration::from_millis(20)).await;
         }
         assert!(
             cancelled.load(Ordering::SeqCst),
@@ -1911,7 +1912,7 @@ mod tests {
             if history.first().and_then(|run| run.error_message.as_deref()) == Some("Cancelled") {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(20)).await;
+            crate::execution::time::sleep(Duration::from_millis(20)).await;
         }
 
         let history = handle.get_job_history("cancellable_job", 1).unwrap();
@@ -1919,10 +1920,10 @@ mod tests {
         assert_eq!(history[0].error_message.as_deref(), Some("Cancelled"));
 
         shutdown_token.cancel();
-        let _ = tokio::time::timeout(Duration::from_secs(2), sched_handle).await;
+        let _ = crate::execution::time::timeout(Duration::from_secs(2), sched_handle).await;
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn distinct_jobs_run_independently_while_each_job_is_deduplicated() {
         let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
         let shutdown_token = scheduler.shutdown_token.clone();
@@ -1944,7 +1945,7 @@ mod tests {
                 .await;
         }
 
-        let scheduler_task = tokio::spawn(async move { scheduler.run().await });
+        let scheduler_task = crate::execution::spawn(async move { scheduler.run().await });
         handle.trigger_job("blocking_one", None).await.unwrap();
         assert!(matches!(
             handle.trigger_job("blocking_one", None).await,
@@ -1956,7 +1957,7 @@ mod tests {
             if started.load(Ordering::SeqCst) == 2 {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            crate::execution::time::sleep(Duration::from_millis(10)).await;
         }
         assert_eq!(started.load(Ordering::SeqCst), 2);
         assert_eq!(max_active.load(Ordering::SeqCst), 2);
@@ -1968,7 +1969,7 @@ mod tests {
             {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            crate::execution::time::sleep(Duration::from_millis(10)).await;
         }
         assert!(!handle.is_job_running("blocking_one").await);
         assert!(!handle.is_job_running("blocking_two").await);
@@ -1982,10 +1983,10 @@ mod tests {
         );
 
         shutdown_token.cancel();
-        let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;
+        let _ = crate::execution::time::timeout(Duration::from_secs(2), scheduler_task).await;
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn global_execution_limit_serializes_distinct_jobs() {
         let config = JobSchedulerConfig {
             max_concurrent_jobs: 1,
@@ -2012,10 +2013,10 @@ mod tests {
                 .await;
         }
 
-        let scheduler_task = tokio::spawn(async move { scheduler.run().await });
+        let scheduler_task = crate::execution::spawn(async move { scheduler.run().await });
         handle.trigger_job("limited_one", None).await.unwrap();
         handle.trigger_job("limited_two", None).await.unwrap();
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        crate::execution::time::sleep(Duration::from_millis(100)).await;
 
         assert_eq!(started.load(Ordering::SeqCst), 1);
         assert_eq!(max_active.load(Ordering::SeqCst), 1);
@@ -2027,16 +2028,16 @@ mod tests {
             {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            crate::execution::time::sleep(Duration::from_millis(10)).await;
         }
         assert_eq!(started.load(Ordering::SeqCst), 2);
         assert_eq!(max_active.load(Ordering::SeqCst), 1);
 
         shutdown_token.cancel();
-        let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;
+        let _ = crate::execution::time::timeout(Duration::from_secs(2), scheduler_task).await;
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn queued_job_fails_after_its_queue_budget() {
         let config = JobSchedulerConfig {
             max_concurrent_jobs: 1,
@@ -2071,13 +2072,13 @@ mod tests {
             }))
             .await;
 
-        let scheduler_task = tokio::spawn(async move { scheduler.run().await });
+        let scheduler_task = crate::execution::spawn(async move { scheduler.run().await });
         handle.trigger_job("queue_blocker", None).await.unwrap();
         for _ in 0..50 {
             if started.load(Ordering::SeqCst) == 1 {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            crate::execution::time::sleep(Duration::from_millis(10)).await;
         }
         handle.trigger_job("queue_timeout", None).await.unwrap();
 
@@ -2090,7 +2091,7 @@ mod tests {
             {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            crate::execution::time::sleep(Duration::from_millis(10)).await;
         }
         let history = handle.get_job_history("queue_timeout", 1).unwrap();
         assert_eq!(history[0].status, "failed");
@@ -2099,10 +2100,10 @@ mod tests {
 
         release.store(true, Ordering::SeqCst);
         shutdown_token.cancel();
-        let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;
+        let _ = crate::execution::time::timeout(Duration::from_secs(2), scheduler_task).await;
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn resource_class_limit_does_not_block_other_classes() {
         let config = JobSchedulerConfig {
             max_concurrent_jobs: 2,
@@ -2134,7 +2135,7 @@ mod tests {
                 .await;
         }
 
-        let scheduler_task = tokio::spawn(async move { scheduler.run().await });
+        let scheduler_task = crate::execution::spawn(async move { scheduler.run().await });
         handle.trigger_job("io_one", None).await.unwrap();
         handle.trigger_job("io_two", None).await.unwrap();
         handle.trigger_job("light_one", None).await.unwrap();
@@ -2142,7 +2143,7 @@ mod tests {
             if started.load(Ordering::SeqCst) == 2 {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            crate::execution::time::sleep(Duration::from_millis(10)).await;
         }
 
         assert_eq!(started.load(Ordering::SeqCst), 2);
@@ -2150,10 +2151,10 @@ mod tests {
 
         release.store(true, Ordering::SeqCst);
         shutdown_token.cancel();
-        let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;
+        let _ = crate::execution::time::timeout(Duration::from_secs(2), scheduler_task).await;
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn runtime_budget_requests_cooperative_cancellation() {
         let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
         let shutdown_token = scheduler.shutdown_token.clone();
@@ -2164,13 +2165,13 @@ mod tests {
             }))
             .await;
 
-        let scheduler_task = tokio::spawn(async move { scheduler.run().await });
+        let scheduler_task = crate::execution::spawn(async move { scheduler.run().await });
         handle.trigger_job("deadline_job", None).await.unwrap();
         for _ in 0..100 {
             if cancelled.load(Ordering::SeqCst) {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            crate::execution::time::sleep(Duration::from_millis(10)).await;
         }
         assert!(cancelled.load(Ordering::SeqCst));
 
@@ -2183,22 +2184,22 @@ mod tests {
             {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            crate::execution::time::sleep(Duration::from_millis(10)).await;
         }
         let history = handle.get_job_history("deadline_job", 1).unwrap();
         assert_eq!(history[0].status, "failed");
         assert_eq!(history[0].error_message.as_deref(), Some("Job timed out"));
 
         shutdown_token.cancel();
-        let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;
+        let _ = crate::execution::time::timeout(Duration::from_secs(2), scheduler_task).await;
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn global_pause_rejects_manual_triggers_until_resumed() {
         let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
         let shutdown_token = scheduler.shutdown_token.clone();
         scheduler.register_job(Arc::new(PolicyTestJob)).await;
-        let scheduler_task = tokio::spawn(async move { scheduler.run().await });
+        let scheduler_task = crate::execution::spawn(async move { scheduler.run().await });
 
         handle.set_global_paused(true, false).await.unwrap();
         assert!(matches!(
@@ -2211,10 +2212,10 @@ mod tests {
         handle.trigger_job("policy_job", None).await.unwrap();
 
         shutdown_token.cancel();
-        let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;
+        let _ = crate::execution::time::timeout(Duration::from_secs(2), scheduler_task).await;
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn resource_and_job_pause_scopes_only_block_matching_jobs() {
         let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
         let shutdown_token = scheduler.shutdown_token.clone();
@@ -2226,7 +2227,7 @@ mod tests {
                 execution_count: count.clone(),
             }))
             .await;
-        let scheduler_task = tokio::spawn(async move { scheduler.run().await });
+        let scheduler_task = crate::execution::spawn(async move { scheduler.run().await });
 
         handle
             .set_resource_class_paused(JobResourceClass::IoBound, true, false)
@@ -2241,7 +2242,7 @@ mod tests {
             if !handle.is_job_running("general_job").await {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            crate::execution::time::sleep(Duration::from_millis(10)).await;
         }
         assert!(!handle.is_job_running("general_job").await);
 
@@ -2265,10 +2266,10 @@ mod tests {
         assert!(pause_state.paused_resource_classes.is_empty());
 
         shutdown_token.cancel();
-        let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;
+        let _ = crate::execution::time::timeout(Duration::from_secs(2), scheduler_task).await;
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn pausing_with_cancel_running_requests_cooperative_cancellation() {
         let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
         let shutdown_token = scheduler.shutdown_token.clone();
@@ -2281,14 +2282,14 @@ mod tests {
                 cancelled: cancelled.clone(),
             }))
             .await;
-        let scheduler_task = tokio::spawn(async move { scheduler.run().await });
+        let scheduler_task = crate::execution::spawn(async move { scheduler.run().await });
 
         handle.trigger_job("pause_cancel_job", None).await.unwrap();
         for _ in 0..100 {
             if started.load(Ordering::SeqCst) {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            crate::execution::time::sleep(Duration::from_millis(10)).await;
         }
         handle
             .set_job_paused("pause_cancel_job", true, true)
@@ -2298,15 +2299,15 @@ mod tests {
             if cancelled.load(Ordering::SeqCst) {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            crate::execution::time::sleep(Duration::from_millis(10)).await;
         }
         assert!(cancelled.load(Ordering::SeqCst));
 
         shutdown_token.cancel();
-        let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;
+        let _ = crate::execution::time::timeout(Duration::from_secs(2), scheduler_task).await;
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn circuit_breaker_opens_after_threshold_and_recovers_after_cooldown() {
         let (mut scheduler, handle, _temp_dir, _hook_sender) = create_test_scheduler();
         let server_store = scheduler.server_store.clone();
@@ -2319,7 +2320,7 @@ mod tests {
                 execution_count: execution_count.clone(),
             }))
             .await;
-        let scheduler_task = tokio::spawn(async move { scheduler.run().await });
+        let scheduler_task = crate::execution::spawn(async move { scheduler.run().await });
 
         for expected_count in 1..=2 {
             handle
@@ -2332,7 +2333,7 @@ mod tests {
                 {
                     break;
                 }
-                tokio::time::sleep(Duration::from_millis(10)).await;
+                crate::execution::time::sleep(Duration::from_millis(10)).await;
             }
         }
 
@@ -2347,7 +2348,7 @@ mod tests {
             .expect("open circuit must be persisted");
         assert!(persisted.contains("circuit_breaker_job"));
 
-        tokio::time::sleep(Duration::from_millis(120)).await;
+        crate::execution::time::sleep(Duration::from_millis(120)).await;
         should_fail.store(false, Ordering::SeqCst);
         handle
             .trigger_job("circuit_breaker_job", None)
@@ -2359,7 +2360,7 @@ mod tests {
             {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            crate::execution::time::sleep(Duration::from_millis(10)).await;
         }
         assert_eq!(execution_count.load(Ordering::SeqCst), 3);
         assert!(
@@ -2372,10 +2373,10 @@ mod tests {
         );
 
         shutdown_token.cancel();
-        let _ = tokio::time::timeout(Duration::from_secs(2), scheduler_task).await;
+        let _ = crate::execution::time::timeout(Duration::from_secs(2), scheduler_task).await;
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_hook_triggered_job_execution() {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("server.db");
@@ -2439,12 +2440,12 @@ mod tests {
         scheduler.register_job(job).await;
 
         // Run scheduler in background
-        let sched_handle = tokio::spawn(async move {
+        let sched_handle = crate::execution::spawn(async move {
             scheduler.run().await;
         });
 
         // Initially no execution (it doesn't respond to OnStartup)
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        crate::execution::time::sleep(Duration::from_millis(100)).await;
         assert_eq!(
             exec_count.load(Ordering::SeqCst),
             0,
@@ -2453,7 +2454,7 @@ mod tests {
 
         // Send a catalog change hook
         hook_sender.send(HookEvent::OnCatalogChange).await.unwrap();
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        crate::execution::time::sleep(Duration::from_millis(200)).await;
 
         // Now the job should have executed
         assert_eq!(
@@ -2468,10 +2469,10 @@ mod tests {
         assert_eq!(history[0].triggered_by, "hook:OnCatalogChange");
 
         shutdown_token.cancel();
-        let _ = tokio::time::timeout(Duration::from_secs(2), sched_handle).await;
+        let _ = crate::execution::time::timeout(Duration::from_secs(2), sched_handle).await;
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn test_running_job_marked_in_state() {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("server.db");
@@ -2536,17 +2537,17 @@ mod tests {
         scheduler.register_job(job).await;
 
         // Start scheduler
-        let sched_handle = tokio::spawn(async move {
+        let sched_handle = crate::execution::spawn(async move {
             scheduler.run().await;
         });
 
         // Wait for job to start
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        crate::execution::time::sleep(Duration::from_millis(100)).await;
 
         // Wait until job actually starts
         let mut attempts = 0;
         while !started.load(Ordering::SeqCst) && attempts < 20 {
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            crate::execution::time::sleep(Duration::from_millis(50)).await;
             attempts += 1;
         }
 
@@ -2559,12 +2560,12 @@ mod tests {
         }
 
         shutdown_token.cancel();
-        let _ = tokio::time::timeout(Duration::from_secs(3), sched_handle).await;
+        let _ = crate::execution::time::timeout(Duration::from_secs(3), sched_handle).await;
     }
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn interrupted_shutdown_retains_owner_until_resumed_drain() {
         let (mut scheduler, _, _dir, _hooks) = create_test_scheduler();
-        let (release, receive) = tokio::sync::oneshot::channel();
+        let (release, receive) = crate::execution::sync::oneshot::channel();
         let run_id = scheduler
             .server_store
             .record_job_start("held", "manual")
@@ -2581,7 +2582,7 @@ mod tests {
         );
         scheduler.shutdown_token.cancel();
         assert!(
-            tokio::time::timeout(Duration::from_millis(20), scheduler.run())
+            crate::execution::time::timeout(Duration::from_millis(20), scheduler.run())
                 .await
                 .is_err()
         );
@@ -2591,7 +2592,7 @@ mod tests {
             JobRunStatus::Running
         );
         release.send(()).unwrap();
-        tokio::time::timeout(Duration::from_secs(1), scheduler.run())
+        crate::execution::time::timeout(Duration::from_secs(1), scheduler.run())
             .await
             .unwrap();
         assert_eq!(

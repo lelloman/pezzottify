@@ -34,3 +34,7 @@ pub use search::{Fts5LevenshteinSearchVault, SearchVault};
 pub use server::{prepare_server, RequestsLoggingLevel};
 pub use server_store::{ServerStore, SqliteServerStore};
 pub use user::{SqliteUserStore, UserRole, UserStore};
+
+pub mod web;
+
+pub mod execution;

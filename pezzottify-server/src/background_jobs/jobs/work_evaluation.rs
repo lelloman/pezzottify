@@ -148,7 +148,7 @@ fn work_evaluation_scoring_rejects_wrong_and_unsupported_identities() {
     }
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 #[ignore = "requires WORK_EVAL_CONFIG and WORK_EVAL_REPORT; calls the configured model and Wikidata"]
 async fn work_evaluation_real_model() {
     let path = std::env::var("WORK_EVAL_CONFIG")

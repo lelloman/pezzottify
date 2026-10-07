@@ -9,7 +9,7 @@ use common::{TestClient, TestServer, TEST_PASS, TEST_USER};
 use reqwest::StatusCode;
 use serde_json::json;
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_get_settings_empty_initially() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -22,7 +22,7 @@ async fn test_get_settings_empty_initially() {
     assert!(settings.is_empty());
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_get_settings_requires_authentication() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -32,7 +32,7 @@ async fn test_get_settings_requires_authentication() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_update_notify_whatsnew_true() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -57,7 +57,7 @@ async fn test_update_notify_whatsnew_true() {
     assert_eq!(settings[0]["value"], true);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_update_notify_whatsnew_false() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -88,7 +88,7 @@ async fn test_update_notify_whatsnew_false() {
     assert_eq!(settings[0]["value"], false);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_update_unknown_setting_key_returns_error() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -103,7 +103,7 @@ async fn test_update_unknown_setting_key_returns_error() {
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_update_invalid_value_type_returns_error() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -118,7 +118,7 @@ async fn test_update_invalid_value_type_returns_error() {
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_settings_persist_across_sessions() {
     let server = TestServer::spawn().await;
 
@@ -146,7 +146,7 @@ async fn test_settings_persist_across_sessions() {
     assert_eq!(settings[0]["value"], true);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_update_settings_requires_authentication() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -161,7 +161,7 @@ async fn test_update_settings_requires_authentication() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_empty_settings_update_succeeds() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;

@@ -3,7 +3,7 @@ mod common;
 use common::{TestClient, TestServer};
 use reqwest::StatusCode;
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn upload_preserves_auth_extraction_and_field_errors() {
     let server = TestServer::builder().with_ingestion().spawn().await;
     let url = format!("{}/v1/ingestion/upload", server.base_url);
@@ -28,7 +28,7 @@ async fn upload_preserves_auth_extraction_and_field_errors() {
     }
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn unsupported_methods_and_head_preserve_router_contracts() {
     let server = TestServer::spawn().await;
     let admin = TestClient::authenticated_admin(server.base_url.clone()).await;

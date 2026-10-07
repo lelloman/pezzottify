@@ -69,8 +69,7 @@ pub fn validate_endpoint(endpoint: &str, allow_insecure: bool) -> Result<(), Reg
     if endpoint.is_empty() || endpoint.len() > MAX_ENDPOINT_LEN {
         return Err(RegistrationError::Endpoint("must be 1..2048 bytes"));
     }
-    let url =
-        reqwest::Url::parse(endpoint).map_err(|_| RegistrationError::Endpoint("not a URL"))?;
+    let url = url::Url::parse(endpoint).map_err(|_| RegistrationError::Endpoint("not a URL"))?;
     match url.scheme() {
         "https" => {}
         "http" if allow_insecure => {}
@@ -123,7 +122,7 @@ pub struct PushTarget<'a> {
 
 /// Encrypt `payload` for one registration, sign with VAPID and POST it.
 pub async fn send_wakeup(
-    client: &reqwest::Client,
+    client: &simple_server::client::Client,
     vapid: &VapidKeys,
     subject: &str,
     target: PushTarget<'_>,

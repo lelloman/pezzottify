@@ -26,7 +26,7 @@ fn metric_has_labels(metric_name: &str, expected_labels: &[(&str, &str)]) -> boo
         })
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn executor_metrics_cover_database_password_and_filesystem_work() {
     pezzottify_server::server::metrics::init_metrics();
     let server = TestServer::builder().with_available_catalog().spawn().await;
@@ -61,7 +61,7 @@ async fn executor_metrics_cover_database_password_and_filesystem_work() {
     ));
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn storage_report_preserves_complete_admin_response_contract() {
     let server = TestServer::spawn().await;
     let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -87,7 +87,7 @@ async fn storage_report_preserves_complete_admin_response_contract() {
     );
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn embedding_coverage_preserves_complete_admin_response_contract() {
     let server = TestServer::builder().with_available_catalog().spawn().await;
     let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -109,7 +109,7 @@ async fn embedding_coverage_preserves_complete_admin_response_contract() {
     assert!(coverage["album_derived"]["coverage"].is_object());
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn bug_report_round_trip_preserves_user_and_admin_contracts() {
     let server = TestServer::spawn().await;
     let user = TestClient::authenticated(server.base_url.clone()).await;
@@ -157,7 +157,7 @@ async fn bug_report_round_trip_preserves_user_and_admin_contracts() {
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn catalog_sync_and_backup_prepare_return_complete_response_shapes() {
     let server = TestServer::spawn().await;
     let user = TestClient::authenticated(server.base_url.clone()).await;
@@ -193,7 +193,7 @@ async fn catalog_sync_and_backup_prepare_return_complete_response_shapes() {
         .all(|database| database["success"] == true));
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn catalog_sync_returns_every_high_volume_event_in_sequence() {
     const EVENT_COUNT: i64 = 1_205;
     let server = TestServer::spawn().await;
@@ -264,7 +264,7 @@ async fn catalog_sync_returns_every_high_volume_event_in_sequence() {
         .all(|pair| pair[1] == pair[0] + 1));
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn catalog_sync_honors_a_smaller_requested_page_limit() {
     let server = TestServer::spawn().await;
     let user = TestClient::authenticated(server.base_url.clone()).await;

@@ -14,22 +14,22 @@ The test suite uses:
 
 ```bash
 # Run all e2e tests
-cargo test --test '*'
+bash scripts/test --test '*'
 
 # Run specific test file
-cargo test --test e2e_auth_tests
+bash scripts/test --test e2e_auth_tests
 
 # Run specific test
-cargo test --test e2e_catalog_tests test_get_artist_returns_correct_data
+bash scripts/test --test e2e_catalog_tests test_get_artist_returns_correct_data
 
 # Run with output
-cargo test --test e2e_auth_tests -- --nocapture
+bash scripts/test --test e2e_auth_tests -- --nocapture
 
 # Run tests in parallel (default)
-cargo test --test '*' -- --test-threads=4
+bash scripts/test --test '*' -- --test-threads=4
 
 # Run tests sequentially (for debugging)
-cargo test --test '*' -- --test-threads=1
+bash scripts/test --test '*' -- --test-threads=1
 ```
 
 ## Architecture
@@ -325,9 +325,9 @@ pub const ARTIST_3_ID: &str = "artist-3";
 
 ### Tests Hang or Timeout
 
-- Check server logs: `cargo test -- --nocapture`
+- Check server logs: `bash scripts/test -- --nocapture`
 - Verify server startup: Look for "Server ready" messages
-- Reduce parallelism: `cargo test -- --test-threads=1`
+- Reduce parallelism: `bash scripts/test -- --test-threads=1`
 
 ### Port Already in Use
 
@@ -400,7 +400,7 @@ ffmpeg -f lavfi -i color=c=gray:s=32x32:d=1 -frames:v 1 test-image.jpg -y
 To optimize:
 - Use `#[cfg(feature = "no_checks")]` to skip catalog validation
 - Use `#[cfg(feature = "fast")]` for faster builds
-- Run in parallel: `cargo test -- --test-threads=8`
+- Run in parallel: `bash scripts/test -- --test-threads=8`
 
 ## Contributing
 
@@ -416,4 +416,4 @@ When modifying infrastructure:
 1. Update `common/` modules, not test files
 2. Keep changes backward compatible if possible
 3. Update this README if adding new patterns
-4. Run full test suite after changes: `cargo test --test '*'`
+4. Run full test suite after changes: `bash scripts/test --test '*'`

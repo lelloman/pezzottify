@@ -408,7 +408,7 @@ async fn run(
             rounds.push(json!({"round":round+1,"new_actions":before-remaining,"outcome":if verified.is_some(){"verified"}else{"unresolved"}}));
         }
     };
-    if tokio::time::timeout(Duration::from_secs(240), research)
+    if crate::execution::time::timeout(Duration::from_secs(240), research)
         .await
         .is_err()
     {
@@ -556,7 +556,7 @@ mod tests {
         )
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn research_links_only_fetched_corroborated_recordings_and_credits() {
         let model = Model(Mutex::new(
             vec![
@@ -581,7 +581,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn research_model_claim_cannot_create_link_without_sources() {
         let model = Model(Mutex::new((0..5).map(|_| final_answer()).collect()));
         let result = run(&model, &EmptySources, context(), json!([]), 10)
@@ -597,7 +597,7 @@ mod tests {
                 .is_some_and(|s| s.contains("recording must be fetched"))));
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn research_rejects_invented_ids_unknown_tools_and_duplicate_calls() {
         let mut evidence = Evidence::default();
         assert!(evidence
@@ -843,7 +843,7 @@ mod tests {
         assert!(snapshot["fetched_recordings"]["omitted"].as_u64().unwrap() > 0);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn research_stops_after_five_rounds_and_carries_partial_output_failure_forward() {
         let model = Model(Mutex::new(
             (0..5)
@@ -882,7 +882,7 @@ mod tests {
         assert!(trace.iter().filter(|t| t["tool"].is_string()).count() <= 10);
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn research_repeated_queries_advance_and_resume_across_interventions() {
         let model = Model(Mutex::new(
             (0..5)
@@ -978,7 +978,7 @@ mod tests {
         )));
     }
 
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     async fn research_memory_distinguishes_failed_source_requests_from_empty_successes() {
         let mut evidence = Evidence::default();
         evidence
@@ -1050,7 +1050,7 @@ mod tests {
     }
 
     /// Opt-in production-model evaluation, using exported contexts only; no store is opened.
-    #[tokio::test]
+    #[simple_server::test(host_runtime = true)]
     #[ignore = "live model and reference APIs; requires PEZZOTTIFY_RESEARCH_INPUT and PEZZOTTIFY_RESEARCH_OUTPUT"]
     async fn work_research_live_corpus() {
         let input: Value = serde_json::from_slice(

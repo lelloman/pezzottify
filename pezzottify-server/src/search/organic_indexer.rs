@@ -19,10 +19,10 @@
 
 use crate::catalog_store::CatalogStore;
 use crate::db_executor::{DbHandle, DbPriority};
+use crate::execution::sync::mpsc;
 use crate::search::{HashedItemType, SearchIndexItem, SearchVault};
 use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
-use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
 /// Maximum queue capacity before dropping new items
@@ -96,7 +96,7 @@ impl OrganicIndexer {
 
         // Start background worker
         let indexer_clone = Arc::clone(&indexer);
-        tokio::spawn(async move {
+        crate::execution::spawn(async move {
             indexer_clone
                 .background_worker(rx, search_vault, catalog_store)
                 .await;
@@ -196,7 +196,9 @@ impl OrganicIndexer {
 
             // Try to receive a task with timeout
             let task =
-                match tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv()).await {
+                match crate::execution::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+                    .await
+                {
                     Ok(Some(task)) => task,
                     Ok(None) => {
                         // Channel closed

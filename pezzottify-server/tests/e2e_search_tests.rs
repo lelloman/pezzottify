@@ -12,7 +12,7 @@ use reqwest::StatusCode;
 // Basic Search Tests
 // =============================================================================
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_search_returns_results() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -31,7 +31,7 @@ async fn test_search_returns_results() {
     let _results: Vec<serde_json::Value> = response.json().await.unwrap();
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_search_finds_artist_by_partial_name() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -49,7 +49,7 @@ async fn test_search_finds_artist_by_partial_name() {
     let _results: Vec<serde_json::Value> = response.json().await.unwrap();
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_search_with_no_results() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -70,7 +70,7 @@ async fn test_search_with_no_results() {
     );
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_search_requires_authentication() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -92,7 +92,7 @@ async fn test_search_requires_authentication() {
 // Search Filter Tests
 // =============================================================================
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_search_filter_by_artist() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -119,7 +119,7 @@ async fn test_search_filter_by_artist() {
     }
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_search_filter_by_album() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -135,7 +135,7 @@ async fn test_search_filter_by_album() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_search_filter_by_track() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -155,7 +155,7 @@ async fn test_search_filter_by_track() {
 // Search Response Format Tests
 // =============================================================================
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_search_raw_returns_item_ids() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -180,7 +180,7 @@ async fn test_search_raw_returns_item_ids() {
     }
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_search_resolved_returns_full_objects() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -209,7 +209,7 @@ async fn test_search_resolved_returns_full_objects() {
 // Search Edge Cases
 // =============================================================================
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_search_empty_query() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -226,7 +226,7 @@ async fn test_search_empty_query() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_search_special_characters() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -246,7 +246,7 @@ async fn test_search_special_characters() {
     );
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_search_case_insensitive() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -280,7 +280,7 @@ async fn test_search_case_insensitive() {
 // Relevance Filter Admin Tests
 // =============================================================================
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_relevance_filter_get_requires_admin() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -302,7 +302,7 @@ async fn test_relevance_filter_get_requires_admin() {
     );
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_relevance_filter_get_default_is_none() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -328,7 +328,7 @@ async fn test_relevance_filter_get_default_is_none() {
     );
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_relevance_filter_set_and_get() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -370,7 +370,7 @@ async fn test_relevance_filter_set_and_get() {
     );
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_relevance_filter_set_gap_detection() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -400,7 +400,7 @@ async fn test_relevance_filter_set_gap_detection() {
     );
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_relevance_filter_set_standard_deviation() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -430,7 +430,7 @@ async fn test_relevance_filter_set_standard_deviation() {
     );
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_relevance_filter_set_percentage_with_minimum() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -461,7 +461,7 @@ async fn test_relevance_filter_set_percentage_with_minimum() {
     );
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_relevance_filter_reset_to_none() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated_admin(server.base_url.clone()).await;
@@ -514,7 +514,7 @@ fn parse_sse_events(text: &str) -> Vec<serde_json::Value> {
         .collect()
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_streaming_search_returns_sse_response() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -536,7 +536,7 @@ async fn test_streaming_search_returns_sse_response() {
     );
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_streaming_search_requires_authentication() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -550,7 +550,7 @@ async fn test_streaming_search_requires_authentication() {
     );
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_streaming_search_returns_done_section() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -583,7 +583,7 @@ async fn test_streaming_search_returns_done_section() {
     );
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_streaming_search_with_no_results() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -609,7 +609,7 @@ async fn test_streaming_search_with_no_results() {
     assert!(has_done, "Should have Done section");
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_streaming_search_returns_valid_sections() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -647,7 +647,7 @@ async fn test_streaming_search_returns_valid_sections() {
     }
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_streaming_search_special_characters() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -663,7 +663,7 @@ async fn test_streaming_search_special_characters() {
     );
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_streaming_search_empty_query() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;
@@ -683,7 +683,7 @@ async fn test_streaming_search_empty_query() {
     assert!(has_done, "Empty query should still return Done section");
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_streaming_search_wire_contract_and_reconnect_header() {
     let server = TestServer::spawn().await;
     let client = TestClient::authenticated(server.base_url.clone()).await;

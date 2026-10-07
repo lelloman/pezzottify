@@ -44,7 +44,7 @@ async fn make_app_with_executor(
     enrichment_store: OptionalEnrichmentStore,
     db_executor: crate::db_executor::DbExecutor,
     media: Option<Arc<crate::media::MediaManager>>,
-    mut lifecycle: Option<&mut simple_server::lifecycle::Lifecycle<'static>>,
+    mut lifecycle: Option<&mut simple_server::engine_lifecycle::Lifecycle<'static>>,
     runtime_tasks: super::lifecycle::RuntimeTasks,
 ) -> Result<Router> {
     let catalog_store = crate::media::MediaCatalogView::wrap(catalog_store);
@@ -96,9 +96,9 @@ async fn make_app_with_executor(
         let playback_manager = state.playback_session_manager.clone();
         let shutdown = runtime_tasks.shutdown.clone();
         super::lifecycle::maintenance(&mut lifecycle, "playback-maintenance", async move {
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
+            let mut interval = crate::execution::time::interval(std::time::Duration::from_secs(5));
             loop {
-                tokio::select! {
+                crate::execution::select! {
                     biased;
                     _ = shutdown.requested() => break,
                     _ = interval.tick() => {}
@@ -174,10 +174,10 @@ async fn make_app_with_executor(
         let media = Arc::downgrade(&media);
         let shutdown = runtime_tasks.shutdown.clone();
         super::lifecycle::maintenance(&mut lifecycle, "media-recovery", async move {
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            let mut interval = crate::execution::time::interval(std::time::Duration::from_secs(60));
             interval.tick().await;
             loop {
-                tokio::select! {
+                crate::execution::select! {
                     biased;
                     _ = shutdown.requested() => break,
                     _ = interval.tick() => {}
@@ -413,7 +413,7 @@ pub async fn prepare_server(
     enrichment_store: OptionalEnrichmentStore,
     db_executor: crate::db_executor::DbExecutor,
     media: Arc<crate::media::MediaManager>,
-    lifecycle: &mut simple_server::lifecycle::Lifecycle<'static>,
+    lifecycle: &mut simple_server::engine_lifecycle::Lifecycle<'static>,
     runtime_tasks: super::lifecycle::RuntimeTasks,
 ) -> Result<()> {
     let disable_password_auth = oidc_config
@@ -467,11 +467,11 @@ pub async fn prepare_server(
     let metrics_app = Router::new()
         .route("/metrics", get(super::metrics::metrics_handler))
         .with_state(super::filesystem_work::FilesystemWorkPool::default());
-    let metrics_listener = simple_server::http::bind(format!("0.0.0.0:{}", metrics_port)).await?;
-    let main_listener = simple_server::http::bind(format!("0.0.0.0:{}", port)).await?;
+    let metrics_listener = crate::web::bind(format!("0.0.0.0:{}", metrics_port)).await?;
+    let main_listener = crate::web::bind(format!("0.0.0.0:{}", port)).await?;
     lifecycle.service(
         "http",
-        simple_server::web::serve_with_connect_info(
+        crate::web::serve_with_connect_info(
             main_listener,
             app,
             lifecycle.shutdown(),
@@ -479,7 +479,7 @@ pub async fn prepare_server(
     )?;
     lifecycle.service(
         "metrics",
-        simple_server::web::serve(metrics_listener, metrics_app, lifecycle.shutdown()),
+        crate::web::serve(metrics_listener, metrics_app, lifecycle.shutdown()),
     )?;
     Ok(())
 }

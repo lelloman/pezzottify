@@ -370,7 +370,7 @@ impl RelatedArtistsEnrichmentJob {
                 // Emit catalog invalidation so clients refresh their cache
                 // Note: This runs in a sync context, so we use block_on
                 if let Some(sync_notifier) = &ctx.sync_notifier {
-                    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                    if let Ok(handle) = crate::execution::runtime::Handle::try_current() {
                         let sync_notifier = sync_notifier.clone();
                         let spotify_id = spotify_id.to_string();
                         handle.spawn(async move {

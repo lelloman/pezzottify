@@ -22,7 +22,7 @@ fn session_token_from(response: &reqwest::Response) -> String {
         .expect("login response should contain a session token")
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_login_sets_consistent_session_and_csrf_cookie_policy() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -58,7 +58,7 @@ async fn test_login_sets_consistent_session_and_csrf_cookie_policy() {
     assert!(csrf.contains("Max-Age=604800"));
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_cookie_authenticated_logout_requires_csrf_and_post() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -105,7 +105,7 @@ async fn test_cookie_authenticated_logout_requires_csrf_and_post() {
     assert!(expired.iter().all(|cookie| cookie.contains("Path=/")));
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_login_with_valid_credentials() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -118,7 +118,7 @@ async fn test_login_with_valid_credentials() {
     // (reqwest client automatically handles cookies)
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn bearer_authorization_authenticates_without_cookies() {
     let server = TestServer::spawn().await;
     let login_client = TestClient::new(server.base_url.clone());
@@ -135,7 +135,7 @@ async fn bearer_authorization_authenticates_without_cookies() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn legacy_raw_authorization_remains_available_during_client_rollout() {
     let server = TestServer::spawn().await;
     let login_client = TestClient::new(server.base_url.clone());
@@ -152,7 +152,7 @@ async fn legacy_raw_authorization_remains_available_during_client_rollout() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn strict_authorization_mode_rejects_legacy_raw_credentials() {
     let server = TestServer::builder()
         .with_strict_authorization_header()
@@ -172,7 +172,7 @@ async fn strict_authorization_mode_rejects_legacy_raw_credentials() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn malformed_authorization_does_not_fall_back_to_valid_cookie() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -192,7 +192,7 @@ async fn malformed_authorization_does_not_fall_back_to_valid_cookie() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn duplicate_authorization_does_not_fall_back_to_valid_cookie() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -211,7 +211,7 @@ async fn duplicate_authorization_does_not_fall_back_to_valid_cookie() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_login_with_invalid_password() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -221,7 +221,7 @@ async fn test_login_with_invalid_password() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_login_with_nonexistent_user() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -231,7 +231,7 @@ async fn test_login_with_nonexistent_user() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_logout_clears_session() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -254,7 +254,7 @@ async fn test_logout_clears_session() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_protected_endpoint_requires_authentication() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -266,7 +266,7 @@ async fn test_protected_endpoint_requires_authentication() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_admin_user_can_login() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -280,7 +280,7 @@ async fn test_admin_user_can_login() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_session_persists_across_requests() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -296,7 +296,7 @@ async fn test_session_persists_across_requests() {
     }
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_unauthenticated_statics_endpoint() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -314,7 +314,7 @@ async fn test_unauthenticated_statics_endpoint() {
 
 // ==================== Device Entity Integration Tests ====================
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_login_with_device_info() {
     let server = TestServer::spawn().await;
     let client = TestClient::new(server.base_url.clone());
@@ -331,7 +331,7 @@ async fn test_login_with_device_info() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_multiple_logins_same_device_reuse_record() {
     let server = TestServer::spawn().await;
 
@@ -358,7 +358,7 @@ async fn test_multiple_logins_same_device_reuse_record() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_device_persists_across_logout_login() {
     let server = TestServer::spawn().await;
     let device_uuid = "persist-device-uuid";
@@ -390,7 +390,7 @@ async fn test_device_persists_across_logout_login() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn test_different_devices_for_same_user() {
     let server = TestServer::spawn().await;
 
@@ -426,7 +426,7 @@ async fn test_different_devices_for_same_user() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn concurrent_logins_create_independent_revocable_sessions() {
     let server = TestServer::spawn().await;
     let mut login_tasks = Vec::new();
@@ -471,7 +471,7 @@ async fn concurrent_logins_create_independent_revocable_sessions() {
     }
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn cookie_credential_compatibility_preserves_decoding_and_duplicate_order() {
     let server = TestServer::spawn().await;
     let login_client = TestClient::new(server.base_url.clone());
@@ -514,7 +514,7 @@ async fn cookie_credential_compatibility_preserves_decoding_and_duplicate_order(
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-#[tokio::test]
+#[simple_server::test(host_runtime = true)]
 async fn optional_home_session_preserves_anonymous_invalid_credentials() {
     let server = TestServer::spawn().await;
     let login_client = TestClient::new(server.base_url.clone());
