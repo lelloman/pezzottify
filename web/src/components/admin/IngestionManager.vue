@@ -1,12 +1,25 @@
 <template>
   <div class="ingestionManager">
-    <h2 class="sectionTitle">Ingestion Manager</h2>
+    <header class="pageHeader">
+      <div>
+        <h2 class="sectionTitle">Ingestion</h2>
+        <p>Upload audio, follow processing and review catalog matches.</p>
+      </div>
+      <button class="refreshButton" @click="loadData" :disabled="isLoading">
+        {{ isLoading ? "Loading…" : "Refresh" }}
+      </button>
+    </header>
 
     <!-- Upload Section -->
     <div class="uploadSection">
       <div
         class="uploadDropzone"
-        :class="{ 'dragging': isDragging }"
+        role="button"
+        tabindex="0"
+        aria-label="Choose audio files"
+        @keydown.enter.self="triggerFileInput"
+        @keydown.space.self.prevent="triggerFileInput"
+        :class="{ dragging: isDragging }"
         @click="triggerFileInput"
         @dragover.prevent="isDragging = true"
         @dragleave="isDragging = false"
@@ -28,11 +41,16 @@
           style="display: none"
         />
         <div class="dropzoneContent">
-          <span class="dropzoneIcon">+</span>
+          <svg class="dropzoneIcon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 16V3m-5 5 5-5 5 5M4 15v5h16v-5" />
+          </svg>
           <span class="dropzoneText">
-            Drag files/folders here or <span class="browseLink">browse files</span>
+            Drag files/folders here or
+            <span class="browseLink">browse files</span>
           </span>
-          <span class="dropzoneHint">Supports MP3, FLAC, WAV, OGG, M4A, AAC, OPUS, ZIP, or folders</span>
+          <span class="dropzoneHint"
+            >Supports MP3, FLAC, WAV, OGG, M4A, AAC, OPUS, ZIP, or folders</span
+          >
           <button class="folderButton" @click.stop="triggerFolderInput">
             Select Folder
           </button>
@@ -40,12 +58,19 @@
       </div>
 
       <!-- Upload Progress -->
-      <div v-if="uploadState.uploading || uploadState.zipping" class="uploadProgress">
+      <div
+        v-if="uploadState.uploading || uploadState.zipping"
+        class="uploadProgress"
+      >
         <div class="progressBar">
-          <div class="progressFill" :style="{ width: uploadState.progress + '%' }"></div>
+          <div
+            class="progressFill"
+            :style="{ width: uploadState.progress + '%' }"
+          ></div>
         </div>
         <span class="progressText">
-          {{ uploadState.zipping ? 'Zipping' : 'Uploading' }} {{ uploadState.filename }}...
+          {{ uploadState.zipping ? "Zipping" : "Uploading" }}
+          {{ uploadState.filename }}...
         </span>
       </div>
 
@@ -84,10 +109,13 @@
         :key="tab.id"
         class="tabButton"
         :class="{ active: activeTab === tab.id }"
+        :aria-pressed="activeTab === tab.id"
         @click="activeTab = tab.id"
       >
         {{ tab.label }}
-        <span v-if="tab.count !== undefined" class="tabCount">{{ tab.count }}</span>
+        <span v-if="tab.count !== undefined" class="tabCount">{{
+          tab.count
+        }}</span>
       </button>
     </div>
 
@@ -97,14 +125,23 @@
         No ingestion jobs yet.
       </div>
       <div v-else class="jobList">
-        <div v-for="job in myJobs" :key="job.id" class="jobItem" :class="statusClass(job.status)">
+        <div
+          v-for="job in myJobs"
+          :key="job.id"
+          class="jobItem"
+          :class="statusClass(job.status)"
+        >
           <div class="jobHeader">
             <div class="jobMain">
               <span class="jobFilename">{{ job.original_filename }}</span>
               <span class="statusBadge" :class="statusClass(job.status)">
                 {{ formatStatus(job.status) }}
               </span>
-              <span v-if="job.ticket_type" class="ticketBadge" :class="ticketClass(job.ticket_type)">
+              <span
+                v-if="job.ticket_type"
+                class="ticketBadge"
+                :class="ticketClass(job.ticket_type)"
+              >
                 {{ job.ticket_type }}
               </span>
               <span v-if="job.upload_type" class="uploadTypeBadge">
@@ -133,8 +170,13 @@
                 @click="deleteJob(job.id)"
                 :disabled="processingJobs[job.id]"
                 title="Delete job"
+                :aria-label="`Delete ${job.original_filename}`"
               >
-                ✕
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7"
+                  />
+                </svg>
               </button>
             </div>
           </div>
@@ -145,11 +187,15 @@
             </span>
             <span class="detailItem">
               <span class="detailLabel">Size:</span>
-              <span class="detailValue">{{ formatBytes(job.total_size_bytes) }}</span>
+              <span class="detailValue">{{
+                formatBytes(job.total_size_bytes)
+              }}</span>
             </span>
             <span v-if="job.matched_album_id" class="detailItem">
               <span class="detailLabel">Album:</span>
-              <span class="detailValue">{{ job.detected_album || job.matched_album_id }}</span>
+              <span class="detailValue">{{
+                job.detected_album || job.matched_album_id
+              }}</span>
             </span>
             <span v-if="job.detected_artist" class="detailItem">
               <span class="detailLabel">Artist:</span>
@@ -157,7 +203,9 @@
             </span>
             <span v-if="job.match_score != null" class="detailItem">
               <span class="detailLabel">Match:</span>
-              <span class="detailValue">{{ (job.match_score * 100).toFixed(0) }}%</span>
+              <span class="detailValue"
+                >{{ (job.match_score * 100).toFixed(0) }}%</span
+              >
             </span>
             <span v-if="job.match_delta_ms != null" class="detailItem">
               <span class="detailLabel">Delta:</span>
@@ -190,25 +238,38 @@
           <template v-if="reviewAlbumData[item.job_id]">
             <div class="reviewAlbumHeader">
               <div class="reviewAlbumInfo">
-                <span class="reviewAlbumArtist">{{ reviewAlbumData[item.job_id].artistName }}</span>
-                <span class="reviewAlbumName">{{ reviewAlbumData[item.job_id].albumName }}</span>
+                <span class="reviewAlbumArtist">{{
+                  reviewAlbumData[item.job_id].artistName
+                }}</span>
+                <span class="reviewAlbumName">{{
+                  reviewAlbumData[item.job_id].albumName
+                }}</span>
               </div>
               <div class="reviewAlbumScores">
                 <span
                   class="scoreBadge"
                   :class="fpScoreClass(reviewAlbumData[item.job_id].fpScore)"
-                >FP {{ reviewAlbumData[item.job_id].fpScore ?? '?' }}%</span>
+                  >FP {{ reviewAlbumData[item.job_id].fpScore ?? "?" }}%</span
+                >
                 <span
                   v-if="reviewAlbumData[item.job_id].metaScore != null"
                   class="scoreBadge scoreMeta"
-                >Meta {{ reviewAlbumData[item.job_id].metaScore }}%</span>
+                  >Meta {{ reviewAlbumData[item.job_id].metaScore }}%</span
+                >
                 <span class="reviewTrackCount">
-                  {{ reviewAlbumData[item.job_id].catalogTracks.length }} catalog /
-                  {{ reviewAlbumData[item.job_id].uploadedFiles.length }} uploaded
+                  {{ reviewAlbumData[item.job_id].catalogTracks.length }}
+                  catalog /
+                  {{ reviewAlbumData[item.job_id].uploadedFiles.length }}
+                  uploaded
                 </span>
               </div>
             </div>
-            <div class="trackTableWrapper">
+            <div
+              class="trackTableWrapper"
+              tabindex="0"
+              role="region"
+              aria-label="Catalog and uploaded track comparison"
+            >
               <table class="trackTable">
                 <thead>
                   <tr>
@@ -221,19 +282,33 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(row, i) in buildComparisonRows(reviewAlbumData[item.job_id])" :key="i">
+                  <tr
+                    v-for="(row, i) in buildComparisonRows(
+                      reviewAlbumData[item.job_id],
+                    )"
+                    :key="i"
+                  >
                     <td class="colNum">{{ row.number }}</td>
-                    <td class="colName" :title="row.catalogName">{{ row.catalogName || '—' }}</td>
+                    <td class="colName" :title="row.catalogName">
+                      {{ row.catalogName || "—" }}
+                    </td>
                     <td class="colDur mono">{{ row.catalogDuration }}</td>
-                    <td class="colDelta mono" :class="row.deltaClass">{{ row.delta }}</td>
+                    <td class="colDelta mono" :class="row.deltaClass">
+                      {{ row.delta }}
+                    </td>
                     <td class="colDur mono">{{ row.uploadedDuration }}</td>
-                    <td class="colName" :title="row.uploadedName">{{ row.uploadedName || '—' }}</td>
+                    <td class="colName" :title="row.uploadedName">
+                      {{ row.uploadedName || "—" }}
+                    </td>
                   </tr>
                 </tbody>
               </table>
             </div>
           </template>
-          <div v-else-if="reviewAlbumLoading[item.job_id]" class="reviewAlbumLoading">
+          <div
+            v-else-if="reviewAlbumLoading[item.job_id]"
+            class="reviewAlbumLoading"
+          >
             Loading album comparison...
           </div>
 
@@ -246,7 +321,9 @@
               :disabled="resolvingReviews[item.job_id]"
             >
               <span class="optionLabel">{{ option.label }}</span>
-              <span v-if="option.description" class="optionDesc">{{ option.description }}</span>
+              <span v-if="option.description" class="optionDesc">{{
+                option.description
+              }}</span>
             </button>
             <button
               class="reviewOption noMatch"
@@ -270,11 +347,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Refresh Button -->
-    <button class="refreshButton" @click="loadData" :disabled="isLoading">
-      {{ isLoading ? "Loading..." : "Refresh" }}
-    </button>
   </div>
 </template>
 
@@ -288,7 +360,16 @@ const remoteStore = useRemoteStore();
 const ingestionStore = useIngestionStore();
 
 // Supported audio extensions
-const AUDIO_EXTENSIONS = ["mp3", "flac", "wav", "ogg", "m4a", "aac", "wma", "opus"];
+const AUDIO_EXTENSIONS = [
+  "mp3",
+  "flac",
+  "wav",
+  "ogg",
+  "m4a",
+  "aac",
+  "wma",
+  "opus",
+];
 
 // State
 const activeTab = ref("myJobs");
@@ -314,14 +395,30 @@ const uploadState = reactive({
 });
 
 const stats = computed(() => {
-  const s = { pending: 0, processing: 0, awaitingReview: 0, completed: 0, failed: 0 };
+  const s = {
+    pending: 0,
+    processing: 0,
+    awaitingReview: 0,
+    completed: 0,
+    failed: 0,
+  };
   for (const job of myJobs.value) {
     switch (job.status) {
-      case "PENDING": s.pending++; break;
-      case "PROCESSING": s.processing++; break;
-      case "AWAITING_REVIEW": s.awaitingReview++; break;
-      case "COMPLETED": s.completed++; break;
-      case "FAILED": s.failed++; break;
+      case "PENDING":
+        s.pending++;
+        break;
+      case "PROCESSING":
+        s.processing++;
+        break;
+      case "AWAITING_REVIEW":
+        s.awaitingReview++;
+        break;
+      case "COMPLETED":
+        s.completed++;
+        break;
+      case "FAILED":
+        s.failed++;
+        break;
     }
   }
   return s;
@@ -382,14 +479,14 @@ const onDrop = async (e) => {
 
 // Check if a file is a supported audio format
 const isAudioFile = (filename) => {
-  const ext = filename.split('.').pop()?.toLowerCase();
+  const ext = filename.split(".").pop()?.toLowerCase();
   return AUDIO_EXTENSIONS.includes(ext);
 };
 
 // Upload a folder by zipping it first
 const uploadFolder = async (files) => {
   // Filter to only audio files
-  const audioFiles = Array.from(files).filter(f => isAudioFile(f.name));
+  const audioFiles = Array.from(files).filter((f) => isAudioFile(f.name));
 
   if (audioFiles.length === 0) {
     uploadState.error = "No audio files found in folder";
@@ -397,7 +494,8 @@ const uploadFolder = async (files) => {
   }
 
   // Get folder name from webkitRelativePath
-  const folderName = audioFiles[0].webkitRelativePath?.split('/')[0] || 'folder';
+  const folderName =
+    audioFiles[0].webkitRelativePath?.split("/")[0] || "folder";
 
   uploadState.zipping = true;
   uploadState.progress = 0;
@@ -417,19 +515,18 @@ const uploadFolder = async (files) => {
     }
 
     // Generate zip blob
-    const zipBlob = await zip.generateAsync(
-      { type: "blob" },
-      (metadata) => {
-        uploadState.progress = 50 + Math.round(metadata.percent / 2);
-      }
-    );
+    const zipBlob = await zip.generateAsync({ type: "blob" }, (metadata) => {
+      uploadState.progress = 50 + Math.round(metadata.percent / 2);
+    });
 
     uploadState.zipping = false;
     uploadState.uploading = true;
     uploadState.progress = 0;
 
     // Upload the zip
-    const zipFile = new File([zipBlob], `${folderName}.zip`, { type: "application/zip" });
+    const zipFile = new File([zipBlob], `${folderName}.zip`, {
+      type: "application/zip",
+    });
 
     const result = await remoteStore.uploadIngestionFile(
       zipFile,
@@ -444,9 +541,10 @@ const uploadFolder = async (files) => {
       uploadState.error = result.error;
     } else {
       const jobCount = result.job_ids?.length || 1;
-      uploadState.success = jobCount > 1
-        ? `Created ${jobCount} jobs from ${folderName}`
-        : `Job created: ${result.job_id || result.job_ids?.[0]}`;
+      uploadState.success =
+        jobCount > 1
+          ? `Created ${jobCount} jobs from ${folderName}`
+          : `Job created: ${result.job_id || result.job_ids?.[0]}`;
       // Add sessions to ingestion store and open monitor
       const jobIds = result.job_ids || (result.job_id ? [result.job_id] : []);
       for (const jobId of jobIds) {
@@ -487,7 +585,7 @@ const uploadDirectoryEntry = async (dirEntry) => {
   try {
     // Recursively read all files from the directory
     const files = await readDirectoryRecursive(dirEntry);
-    const audioFiles = files.filter(f => isAudioFile(f.path));
+    const audioFiles = files.filter((f) => isAudioFile(f.path));
 
     if (audioFiles.length === 0) {
       uploadState.error = "No audio files found in folder";
@@ -505,19 +603,18 @@ const uploadDirectoryEntry = async (dirEntry) => {
     }
 
     // Generate zip blob
-    const zipBlob = await zip.generateAsync(
-      { type: "blob" },
-      (metadata) => {
-        uploadState.progress = 50 + Math.round(metadata.percent / 2);
-      }
-    );
+    const zipBlob = await zip.generateAsync({ type: "blob" }, (metadata) => {
+      uploadState.progress = 50 + Math.round(metadata.percent / 2);
+    });
 
     uploadState.zipping = false;
     uploadState.uploading = true;
     uploadState.progress = 0;
 
     // Upload the zip
-    const zipFile = new File([zipBlob], `${folderName}.zip`, { type: "application/zip" });
+    const zipFile = new File([zipBlob], `${folderName}.zip`, {
+      type: "application/zip",
+    });
 
     const result = await remoteStore.uploadIngestionFile(
       zipFile,
@@ -532,9 +629,10 @@ const uploadDirectoryEntry = async (dirEntry) => {
       uploadState.error = result.error;
     } else {
       const jobCount = result.job_ids?.length || 1;
-      uploadState.success = jobCount > 1
-        ? `Created ${jobCount} jobs from ${folderName}`
-        : `Job created: ${result.job_id || result.job_ids?.[0]}`;
+      uploadState.success =
+        jobCount > 1
+          ? `Created ${jobCount} jobs from ${folderName}`
+          : `Job created: ${result.job_id || result.job_ids?.[0]}`;
       // Add sessions to ingestion store and open monitor
       const jobIds = result.job_ids || (result.job_id ? [result.job_id] : []);
       for (const jobId of jobIds) {
@@ -630,9 +728,10 @@ const uploadFile = async (file) => {
     } else {
       const jobIds = result.job_ids || (result.job_id ? [result.job_id] : []);
       const jobCount = jobIds.length;
-      uploadState.success = jobCount > 1
-        ? `Created ${jobCount} jobs from ${file.name}`
-        : `Job created: ${jobIds[0]}`;
+      uploadState.success =
+        jobCount > 1
+          ? `Created ${jobCount} jobs from ${file.name}`
+          : `Job created: ${jobIds[0]}`;
       // Add sessions to ingestion store and open monitor
       for (const jobId of jobIds) {
         ingestionStore.addSession({
@@ -732,7 +831,8 @@ const resolveReview = async (jobId, selectedOption) => {
 // Review album comparison
 const loadReviewAlbumData = async (items) => {
   for (const item of items) {
-    if (reviewAlbumData[item.job_id] || reviewAlbumLoading[item.job_id]) continue;
+    if (reviewAlbumData[item.job_id] || reviewAlbumLoading[item.job_id])
+      continue;
 
     // Parse options to find album candidate
     const options = parseOptions(item.options);
@@ -781,8 +881,7 @@ const loadReviewAlbumData = async (items) => {
       });
 
       reviewAlbumData[item.job_id] = {
-        albumName:
-          resolvedAlbum.album?.name || "Unknown Album",
+        albumName: resolvedAlbum.album?.name || "Unknown Album",
         artistName:
           resolvedAlbum.artists?.map((a) => a.name).join(", ") ||
           "Unknown Artist",
@@ -825,11 +924,8 @@ const buildComparisonRows = (data) => {
         : String(i + 1),
       catalogName: catalog?.name || null,
       catalogDuration: catalogMs != null ? formatDurationMs(catalogMs) : "—",
-      uploadedName: uploaded
-        ? uploaded.tag_title || uploaded.filename
-        : null,
-      uploadedDuration:
-        uploadedMs != null ? formatDurationMs(uploadedMs) : "—",
+      uploadedName: uploaded ? uploaded.tag_title || uploaded.filename : null,
+      uploadedDuration: uploadedMs != null ? formatDurationMs(uploadedMs) : "—",
       delta: deltaStr,
       deltaClass,
     });
@@ -859,25 +955,39 @@ const formatStatus = (status) => {
 
 const statusClass = (status) => {
   switch (status?.toUpperCase()) {
-    case "COMPLETED": return "status-completed";
-    case "PROCESSING": return "status-progress";
-    case "ANALYZING": return "status-progress";
-    case "IDENTIFYING_ALBUM": return "status-progress";
-    case "MAPPING_TRACKS": return "status-progress";
-    case "CONVERTING": return "status-converting";
-    case "PENDING": return "status-pending";
-    case "FAILED": return "status-failed";
-    case "AWAITING_REVIEW": return "status-review";
-    default: return "";
+    case "COMPLETED":
+      return "status-completed";
+    case "PROCESSING":
+      return "status-progress";
+    case "ANALYZING":
+      return "status-progress";
+    case "IDENTIFYING_ALBUM":
+      return "status-progress";
+    case "MAPPING_TRACKS":
+      return "status-progress";
+    case "CONVERTING":
+      return "status-converting";
+    case "PENDING":
+      return "status-pending";
+    case "FAILED":
+      return "status-failed";
+    case "AWAITING_REVIEW":
+      return "status-review";
+    default:
+      return "";
   }
 };
 
 const ticketClass = (ticketType) => {
   switch (ticketType?.toUpperCase()) {
-    case "SUCCESS": return "ticket-success";
-    case "REVIEW": return "ticket-review";
-    case "FAILURE": return "ticket-failure";
-    default: return "";
+    case "SUCCESS":
+      return "ticket-success";
+    case "REVIEW":
+      return "ticket-review";
+    case "FAILURE":
+      return "ticket-failure";
+    default:
+      return "";
   }
 };
 
@@ -926,608 +1036,491 @@ onUnmounted(() => {
 <style scoped>
 .ingestionManager {
   width: 100%;
-}
-
-.sectionTitle {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
+  min-width: 0;
   color: var(--text-base);
-  margin: 0 0 var(--spacing-4) 0;
 }
-
-/* Upload Section */
-.uploadSection {
-  margin-bottom: var(--spacing-4);
+.pageHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 28px;
 }
-
-.uploadDropzone {
-  border: 2px dashed var(--border-subdued);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-8);
-  text-align: center;
-  transition: all var(--transition-fast);
+.sectionTitle {
+  margin: 0 0 10px;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+.pageHeader p {
+  margin: 0;
+  color: var(--text-subdued);
+  font-size: 14px;
+  line-height: 1.5;
+}
+button {
+  font: inherit;
+  font-size: 13px;
   cursor: pointer;
 }
-
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+.refreshButton,
+.folderButton,
+.actionButton {
+  min-height: 40px;
+  padding: 8px 20px;
+  border: 1px solid #727272;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-base);
+  font-weight: 600;
+}
+.refreshButton:hover:not(:disabled),
+.folderButton:hover,
+.actionButton:hover:not(:disabled) {
+  border-color: #fff;
+  background: #ffffff0c;
+}
+.uploadSection {
+  margin-bottom: 28px;
+}
+.uploadDropzone {
+  padding: 32px 24px;
+  border: 1px dashed #727272;
+  background: #181818;
+  border-radius: 8px;
+  cursor: pointer;
+}
 .uploadDropzone:hover,
 .uploadDropzone.dragging {
-  border-color: var(--spotify-green);
-  background-color: rgba(29, 185, 84, 0.05);
+  border-color: #fff;
+  background: #202020;
 }
-
 .dropzoneContent {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--spacing-2);
+  gap: 12px;
+  text-align: center;
 }
-
-
 .dropzoneIcon {
-  font-size: var(--text-4xl);
-  color: var(--text-subdued);
+  width: 32px;
+  height: 32px;
+  fill: none;
+  stroke: var(--text-subdued);
+  stroke-width: 1.5;
 }
-
 .dropzoneText {
-  color: var(--text-subdued);
-  font-size: var(--text-sm);
+  font-size: 16px;
+  font-weight: 500;
 }
-
 .browseLink {
-  color: var(--spotify-green);
-  font-weight: var(--font-medium);
   text-decoration: underline;
 }
-
 .dropzoneHint {
-  font-size: var(--text-xs);
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--text-subdued);
 }
-
 .folderButton {
-  margin-top: var(--spacing-2);
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--bg-elevated-base);
-  border: 1px solid var(--border-subdued);
-  border-radius: var(--radius-md);
-  color: var(--text-subdued);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition: all var(--transition-fast);
+  margin-top: 4px;
 }
-
-.folderButton:hover {
-  border-color: var(--spotify-green);
-  color: var(--spotify-green);
-}
-
 .uploadProgress {
-  margin-top: var(--spacing-3);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--spacing-3);
+  gap: 12px;
+  margin-top: 16px;
 }
-
 .progressBar {
-  flex: 1;
-  height: 6px;
-  background-color: var(--bg-highlight);
-  border-radius: 3px;
+  flex: 1 1 200px;
+  height: 4px;
+  border-radius: 999px;
+  background: #535353;
   overflow: hidden;
 }
-
 .progressFill {
   height: 100%;
-  background-color: var(--spotify-green);
-  transition: width 0.3s ease;
+  background: var(--spotify-green);
 }
-
 .progressText {
-  font-size: var(--text-sm);
+  font-size: 13px;
   color: var(--text-subdued);
+  overflow-wrap: anywhere;
 }
-
-.uploadError {
-  margin-top: var(--spacing-3);
-  padding: var(--spacing-3);
-  background-color: rgba(220, 38, 38, 0.1);
-  border: 1px solid #dc2626;
-  border-radius: var(--radius-md);
-  color: #dc2626;
-  font-size: var(--text-sm);
-}
-
+.uploadError,
 .uploadSuccess {
-  margin-top: var(--spacing-3);
-  padding: var(--spacing-3);
-  background-color: rgba(34, 197, 94, 0.1);
-  border: 1px solid #22c55e;
-  border-radius: var(--radius-md);
-  color: #22c55e;
-  font-size: var(--text-sm);
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
-
-/* Stats Summary */
+.uploadError {
+  background: #f3727f12;
+  color: #f3727f;
+}
+.uploadSuccess {
+  background: #1ed76012;
+  color: var(--spotify-green);
+}
 .statsSummary {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--spacing-4);
-  padding: var(--spacing-3) var(--spacing-4);
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
-  margin-bottom: var(--spacing-4);
-  font-size: var(--text-sm);
+  gap: 12px 28px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--surface-border);
+  margin-bottom: 24px;
+  font-size: 14px;
   color: var(--text-subdued);
 }
-
 .statItem strong {
   color: var(--text-base);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
-
-.statItem.success strong { color: #22c55e; }
-.statItem.danger strong { color: #dc2626; }
-.statItem.warning strong { color: #f97316; }
-
-/* Tab Navigation */
+.statItem.warning strong {
+  color: #f0bc65;
+}
+.statItem.danger strong {
+  color: #f3727f;
+}
 .tabNav {
   display: flex;
-  gap: var(--spacing-2);
-  margin-bottom: var(--spacing-4);
-  border-bottom: 1px solid var(--border-subdued);
-  padding-bottom: var(--spacing-2);
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
 }
-
 .tabButton {
   display: flex;
   align-items: center;
-  gap: var(--spacing-2);
-  padding: var(--spacing-2) var(--spacing-4);
-  background: none;
-  border: none;
-  color: var(--text-subdued);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  border-radius: var(--radius-md);
-  transition: all var(--transition-fast);
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: #242424;
+  color: var(--text-base);
 }
-
 .tabButton:hover {
-  color: var(--text-base);
-  background-color: var(--bg-highlight);
+  background: #333;
 }
-
 .tabButton.active {
-  color: var(--text-base);
-  background-color: var(--bg-elevated-base);
+  background: #fff;
+  color: #000;
 }
-
 .tabCount {
-  background-color: var(--bg-highlight);
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  font-size: var(--text-xs);
+  font-size: 12px;
+  opacity: 0.7;
 }
-
-/* Tab Content */
 .tabContent {
   min-height: 200px;
 }
-
 .emptyState {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 200px;
+  display: grid;
+  place-items: center;
+  min-height: 160px;
+  padding: 24px;
+  background: #181818;
+  border-radius: 8px;
   color: var(--text-subdued);
+  font-size: 14px;
 }
-
-/* Job List */
-.jobList {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2);
-}
-
-.jobItem {
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-3) var(--spacing-4);
-  border-left: 3px solid var(--border-subdued);
-}
-
-.jobItem.status-pending { border-left-color: #9ca3af; }
-.jobItem.status-progress { border-left-color: #3b82f6; }
-.jobItem.status-converting { border-left-color: #f59e0b; }
-.jobItem.status-completed { border-left-color: #22c55e; }
-.jobItem.status-failed { border-left-color: #dc2626; }
-.jobItem.status-review { border-left-color: #f97316; }
-
-.jobHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-2);
-}
-
-.jobMain {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-3);
-}
-
-.jobFilename {
-  font-weight: var(--font-medium);
-  color: var(--text-base);
-}
-
-.jobActions {
-  display: flex;
-  gap: var(--spacing-2);
-}
-
-.actionButton {
-  padding: 4px 12px;
-  border-radius: var(--radius-md);
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.actionButton.primary {
-  background-color: var(--spotify-green);
-  color: white;
-  border: none;
-}
-
-.actionButton.primary:hover:not(:disabled) {
-  background-color: #1ed760;
-}
-
-.actionButton.secondary {
-  background-color: transparent;
-  color: var(--text-subdued);
-  border: 1px solid var(--border-subdued);
-}
-
-.actionButton.secondary:hover:not(:disabled) {
-  border-color: var(--text-base);
-  color: var(--text-base);
-}
-
-.actionButton.danger {
-  background-color: transparent;
-  color: var(--text-subdued);
-  border: 1px solid var(--border-subdued);
-  padding: 4px 8px;
-}
-
-.actionButton.danger:hover:not(:disabled) {
-  border-color: #dc2626;
-  color: #dc2626;
-}
-
-.actionButton:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.jobDetails {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-3);
-  font-size: var(--text-xs);
-}
-
-.detailItem {
-  display: inline-flex;
-  gap: var(--spacing-1);
-}
-
-.detailLabel {
-  color: var(--text-subdued);
-}
-
-.detailValue {
-  color: var(--text-base);
-}
-
-.detailValue.trackId {
-  font-family: monospace;
-  font-size: var(--text-xs);
-}
-
-.jobError {
-  margin-top: var(--spacing-2);
-  font-size: var(--text-xs);
-  color: #dc2626;
-}
-
-/* Status Badge */
-.statusBadge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-}
-
-.status-completed { background-color: rgba(34, 197, 94, 0.15); color: #22c55e; }
-.status-progress { background-color: rgba(59, 130, 246, 0.15); color: #3b82f6; }
-.status-converting { background-color: rgba(245, 158, 11, 0.15); color: #f59e0b; }
-.status-pending { background-color: rgba(156, 163, 175, 0.15); color: #9ca3af; }
-.status-failed { background-color: rgba(220, 38, 38, 0.15); color: #dc2626; }
-.status-review { background-color: rgba(249, 115, 22, 0.15); color: #f97316; }
-
-/* Ticket Type Badge */
-.ticketBadge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  text-transform: uppercase;
-}
-
-.ticket-success { background-color: rgba(34, 197, 94, 0.2); color: #22c55e; }
-.ticket-review { background-color: rgba(249, 115, 22, 0.2); color: #f97316; }
-.ticket-failure { background-color: rgba(220, 38, 38, 0.2); color: #dc2626; }
-
-/* Upload Type Badge */
-.uploadTypeBadge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  background-color: rgba(139, 92, 246, 0.15);
-  color: #8b5cf6;
-  text-transform: lowercase;
-}
-
-/* Review List */
+.jobList,
 .reviewList {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-3);
+  gap: 8px;
 }
-
+.jobItem,
 .reviewItem {
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-4);
-  border-left: 3px solid #f97316;
+  padding: 20px;
+  background: #181818;
+  border-radius: 8px;
+  min-width: 0;
 }
-
-.reviewHeader {
-  margin-bottom: var(--spacing-3);
+.jobHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
 }
-
-.reviewQuestion {
-  font-weight: var(--font-medium);
+.jobMain {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-width: 0;
+  flex: 1 1 260px;
+}
+.jobFilename {
+  font-size: 16px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.jobActions {
+  display: flex;
+  gap: 8px;
+}
+.actionButton {
+  min-height: 36px;
+  padding: 6px 16px;
+}
+.actionButton.primary {
+  background: var(--spotify-green);
+  border-color: transparent;
+  color: #000;
+  font-weight: 700;
+}
+.actionButton.primary:hover:not(:disabled) {
+  background: var(--spotify-green-hover);
+}
+.actionButton.danger {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  padding: 0;
+  border: 0;
+  color: var(--text-subdued);
+}
+.actionButton.danger:hover:not(:disabled) {
+  color: #f3727f;
+}
+.actionButton.danger svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+}
+.jobDetails,
+.reviewMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  font-size: 12px;
+}
+.detailItem {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.detailLabel {
+  color: var(--text-subdued);
+}
+.detailValue {
   color: var(--text-base);
 }
-
-.reviewOptions {
+.jobError {
+  margin-top: 12px;
+  color: #f3727f;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.statusBadge,
+.ticketBadge,
+.uploadTypeBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-subdued);
+}
+.statusBadge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.ticketBadge,
+.uploadTypeBadge {
+  padding: 4px 8px;
+  background: #2a2a2a;
+  border-radius: 4px;
+  text-transform: lowercase;
+}
+.statusBadge.status-progress,
+.ticket-success {
+  color: var(--spotify-green);
+}
+.statusBadge.status-review,
+.statusBadge.status-converting,
+.ticket-review {
+  color: #f0bc65;
+}
+.statusBadge.status-failed,
+.ticket-failure {
+  color: #f3727f;
+}
+.reviewHeader {
+  margin-bottom: 20px;
+}
+.reviewQuestion {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.reviewAlbumHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.reviewAlbumInfo {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-2);
-  margin-bottom: var(--spacing-3);
+  gap: 6px;
+  min-width: 0;
 }
-
+.reviewAlbumArtist {
+  font-size: 13px;
+  color: var(--text-subdued);
+}
+.reviewAlbumName {
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.reviewAlbumScores {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.scoreBadge,
+.reviewTrackCount {
+  font-size: 12px;
+  color: var(--text-subdued);
+  font-variant-numeric: tabular-nums;
+}
+.scoreHigh {
+  color: var(--spotify-green);
+}
+.scoreMedium {
+  color: #f0bc65;
+}
+.scoreLow {
+  color: #f3727f;
+}
+.trackTableWrapper {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  margin-bottom: 20px;
+  border-radius: 4px;
+}
+.trackTable {
+  width: 100%;
+  min-width: 700px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.trackTable th {
+  padding: 12px;
+  text-align: left;
+  color: var(--text-subdued);
+  font-weight: 500;
+  background: #242424;
+  border-bottom: 1px solid var(--surface-border);
+}
+.trackTable td {
+  padding: 12px;
+  border-bottom: 1px solid var(--surface-border);
+}
+.trackTable tbody tr:hover {
+  background: #ffffff08;
+}
+.colNum {
+  width: 32px;
+  color: var(--text-subdued);
+}
+.colName {
+  max-width: 220px;
+  overflow-wrap: anywhere;
+}
+.colDur,
+.colDelta {
+  white-space: nowrap;
+}
+.mono {
+  font-variant-numeric: tabular-nums;
+}
+.deltaOk {
+  color: var(--spotify-green);
+}
+.deltaWarn {
+  color: #f0bc65;
+}
+.deltaBad {
+  color: #f3727f;
+}
+.reviewAlbumLoading {
+  padding: 20px;
+  color: var(--text-subdued);
+  font-size: 13px;
+}
+.reviewOptions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
 .reviewOption {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  padding: var(--spacing-3);
-  background-color: var(--bg-base);
-  border: 1px solid var(--border-subdued);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.reviewOption:hover:not(:disabled) {
-  border-color: var(--spotify-green);
-}
-
-.reviewOption.noMatch {
-  border-color: var(--border-subdued);
-}
-
-.reviewOption.noMatch:hover:not(:disabled) {
-  border-color: #dc2626;
-}
-
-.reviewOption:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.optionLabel {
-  font-weight: var(--font-medium);
-  color: var(--text-base);
-}
-
-.optionDesc {
-  font-size: var(--text-xs);
-  color: var(--text-subdued);
-  margin-top: var(--spacing-1);
-}
-
-.reviewMeta {
-  display: flex;
-  gap: var(--spacing-3);
-  font-size: var(--text-xs);
-}
-
-/* Review Album Comparison */
-.reviewAlbumHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--spacing-3);
-  background-color: var(--bg-highlight);
-  border-radius: var(--radius-md);
-  margin-bottom: var(--spacing-2);
-  gap: var(--spacing-3);
-}
-
-.reviewAlbumInfo {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.reviewAlbumArtist {
-  font-size: var(--text-xs);
-  color: var(--text-subdued);
-}
-
-.reviewAlbumName {
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  color: var(--text-base);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.reviewAlbumScores {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  flex-shrink: 0;
-}
-
-.scoreBadge {
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  font-size: 11px;
-  font-weight: var(--font-semibold);
-}
-
-.scoreBadge.scoreHigh {
-  background-color: rgba(34, 197, 94, 0.2);
-  color: #22c55e;
-}
-
-.scoreBadge.scoreMedium {
-  background-color: rgba(249, 115, 22, 0.2);
-  color: #f97316;
-}
-
-.scoreBadge.scoreLow {
-  background-color: rgba(220, 38, 38, 0.2);
-  color: #dc2626;
-}
-
-.scoreBadge.scoreMeta {
-  background-color: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
-}
-
-.reviewTrackCount {
-  font-size: 11px;
-  color: var(--text-subdued);
-}
-
-.trackTableWrapper {
-  overflow-x: auto;
-  margin-bottom: var(--spacing-3);
-  border: 1px solid var(--border-subdued);
-  border-radius: var(--radius-md);
-}
-
-.trackTable {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--text-xs);
-}
-
-.trackTable th {
-  padding: var(--spacing-2);
+  gap: 8px;
+  padding: 16px;
   text-align: left;
-  font-weight: var(--font-medium);
-  font-size: 11px;
-  color: var(--text-subdued);
-  border-bottom: 1px solid var(--border-subdued);
-  background-color: var(--bg-elevated-base);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.trackTable td {
-  padding: 4px var(--spacing-2);
-  border-bottom: 1px solid var(--bg-highlight);
+  border: 1px solid #727272;
+  border-radius: 8px;
+  background: transparent;
   color: var(--text-base);
 }
-
-.trackTable tr:last-child td {
-  border-bottom: none;
+.reviewOption:hover:not(:disabled) {
+  border-color: #fff;
+  background: #ffffff08;
 }
-
-.colNum {
-  width: 32px;
-  text-align: center;
+.reviewOption.noMatch:hover:not(:disabled) {
+  border-color: #f3727f;
+}
+.optionLabel {
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.optionDesc {
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--text-subdued);
 }
-
-.colName {
-  max-width: 180px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.colDur {
-  width: 52px;
-  text-align: right;
-}
-
-.colDelta {
-  width: 56px;
-  text-align: center;
-  font-weight: var(--font-medium);
-}
-
-.mono {
-  font-family: monospace;
-}
-
-.deltaOk { color: #22c55e; }
-.deltaWarn { color: #f97316; }
-.deltaBad { color: #dc2626; }
-
-.reviewAlbumLoading {
-  padding: var(--spacing-3);
-  text-align: center;
-  color: var(--text-subdued);
-  font-size: var(--text-xs);
-  margin-bottom: var(--spacing-2);
-}
-
-/* Refresh Button */
-.refreshButton {
-  margin-top: var(--spacing-4);
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--bg-elevated-base);
-  border: 1px solid var(--border-subdued);
-  border-radius: var(--radius-md);
-  color: var(--text-subdued);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.refreshButton:hover:not(:disabled) {
-  border-color: var(--text-base);
-  color: var(--text-base);
-}
-
-.refreshButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+@media (max-width: 600px) {
+  .jobItem,
+  .reviewItem {
+    padding: 16px;
+  }
+  .uploadDropzone {
+    padding: 24px 16px;
+  }
 }
 </style>
