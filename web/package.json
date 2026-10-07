@@ -16,7 +16,8 @@
     "test:e2e:debug": "playwright test --debug",
     "dev:mock": "vite --mode mock",
     "test:mock": "node mock/smoke.mjs",
-    "test:mock:loading": "node mock/loading.mjs"
+    "test:mock:loading": "node mock/loading.mjs",
+    "test:mock:mobile": "node mock/mobile.mjs"
   },
   "dependencies": {
     "@lelloman/simple-assistant": "file:vendor/simple-assistant/lelloman-simple-assistant-0.2.0.tgz",
