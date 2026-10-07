@@ -1,23 +1,38 @@
 <template>
   <div class="analyticsDashboard">
-    <h2 class="sectionTitle">Analytics Dashboard</h2>
+    <header class="pageHeader">
+      <h2 class="sectionTitle">Analytics</h2>
+      <p>Explore listening activity, popular tracks and who’s online.</p>
+    </header>
 
     <!-- Date Range Picker -->
-    <div class="dateRangeSection">
+    <form class="dateRangeSection" @submit.prevent="loadData">
       <div class="dateInputs">
         <label class="dateLabel">
-          From:
-          <input type="date" v-model="startDate" class="dateInput" />
+          From
+          <input
+            type="date"
+            v-model="startDate"
+            :max="endDate"
+            required
+            class="dateInput"
+          />
         </label>
         <label class="dateLabel">
-          To:
-          <input type="date" v-model="endDate" class="dateInput" />
+          To
+          <input
+            type="date"
+            v-model="endDate"
+            :min="startDate"
+            required
+            class="dateInput"
+          />
         </label>
-        <button class="refreshButton" @click="loadData" :disabled="isLoading">
-          {{ isLoading ? "Loading..." : "Refresh" }}
+        <button class="refreshButton" type="submit" :disabled="isLoading">
+          {{ isLoading ? "Loading…" : "Refresh" }}
         </button>
       </div>
-    </div>
+    </form>
 
     <!-- Online Users -->
     <div class="onlineUsersCard">
@@ -29,7 +44,7 @@
       </div>
       <div v-if="onlineUsers?.handles?.length > 0" class="onlineHandles">
         <span
-          v-for="handle in onlineUsers.handles"
+          v-for="handle in onlineUsers.handles.slice(0, 3)"
           :key="handle"
           class="userBadge"
         >
@@ -45,14 +60,16 @@
       {{ loadError }}
     </div>
 
-    <!-- Daily Listening Stats -->
+    <!-- Daily listening Stats -->
     <div class="chartSection">
-      <h3 class="chartTitle">Daily Listening</h3>
+      <h3 class="chartTitle">Daily listening</h3>
       <div class="chartContainer">
         <Line
           v-if="dailyChartData"
           :data="dailyChartData"
           :options="lineChartOptions"
+          aria-label="Daily total and completed plays; values listed in the table below"
+          role="img"
         />
         <div v-else class="noData">
           No listening data available for this period.
@@ -62,8 +79,13 @@
 
     <!-- Daily Stats Table -->
     <div v-if="dailyStats.length > 0" class="tableSection">
-      <h4 class="tableTitle">Daily Breakdown</h4>
-      <div class="tableWrapper">
+      <h4 class="tableTitle">Daily breakdown</h4>
+      <div
+        class="tableWrapper"
+        tabindex="0"
+        role="region"
+        aria-label="Daily listening breakdown"
+      >
         <table class="dataTable">
           <thead>
             <tr>
@@ -89,14 +111,16 @@
       </div>
     </div>
 
-    <!-- Top Tracks -->
+    <!-- Top tracks -->
     <div class="chartSection">
-      <h3 class="chartTitle">Top Tracks</h3>
+      <h3 class="chartTitle">Top tracks</h3>
       <div class="chartContainer barChartContainer">
         <Bar
           v-if="topTracksChartData"
           :data="topTracksChartData"
           :options="barChartOptions"
+          aria-label="Top ten tracks by plays; values listed in the table below"
+          role="img"
         />
         <div v-else class="noData">
           No track data available for this period.
@@ -104,10 +128,15 @@
       </div>
     </div>
 
-    <!-- Top Tracks Table -->
+    <!-- Top tracks Table -->
     <div v-if="topTracks.length > 0" class="tableSection">
-      <h4 class="tableTitle">Top Tracks Breakdown</h4>
-      <div class="tableWrapper">
+      <h4 class="tableTitle">Top tracks breakdown</h4>
+      <div
+        class="tableWrapper"
+        tabindex="0"
+        role="region"
+        aria-label="Top tracks breakdown"
+      >
         <table class="dataTable">
           <thead>
             <tr>
@@ -280,17 +309,22 @@ const dailyChartData = computed(() => {
       {
         label: "Total Plays",
         data: sortedStats.map((d) => d.total_plays),
-        borderColor: "#1db954",
-        backgroundColor: "rgba(29, 185, 84, 0.1)",
+        borderColor: "#1ed760",
+        backgroundColor: "rgba(30, 215, 96, 0.08)",
+        borderWidth: 2,
+        pointRadius: 2,
         fill: true,
         tension: 0.3,
       },
       {
         label: "Completed Plays",
         data: sortedStats.map((d) => d.completed_plays),
-        borderColor: "#1ed760",
-        backgroundColor: "rgba(30, 215, 96, 0.1)",
-        fill: true,
+        borderColor: "#b3b3b3",
+        backgroundColor: "#b3b3b3",
+        borderDash: [5, 4],
+        borderWidth: 2,
+        pointRadius: 2,
+        fill: false,
         tension: 0.3,
       },
     ],
@@ -313,14 +347,20 @@ const topTracksChartData = computed(() => {
       {
         label: "Play Count",
         data: top10.map((t) => t.play_count),
-        backgroundColor: "rgba(29, 185, 84, 0.8)",
-        borderColor: "#1db954",
+        backgroundColor: "#1ed760",
+        borderRadius: 4,
+        maxBarThickness: 24,
+        borderColor: "#1ed760",
         borderWidth: 1,
       },
     ],
   };
 });
 
+const chartFont = {
+  family: "Figtree, Helvetica Neue, Arial, sans-serif",
+  size: 12,
+};
 const lineChartOptions = {
   responsive: true,
   maintainAspectRatio: false,
@@ -329,23 +369,38 @@ const lineChartOptions = {
       position: "top",
       labels: {
         color: "#b3b3b3",
+        font: chartFont,
+        usePointStyle: true,
+        boxWidth: 8,
+        padding: 20,
       },
     },
   },
   scales: {
     x: {
-      ticks: { color: "#b3b3b3" },
-      grid: { color: "rgba(255, 255, 255, 0.1)" },
+      ticks: {
+        color: "#b3b3b3",
+        font: chartFont,
+        maxRotation: 0,
+        maxTicksLimit: 6,
+      },
+      grid: { color: "rgba(255, 255, 255, 0.06)" },
     },
     y: {
-      ticks: { color: "#b3b3b3" },
-      grid: { color: "rgba(255, 255, 255, 0.1)" },
+      ticks: {
+        color: "#b3b3b3",
+        font: chartFont,
+        maxRotation: 0,
+        maxTicksLimit: 6,
+      },
+      grid: { color: "rgba(255, 255, 255, 0.06)" },
       beginAtZero: true,
     },
   },
 };
 
 const barChartOptions = {
+  indexAxis: "y",
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
@@ -355,13 +410,23 @@ const barChartOptions = {
   },
   scales: {
     x: {
-      ticks: { color: "#b3b3b3" },
-      grid: { color: "rgba(255, 255, 255, 0.1)" },
+      beginAtZero: true,
+      ticks: {
+        color: "#b3b3b3",
+        font: chartFont,
+        maxRotation: 0,
+        maxTicksLimit: 6,
+      },
+      grid: { color: "rgba(255, 255, 255, 0.06)" },
     },
     y: {
-      ticks: { color: "#b3b3b3" },
-      grid: { color: "rgba(255, 255, 255, 0.1)" },
-      beginAtZero: true,
+      ticks: {
+        color: "#b3b3b3",
+        font: chartFont,
+        maxRotation: 0,
+        autoSkip: false,
+      },
+      grid: { color: "rgba(255, 255, 255, 0.06)" },
     },
   },
 };
@@ -397,234 +462,224 @@ onUnmounted(() => {
 <style scoped>
 .analyticsDashboard {
   width: 100%;
-}
-
-.sectionTitle {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
+  min-width: 0;
   color: var(--text-base);
-  margin: 0 0 var(--spacing-6) 0;
+  color-scheme: dark;
 }
-
+.pageHeader {
+  margin-bottom: 28px;
+}
+.sectionTitle {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+.pageHeader p {
+  margin: 8px 0 0;
+  color: var(--text-subdued);
+  font-size: 14px;
+  line-height: 1.5;
+}
 .dateRangeSection {
-  margin-bottom: var(--spacing-4);
+  margin-bottom: 24px;
 }
-
+.dateInputs {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.dateLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.dateInput {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #727272;
+  border-radius: 4px;
+  background: #242424;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+}
+.dateInput:focus {
+  outline: 2px solid white;
+  outline-offset: -2px;
+}
+.refreshButton {
+  min-height: 44px;
+  padding: 10px 24px;
+  border: 1px solid #727272;
+  border-radius: 999px;
+  background: transparent;
+  color: white;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.refreshButton:hover:not(:disabled) {
+  border-color: white;
+  background: #242424;
+}
+.refreshButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.refreshButton:focus-visible,
+.tableWrapper:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
 .onlineUsersCard {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--spacing-4);
-  padding: var(--spacing-4);
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
-  margin-bottom: var(--spacing-6);
+  gap: 20px;
+  padding: 20px 24px;
+  border-radius: 8px;
+  background: #181818;
+  margin-bottom: 28px;
 }
-
 .onlineUsersInfo {
   display: flex;
   align-items: baseline;
-  gap: var(--spacing-2);
+  gap: 10px;
 }
-
+.onlineUsersInfo::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #1ed760;
+  align-self: center;
+}
 .onlineCount {
-  font-size: var(--text-3xl);
-  font-weight: var(--font-bold);
-  color: var(--spotify-green);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
 }
-
-.onlineLabel {
-  font-size: var(--font-size-base);
+.onlineLabel,
+.moreUsers {
+  font-size: 14px;
   color: var(--text-subdued);
 }
-
 .onlineHandles {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--spacing-2);
-}
-
-.userBadge {
-  padding: var(--spacing-1) var(--spacing-3);
-  background-color: rgba(29, 185, 84, 0.15);
-  border: 1px solid rgba(29, 185, 84, 0.3);
-  border-radius: var(--radius-full);
-  font-size: var(--text-sm);
-  color: var(--spotify-green);
-}
-
-.moreUsers {
-  font-size: var(--text-sm);
-  color: var(--text-subdued);
-}
-
-.dateInputs {
-  display: flex;
   flex-wrap: wrap;
-  gap: var(--spacing-4);
-  align-items: flex-end;
+  gap: 8px;
 }
-
-.dateLabel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-1);
-  color: var(--text-subdued);
-  font-size: var(--text-sm);
+.userBadge {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #2a2a2a;
+  color: #b3b3b3;
+  font-size: 13px;
+  overflow-wrap: anywhere;
 }
-
-.dateInput {
-  padding: var(--spacing-2) var(--spacing-3);
-  background-color: var(--bg-elevated-base);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  color: var(--text-base);
-  font-size: var(--font-size-base);
-}
-
-.refreshButton {
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--spotify-green);
-  color: white;
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
-}
-
-.refreshButton:hover:not(:disabled) {
-  background-color: #1ed760;
-}
-
-.refreshButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
 .errorMessage {
-  padding: var(--spacing-3) var(--spacing-4);
-  background-color: rgba(220, 38, 38, 0.1);
-  border: 1px solid #dc2626;
-  border-radius: var(--radius-md);
-  color: #dc2626;
-  font-size: var(--text-sm);
-  margin-bottom: var(--spacing-4);
+  padding: 16px;
+  border-radius: 8px;
+  background: #281a1d;
+  color: #f3727f;
+  font-size: 14px;
+  margin-bottom: 24px;
 }
-
 .chartSection {
-  margin-bottom: var(--spacing-6);
+  margin-bottom: 20px;
+  padding: 24px;
+  border-radius: 8px;
+  background: #181818;
 }
-
 .chartTitle {
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  color: var(--text-base);
-  margin: 0 0 var(--spacing-3) 0;
+  margin: 0 0 20px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
-
 .chartContainer {
+  position: relative;
   height: 300px;
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-4);
+  min-width: 0;
 }
-
 .barChartContainer {
-  height: 250px;
+  height: 360px;
 }
-
 .noData {
   display: flex;
+  height: 100%;
   align-items: center;
   justify-content: center;
-  height: 100%;
   color: var(--text-subdued);
+  font-size: 14px;
+  text-align: center;
 }
-
 .tableSection {
-  margin-bottom: var(--spacing-6);
+  margin-bottom: 32px;
 }
-
 .tableTitle {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-medium);
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text-subdued);
-  margin: 0 0 var(--spacing-2) 0;
 }
-
 .tableWrapper {
   overflow-x: auto;
+  border-radius: 8px;
+  background: #181818;
 }
-
 .dataTable {
   width: 100%;
+  min-width: 680px;
   border-collapse: collapse;
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
-
 .dataTable th,
 .dataTable td {
-  padding: var(--spacing-3) var(--spacing-4);
+  padding: 14px 16px;
   text-align: left;
-  border-bottom: 1px solid var(--border-subdued);
+  border-bottom: 1px solid #282828;
 }
-
 .dataTable th {
-  background-color: var(--bg-highlight);
   color: var(--text-subdued);
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-size: 12px;
+  font-weight: 500;
 }
-
 .dataTable td {
-  color: var(--text-base);
-  font-size: var(--text-sm);
+  color: #fff;
 }
-
+.dataTable .artistName {
+  color: var(--text-subdued);
+}
 .dataTable tr:last-child td {
-  border-bottom: none;
+  border-bottom: 0;
 }
-
-.dataTable tr:hover td {
-  background-color: var(--bg-highlight);
+.dataTable tbody tr:hover {
+  background: #242424;
 }
-
-.trackId {
-  font-family: monospace;
-  font-size: var(--text-xs);
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-@media (max-width: 768px) {
-  .dateInputs {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
+@media (max-width: 600px) {
   .dateLabel {
-    width: 100%;
+    flex: 1 1 140px;
   }
-
-  .refreshButton {
-    width: 100%;
+  .onlineUsersCard,
+  .chartSection {
+    padding: 16px;
   }
-
   .chartContainer {
-    height: 250px;
+    height: 260px;
   }
-
   .barChartContainer {
-    height: 200px;
+    height: 360px;
   }
 }
 </style>
