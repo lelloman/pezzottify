@@ -17,6 +17,12 @@ import {
 
 export function mockPlugin() {
   let state = freshState();
+  let deviceSharePolicy = {
+    mode: "deny_everyone",
+    allow_users: [],
+    deny_users: [],
+    allow_roles: [],
+  };
   const misses = new Set();
   const sound = audio();
   const requests = [
@@ -443,6 +449,10 @@ export function mockPlugin() {
       path === "/v1/content/recommendations/continuation"
     )
       return json(res, { track_ids: tracks.slice(6, 24).map((t) => t.id) });
+    if (path === "/v1/user/devices/1/share_policy" && method === "PUT") {
+      deviceSharePolicy = body;
+      return json(res, deviceSharePolicy);
+    }
     if (path === "/v1/user/devices")
       return json(res, {
         devices: [
@@ -452,7 +462,7 @@ export function mockPlugin() {
             name: "Design browser",
             device_name: "Design browser",
             device_type: "web",
-            share_policy: "private",
+            share_policy: deviceSharePolicy,
             is_online: true,
             last_seen: 1780000000,
           },
@@ -462,7 +472,12 @@ export function mockPlugin() {
             name: "Living room speaker",
             device_name: "Living room speaker",
             device_type: "android",
-            share_policy: "private",
+            share_policy: {
+              mode: "deny_everyone",
+              allow_users: [],
+              deny_users: [],
+              allow_roles: [],
+            },
             is_online: true,
             last_seen: 1780000000,
           },
@@ -723,6 +738,13 @@ export function mockPlugin() {
                 device_id: 1,
                 devices: [
                   {
+                    id: 3,
+                    name: "Kitchen tablet",
+                    device_type: "android",
+                    is_shared: true,
+                    owner_handle: "alex",
+                  },
+                  {
                     id: 1,
                     device_id: 1,
                     name: "Design browser",
@@ -737,7 +759,26 @@ export function mockPlugin() {
                     device_type: "android",
                   },
                 ],
-                session: { active_devices: [] },
+                session: {
+                  active_devices: [
+                    {
+                      device_id: 2,
+                      device_name: "Living room speaker",
+                      state: {
+                        is_playing: true,
+                        position: 32,
+                        timestamp: Date.now(),
+                        current_track: {
+                          id: "track-7",
+                          title: "Sunday in Rome",
+                          artist_name: "Luca Moretti",
+                          image_id: "album-2",
+                          duration: 210000,
+                        },
+                      },
+                    },
+                  ],
+                },
               });
           } catch {
             ws.close(1003);
