@@ -5,7 +5,7 @@ This directory contains end-to-end integration tests for the pezzottify-server. 
 ## Overview
 
 The test suite uses:
-- **Real HTTP server**: Spawns `axum` server on a random port
+- **Real HTTP server**: Spawns the native-engine production server on a random port
 - **reqwest**: HTTP client with cookie support for session management
 - **Temporary resources**: Each test gets isolated catalog and database
 - **No mocking**: Tests the actual production code paths

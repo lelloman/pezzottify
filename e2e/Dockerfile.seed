@@ -10,6 +10,4 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy cli-auth binary from pezzottify-server image
 COPY --from=cli-source /usr/local/bin/cli-auth /usr/local/bin/cli-auth
 
-COPY --from=cli-source /usr/local/bin/lib/ /usr/local/bin/lib/
-
 WORKDIR /seed

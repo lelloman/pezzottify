@@ -8,6 +8,10 @@ second runtime. The server's existing graceful drain and admission policies are
 preserved. Ordinary database worker threads explicitly enter the engine context
 when they need asynchronous work.
 
+The `build_search_index` helper adopts shared logging and links the engine.
+`cli-auth` and `query_search_index` remain synchronous helpers and do not link an
+unused native runtime; their database/search behavior is unchanged.
+
 SQLite (including hooks/FTS and the bounded database executor), search, JWT/JWKS
 verification and refresh, Web Push crypto, RSA/Argon2 and ZIP remain local.
 OpenID Connect uses the original SDK with a shared HTTP adapter. Host Tokio is
@@ -45,7 +49,7 @@ Docker runs. For a direct Docker build, first run
 Git export of the pin and the prepared engine is checksum verified. The Docker
 consumer build links that artifact; it does not compile the engine again.
 The images use Debian Trixie; supply a glibc-compatible Linux engine. The seed
-image copies the same engine beside cli-auth.
+image uses the same Debian release and needs no engine for its synchronous cli-auth.
 
 ## Verification status
 
@@ -69,11 +73,28 @@ intervening frontend commit. Shared implementation/source pin:
   ranges/streaming, SPA fallback, jobs and persistence.
 - Docker image build and network-disabled server/CLI loader smoke pass. The
   complete browser/Android Docker E2E suite has not been run for this migration.
-- Artifact revision/checksum rejection checks pass.
+- Artifact revision/checksum rejection checks pass, including relative artifact
+  directories. The release wrapper builds all four binaries; graph/link checks
+  pass. A relocated bundle launches without LD_LIBRARY_PATH through `$ORIGIN/lib`.
 - Normal/build dependencies: **361 → 328 package/version entries**, **340 → 307
   package names**. No host Axum/Hyper/Reqwest/Rustls/tracing-subscriber; host Tokio
   retains only synchronization/macros.
 
-Paired build measurements and branch integration are pending. No runtime speedup,
-push, publication or deployment is claimed. The new source revision must be made
+Implementation commit: `0b666437`; branch integration remains pending.
+No push, publication or deployment is claimed. The new source revision must be made
 available remotely separately before a fresh remote CI checkout can fetch it.
+
+## Build measurements
+
+Three alternating paired fresh-target builds per profile, eight jobs, Rust 1.96.0,
+offline cached dependencies; engine prebuild excluded:
+
+| Profile | Clean before | Clean after | Reduction | Main touch before | Main touch after |
+|---|---:|---:|---:|---:|---:|
+| dev | 66.214s | 56.872s | 14.11% | 1.736s | 1.592s |
+| release | 114.179s | 105.151s | 7.91% | 5.953s | 4.836s |
+
+Touch measurements change only `src/main.rs`'s timestamp, not library code.
+Release samples varied (before 110.9–114.4s; after 97.4–108.9s); the table reports
+medians, not the best pair. No runtime speedup is claimed.
+[Raw measurements](measurements/pezzottify-engine-build-2026-10-07.json).

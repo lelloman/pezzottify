@@ -14,6 +14,7 @@ if [[ -z "${SIMPLE_SERVER_ENGINE_DIR:-}" ]]; then
         bash "${pezzottify_component_dir}/scripts/build-engine" >&2
     fi
 fi
+SIMPLE_SERVER_ENGINE_DIR="$(cd -- "${SIMPLE_SERVER_ENGINE_DIR}" && pwd)" || return 1
 [[ "$(cat "${SIMPLE_SERVER_ENGINE_DIR}/SOURCE_REVISION")" == "${pezzottify_revision}" ]] || {
     echo 'engine artifact revision does not match simple-server.rev' >&2; return 1;
 }

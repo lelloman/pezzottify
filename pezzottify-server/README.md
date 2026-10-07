@@ -214,6 +214,7 @@ in migrated handler groups, and reintroduction of unbounded catalog-event APIs.
    ```bash
    git clone https://github.com/lelloman/pezzottify
    cd pezzottify/pezzottify-server
+   bash scripts/checkout-engine-source
    ```
 
 2. Build the project:
@@ -251,6 +252,9 @@ bash scripts/build
 For faster development iteration, use feature flags to skip expensive operations:
 
 ```bash
+source scripts/engine-env
+export LD_LIBRARY_PATH="$SIMPLE_SERVER_ENGINE_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
 # Skip catalog integrity checks (faster startup)
 cargo build --features no_checks
 
@@ -275,16 +279,17 @@ The Docker image includes both the pezzottify server and web frontend. A wrapper
 
 The script:
 
-1. Detects git commit hash on the host
-2. Detects dirty state (uncommitted changes)
-3. Passes these as build args to Docker
-4. Runs `docker-compose up --build`
+1. Prepares pinned bindings and the verified prebuilt engine in `.engine-build`
+2. Detects git commit hash and dirty state on the host
+3. Passes version information as build args to Docker
+4. Runs `docker compose up --build`
 
 ### Manual Build
 
 If you need to build manually:
 
 ```bash
+bash pezzottify-server/scripts/prepare-docker
 GIT_HASH=$(git rev-parse --short HEAD) \
 GIT_DIRTY=$(git status --porcelain | grep -q . && echo 1 || echo 0) \
 docker-compose up --build pezzottify-server

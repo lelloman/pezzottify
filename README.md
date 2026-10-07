@@ -20,7 +20,7 @@ It is built around owning the full music stack: browsing and streaming local med
 
 ```text
 pezzottify/
-├── pezzottify-server/     Rust/Axum backend, SQLite stores, background jobs
+├── pezzottify-server/     Rust/native-engine backend, SQLite stores, background jobs
 ├── web/                   Vue 3 frontend
 ├── android/               Kotlin/Jetpack Compose Android app
 ├── docs/                  Design notes and feature documentation
@@ -48,17 +48,22 @@ Run the development stack:
 ```bash
 git clone https://github.com/lelloman/pezzottify
 cd pezzottify
+bash pezzottify-server/scripts/checkout-engine-source
 mkdir -p dev-data
 cp pezzottify-server/config.example.toml pezzottify-server/config.toml
 # Edit pezzottify-server/config.toml for your paths and optional services.
-docker compose up --build
+./build-docker.sh
 ```
 
-Cargo downloads `lelloman-simple-server` from crates.io at the version locked in
-`pezzottify-server/Cargo.lock`; no sibling checkout or private registry credentials
-are required. Direct image builds use the repository root:
+The backend uses sibling simple-server bindings pinned by
+`pezzottify-server/simple-server.rev` and a matching prebuilt native engine.
+The build wrapper verifies or builds that engine once using Rust 1.96+, then
+Docker links the prepared artifact. Set `SIMPLE_SERVER_ENGINE_DIR` to reuse an
+existing verified artifact. See [native-engine setup](docs/native-engine-migration.md).
+Direct image builds use the repository root:
 
 ```bash
+bash pezzottify-server/scripts/prepare-docker
 docker build -f pezzottify-server/Dockerfile .
 ```
 
@@ -166,11 +171,11 @@ Server:
 
 The server uses shared cookie/header authentication (`auth-cookies`) and session
 extraction (`extract`). All route groups now use [shared HTTP routing](docs/shared-http-canary.md),
-extractors, responses, middleware composition and serving (`web`). Multipart
-uploads, SSE, WebSocket upgrades, tracing and test fixtures use shared owned
-APIs. The server has no direct Axum API use. The `simple-server` dependency name
-is an alias for the published `lelloman-simple-server =0.1.0` crate, preserving
-existing `simple_server` imports. Cargo.lock pins the registry artifact and checksum.
+extractors, responses, middleware composition and serving (`engine-web`). Multipart
+uploads, SSE, WebSockets, HTTP clients, runtime and logging use the prebuilt
+engine. `simple-server` aliases the sibling `lelloman-simple-server` bindings;
+`simple-server.rev` pins their source and engine together. SQLite, search and
+OIDC verification remain local.
 
 ```bash
 cd pezzottify-server

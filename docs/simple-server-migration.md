@@ -1,5 +1,9 @@
 # Axum centralization: Pezzottify
 
+Historical source-backend migration record. Current build/runtime instructions are
+in [Native engine migration](native-engine-migration.md).
+
+
 Pezzottify is the first service adopting `simple-server` for Axum dependency
 centralization. This step keeps the existing routers, state, middleware,
 authentication, database setup, and application lifecycle.
