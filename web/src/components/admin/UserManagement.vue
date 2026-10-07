@@ -1,13 +1,17 @@
 <template>
   <div class="userManagement">
-    <h2 class="sectionTitle">User Management</h2>
+    <header class="pageHeader">
+      <h2 class="sectionTitle">Users</h2>
+      <p>Manage accounts, roles and access.</p>
+    </header>
 
     <!-- Create User Section -->
     <div class="createUserSection">
       <input
         v-model="newUserHandle"
         type="text"
-        placeholder="New user handle..."
+        placeholder="New user handle"
+        aria-label="New user handle"
         class="createUserInput"
         @keyup.enter="handleCreateUser"
       />
@@ -16,7 +20,7 @@
         @click="handleCreateUser"
         :disabled="!newUserHandle.trim() || isCreating"
       >
-        {{ isCreating ? "Creating..." : "Create User" }}
+        {{ isCreating ? "Creating..." : "Create user" }}
       </button>
     </div>
     <div v-if="createError" class="createError">{{ createError }}</div>
@@ -31,25 +35,34 @@
     <div v-else class="userList">
       <div v-for="user in users" :key="user.user_handle" class="userCard">
         <div class="userHeader">
-          <span
-            class="userName"
+          <button
+            class="userToggle"
+            :aria-expanded="Boolean(expandedUsers[user.user_handle])"
             @click="toggleUserExpanded(user.user_handle)"
-            >{{ user.user_handle }}</span
           >
-          <div class="userActions">
-            <button
-              class="deleteUserButton"
-              @click.stop="initiateDelete(user.user_handle)"
-              title="Delete user"
-            >
-              ×
-            </button>
-            <span
+            <span class="userAvatar" aria-hidden="true">{{
+              user.user_handle.slice(0, 1).toUpperCase()
+            }}</span>
+            <span class="userName">{{ user.user_handle }}</span>
+            <svg
               class="expandIcon"
-              @click="toggleUserExpanded(user.user_handle)"
-              >{{ expandedUsers[user.user_handle] ? "−" : "+" }}</span
+              :class="{ expanded: expandedUsers[user.user_handle] }"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
             >
-          </div>
+              <path d="m8 5 7 7-7 7" />
+            </svg>
+          </button>
+          <button
+            class="deleteUserButton"
+            @click="initiateDelete(user.user_handle)"
+            :aria-label="`Delete ${user.user_handle}`"
+            title="Delete user"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7" />
+            </svg>
+          </button>
         </div>
 
         <div v-if="expandedUsers[user.user_handle]" class="userDetails">
@@ -75,6 +88,7 @@
                   <button
                     class="removeButton"
                     @click="handleRemoveRole(user.user_handle, role)"
+                    :aria-label="`Remove ${role} role from ${user.user_handle}`"
                     title="Remove role"
                   >
                     ×
@@ -87,7 +101,11 @@
                 >
               </div>
               <div class="addRoleForm">
-                <select v-model="newRole[user.user_handle]" class="roleSelect">
+                <select
+                  v-model="newRole[user.user_handle]"
+                  class="roleSelect"
+                  :aria-label="`Add role for ${user.user_handle}`"
+                >
                   <option value="">Add role...</option>
                   <option value="Admin">Admin</option>
                   <option value="Regular">Regular</option>
@@ -104,7 +122,7 @@
 
             <!-- Permissions Section -->
             <div class="detailSection">
-              <h4 class="detailTitle">Current Permissions</h4>
+              <h4 class="detailTitle">Current permissions</h4>
               <div class="permissionList">
                 <span
                   v-for="perm in userDetails[user.user_handle]?.permissions ||
@@ -124,11 +142,12 @@
 
             <!-- Grant Permission Section -->
             <div class="detailSection">
-              <h4 class="detailTitle">Grant Extra Permission</h4>
+              <h4 class="detailTitle">Grant extra permission</h4>
               <div class="grantForm">
                 <select
                   v-model="grantPermission[user.user_handle]"
                   class="permissionSelect"
+                  aria-label="Permission to grant"
                 >
                   <option value="">Select permission...</option>
                   <option
@@ -144,6 +163,7 @@
                   type="number"
                   min="0"
                   placeholder="Duration (seconds)"
+                  aria-label="Permission duration in seconds"
                   class="durationInput"
                 />
                 <input
@@ -151,6 +171,7 @@
                   type="number"
                   min="0"
                   placeholder="Countdown (uses)"
+                  aria-label="Permission use count"
                   class="countdownInput"
                 />
                 <button
@@ -166,9 +187,9 @@
               </p>
             </div>
 
-            <!-- Password Login Section -->
+            <!-- Password login Section -->
             <div class="detailSection">
-              <h4 class="detailTitle">Password Login</h4>
+              <h4 class="detailTitle">Password login</h4>
               <div class="passwordStatus">
                 <span
                   v-if="userDetails[user.user_handle]?.hasPassword"
@@ -188,6 +209,8 @@
                       : 'Set password...'
                   "
                   class="passwordInput"
+                  aria-label="New password"
+                  autocomplete="new-password"
                   @keyup.enter="handleSetPassword(user.user_handle)"
                 />
                 <button
@@ -233,8 +256,14 @@
       class="dialogOverlay"
       @click.self="cancelDelete"
     >
-      <div class="dialogBox">
-        <h3 class="dialogTitle">Delete User</h3>
+      <div
+        class="dialogBox"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-dialog-title"
+        @keydown.esc="cancelDelete"
+      >
+        <h3 id="delete-dialog-title" class="dialogTitle">Delete user</h3>
         <p class="dialogMessage">
           Are you sure you want to delete user
           <strong>{{ deleteTarget }}</strong
@@ -257,8 +286,14 @@
       class="dialogOverlay"
       @click.self="cancelDelete"
     >
-      <div class="dialogBox">
-        <h3 class="dialogTitle">Confirm Deletion</h3>
+      <div
+        class="dialogBox"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-dialog-title"
+        @keydown.esc="cancelDelete"
+      >
+        <h3 id="delete-dialog-title" class="dialogTitle">Confirm deletion</h3>
         <p class="dialogMessage">
           This will permanently delete <strong>{{ deleteTarget }}</strong> and
           all their data (playlists, liked content, settings, etc.).
@@ -270,6 +305,7 @@
           v-model="confirmDeleteName"
           type="text"
           class="confirmInput"
+          aria-label="Confirm user handle"
           :placeholder="deleteTarget"
           @keyup.enter="confirmSecondDelete"
         />
@@ -282,7 +318,7 @@
             @click="confirmSecondDelete"
             :disabled="confirmDeleteName !== deleteTarget"
           >
-            Delete Forever
+            Delete permanently
           </button>
         </div>
       </div>
@@ -360,7 +396,7 @@ const loadUsers = async () => {
 
 const handleCreateUser = async () => {
   const handle = newUserHandle.value.trim();
-  if (!handle) return;
+  if (!handle || isCreating.value) return;
 
   isCreating.value = true;
   createError.value = null;
@@ -411,6 +447,8 @@ const toggleUserExpanded = async (userHandle) => {
   if (expandedUsers[userHandle]) {
     expandedUsers[userHandle] = false;
   } else {
+    newRole[userHandle] ??= "";
+    grantPermission[userHandle] ??= "";
     expandedUsers[userHandle] = true;
     await loadUserDetails(userHandle);
   }
@@ -514,446 +552,400 @@ onMounted(() => {
 
 <style scoped>
 .userManagement {
-  max-width: 800px;
-}
-
-.sectionTitle {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
+  width: 100%;
   color: var(--text-base);
-  margin: 0 0 var(--spacing-6) 0;
 }
-
-.loadingState,
-.errorState,
-.emptyUsers {
-  padding: var(--spacing-4);
-  text-align: center;
+.pageHeader {
+  margin-bottom: 28px;
+}
+.sectionTitle {
+  margin: 0 0 10px;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+.pageHeader p {
+  margin: 0;
+  font-size: 14px;
   color: var(--text-subdued);
 }
-
-.errorState {
-  color: #dc2626;
+.createUserSection {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 28px;
 }
-
-.retryButton {
-  margin-top: var(--spacing-2);
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--bg-elevated-base);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+input,
+select {
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  background: #242424;
   color: var(--text-base);
+  color-scheme: dark;
+  border: 1px solid #727272;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 14px;
+}
+input::placeholder {
+  color: var(--text-subdued);
+}
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+}
+.createUserInput {
+  flex: 1;
+}
+button {
+  font: inherit;
+  font-size: 14px;
   cursor: pointer;
 }
-
+button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.createUserButton,
+.addButton,
+.grantButton,
+.setPasswordButton {
+  min-height: 44px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--spotify-green);
+  color: #000;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.createUserButton:hover:not(:disabled),
+.addButton:hover:not(:disabled),
+.grantButton:hover:not(:disabled),
+.setPasswordButton:hover:not(:disabled) {
+  background: var(--spotify-green-hover);
+}
 .userList {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-3);
+  gap: 8px;
 }
-
 .userCard {
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
+  background: #181818;
+  border-radius: 8px;
 }
-
 .userHeader {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: var(--spacing-4);
-  transition: background-color var(--transition-fast);
+  padding: 4px 12px;
+  gap: 12px;
 }
-
-.userHeader:hover {
-  background-color: var(--bg-highlight);
-}
-
-.userName {
-  font-size: var(--text-lg);
-  font-weight: var(--font-medium);
-  color: var(--text-base);
-  cursor: pointer;
+.userToggle {
+  display: flex;
+  align-items: center;
   flex: 1;
+  min-width: 0;
+  gap: 16px;
+  padding: 12px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text-base);
+  text-align: left;
+  border-radius: 4px;
 }
-
+.userAvatar {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #333;
+  color: var(--text-subdued);
+  font-size: 18px;
+  font-weight: 600;
+}
+.userName {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 16px;
+  font-weight: 600;
+}
 .expandIcon {
-  font-size: var(--text-xl);
-  color: var(--text-subdued);
-  font-weight: var(--font-bold);
-  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: var(--text-subdued);
+  stroke-width: 1.8;
 }
-
+.expandIcon.expanded {
+  transform: rotate(90deg);
+}
+.userToggle:hover .userName {
+  text-decoration: underline;
+}
+.deleteUserButton {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-subdued);
+}
+.deleteUserButton svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.6;
+}
+.deleteUserButton:hover {
+  background: #ffffff12;
+  color: #f3727f;
+}
 .userDetails {
-  padding: 0 var(--spacing-4) var(--spacing-4);
-  border-top: 1px solid var(--border-subdued);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+  padding: 24px;
+  border-top: 1px solid var(--surface-border);
 }
-
-.detailsLoading {
-  padding: var(--spacing-4);
-  text-align: center;
-  color: var(--text-subdued);
-}
-
 .detailSection {
-  margin-top: var(--spacing-4);
+  min-width: 0;
 }
-
+.detailSection:nth-last-child(2),
+.detailSection:last-child {
+  grid-column: 1 / -1;
+}
 .detailTitle {
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  color: var(--text-subdued);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin: 0 0 var(--spacing-2) 0;
+  margin: 0 0 14px;
+  font-size: 16px;
+  font-weight: 700;
 }
-
 .roleList,
 .permissionList {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--spacing-2);
-  margin-bottom: var(--spacing-2);
+  gap: 8px;
+  margin-bottom: 12px;
 }
-
 .roleTag,
 .permissionTag {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-1);
-  padding: var(--spacing-1) var(--spacing-3);
-  background-color: var(--bg-highlight);
-  border-radius: var(--radius-full);
-  font-size: var(--text-sm);
-  color: var(--text-base);
+  gap: 8px;
+  padding: 6px 12px;
+  background: #2a2a2a;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text-subdued);
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
-
 .roleTag {
-  background-color: var(--spotify-green);
-  color: white;
+  color: var(--text-base);
 }
-
 .removeButton {
-  background: none;
-  border: none;
-  color: inherit;
-  font-size: var(--text-lg);
-  cursor: pointer;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text-subdued);
+  width: 24px;
+  height: 24px;
   padding: 0;
-  margin-left: var(--spacing-1);
-  opacity: 0.7;
-  line-height: 1;
+  font-size: 20px;
+  border-radius: 50%;
 }
-
 .removeButton:hover {
-  opacity: 1;
+  color: #fff;
+  background: #ffffff12;
 }
-
-.emptyState {
-  color: var(--text-subdued);
-  font-style: italic;
-  font-size: var(--text-sm);
-}
-
 .addRoleForm,
-.grantForm {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-2);
-  align-items: center;
-}
-
-.roleSelect,
-.permissionSelect,
-.durationInput,
-.countdownInput {
-  padding: var(--spacing-2) var(--spacing-3);
-  background-color: var(--bg-base);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  color: var(--text-base);
-  font-size: var(--text-sm);
-}
-
-.durationInput,
-.countdownInput {
-  width: 140px;
-}
-
-.addButton,
-.grantButton {
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--spotify-green);
-  color: white;
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
-}
-
-.addButton:hover,
-.grantButton:hover {
-  background-color: #1ed760;
-}
-
-.grantHint {
-  font-size: var(--text-xs);
-  color: var(--text-subdued);
-  margin: var(--spacing-2) 0 0 0;
-}
-
-/* Create User Section */
-.createUserSection {
-  display: flex;
-  gap: var(--spacing-2);
-  margin-bottom: var(--spacing-4);
-}
-
-.createUserInput {
-  flex: 1;
-  padding: var(--spacing-3) var(--spacing-4);
-  background-color: var(--bg-elevated-base);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  color: var(--text-base);
-  font-size: var(--font-size-base);
-}
-
-.createUserInput::placeholder {
-  color: var(--text-subdued);
-}
-
-.createUserButton {
-  padding: var(--spacing-3) var(--spacing-6);
-  background-color: var(--spotify-green);
-  color: white;
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
-}
-
-.createUserButton:hover:not(:disabled) {
-  background-color: #1ed760;
-}
-
-.createUserButton:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.createError {
-  color: #dc2626;
-  font-size: var(--text-sm);
-  margin-bottom: var(--spacing-4);
-}
-
-/* User Actions */
-.userActions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-}
-
-.deleteUserButton {
-  background: none;
-  border: none;
-  color: var(--text-subdued);
-  font-size: var(--text-xl);
-  cursor: pointer;
-  padding: var(--spacing-1) var(--spacing-2);
-  border-radius: var(--radius-md);
-  transition: all var(--transition-fast);
-  line-height: 1;
-}
-
-.deleteUserButton:hover {
-  background-color: rgba(220, 38, 38, 0.2);
-  color: #dc2626;
-}
-
-/* Dialog Styles */
-.dialogOverlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.dialogBox {
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-6);
-  max-width: 400px;
-  width: 90%;
-}
-
-.dialogTitle {
-  font-size: var(--text-xl);
-  font-weight: var(--font-bold);
-  color: var(--text-base);
-  margin: 0 0 var(--spacing-4) 0;
-}
-
-.dialogMessage {
-  font-size: var(--font-size-base);
-  color: var(--text-subdued);
-  margin: 0 0 var(--spacing-3) 0;
-  line-height: 1.5;
-}
-
-.dialogMessage strong {
-  color: var(--text-base);
-}
-
-.confirmInput {
-  width: 100%;
-  padding: var(--spacing-3);
-  background-color: var(--bg-base);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  color: var(--text-base);
-  font-size: var(--font-size-base);
-  margin-bottom: var(--spacing-4);
-}
-
-.dialogActions {
-  display: flex;
-  gap: var(--spacing-3);
-  justify-content: flex-end;
-}
-
-.dialogButton {
-  padding: var(--spacing-2) var(--spacing-4);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.cancelButton {
-  background-color: var(--bg-highlight);
-  border: 1px solid var(--border-default);
-  color: var(--text-base);
-}
-
-.cancelButton:hover {
-  background-color: var(--bg-base);
-}
-
-.dangerButton {
-  background-color: #dc2626;
-  border: none;
-  color: white;
-}
-
-.dangerButton:hover:not(:disabled) {
-  background-color: #b91c1c;
-}
-
-.dangerButton:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Password Section */
-.passwordStatus {
-  margin-bottom: var(--spacing-2);
-}
-
-.statusBadge {
-  display: inline-block;
-  padding: var(--spacing-1) var(--spacing-3);
-  border-radius: var(--radius-full);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-}
-
-.hasPassword {
-  background-color: var(--spotify-green);
-  color: white;
-}
-
-.noPassword {
-  background-color: var(--bg-highlight);
-  color: var(--text-subdued);
-}
-
+.grantForm,
 .passwordForm {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--spacing-2);
   align-items: center;
+  gap: 12px;
 }
-
+.permissionSelect {
+  flex: 2 1 220px;
+  max-width: 100%;
+}
+.durationInput,
+.countdownInput {
+  flex: 1 1 160px;
+  width: 160px;
+}
 .passwordInput {
-  flex: 1;
-  min-width: 150px;
-  padding: var(--spacing-2) var(--spacing-3);
-  background-color: var(--bg-base);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  flex: 1 1 200px;
+}
+.grantHint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-subdued);
+}
+.passwordStatus {
+  margin-bottom: 12px;
+}
+.statusBadge,
+.emptyState {
+  font-size: 13px;
+  color: var(--text-subdued);
+}
+.hasPassword::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--spotify-green);
+  margin-right: 8px;
+}
+.removePasswordButton,
+.retryButton {
+  min-height: 40px;
+  padding: 0 20px;
+  border: 1px solid #727272;
+  border-radius: 999px;
+  background: transparent;
   color: var(--text-base);
-  font-size: var(--text-sm);
+  font-weight: 700;
 }
-
-.setPasswordButton {
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--spotify-green);
-  color: white;
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
-}
-
-.setPasswordButton:hover:not(:disabled) {
-  background-color: #1ed760;
-}
-
-.setPasswordButton:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .removePasswordButton {
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: transparent;
-  color: #dc2626;
-  border: 1px solid #dc2626;
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition: all var(--transition-fast);
+  color: #f3727f;
 }
-
-.removePasswordButton:hover:not(:disabled) {
-  background-color: rgba(220, 38, 38, 0.1);
+.removePasswordButton:hover,
+.retryButton:hover {
+  background: #ffffff12;
 }
-
-.removePasswordButton:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.loadingState,
+.errorState,
+.emptyUsers,
+.detailsLoading {
+  padding: 24px;
+  color: var(--text-subdued);
+  font-size: 14px;
 }
-
+.detailsLoading {
+  grid-column: 1 / -1;
+}
+.errorState,
+.createError,
 .passwordError {
-  color: #dc2626;
-  font-size: var(--text-sm);
-  margin-top: var(--spacing-2);
+  color: #f3727f;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.createError {
+  margin-bottom: 16px;
+}
+.passwordError {
+  margin-top: 12px;
+}
+.dialogOverlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: #000b;
+  z-index: 1000;
+}
+.dialogBox {
+  background: #282828;
+  border-radius: 8px;
+  padding: 24px;
+  width: 440px;
+  max-width: 100%;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  box-shadow: var(--shadow-menu);
+}
+.dialogTitle {
+  margin: 0 0 20px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.dialogMessage {
+  margin: 0 0 16px;
+  color: var(--text-subdued);
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.dialogMessage strong {
+  color: var(--text-base);
+}
+.confirmInput {
+  width: 100%;
+  margin-bottom: 20px;
+}
+.dialogActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.dialogButton {
+  min-height: 48px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 999px;
+  font-weight: 700;
+}
+.cancelButton {
+  background: transparent;
+  color: var(--text-subdued);
+}
+.cancelButton:hover {
+  color: #fff;
+}
+.dangerButton {
+  background: #f3727f;
+  color: #000;
+}
+.dangerButton:hover:not(:disabled) {
+  background: #ff8e99;
+}
+@media (max-width: 900px) {
+  .userDetails {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 480px) {
+  .createUserSection {
+    flex-direction: column;
+  }
+  .createUserButton {
+    align-self: flex-start;
+  }
+  .userDetails {
+    padding: 20px 16px;
+  }
+  .grantForm > input,
+  .grantForm > select {
+    width: 100%;
+    flex-basis: 100%;
+  }
+  .roleSelect {
+    max-width: 100%;
+  }
 }
 </style>
