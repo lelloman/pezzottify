@@ -1,24 +1,51 @@
 <template>
   <div class="adminView">
     <header class="adminHeader">
-      <h1 class="adminTitle">Admin Panel</h1>
+      <div class="adminBrand">
+        <router-link to="/" class="brandLink">Pezzottify</router-link
+        ><span class="brandDivider" aria-hidden="true">/</span>
+        <h1 class="adminTitle">Admin</h1>
+      </div>
       <div class="headerActions">
-        <div class="connectionStatus" :title="connectionTitle">
-          <span class="statusDot" :class="connectionStatusClass"></span>
+        <div
+          class="connectionStatus"
+          role="status"
+          :title="connectionTitle"
+          :aria-label="connectionTitle"
+        >
+          <span
+            class="statusDot"
+            :class="connectionStatusClass"
+            aria-hidden="true"
+          ></span
+          ><span class="connectionLabel">{{ connectionLabel }}</span>
         </div>
-        <router-link to="/" class="closeButton" title="Close Admin Panel">
-          <CrossIcon class="closeIcon" />
+        <router-link
+          to="/"
+          class="backButton"
+          aria-label="Back to player"
+          title="Back to player"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m10 5-7 7 7 7M3 12h18" /></svg
+          ><span>Back to player</span>
         </router-link>
       </div>
     </header>
     <div class="adminBody">
-      <div v-if="isLoading" class="loadingState">Loading...</div>
+      <div v-if="isLoading" class="loadingState" role="status">
+        Loading admin…
+      </div>
       <template v-else>
         <AdminSidebar
           :sections="availableSections"
           :activeSection="activeSection"
         />
-        <main class="adminContent">
+        <main
+          :key="activeSection"
+          class="adminContent"
+          aria-label="Admin content"
+        >
           <component :is="activeSectionComponent" />
         </main>
       </template>
@@ -30,7 +57,6 @@
 import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useUserStore } from "@/store/user";
-import CrossIcon from "@/components/icons/CrossIcon.vue";
 import AdminSidebar from "@/components/admin/AdminSidebar.vue";
 import UserManagement from "@/components/admin/UserManagement.vue";
 import AnalyticsDashboard from "@/components/admin/AnalyticsDashboard.vue";
@@ -70,10 +96,18 @@ const connectionTitle = computed(() => {
   }
 });
 
+const connectionLabel = computed(
+  () =>
+    ({ connected: "Connected", connecting: "Connecting…" })[
+      wsConnectionStatus.value
+    ] || "Disconnected",
+);
+
 // Define available sections based on permissions
 const allSections = [
   {
     id: "users",
+    group: "People",
     label: "Users",
     permission: "ManagePermissions",
     component: UserManagement,
@@ -81,6 +115,7 @@ const allSections = [
   },
   {
     id: "analytics",
+    group: "Insights",
     label: "Analytics",
     permission: "ViewAnalytics",
     component: AnalyticsDashboard,
@@ -88,6 +123,7 @@ const allSections = [
   },
   {
     id: "server",
+    group: "Operations",
     label: "Server",
     permission: "ServerAdmin",
     component: ServerControl,
@@ -95,6 +131,7 @@ const allSections = [
   },
   {
     id: "downloads",
+    group: "Operations",
     label: "Downloads",
     permission: "DownloadManagerAdmin",
     component: DownloadManager,
@@ -102,6 +139,7 @@ const allSections = [
   },
   {
     id: "batches",
+    group: "Catalog",
     label: "Batches",
     permission: "EditCatalog",
     component: BatchManager,
@@ -109,6 +147,7 @@ const allSections = [
   },
   {
     id: "bug-reports",
+    group: "Operations",
     label: "Bug Reports",
     permission: "ServerAdmin",
     component: BugReports,
@@ -116,6 +155,7 @@ const allSections = [
   },
   {
     id: "ingestion",
+    group: "Catalog",
     label: "Ingestion",
     permission: "EditCatalog",
     component: IngestionManager,
@@ -123,6 +163,7 @@ const allSections = [
   },
   {
     id: "push",
+    group: "People",
     label: "Push",
     permission: "ServerAdmin",
     component: PushNotifications,
@@ -169,127 +210,154 @@ const activeSectionComponent = computed(() => {
 .adminView {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  background-color: var(--bg-base);
+  height: 100dvh;
+  overflow: hidden;
+  background: #000;
   color: var(--text-base);
 }
-
 .adminHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-3) var(--spacing-4);
-  background-color: var(--bg-elevated-base);
-  border-bottom: 1px solid var(--border-subdued);
+  min-height: 64px;
+  padding: 8px 24px;
+  gap: 16px;
   flex-shrink: 0;
-  gap: var(--spacing-4);
 }
-
-.closeButton {
+.adminBrand {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  color: var(--text-subdued);
+  gap: 16px;
+  min-width: 0;
+}
+.brandLink {
+  color: var(--spotify-green);
+  font-size: 20px;
+  font-weight: 750;
+  font-style: italic;
   text-decoration: none;
-  border-radius: var(--radius-full);
-  transition:
-    color var(--transition-fast),
-    background-color var(--transition-fast);
 }
-
-.closeButton:hover {
-  color: var(--text-base);
-  background-color: var(--bg-highlight);
+.brandDivider {
+  color: #727272;
+  font-size: 20px;
 }
-
-.closeIcon {
-  width: 20px;
-  height: 20px;
-  stroke: currentColor;
-  stroke-width: 2;
-}
-
 .adminTitle {
-  font-size: var(--text-xl);
-  font-weight: var(--font-bold);
   margin: 0;
+  font-size: 16px;
+  font-weight: 600;
 }
-
 .headerActions {
   display: flex;
   align-items: center;
-  gap: var(--spacing-3);
+  gap: 24px;
 }
-
+.backButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid #727272;
+  border-radius: 999px;
+  color: var(--text-base);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.backButton:hover {
+  border-color: #fff;
+  background: #1f1f1f;
+}
+.backButton svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+a:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
 .connectionStatus {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 8px;
+  color: var(--text-subdued);
+  font-size: 12px;
 }
-
 .statusDot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  transition: background-color var(--transition-fast);
+  flex-shrink: 0;
 }
-
 .status-connected {
-  background-color: #22c55e;
-  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+  background: var(--spotify-green);
 }
-
 .status-connecting {
-  background-color: #f97316;
-  box-shadow: 0 0 6px rgba(249, 115, 22, 0.5);
-  animation: pulse 1.5s ease-in-out infinite;
+  background: #f0bc65;
 }
-
 .status-disconnected {
-  background-color: #ef4444;
-  box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+  background: #f3727f;
 }
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
 .adminBody {
   display: flex;
   flex: 1;
+  min-height: 0;
+  min-width: 0;
+  gap: 8px;
+  padding: 0 8px 8px;
   overflow: hidden;
 }
-
 .loadingState {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   flex: 1;
+  background: #121212;
+  border-radius: 8px;
   color: var(--text-subdued);
 }
-
 .adminContent {
   flex: 1;
-  overflow-y: auto;
-  padding: var(--spacing-4);
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: #121212;
+  border-radius: 8px;
+  padding: 28px 32px;
 }
-
-/* Responsive: stack sidebar on mobile */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
+  .adminHeader {
+    min-height: 56px;
+    padding: 8px 16px;
+    gap: 12px;
+  }
+  .adminBrand {
+    gap: 10px;
+  }
+  .brandLink {
+    font-size: 18px;
+  }
+  .headerActions {
+    gap: 12px;
+  }
+  .connectionLabel,
+  .backButton span {
+    display: none;
+  }
+  .backButton {
+    width: 40px;
+    padding: 0;
+    justify-content: center;
+  }
   .adminBody {
     flex-direction: column;
   }
-
   .adminContent {
-    padding: var(--spacing-3);
+    padding: 20px 16px;
   }
 }
 </style>
