@@ -6,27 +6,39 @@
       <h2 class="sectionTitle">Search</h2>
       <div class="settingRow">
         <div class="settingInfo">
-          <span class="settingLabel">Organic Search</span>
-          <span class="settingDescription">
+          <span class="settingLabel">Organic search</span>
+          <span id="useOrganicSearch-description" class="settingDescription">
             Use classic flat search results. When disabled, uses smart search
             with intelligent result grouping and enrichment.
           </span>
         </div>
         <label class="toggle">
-          <input type="checkbox" v-model="useOrganicSearch" />
+          <input
+            type="checkbox"
+            role="switch"
+            aria-label="Organic search"
+            aria-describedby="useOrganicSearch-description"
+            v-model="useOrganicSearch"
+          />
           <span class="toggle-slider"></span>
         </label>
       </div>
       <div class="settingRow">
         <div class="settingInfo">
-          <span class="settingLabel">Hide Unavailable Content</span>
-          <span class="settingDescription">
+          <span class="settingLabel">Hide unavailable content</span>
+          <span id="excludeUnavailable-description" class="settingDescription">
             Hide tracks, albums, and artists that are not available for
             streaming from search results.
           </span>
         </div>
         <label class="toggle">
-          <input type="checkbox" v-model="excludeUnavailable" />
+          <input
+            type="checkbox"
+            role="switch"
+            aria-label="Hide unavailable content"
+            aria-describedby="excludeUnavailable-description"
+            v-model="excludeUnavailable"
+          />
           <span class="toggle-slider"></span>
         </label>
       </div>
@@ -36,13 +48,19 @@
       <h2 class="sectionTitle">Display</h2>
       <div class="settingRow">
         <div class="settingInfo">
-          <span class="settingLabel">Show Images</span>
-          <span class="settingDescription">
+          <span class="settingLabel">Show images</span>
+          <span id="imagesEnabled-description" class="settingDescription">
             Display album and artist images throughout the app.
           </span>
         </div>
         <label class="toggle">
-          <input type="checkbox" v-model="imagesEnabled" />
+          <input
+            type="checkbox"
+            role="switch"
+            aria-label="Show images"
+            aria-describedby="imagesEnabled-description"
+            v-model="imagesEnabled"
+          />
           <span class="toggle-slider"></span>
         </label>
       </div>
@@ -53,17 +71,23 @@
       <div v-if="userStore.canUseProxyStreaming" class="settingRow">
         <div class="settingInfo">
           <span class="settingLabel">Stream missing tracks</span>
-          <span class="settingDescription">
+          <span id="proxyModeEnabled-description" class="settingDescription">
             Start playing catalog tracks immediately and save them locally as
             they download.
           </span>
         </div>
         <label class="toggle">
-          <input type="checkbox" v-model="proxyModeEnabled" />
+          <input
+            type="checkbox"
+            role="switch"
+            aria-label="Stream missing tracks"
+            aria-describedby="proxyModeEnabled-description"
+            v-model="proxyModeEnabled"
+          />
           <span class="toggle-slider"></span>
         </label>
       </div>
-      <div class="settingRow">
+      <div class="settingRow selectRow">
         <div class="settingInfo">
           <span class="settingLabel">When editing a radio queue</span>
           <span class="settingDescription"
@@ -71,6 +95,7 @@
           >
         </div>
         <select
+          class="settingSelect"
           v-model="keepRadioOnQueueEdit"
           aria-label="When editing a radio queue"
         >
@@ -80,14 +105,23 @@
       </div>
       <div class="settingRow">
         <div class="settingInfo">
-          <span class="settingLabel">Smart Continuation</span>
-          <span class="settingDescription">
+          <span class="settingLabel">Smart continuation</span>
+          <span
+            id="smartContinuationEnabled-description"
+            class="settingDescription"
+          >
             Automatically queue related tracks after ordinary queues. Radios
             manage their own continuation.
           </span>
         </div>
         <label class="toggle">
-          <input type="checkbox" v-model="smartContinuationEnabled" />
+          <input
+            type="checkbox"
+            role="switch"
+            aria-label="Smart continuation"
+            aria-describedby="smartContinuationEnabled-description"
+            v-model="smartContinuationEnabled"
+          />
           <span class="toggle-slider"></span>
         </label>
       </div>
@@ -123,154 +157,150 @@ const proxyModeEnabled = computed({
 .settingsPage {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 32px;
   width: 100%;
-  min-height: 100%;
-  padding: clamp(18px, 2vw, 30px);
   color: var(--text-base);
+  color-scheme: dark;
 }
-
 .pageTitle {
-  margin: 0;
-  color: #9eddb7;
-  font-size: clamp(1.25rem, 1.8vw, 1.65rem);
-  font-weight: 900;
-  line-height: 1.1;
-  text-transform: uppercase;
+  margin: 16px 0 8px;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
 }
-
 .settingsSection {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--surface-border);
-  border-radius: 8px;
-  background: var(--surface-panel);
-  overflow: hidden;
+  gap: 8px;
 }
-
 .sectionTitle {
-  margin: 0;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--surface-border);
-  color: #9eddb7;
-  font-size: 0.82rem;
-  font-weight: 900;
-  letter-spacing: 0;
-  text-transform: uppercase;
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
 }
-
 .settingRow {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 18px;
-  padding: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+  gap: 24px;
+  min-height: 40px;
+  padding: 4px 0;
 }
-
-.settingRow:last-child {
-  border-bottom: none;
-}
-
 .settingInfo {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: 4px;
 }
-
 .settingLabel {
-  color: var(--text-base);
-  font-size: 0.96rem;
-  font-weight: 850;
+  color: var(--text-subdued);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
 }
-
 .settingDescription {
-  max-width: 680px;
-  color: rgba(255, 255, 255, 0.62);
-  font-size: 0.84rem;
-  font-weight: 600;
-  line-height: 1.35;
+  color: var(--text-subdued);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
 }
-
 .settingSelect {
-  flex-shrink: 0;
-  padding: var(--spacing-2) var(--spacing-3);
-  border: 1px solid var(--surface-border);
-  border-radius: var(--radius-md);
-  background-color: var(--surface-hover);
-  color: var(--text-base);
-  font-size: var(--text-sm);
+  width: 200px;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 6px 32px 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background-color: #242424;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%23b3b3b3' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-position: right 10px center;
+  background-size: 16px;
+  background-repeat: no-repeat;
+  appearance: none;
+  color: var(--text-subdued);
+  font: inherit;
+  font-size: 13px;
   cursor: pointer;
 }
-
-.settingSelect:focus {
-  outline: 2px solid var(--accent-color);
-  outline-offset: 1px;
+.settingSelect:hover {
+  border-color: #727272;
 }
-
+.settingSelect:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
 .toggle {
   position: relative;
-  display: inline-block;
-  width: 48px;
-  height: 28px;
-  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  width: 42px;
+  height: 40px;
+  cursor: pointer;
 }
-
 .toggle input {
-  width: 0;
-  height: 0;
-  opacity: 0;
-}
-
-.toggle-slider {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  margin: 0;
   cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 28px;
-  background-color: rgba(255, 255, 255, 0.09);
-  transition:
-    background-color var(--transition-fast),
-    border-color var(--transition-fast);
 }
-
+.toggle-slider {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  pointer-events: none;
+  border-radius: 999px;
+  background: #535353;
+  transition: background-color 150ms;
+}
 .toggle-slider::before {
   position: absolute;
   content: "";
   width: 20px;
   height: 20px;
-  left: 3px;
-  bottom: 3px;
+  left: 2px;
+  top: 2px;
   border-radius: 50%;
-  background-color: var(--text-base);
-  transition: transform var(--transition-fast);
+  background: #fff;
+  transition: transform 150ms;
 }
-
+.toggle:hover .toggle-slider {
+  background: #727272;
+}
 .toggle input:checked + .toggle-slider {
-  border-color: var(--spotify-green);
-  background-color: var(--spotify-green);
+  background: var(--spotify-green);
 }
-
+.toggle:hover input:checked + .toggle-slider {
+  background: var(--spotify-green-hover);
+}
 .toggle input:checked + .toggle-slider::before {
-  transform: translateX(20px);
-  background-color: #071108;
+  transform: translateX(18px);
 }
-
 .toggle input:focus-visible + .toggle-slider {
-  outline: 2px solid var(--spotify-green);
-  outline-offset: 2px;
+  outline: 2px solid #fff;
+  outline-offset: 3px;
 }
-
-@media (max-width: 720px) {
-  .settingsPage {
-    padding: 14px;
-    gap: 18px;
-  }
-
+@container (max-width: 480px) {
   .settingRow {
-    grid-template-columns: 1fr;
-    gap: 12px;
+    gap: 16px;
+  }
+  .selectRow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .settingSelect {
+    width: 100%;
+    min-height: 40px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toggle-slider,
+  .toggle-slider::before {
+    transition: none;
   }
 }
 </style>
