@@ -1,10 +1,13 @@
 <template>
   <div class="serverControl">
-    <h2 class="sectionTitle">Server Control</h2>
+    <header class="pageHeader">
+      <h2 class="pageTitle">Server</h2>
+      <p>Monitor storage, tune search and manage background jobs.</p>
+    </header>
 
     <div class="controlCard">
       <div class="controlInfo">
-        <h3 class="controlTitle">Restart Server</h3>
+        <h3 class="controlTitle">Restart server</h3>
         <p class="controlDescription">
           Initiate a server restart. The server will gracefully shut down and
           restart. All connected clients will be temporarily disconnected.
@@ -28,8 +31,11 @@
     <div class="storageCard">
       <div class="storageHeader">
         <div>
-          <h3 class="controlTitle">Disk Usage</h3>
-          <p class="controlDescription">Storage used by SQLite databases, media, and operational upload data.</p>
+          <h3 class="controlTitle">Disk usage</h3>
+          <p class="controlDescription">
+            Storage used by SQLite databases, media, and operational upload
+            data.
+          </p>
         </div>
         <button
           class="refreshButton small"
@@ -40,20 +46,30 @@
         </button>
       </div>
 
-      <div v-if="storageLoading" class="loadingMessage">Loading storage usage...</div>
-      <div v-else-if="storageError" class="errorMessage">{{ storageError }}</div>
+      <div v-if="storageLoading" class="loadingMessage">
+        Loading storage usage...
+      </div>
+      <div v-else-if="storageError" class="errorMessage">
+        {{ storageError }}
+      </div>
       <div v-else-if="storageReport" class="storageBody">
         <div class="storageStats">
           <div class="storageStat">
-            <span class="statValue">{{ formatBytes(storageReport.total_bytes) }}</span>
+            <span class="statValue">{{
+              formatBytes(storageReport.total_bytes)
+            }}</span>
             <span class="statLabel">Total tracked</span>
           </div>
           <div class="storageStat">
-            <span class="statValue">{{ formatBytes(storageReport.database_total_bytes) }}</span>
+            <span class="statValue">{{
+              formatBytes(storageReport.database_total_bytes)
+            }}</span>
             <span class="statLabel">Databases</span>
           </div>
           <div class="storageStat">
-            <span class="statValue">{{ formatBytes(storageReport.filesystem_total_bytes) }}</span>
+            <span class="statValue">{{
+              formatBytes(storageReport.filesystem_total_bytes)
+            }}</span>
             <span class="statLabel">Media and uploads</span>
           </div>
         </div>
@@ -67,12 +83,19 @@
             <div class="storageMeta">
               <span class="storageName">{{ db.label }}</span>
               <span class="storagePath" :title="db.path">{{ db.path }}</span>
-              <span v-if="db.wal_bytes || db.shm_bytes" class="storageBreakdown">
-                DB {{ formatBytes(db.main_bytes) }} · WAL {{ formatBytes(db.wal_bytes) }} · SHM {{ formatBytes(db.shm_bytes) }}
+              <span
+                v-if="db.wal_bytes || db.shm_bytes"
+                class="storageBreakdown"
+              >
+                DB {{ formatBytes(db.main_bytes) }} · WAL
+                {{ formatBytes(db.wal_bytes) }} · SHM
+                {{ formatBytes(db.shm_bytes) }}
               </span>
             </div>
             <div class="storageMeasure">
-              <div class="storageBar"><span :style="{ width: storagePercent(db.total_bytes) }"></span></div>
+              <div class="storageBar">
+                <span :style="{ width: storagePercent(db.total_bytes) }"></span>
+              </div>
               <span class="storageSize">{{ formatBytes(db.total_bytes) }}</span>
             </div>
           </div>
@@ -84,25 +107,33 @@
           >
             <div class="storageMeta">
               <span class="storageName">{{ component.label }}</span>
-              <span class="storagePath" :title="component.path">{{ component.path }}</span>
+              <span class="storagePath" :title="component.path">{{
+                component.path
+              }}</span>
             </div>
             <div class="storageMeasure">
-              <div class="storageBar"><span :style="{ width: storagePercent(component.bytes) }"></span></div>
-              <span class="storageSize">{{ formatBytes(component.bytes) }}</span>
+              <div class="storageBar">
+                <span
+                  :style="{ width: storagePercent(component.bytes) }"
+                ></span>
+              </div>
+              <span class="storageSize">{{
+                formatBytes(component.bytes)
+              }}</span>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <h2 class="sectionTitle searchTitle">Search Settings</h2>
+    <h2 class="sectionTitle searchTitle">Search settings</h2>
 
     <div class="controlCard searchSettings">
       <div class="controlInfo">
-        <h3 class="controlTitle">Relevance Filter</h3>
+        <h3 class="controlTitle">Relevance filter</h3>
         <p class="controlDescription">
-          Filter search results to remove low-quality matches. Choose a filtering
-          method and configure its parameters.
+          Filter search results to remove low-quality matches. Choose a
+          filtering method and configure its parameters.
         </p>
       </div>
 
@@ -110,19 +141,29 @@
       <div v-else-if="filterError" class="errorMessage">{{ filterError }}</div>
       <div v-else class="filterConfig">
         <div class="filterRow">
-          <label class="filterLabel">Method</label>
-          <select v-model="filterMethod" class="filterSelect" @change="onFilterMethodChange">
+          <label class="filterLabel" for="server-filter-1">Method</label>
+          <select
+            id="server-filter-1"
+            v-model="filterMethod"
+            class="filterSelect"
+            @change="onFilterMethodChange"
+          >
             <option value="none">None (return all results)</option>
             <option value="percentage_of_best">Percentage of Best</option>
             <option value="gap_detection">Gap Detection</option>
             <option value="standard_deviation">Standard Deviation</option>
-            <option value="percentage_with_minimum">Percentage with Minimum</option>
+            <option value="percentage_with_minimum">
+              Percentage with Minimum
+            </option>
           </select>
         </div>
 
         <div v-if="filterMethod === 'percentage_of_best'" class="filterRow">
-          <label class="filterLabel">Threshold (0-1)</label>
+          <label class="filterLabel" for="server-filter-2"
+            >Threshold (0-1)</label
+          >
           <input
+            id="server-filter-2"
             v-model.number="filterParams.threshold"
             type="number"
             step="0.1"
@@ -130,12 +171,18 @@
             max="1"
             class="filterInput"
           />
-          <span class="filterHint">Keep results with score >= {{ (filterParams.threshold * 100).toFixed(0) }}% of best</span>
+          <span class="filterHint"
+            >Keep results with score >=
+            {{ (filterParams.threshold * 100).toFixed(0) }}% of best</span
+          >
         </div>
 
         <div v-if="filterMethod === 'gap_detection'" class="filterRow">
-          <label class="filterLabel">Drop Threshold (0-1)</label>
+          <label class="filterLabel" for="server-filter-3"
+            >Drop Threshold (0-1)</label
+          >
           <input
+            id="server-filter-3"
             v-model.number="filterParams.drop_threshold"
             type="number"
             step="0.1"
@@ -143,24 +190,40 @@
             max="1"
             class="filterInput"
           />
-          <span class="filterHint">Cut when next score drops below {{ (filterParams.drop_threshold * 100).toFixed(0) }}% of previous</span>
+          <span class="filterHint"
+            >Cut when next score drops below
+            {{ (filterParams.drop_threshold * 100).toFixed(0) }}% of
+            previous</span
+          >
         </div>
 
         <div v-if="filterMethod === 'standard_deviation'" class="filterRow">
-          <label class="filterLabel">Std Deviations</label>
+          <label class="filterLabel" for="server-filter-4"
+            >Std Deviations</label
+          >
           <input
+            id="server-filter-4"
             v-model.number="filterParams.num_std_devs"
             type="number"
             step="0.5"
             min="0"
             class="filterInput"
           />
-          <span class="filterHint">Keep results within {{ filterParams.num_std_devs }} std devs of mean</span>
+          <span class="filterHint"
+            >Keep results within {{ filterParams.num_std_devs }} std devs of
+            mean</span
+          >
         </div>
 
-        <div v-if="filterMethod === 'percentage_with_minimum'" class="filterRow">
-          <label class="filterLabel">Threshold (0-1)</label>
+        <div
+          v-if="filterMethod === 'percentage_with_minimum'"
+          class="filterRow"
+        >
+          <label class="filterLabel" for="server-filter-5"
+            >Threshold (0-1)</label
+          >
           <input
+            id="server-filter-5"
             v-model.number="filterParams.threshold"
             type="number"
             step="0.1"
@@ -169,16 +232,24 @@
             class="filterInput"
           />
         </div>
-        <div v-if="filterMethod === 'percentage_with_minimum'" class="filterRow">
-          <label class="filterLabel">Min Best Score</label>
+        <div
+          v-if="filterMethod === 'percentage_with_minimum'"
+          class="filterRow"
+        >
+          <label class="filterLabel" for="server-filter-6"
+            >Min Best Score</label
+          >
           <input
+            id="server-filter-6"
             v-model.number="filterParams.min_best_score"
             type="number"
             step="1000"
             min="0"
             class="filterInput"
           />
-          <span class="filterHint">Only filter if best score exceeds this value</span>
+          <span class="filterHint"
+            >Only filter if best score exceeds this value</span
+          >
         </div>
 
         <div class="filterActions">
@@ -190,17 +261,19 @@
             {{ filterSaving ? "Saving..." : "Save" }}
           </button>
           <span v-if="filterSaveSuccess" class="saveSuccess">Saved!</span>
-          <span v-if="filterSaveError" class="saveError">{{ filterSaveError }}</span>
+          <span v-if="filterSaveError" class="saveError">{{
+            filterSaveError
+          }}</span>
         </div>
       </div>
     </div>
 
-    <h2 class="sectionTitle jobsTitle">Background Jobs</h2>
+    <h2 class="sectionTitle jobsTitle">Background jobs</h2>
 
     <div class="embeddingCoverageCard">
       <div class="coverageHeader">
         <div>
-          <h3 class="controlTitle">Audio Embedding Coverage</h3>
+          <h3 class="controlTitle">Audio embedding coverage</h3>
           <p class="controlDescription">
             Available tracks with MusicFM/AST embeddings stored in the catalog.
           </p>
@@ -223,15 +296,23 @@
       <div v-else-if="embeddingCoverage" class="coverageBody">
         <div class="coverageStats">
           <div class="coverageStat">
-            <span class="statValue">{{ formatNumber(embeddingCoverage.coverage.available_tracks) }}</span>
+            <span class="statValue">{{
+              formatNumber(embeddingCoverage.coverage.available_tracks)
+            }}</span>
             <span class="statLabel">Available tracks</span>
           </div>
           <div class="coverageStat">
-            <span class="statValue">{{ formatNumber(embeddingCoverage.coverage.fully_embedded_tracks) }}</span>
+            <span class="statValue">{{
+              formatNumber(embeddingCoverage.coverage.fully_embedded_tracks)
+            }}</span>
             <span class="statLabel">Complete</span>
           </div>
           <div class="coverageStat warning">
-            <span class="statValue">{{ formatNumber(embeddingCoverage.coverage.tracks_missing_any_embedding) }}</span>
+            <span class="statValue">{{
+              formatNumber(
+                embeddingCoverage.coverage.tracks_missing_any_embedding,
+              )
+            }}</span>
             <span class="statLabel">Missing any embedding</span>
           </div>
         </div>
@@ -244,7 +325,9 @@
           >
             <div class="namespaceInfo">
               <span class="namespaceName">{{ namespace.namespace }}</span>
-              <span class="namespaceModel">{{ modelForNamespace(namespace.namespace) }}</span>
+              <span class="namespaceModel">{{
+                modelForNamespace(namespace.namespace)
+              }}</span>
             </div>
             <div class="namespaceCounts">
               <span>{{ formatNumber(namespace.embedded_tracks) }} present</span>
@@ -254,7 +337,8 @@
         </div>
 
         <p v-if="!embeddingCoverage.enabled" class="coverageWarning">
-          Embedding sync is not enabled in server config; these counts use the default namespaces.
+          Embedding sync is not enabled in server config; these counts use the
+          default namespaces.
         </p>
       </div>
     </div>
@@ -279,7 +363,9 @@
             >
               (Success)
             </span>
-            <span v-else class="outcome failed">({{ job.last_run.outcome }})</span>
+            <span v-else class="outcome failed"
+              >({{ job.last_run.outcome }})</span
+            >
           </span>
           <span v-else class="jobStatus">Never run</span>
         </div>
@@ -289,9 +375,15 @@
           <input
             type="checkbox"
             :checked="expandArtistsMode === 'actual'"
-            @change="expandArtistsMode = $event.target.checked ? 'actual' : 'dry_run'"
+            @change="
+              expandArtistsMode = $event.target.checked ? 'actual' : 'dry_run'
+            "
           />
-          <span class="modeLabel">{{ expandArtistsMode === 'actual' ? 'Actual (will queue downloads)' : 'Dry-run (preview only)' }}</span>
+          <span class="modeLabel">{{
+            expandArtistsMode === "actual"
+              ? "Actual (will queue downloads)"
+              : "Dry-run (preview only)"
+          }}</span>
         </label>
       </div>
       <div v-if="job.id === 'missing_files_watchdog'" class="jobOptions">
@@ -299,12 +391,21 @@
           <input
             type="checkbox"
             :checked="missingFilesMode === 'actual'"
-            @change="missingFilesMode = $event.target.checked ? 'actual' : 'dry_run'"
+            @change="
+              missingFilesMode = $event.target.checked ? 'actual' : 'dry_run'
+            "
           />
-          <span class="modeLabel">{{ missingFilesMode === 'actual' ? 'Actual (will queue downloads)' : 'Dry-run (preview only)' }}</span>
+          <span class="modeLabel">{{
+            missingFilesMode === "actual"
+              ? "Actual (will queue downloads)"
+              : "Dry-run (preview only)"
+          }}</span>
         </label>
       </div>
-      <div v-if="job.id === 'track_embedding_sync'" class="jobOptions embeddingOptions">
+      <div
+        v-if="job.id === 'track_embedding_sync'"
+        class="jobOptions embeddingOptions"
+      >
         <label class="numberOption">
           <span>Max tracks</span>
           <input
@@ -319,7 +420,10 @@
           <span class="modeLabel">Force regenerate</span>
         </label>
       </div>
-      <div v-if="job.id === 'metadata_enrichment_v1'" class="jobOptions metadataOptions">
+      <div
+        v-if="job.id === 'metadata_enrichment_v1'"
+        class="jobOptions metadataOptions"
+      >
         <label class="numberOption">
           <span>Max items</span>
           <input
@@ -349,7 +453,13 @@
         :disabled="job.is_running || triggeringJobs[job.id]"
         @click="triggerJob(job.id)"
       >
-        {{ triggeringJobs[job.id] ? "Triggering..." : job.is_running ? "Running..." : "Run Now" }}
+        {{
+          triggeringJobs[job.id]
+            ? "Triggering..."
+            : job.is_running
+              ? "Running..."
+              : "Run Now"
+        }}
       </button>
       <button
         v-if="job.is_running"
@@ -368,7 +478,7 @@
       {{ stopError }}
     </div>
 
-    <h2 class="sectionTitle auditTitle">Job Audit Log</h2>
+    <h2 class="sectionTitle auditTitle">Job audit log</h2>
 
     <div v-if="auditLoading" class="loadingMessage">Loading audit log...</div>
     <div v-else-if="auditError" class="errorMessage">{{ auditError }}</div>
@@ -376,7 +486,13 @@
       No audit log entries
     </div>
 
-    <div v-else class="auditTable">
+    <div
+      v-else
+      class="auditTable"
+      tabindex="0"
+      role="region"
+      aria-label="Job audit log"
+    >
       <div class="auditHeader">
         <span class="auditCol time">Time</span>
         <span class="auditCol job">Job</span>
@@ -385,21 +501,33 @@
         <span class="auditCol details">Details</span>
       </div>
       <div v-for="entry in auditEntries" :key="entry.id" class="auditRow">
-        <span class="auditCol time">{{ formatTimestamp(entry.timestamp) }}</span>
+        <span class="auditCol time">{{
+          formatTimestamp(entry.timestamp)
+        }}</span>
         <span class="auditCol job">{{ entry.job_id }}</span>
         <span class="auditCol event">
-          <span :class="['eventBadge', entry.event_type]">{{ entry.event_type }}</span>
+          <span :class="['eventBadge', entry.event_type]">{{
+            entry.event_type
+          }}</span>
         </span>
-        <span class="auditCol duration">{{ formatDuration(entry.duration_ms) }}</span>
+        <span class="auditCol duration">{{
+          formatDuration(entry.duration_ms)
+        }}</span>
         <span class="auditCol details">
           <span v-if="entry.error" class="errorText">{{ entry.error }}</span>
-          <span v-else-if="entry.details" class="detailsText">{{ formatDetails(entry.details) }}</span>
+          <span v-else-if="entry.details" class="detailsText">{{
+            formatDetails(entry.details)
+          }}</span>
           <span v-else class="noDetails">-</span>
         </span>
       </div>
     </div>
 
-    <button v-if="auditEntries.length > 0" class="refreshButton" @click="loadAuditLog">
+    <button
+      v-if="auditEntries.length > 0"
+      class="refreshButton"
+      @click="loadAuditLog"
+    >
       Refresh
     </button>
 
@@ -524,10 +652,14 @@ const loadRelevanceFilter = async () => {
     filterError.value = "Failed to load relevance filter";
   } else {
     filterMethod.value = data.config.method;
-    if (data.config.threshold !== undefined) filterParams.threshold = data.config.threshold;
-    if (data.config.drop_threshold !== undefined) filterParams.drop_threshold = data.config.drop_threshold;
-    if (data.config.num_std_devs !== undefined) filterParams.num_std_devs = data.config.num_std_devs;
-    if (data.config.min_best_score !== undefined) filterParams.min_best_score = data.config.min_best_score;
+    if (data.config.threshold !== undefined)
+      filterParams.threshold = data.config.threshold;
+    if (data.config.drop_threshold !== undefined)
+      filterParams.drop_threshold = data.config.drop_threshold;
+    if (data.config.num_std_devs !== undefined)
+      filterParams.num_std_devs = data.config.num_std_devs;
+    if (data.config.min_best_score !== undefined)
+      filterParams.min_best_score = data.config.min_best_score;
   }
   filterLoading.value = false;
 };
@@ -562,7 +694,9 @@ const saveFilter = async () => {
   const result = await remoteStore.updateRelevanceFilter(config);
   if (result.success) {
     filterSaveSuccess.value = true;
-    setTimeout(() => { filterSaveSuccess.value = false; }, 2000);
+    setTimeout(() => {
+      filterSaveSuccess.value = false;
+    }, 2000);
   } else {
     filterSaveError.value = result.error;
   }
@@ -614,7 +748,8 @@ const triggerJob = async (jobId) => {
       .map(([entityType]) => entityType);
     params = {
       batch_size: Math.max(1, Number(metadataBatchSize.value) || 25),
-      entity_types: entityTypes.length > 0 ? entityTypes : ["artist", "album", "track"],
+      entity_types:
+        entityTypes.length > 0 ? entityTypes : ["artist", "album", "track"],
     };
   }
 
@@ -706,7 +841,9 @@ const storagePercent = (bytes) => {
 };
 
 const modelForNamespace = (namespace) => {
-  const spec = embeddingCoverage.value?.specs?.find((item) => item.namespace === namespace);
+  const spec = embeddingCoverage.value?.specs?.find(
+    (item) => item.namespace === namespace,
+  );
   return spec ? spec.model : "unknown model";
 };
 
@@ -716,7 +853,10 @@ const formatDetails = (details) => {
   const parts = [];
 
   // MissingFilesWatchdog - has 'mode' and 'total_tracks_scanned' fields
-  if (details.mode !== undefined && details.total_tracks_scanned !== undefined) {
+  if (
+    details.mode !== undefined &&
+    details.total_tracks_scanned !== undefined
+  ) {
     const modeLabel = details.mode === "actual" ? "Actual" : "Dry-run";
     const scanned = `Scanned: ${details.total_tracks_scanned} tracks, ${details.total_album_images_scanned} album imgs, ${details.total_artist_images_scanned} artist imgs`;
     if (details.is_clean) {
@@ -724,27 +864,43 @@ const formatDetails = (details) => {
       parts.push(scanned);
     } else {
       const missing = [];
-      if (details.missing_track_audio_count > 0) missing.push(`${details.missing_track_audio_count} tracks`);
-      if (details.missing_album_images_count > 0) missing.push(`${details.missing_album_images_count} album images`);
-      if (details.missing_artist_images_count > 0) missing.push(`${details.missing_artist_images_count} artist images`);
+      if (details.missing_track_audio_count > 0)
+        missing.push(`${details.missing_track_audio_count} tracks`);
+      if (details.missing_album_images_count > 0)
+        missing.push(`${details.missing_album_images_count} album images`);
+      if (details.missing_artist_images_count > 0)
+        missing.push(`${details.missing_artist_images_count} artist images`);
       parts.push(`${modeLabel}: Missing ${missing.join(", ")}`);
       parts.push(scanned);
-      if (details.items_queued > 0) parts.push(`Queued: ${details.items_queued}`);
-      if (details.items_skipped > 0) parts.push(`Skipped: ${details.items_skipped}`);
+      if (details.items_queued > 0)
+        parts.push(`Queued: ${details.items_queued}`);
+      if (details.items_skipped > 0)
+        parts.push(`Skipped: ${details.items_skipped}`);
     }
   }
   // ExpandArtistsBase - has 'mode' and 'artists_without_related_count' fields
-  else if (details.mode !== undefined && details.artists_without_related_count !== undefined) {
+  else if (
+    details.mode !== undefined &&
+    details.artists_without_related_count !== undefined
+  ) {
     const modeLabel = details.mode === "actual" ? "Actual" : "Dry-run";
     if (details.is_clean) {
       parts.push(`${modeLabel}: ✓ No enrichment needed`);
     } else {
       const enrichment = [];
-      if (details.artists_without_related_count > 0) enrichment.push(`${details.artists_without_related_count} without related`);
-      if (details.orphan_related_artist_ids_count > 0) enrichment.push(`${details.orphan_related_artist_ids_count} orphan relations`);
+      if (details.artists_without_related_count > 0)
+        enrichment.push(
+          `${details.artists_without_related_count} without related`,
+        );
+      if (details.orphan_related_artist_ids_count > 0)
+        enrichment.push(
+          `${details.orphan_related_artist_ids_count} orphan relations`,
+        );
       parts.push(`${modeLabel}: ${enrichment.join(", ")}`);
-      if (details.items_queued > 0) parts.push(`Queued: ${details.items_queued}`);
-      if (details.items_skipped > 0) parts.push(`Skipped: ${details.items_skipped}`);
+      if (details.items_queued > 0)
+        parts.push(`Queued: ${details.items_queued}`);
+      if (details.items_skipped > 0)
+        parts.push(`Skipped: ${details.items_skipped}`);
     }
   }
   // Legacy IntegrityWatchdog (no mode field) - for backward compatibility
@@ -754,31 +910,44 @@ const formatDetails = (details) => {
     } else {
       if (details.total_missing > 0) {
         const missing = [];
-        if (details.missing_track_audio_count > 0) missing.push(`${details.missing_track_audio_count} tracks`);
-        if (details.missing_album_images_count > 0) missing.push(`${details.missing_album_images_count} album images`);
-        if (details.missing_artist_images_count > 0) missing.push(`${details.missing_artist_images_count} artist images`);
+        if (details.missing_track_audio_count > 0)
+          missing.push(`${details.missing_track_audio_count} tracks`);
+        if (details.missing_album_images_count > 0)
+          missing.push(`${details.missing_album_images_count} album images`);
+        if (details.missing_artist_images_count > 0)
+          missing.push(`${details.missing_artist_images_count} artist images`);
         parts.push(`Missing: ${missing.join(", ")}`);
       }
     }
     if (details.items_queued > 0) parts.push(`Queued: ${details.items_queued}`);
-    if (details.items_skipped > 0) parts.push(`Skipped: ${details.items_skipped}`);
+    if (details.items_skipped > 0)
+      parts.push(`Skipped: ${details.items_skipped}`);
   }
 
   // PopularContent - started
   if (details.start_date !== undefined && details.end_date !== undefined) {
     parts.push(`Date range: ${details.start_date} - ${details.end_date}`);
-    if (details.lookback_days) parts.push(`${details.lookback_days} day lookback`);
+    if (details.lookback_days)
+      parts.push(`${details.lookback_days} day lookback`);
   }
 
   // PopularContent - completed
-  if (details.albums_count !== undefined && details.artists_count !== undefined) {
-    parts.push(`${details.albums_count} albums, ${details.artists_count} artists`);
-    if (details.tracks_analyzed) parts.push(`${details.tracks_analyzed} tracks analyzed`);
+  if (
+    details.albums_count !== undefined &&
+    details.artists_count !== undefined
+  ) {
+    parts.push(
+      `${details.albums_count} albums, ${details.artists_count} artists`,
+    );
+    if (details.tracks_analyzed)
+      parts.push(`${details.tracks_analyzed} tracks analyzed`);
   }
 
   // PopularContent - skipped
   if (details.skipped) {
-    parts.push(`Skipped: ${details.reason === "no_listening_data" ? "No listening data" : details.reason}`);
+    parts.push(
+      `Skipped: ${details.reason === "no_listening_data" ? "No listening data" : details.reason}`,
+    );
   }
 
   // AuditLogCleanup - started
@@ -787,19 +956,33 @@ const formatDetails = (details) => {
   }
 
   // RelatedArtistsEnrichment - started
-  if (details.batch_size !== undefined && details.similar_artists_limit !== undefined && parts.length === 0) {
-    parts.push(`Batch: ${details.batch_size}, limit: ${details.similar_artists_limit} similar`);
+  if (
+    details.batch_size !== undefined &&
+    details.similar_artists_limit !== undefined &&
+    parts.length === 0
+  ) {
+    parts.push(
+      `Batch: ${details.batch_size}, limit: ${details.similar_artists_limit} similar`,
+    );
   }
 
-
   // MetadataEnrichment - started/completed
-  if (details.batch_size !== undefined && details.entity_types !== undefined && parts.length === 0) {
-    const types = Array.isArray(details.entity_types) ? details.entity_types.join(", ") : String(details.entity_types);
+  if (
+    details.batch_size !== undefined &&
+    details.entity_types !== undefined &&
+    parts.length === 0
+  ) {
+    const types = Array.isArray(details.entity_types)
+      ? details.entity_types.join(", ")
+      : String(details.entity_types);
     parts.push(`Batch: ${details.batch_size}`);
     parts.push(`Types: ${types}`);
-    if (details.processed !== undefined) parts.push(`Processed: ${details.processed}`);
-    if (details.retryable_failures !== undefined) parts.push(`Retryable: ${details.retryable_failures}`);
-    if (details.reason === "provider_not_configured") parts.push("Provider not configured");
+    if (details.processed !== undefined)
+      parts.push(`Processed: ${details.processed}`);
+    if (details.retryable_failures !== undefined)
+      parts.push(`Retryable: ${details.retryable_failures}`);
+    if (details.reason === "provider_not_configured")
+      parts.push("Provider not configured");
   }
 
   // RelatedArtistsEnrichment - completed
@@ -830,8 +1013,10 @@ const formatDetails = (details) => {
       parts.push("No entries to clean up");
     } else {
       const deleted = [];
-      if (details.download_entries_deleted > 0) deleted.push(`${details.download_entries_deleted} download`);
-      if (details.job_entries_deleted > 0) deleted.push(`${details.job_entries_deleted} job`);
+      if (details.download_entries_deleted > 0)
+        deleted.push(`${details.download_entries_deleted} download`);
+      if (details.job_entries_deleted > 0)
+        deleted.push(`${details.job_entries_deleted} job`);
       parts.push(`Deleted: ${deleted.join(", ")} entries`);
     }
   }
@@ -850,663 +1035,474 @@ onMounted(() => {
 
 <style scoped>
 .serverControl {
-  max-width: 800px;
-}
-
-.sectionTitle {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
+  width: 100%;
+  min-width: 0;
   color: var(--text-base);
-  margin: 0 0 var(--spacing-6) 0;
+  color-scheme: dark;
 }
-
-.controlCard {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--spacing-4);
-  padding: var(--spacing-4);
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
-  flex-wrap: wrap;
+.pageHeader {
+  margin-bottom: 28px;
 }
-
-.controlInfo {
-  flex: 1;
-  min-width: 200px;
+.pageTitle {
+  margin: 0 0 10px;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
 }
-
-.controlTitle {
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  color: var(--text-base);
-  margin: 0 0 var(--spacing-2) 0;
-}
-
-.controlDescription {
-  font-size: var(--text-sm);
-  color: var(--text-subdued);
+.pageHeader p {
   margin: 0;
+  font-size: 14px;
   line-height: 1.5;
+  color: var(--text-subdued);
 }
-
-.rebootButton {
-  padding: var(--spacing-3) var(--spacing-6);
-  background-color: #dc2626;
-  color: white;
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-medium);
+.sectionTitle {
+  margin: 36px 0 20px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.controlCard,
+.storageCard,
+.embeddingCoverageCard,
+.jobCard {
+  background: #181818;
+  border-radius: 8px;
+  padding: 24px;
+}
+.controlCard,
+.jobCard {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+.controlInfo,
+.jobInfo {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.controlTitle,
+.jobTitle {
+  margin: 0 0 10px;
+  font-size: 18px;
+  font-weight: 700;
+}
+.controlDescription,
+.jobDescription {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-subdued);
+}
+button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
-  transition:
-    background-color var(--transition-fast),
-    opacity var(--transition-fast);
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+.rebootButton,
+.stopButton,
+.refreshButton,
+.triggerButton {
+  min-height: 40px;
+  padding: 8px 20px;
+  border: 1px solid #727272;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-base);
   flex-shrink: 0;
 }
-
-.rebootButton:hover:not(:disabled) {
-  background-color: #b91c1c;
+.rebootButton,
+.stopButton {
+  color: #f3727f;
 }
-
-.rebootButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.rebootButton:hover:not(:disabled),
+.stopButton:hover:not(:disabled),
+.refreshButton:hover:not(:disabled),
+.triggerButton:hover:not(:disabled) {
+  border-color: #fff;
+  background: #ffffff0c;
 }
-
-.errorMessage {
-  margin-top: var(--spacing-4);
-  padding: var(--spacing-3) var(--spacing-4);
-  background-color: rgba(220, 38, 38, 0.1);
-  border: 1px solid #dc2626;
-  border-radius: var(--radius-md);
-  color: #dc2626;
-  font-size: var(--text-sm);
+.saveButton {
+  min-height: 44px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--spotify-green);
+  color: #000;
 }
-
-.storageTitle {
-  margin-top: var(--spacing-8);
+.saveButton:hover:not(:disabled) {
+  background: var(--spotify-green-hover);
 }
-
-.storageCard {
-  padding: var(--spacing-4);
-  margin-bottom: var(--spacing-4);
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
+.refreshButton {
+  margin-top: 16px;
 }
-
-.storageHeader {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--spacing-4);
-  margin-bottom: var(--spacing-4);
+.refreshButton.small {
+  margin: 0;
 }
-
-.storageBody {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-4);
-}
-
-.storageStats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--spacing-3);
-}
-
-.storageStat {
-  padding: var(--spacing-3);
-  background-color: var(--bg-highlight);
-  border-radius: var(--radius-md);
-}
-
-.storageRows {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2);
-}
-
-.storageRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
-  align-items: center;
-  gap: var(--spacing-4);
-  padding: var(--spacing-3);
-  background-color: var(--bg-base);
-  border-radius: var(--radius-md);
-}
-
-.storageMeta {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  gap: var(--spacing-1);
-}
-
-.storageName {
-  color: var(--text-base);
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-}
-
-.storagePath,
-.storageBreakdown {
-  color: var(--text-subdued);
-  font-size: var(--text-xs);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.storageMeasure {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 72px;
-  align-items: center;
-  gap: var(--spacing-3);
-}
-
-.storageBar {
-  height: 8px;
-  overflow: hidden;
-  background-color: var(--bg-elevated-highlight);
-  border-radius: var(--radius-full);
-}
-
-.storageBar span {
-  display: block;
-  height: 100%;
-  min-width: 0;
-  background-color: var(--highlight);
-  border-radius: inherit;
-}
-
-.storageSize {
-  color: var(--text-base);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  text-align: right;
-  white-space: nowrap;
-}
-
-@media (max-width: 700px) {
-  .storageStats {
-    grid-template-columns: 1fr;
-  }
-
-  .storageRow {
-    grid-template-columns: 1fr;
-    gap: var(--spacing-2);
-  }
-
-  .storageMeasure {
-    grid-template-columns: minmax(0, 1fr) 72px;
-  }
-}
-
-.jobsTitle {
-  margin-top: var(--spacing-8);
-}
-
-.embeddingCoverageCard {
-  padding: var(--spacing-4);
-  margin-bottom: var(--spacing-4);
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
-}
-
+.storageHeader,
 .coverageHeader {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--spacing-4);
-  margin-bottom: var(--spacing-4);
+  gap: 16px;
+  margin-bottom: 24px;
 }
-
+.storageHeader > div,
+.coverageHeader > div {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.storageBody,
 .coverageBody {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-4);
+  gap: 24px;
 }
-
+.storageStats,
 .coverageStats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--spacing-3);
+  gap: 20px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--surface-border);
 }
-
-.coverageStat {
-  padding: var(--spacing-3);
-  background-color: var(--bg-highlight);
-  border-radius: var(--radius-md);
-}
-
-.coverageStat.warning .statValue {
-  color: #f59e0b;
-}
-
 .statValue {
   display: block;
-  font-size: var(--text-xl);
-  font-weight: var(--font-bold);
   color: var(--text-base);
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
-
 .statLabel {
   display: block;
-  margin-top: var(--spacing-1);
-  font-size: var(--text-xs);
+  margin-top: 6px;
+  font-size: 13px;
   color: var(--text-subdued);
 }
-
+.coverageStat.warning .statValue,
+.coverageWarning {
+  color: #f0bc65;
+}
+.storageRows,
 .coverageNamespaces {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-2);
+  gap: 16px;
 }
-
+.storageRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 28%);
+  align-items: center;
+  gap: 24px;
+}
+.storageMeta,
+.namespaceInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.storageName,
+.namespaceName {
+  font-size: 14px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.storagePath,
+.storageBreakdown,
+.namespaceModel {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-subdued);
+  overflow-wrap: anywhere;
+}
+.storageMeasure {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 80px;
+  gap: 16px;
+  align-items: center;
+}
+.storageBar {
+  height: 4px;
+  border-radius: 999px;
+  background: #535353;
+  overflow: hidden;
+}
+.storageBar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--spotify-green);
+}
+.storageSize {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
 .namespaceRow {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: var(--spacing-3);
-  padding: var(--spacing-3);
-  background-color: var(--bg-base);
-  border-radius: var(--radius-md);
+  gap: 12px 24px;
 }
-
-.namespaceInfo,
 .namespaceCounts {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-1);
-}
-
-.namespaceName {
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  color: var(--text-base);
-}
-
-.namespaceModel,
-.namespaceCounts {
-  font-size: var(--text-xs);
+  gap: 6px;
   color: var(--text-subdued);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
-
-.namespaceCounts {
-  align-items: flex-end;
-  white-space: nowrap;
-}
-
 .coverageWarning {
+  font-size: 13px;
+  line-height: 1.5;
   margin: 0;
-  color: #f59e0b;
-  font-size: var(--text-xs);
 }
-
-.loadingMessage,
-.emptyMessage {
-  padding: var(--spacing-4);
-  color: var(--text-subdued);
-  font-size: var(--text-sm);
+.embeddingCoverageCard {
+  margin-bottom: 16px;
 }
-
 .jobCard {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--spacing-4);
-  padding: var(--spacing-4);
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
-  flex-wrap: wrap;
-  margin-bottom: var(--spacing-3);
+  margin-bottom: 8px;
 }
-
-.jobInfo {
-  flex: 1;
-  min-width: 200px;
-}
-
-.jobTitle {
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  color: var(--text-base);
-  margin: 0 0 var(--spacing-1) 0;
-}
-
 .jobDescription {
-  font-size: var(--text-sm);
-  color: var(--text-subdued);
-  margin: 0 0 var(--spacing-2) 0;
-  line-height: 1.4;
+  margin-bottom: 10px;
 }
-
 .jobMeta {
-  font-size: var(--text-xs);
   color: var(--text-subdued);
+  font-size: 12px;
+  line-height: 1.5;
 }
-
-.jobStatus.running {
-  color: var(--highlight);
-  font-weight: var(--font-medium);
+.jobStatus.running,
+.outcome.success,
+.saveSuccess {
+  color: var(--spotify-green);
 }
-
-.outcome.success {
-  color: #22c55e;
+.outcome.failed,
+.errorText,
+.saveError {
+  color: #f3727f;
 }
-
-.outcome.failed {
-  color: #dc2626;
-}
-
-.triggerButton {
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--highlight);
-  color: var(--text-base);
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition:
-    background-color var(--transition-fast),
-    opacity var(--transition-fast);
-  flex-shrink: 0;
-}
-
-.stopButton {
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: transparent;
-  color: #dc2626;
-  border: 1px solid #dc2626;
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition:
-    background-color var(--transition-fast),
-    opacity var(--transition-fast);
-  flex-shrink: 0;
-}
-
-.stopButton:hover:not(:disabled) {
-  background-color: rgba(220, 38, 38, 0.1);
-}
-
-.stopButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.triggerButton:hover:not(:disabled) {
-  filter: brightness(1.1);
-}
-
-.triggerButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.triggerError {
-  margin-top: var(--spacing-2);
-}
-
 .jobOptions {
-  flex-shrink: 0;
+  flex: 1 1 240px;
+  min-width: 0;
 }
-
 .metadataOptions,
+.embeddingOptions,
 .typeOptions {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--spacing-3);
-}
-
-.embeddingOptions {
-  display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-3);
+  gap: 12px 20px;
 }
-
 .modeToggle {
   display: flex;
   align-items: center;
-  gap: var(--spacing-2);
+  gap: 8px;
   cursor: pointer;
-  font-size: var(--text-sm);
+  font-size: 13px;
 }
-
-.modeToggle input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-}
-
 .modeLabel {
   color: var(--text-subdued);
-  white-space: nowrap;
+  line-height: 1.5;
 }
-
+input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  accent-color: var(--spotify-green);
+}
 .numberOption {
   display: flex;
   align-items: center;
-  gap: var(--spacing-2);
+  gap: 12px;
   color: var(--text-subdued);
-  font-size: var(--text-sm);
+  font-size: 13px;
 }
-
+input:not([type="checkbox"]),
+select {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  background: #242424;
+  color: var(--text-base);
+  color-scheme: dark;
+  border: 1px solid #727272;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 14px;
+}
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
 .numberOption input {
-  width: 90px;
-  padding: var(--spacing-1) var(--spacing-2);
-  color: var(--text-base);
-  background-color: var(--bg-base);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  width: 100px;
 }
-
-.auditTitle {
-  margin-top: var(--spacing-8);
-}
-
-.auditTable {
-  background-color: var(--bg-elevated-base);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-
-.auditHeader,
-.auditRow {
-  display: grid;
-  grid-template-columns: 160px 140px 100px 80px 1fr;
-  padding: var(--spacing-3) var(--spacing-4);
-  gap: var(--spacing-2);
-}
-
-.auditHeader {
-  background-color: var(--bg-elevated-highlight);
-  font-weight: var(--font-semibold);
-  font-size: var(--text-sm);
-  color: var(--text-subdued);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.auditRow {
-  font-size: var(--text-sm);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.auditRow:last-child {
-  border-bottom: none;
-}
-
-.auditCol {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.auditCol.details {
-  white-space: normal;
-  word-break: break-word;
-}
-
-.eventBadge {
-  display: inline-block;
-  padding: var(--spacing-1) var(--spacing-2);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  text-transform: uppercase;
-}
-
-.eventBadge.started {
-  background-color: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
-}
-
-.eventBadge.completed {
-  background-color: rgba(34, 197, 94, 0.2);
-  color: #22c55e;
-}
-
-.eventBadge.failed {
-  background-color: rgba(220, 38, 38, 0.2);
-  color: #dc2626;
-}
-
-.eventBadge.progress {
-  background-color: rgba(168, 85, 247, 0.2);
-  color: #a855f7;
-}
-
-.errorText {
-  color: #dc2626;
-}
-
-.detailsText {
-  color: var(--text-subdued);
-}
-
-.noDetails {
-  color: var(--text-subdued);
-  opacity: 0.5;
-}
-
-.refreshButton {
-  margin-top: var(--spacing-4);
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--bg-elevated-highlight);
-  color: var(--text-base);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
-}
-
-.refreshButton:hover {
-  background-color: var(--bg-elevated-base);
-}
-
-.refreshButton.small {
-  margin-top: 0;
-  flex-shrink: 0;
-}
-
-.refreshButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.searchTitle {
-  margin-top: var(--spacing-8);
-}
-
 .searchSettings {
   flex-direction: column;
   align-items: stretch;
 }
-
+.searchSettings .controlInfo {
+  flex: auto;
+}
 .filterConfig {
   width: 100%;
-  margin-top: var(--spacing-4);
 }
-
 .filterRow {
   display: flex;
   align-items: center;
-  gap: var(--spacing-3);
-  margin-bottom: var(--spacing-3);
+  gap: 12px 20px;
   flex-wrap: wrap;
+  margin-bottom: 16px;
 }
-
 .filterLabel {
-  min-width: 140px;
-  font-size: var(--text-sm);
+  width: 140px;
+  font-size: 14px;
   color: var(--text-subdued);
 }
-
-.filterSelect,
-.filterInput {
-  padding: var(--spacing-2) var(--spacing-3);
-  background-color: var(--bg-base);
-  color: var(--text-base);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-}
-
 .filterSelect {
-  min-width: 200px;
+  width: 260px;
 }
-
 .filterInput {
   width: 100px;
 }
-
 .filterHint {
-  font-size: var(--text-xs);
   color: var(--text-subdued);
+  font-size: 12px;
+  line-height: 1.5;
 }
-
 .filterActions {
   display: flex;
   align-items: center;
-  gap: var(--spacing-3);
-  margin-top: var(--spacing-4);
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 24px;
+  font-size: 13px;
 }
-
-.saveButton {
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--highlight);
-  color: var(--text-base);
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition: opacity var(--transition-fast);
+.loadingMessage,
+.emptyMessage {
+  padding: 24px;
+  font-size: 14px;
+  color: var(--text-subdued);
 }
-
-.saveButton:hover:not(:disabled) {
-  filter: brightness(1.1);
+.errorMessage {
+  padding: 12px 16px;
+  margin-top: 16px;
+  background: #f3727f12;
+  color: #f3727f;
+  border-radius: 4px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
 }
-
-.saveButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.auditTable {
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: 4px;
+  overscroll-behavior-x: contain;
 }
-
-.saveSuccess {
-  font-size: var(--text-sm);
-  color: #22c55e;
+.auditHeader,
+.auditRow {
+  display: grid;
+  grid-template-columns: 160px 180px 100px 80px minmax(180px, 1fr);
+  min-width: 800px;
+  padding: 14px 16px;
+  gap: 16px;
+  border-bottom: 1px solid var(--surface-border);
+  font-size: 13px;
 }
-
-.saveError {
-  font-size: var(--text-sm);
-  color: #dc2626;
+.auditHeader {
+  background: #181818;
+  color: var(--text-subdued);
+  font-weight: 500;
+}
+.auditRow:hover {
+  background: #ffffff08;
+}
+.auditCol {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.auditCol.time,
+.auditCol.duration {
+  color: var(--text-subdued);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+.eventBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-subdued);
+  font-size: 12px;
+  text-transform: capitalize;
+}
+.eventBadge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.eventBadge.started,
+.eventBadge.progress {
+  color: var(--spotify-green);
+}
+.eventBadge.failed {
+  color: #f3727f;
+}
+.detailsText,
+.noDetails {
+  color: var(--text-subdued);
+}
+@media (max-width: 900px) {
+  .storageRow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+}
+@media (max-width: 600px) {
+  .controlCard,
+  .storageCard,
+  .embeddingCoverageCard,
+  .jobCard {
+    padding: 20px 16px;
+  }
+  .storageStats,
+  .coverageStats {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+  .filterRow {
+    align-items: flex-start;
+  }
+  .filterLabel {
+    width: 100%;
+  }
+  .filterSelect {
+    width: 100%;
+  }
+  .namespaceCounts {
+    text-align: left;
+  }
+  .numberOption {
+    flex-wrap: wrap;
+  }
 }
 </style>
