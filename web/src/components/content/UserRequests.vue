@@ -1,116 +1,131 @@
 <template>
   <div class="requests-container">
-    <h1 class="page-title">My Requests</h1>
-
-    <!-- Rate Limits Section -->
+    <header class="page-header">
+      <h1 class="page-title">Download requests</h1>
+      <p>Follow your requests as they become available in the catalog.</p>
+    </header>
     <div v-if="limits" class="limits-section">
-      <div class="limit-card">
-        <span class="limit-label">Today's Requests</span>
-        <span class="limit-value" :class="{ warning: limits.requests_today >= limits.max_per_day }">
-          {{ limits.requests_today }} / {{ limits.max_per_day }}
-        </span>
-      </div>
-      <div class="limit-card">
-        <span class="limit-label">Status</span>
-        <span class="limit-value" :class="limits.can_request ? 'can-request' : 'cannot-request'">
-          {{ limits.can_request ? 'Can Request' : 'At Limit' }}
-        </span>
-      </div>
+      <span
+        >Today’s requests
+        <strong
+          :class="{ warning: limits.requests_today >= limits.max_per_day }"
+          >{{ limits.requests_today }} / {{ limits.max_per_day }}</strong
+        ></span
+      >
+      <span class="availability" :class="{ warning: !limits.can_request }"
+        ><span class="status-dot" aria-hidden="true"></span
+        >{{
+          limits.can_request ? "Accepting requests" : "Request limit reached"
+        }}</span
+      >
     </div>
-
-    <!-- Pending Requests Section -->
-    <div class="section">
-      <h2 class="section-title">Pending ({{ pendingRequests.length }})</h2>
-      <div v-if="pendingRequests.length > 0" class="requests-list">
-        <div v-for="request in pendingRequests" :key="request.id" class="request-card">
-          <div class="request-info">
-            <span class="request-name">{{ request.content_name }}</span>
-            <span v-if="request.artist_name" class="request-artist">{{ request.artist_name }}</span>
-            <span class="request-meta">
-              <span class="status-badge" :class="getStatusClass(request.status)">
-                {{ formatStatus(request.status) }}
-              </span>
-              <span v-if="request.queue_position" class="queue-position">
-                #{{ request.queue_position }} in queue
-              </span>
-            </span>
-          </div>
-          <div v-if="request.progress" class="progress-bar">
-            <div
-              class="progress-fill"
-              :style="{ width: getProgressPercent(request.progress) + '%' }"
-            ></div>
-            <span class="progress-text">
-              {{ request.progress.completed }}/{{ request.progress.total_children }}
-            </span>
-          </div>
+    <p v-if="isLoading" class="empty-message" role="status">
+      Loading requests…
+    </p>
+    <p v-if="loadError" class="load-error" role="alert">{{ loadError }}</p>
+    <template v-if="!isLoading">
+      <section
+        v-for="group in requestGroups"
+        :key="group.title"
+        class="section"
+        :aria-label="group.title"
+      >
+        <h2 class="section-title">
+          {{ group.title }} <span>{{ group.items.length }}</span>
+        </h2>
+        <div v-if="group.items.length" class="requests-list">
+          <component
+            :is="request.status === 'COMPLETED' ? 'router-link' : 'div'"
+            v-for="request in group.items"
+            :key="request.id"
+            :to="
+              request.status === 'COMPLETED'
+                ? getContentLink(request)
+                : undefined
+            "
+            class="request-row"
+            :class="{ 'request-link': request.status === 'COMPLETED' }"
+          >
+            <img
+              v-if="getCatalogImageUrl(request)"
+              :src="getCatalogImageUrl(request)"
+              alt=""
+              class="request-image"
+            />
+            <div v-else class="request-image placeholder" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M9 18V5l11-2v13M9 8l11-2" />
+                <ellipse cx="6" cy="18" rx="3" ry="2" />
+                <ellipse cx="17" cy="16" rx="3" ry="2" />
+              </svg>
+            </div>
+            <div class="request-info">
+              <span class="request-name">{{ getCatalogName(request) }}</span>
+              <span class="request-artist"
+                >{{ contentTypeLabel(request.content_type)
+                }}<template v-if="getCatalogArtist(request)">
+                  · {{ getCatalogArtist(request) }}</template
+                ></span
+              >
+              <span v-if="request.error_message" class="error-message">{{
+                request.error_message
+              }}</span>
+            </div>
+            <div class="request-status">
+              <span class="status-label" :class="getStatusClass(request.status)"
+                ><span class="status-dot" aria-hidden="true"></span
+                >{{ formatStatus(request.status) }}</span
+              >
+              <span v-if="request.queue_position" class="secondary-text"
+                >#{{ request.queue_position }} in queue</span
+              >
+              <span v-if="request.completed_at" class="secondary-text">{{
+                formatDate(request.completed_at)
+              }}</span>
+              <div v-if="request.progress" class="progress-details">
+                <div
+                  class="progress-bar"
+                  role="progressbar"
+                  :aria-label="`Download progress for ${getCatalogName(request)}`"
+                  :aria-valuenow="getProgressPercent(request.progress)"
+                  :aria-valuemin="0"
+                  :aria-valuemax="100"
+                >
+                  <div
+                    class="progress-fill"
+                    :style="{
+                      width: getProgressPercent(request.progress) + '%',
+                    }"
+                  ></div>
+                </div>
+                <span class="secondary-text"
+                  >{{ request.progress.completed || 0 }} /
+                  {{ request.progress.total_children }} completed<template
+                    v-if="request.progress.failed"
+                  >
+                    · {{ request.progress.failed }} failed</template
+                  ></span
+                >
+              </div>
+            </div>
+          </component>
         </div>
-      </div>
-      <p v-else class="empty-message">No pending requests</p>
-    </div>
-
-    <!-- Completed Requests Section -->
-    <div class="section">
-      <h2 class="section-title">Completed ({{ completedRequests.length }})</h2>
-      <div v-if="completedRequests.length > 0" class="completed-grid">
-        <!-- Successfully completed items with catalog data -->
-        <router-link
-          v-for="request in completedRequests"
-          :key="request.id"
-          :to="getContentLink(request)"
-          class="completed-card"
-          :class="{ failed: request.status === 'FAILED' }"
-        >
-          <div class="completed-card-content">
-            <!-- Show catalog data if available -->
-            <template v-if="request.status === 'COMPLETED' && catalogData[getCatalogKey(request)]">
-              <img
-                v-if="getCatalogImageUrl(request)"
-                :src="getCatalogImageUrl(request)"
-                alt="Cover"
-                class="completed-image"
-              />
-              <div v-else class="completed-image-placeholder"></div>
-              <div class="completed-info">
-                <span class="completed-name">{{ getCatalogName(request) }}</span>
-                <span v-if="getCatalogArtist(request)" class="completed-artist">{{ getCatalogArtist(request) }}</span>
-                <div class="completed-meta">
-                  <span class="status-badge completed">Completed</span>
-                  <span v-if="request.completed_at" class="completed-date">
-                    {{ formatDate(request.completed_at) }}
-                  </span>
-                </div>
-              </div>
-            </template>
-            <!-- Fallback for failed or loading items -->
-            <template v-else>
-              <div class="completed-image-placeholder"></div>
-              <div class="completed-info">
-                <span class="completed-name">{{ request.content_name }}</span>
-                <span v-if="request.artist_name" class="completed-artist">{{ request.artist_name }}</span>
-                <div class="completed-meta">
-                  <span class="status-badge" :class="getStatusClass(request.status)">
-                    {{ formatStatus(request.status) }}
-                  </span>
-                  <span v-if="request.completed_at" class="completed-date">
-                    {{ formatDate(request.completed_at) }}
-                  </span>
-                </div>
-                <span v-if="request.error_message" class="error-message">
-                  {{ request.error_message }}
-                </span>
-              </div>
-            </template>
-          </div>
-        </router-link>
-      </div>
-      <p v-else class="empty-message">No completed requests</p>
-    </div>
+        <p v-else class="empty-message">{{ group.empty }}</p>
+      </section>
+    </template>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onActivated, onDeactivated, watch } from "vue";
+import {
+  ref,
+  computed,
+  onMounted,
+  onActivated,
+  onDeactivated,
+  onUnmounted,
+  watch,
+} from "vue";
 import { useRouter } from "vue-router";
 import { useUserStore } from "@/store/user";
 import { useRemoteStore } from "@/store/remote";
@@ -124,6 +139,7 @@ const limits = ref(null);
 const requests = ref([]);
 const catalogData = ref({});
 const isLoading = ref(true);
+const loadError = ref("");
 
 // Redirect if permission is revoked while on this page
 watch(
@@ -137,15 +153,31 @@ watch(
 
 const pendingRequests = computed(() => {
   return requests.value.filter(
-    (r) => !["COMPLETED", "FAILED"].includes(r.status)
+    (r) => !["COMPLETED", "FAILED"].includes(r.status),
   );
 });
 
 const completedRequests = computed(() => {
   return requests.value.filter((r) =>
-    ["COMPLETED", "FAILED"].includes(r.status)
+    ["COMPLETED", "FAILED"].includes(r.status),
   );
 });
+
+const requestGroups = computed(() => [
+  {
+    title: "In progress",
+    items: pendingRequests.value,
+    empty:
+      "No active requests. Request an album or track from its catalog page.",
+  },
+  {
+    title: "History",
+    items: completedRequests.value,
+    empty: "Finished requests will appear here.",
+  },
+]);
+const contentTypeLabel = (type) =>
+  ({ ALBUM: "Album", ARTIST: "Artist", TRACK: "Track" })[type] || "Content";
 
 const fetchLimits = async () => {
   try {
@@ -162,14 +194,18 @@ const fetchRequests = async () => {
   try {
     const data = await remoteStore.fetchMyDownloadRequests();
     if (data) {
+      loadError.value = "";
       // Server returns { requests: [...], stats: {...} }
       requests.value = data.requests || [];
       // Also use the stats if limits weren't fetched separately
       if (data.stats && !limits.value) {
         limits.value = data.stats;
       }
+    } else {
+      loadError.value = "Could not load requests. Please try again shortly.";
     }
   } catch (error) {
+    loadError.value = "Could not load requests. Please try again shortly.";
     console.error("Error fetching requests:", error);
   }
 };
@@ -208,7 +244,7 @@ const fetchCatalogItem = async (request) => {
 // Fetch catalog data for all completed requests
 const fetchCatalogData = async () => {
   const completed = requests.value.filter(
-    (r) => r.status === "COMPLETED" && r.content_id
+    (r) => r.status === "COMPLETED" && r.content_id,
   );
   await Promise.all(completed.map(fetchCatalogItem));
 };
@@ -231,6 +267,7 @@ const getCatalogName = (request) => {
   if (!data) return request.content_name;
 
   // ResolvedAlbum has album.name, ResolvedArtist has artist.name
+  if (data.track) return data.track.name || data.track.title;
   if (data.album) return data.album.name;
   if (data.artist) return data.artist.name;
   return request.content_name;
@@ -243,7 +280,10 @@ const getCatalogArtist = (request) => {
 
   // ResolvedAlbum has artists array
   if (data.artists && data.artists.length > 0) {
-    return data.artists.map((a) => a.name).join(", ");
+    return data.artists
+      .map((a) => a.artist?.name || a.name)
+      .filter(Boolean)
+      .join(", ");
   }
   // ResolvedArtist doesn't have artist_name (it IS the artist)
   if (data.artist) {
@@ -274,9 +314,17 @@ const getStatusClass = (status) => {
 };
 
 const getProgressPercent = (progress) => {
-  if (!progress || progress.total_children === 0) return 0;
-  return Math.round(
-    ((progress.completed + progress.failed) / progress.total_children) * 100
+  if (!progress || !(progress.total_children > 0)) return 0;
+  return Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        (((progress.completed || 0) + (progress.failed || 0)) /
+          progress.total_children) *
+          100,
+      ),
+    ),
   );
 };
 
@@ -351,6 +399,8 @@ onActivated(() => {
   }
 });
 
+onUnmounted(stopAutoRefresh);
+
 onDeactivated(() => {
   stopAutoRefresh();
 });
@@ -358,290 +408,206 @@ onDeactivated(() => {
 
 <style scoped>
 .requests-container {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: var(--spacing-4);
-}
-
-.page-title {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
-  color: var(--text-base);
-  margin-bottom: var(--spacing-6);
-}
-
-/* Limits Section */
-.limits-section {
-  display: flex;
-  gap: var(--spacing-4);
-  margin-bottom: var(--spacing-6);
-  flex-wrap: wrap;
-}
-
-.limit-card {
-  flex: 1;
-  min-width: 150px;
-  background-color: var(--bg-elevated);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-4);
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-2);
+  width: 100%;
+  gap: 28px;
+  color: var(--text-base);
 }
-
-.limit-label {
-  font-size: var(--text-sm);
+.page-header {
+  padding-top: 16px;
+}
+.page-title {
+  margin: 0 0 12px;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+.page-header p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-subdued);
+  line-height: 1.5;
+}
+.limits-section {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--surface-border);
+  font-size: 14px;
   color: var(--text-subdued);
 }
-
-.limit-value {
-  font-size: var(--text-xl);
-  font-weight: var(--font-semibold);
+.limits-section strong {
   color: var(--text-base);
+  margin-left: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
-
-.limit-value.warning {
-  color: #ef4444;
+.availability,
+.status-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
-
-.limit-value.can-request {
-  color: #22c55e;
+.availability .status-dot {
+  color: var(--spotify-green);
 }
-
-.limit-value.cannot-request {
-  color: #ef4444;
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
 }
-
-/* Section */
-.section {
-  margin-bottom: var(--spacing-6);
+.limits-section .warning,
+.warning .status-dot {
+  color: #f0bc65;
 }
-
 .section-title {
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  color: var(--text-base);
-  margin-bottom: var(--spacing-3);
-  padding-bottom: var(--spacing-2);
-  border-bottom: 1px solid var(--border-subdued);
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 16px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
-
-/* Requests List */
+.section-title span {
+  color: var(--text-subdued);
+  font-size: 14px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
 .requests-list {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-3);
+  gap: 4px;
 }
-
-.request-card {
-  background-color: var(--bg-elevated);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-4);
-}
-
-.request-card.completed {
-  opacity: 0.8;
-}
-
-.request-info {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-1);
-}
-
-.request-name {
-  font-weight: var(--font-medium);
-  color: var(--text-base);
-}
-
-.request-link {
-  color: var(--text-base);
+.request-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) minmax(140px, 220px);
+  gap: 16px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 4px;
+  color: inherit;
   text-decoration: none;
 }
-
 .request-link:hover {
-  color: var(--spotify-green);
+  background: var(--surface-hover);
+}
+.request-link:focus-visible {
+  outline: 2px solid white;
+  outline-offset: -2px;
+}
+.request-link:hover .request-name {
   text-decoration: underline;
 }
-
-.request-artist {
-  font-size: var(--text-sm);
-  color: var(--text-subdued);
-}
-
-.request-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  margin-top: var(--spacing-1);
-}
-
-.status-badge {
-  font-size: var(--text-xs);
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  font-weight: var(--font-medium);
-}
-
-.status-badge.pending {
-  background-color: rgba(107, 114, 128, 0.2);
-  color: #9ca3af;
-}
-
-.status-badge.in-progress {
-  background-color: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
-}
-
-.status-badge.retry-waiting {
-  background-color: rgba(249, 115, 22, 0.2);
-  color: #f97316;
-}
-
-.status-badge.completed {
-  background-color: rgba(34, 197, 94, 0.2);
-  color: #22c55e;
-}
-
-.status-badge.failed {
-  background-color: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
-}
-
-.queue-position {
-  font-size: var(--text-xs);
-  color: var(--text-subdued);
-}
-
-.completed-date {
-  font-size: var(--text-xs);
-  color: var(--text-subdued);
-}
-
-.error-message {
-  font-size: var(--text-sm);
-  color: #ef4444;
-  margin-top: var(--spacing-2);
-}
-
-/* Progress Bar */
-.progress-bar {
-  margin-top: var(--spacing-3);
-  height: 8px;
-  background-color: var(--bg-subdued);
-  border-radius: var(--radius-full);
-  position: relative;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background-color: var(--spotify-green);
-  border-radius: var(--radius-full);
-  transition: width 0.3s ease;
-}
-
-.progress-text {
-  position: absolute;
-  right: 0;
-  top: -20px;
-  font-size: var(--text-xs);
-  color: var(--text-subdued);
-}
-
-.empty-message {
-  color: var(--text-subdued);
-  font-style: italic;
-}
-
-/* Completed Grid */
-.completed-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: var(--spacing-3);
-}
-
-.completed-card {
-  display: block;
-  background-color: var(--bg-elevated);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-3);
-  text-decoration: none;
-  transition:
-    background-color var(--transition-fast),
-    transform var(--transition-fast);
-}
-
-.completed-card:hover {
-  background-color: var(--bg-highlight);
-  transform: translateY(-2px);
-}
-
-.completed-card.failed {
-  opacity: 0.7;
-  cursor: default;
-}
-
-.completed-card.failed:hover {
-  transform: none;
-}
-
-.completed-card-content {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: var(--spacing-3);
-}
-
-.completed-image {
-  width: 64px;
-  height: 64px;
-  border-radius: var(--radius-sm);
+.request-image {
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
   object-fit: cover;
-  flex-shrink: 0;
 }
-
-.completed-image-placeholder {
-  width: 64px;
-  height: 64px;
-  border-radius: var(--radius-sm);
-  background-color: var(--bg-subdued);
-  flex-shrink: 0;
+.placeholder {
+  display: grid;
+  place-items: center;
+  background: #242424;
+  color: var(--text-subdued);
 }
-
-.completed-info {
-  flex: 1;
-  min-width: 0;
+.placeholder svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+.request-info,
+.request-status {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  min-width: 0;
+  gap: 5px;
 }
-
-.completed-name {
-  font-weight: var(--font-medium);
-  color: var(--text-base);
-  white-space: nowrap;
+.request-name {
+  font-size: 16px;
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
-
-.completed-artist {
-  font-size: var(--text-sm);
+.request-artist {
+  font-size: 14px;
   color: var(--text-subdued);
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
-
-.completed-meta {
+.status-label {
+  font-size: 13px;
+  color: var(--text-subdued);
+}
+.status-label.in-progress {
+  color: var(--spotify-green);
+}
+.status-label.retry-waiting {
+  color: #f0bc65;
+}
+.status-label.failed,
+.error-message,
+.load-error {
+  color: #f3727f;
+}
+.secondary-text,
+.error-message {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.secondary-text {
+  color: var(--text-subdued);
+  font-variant-numeric: tabular-nums;
+}
+.error-message {
+  overflow-wrap: anywhere;
+}
+.progress-details {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  margin-top: var(--spacing-1);
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
 }
-
-.completed-date {
-  font-size: var(--text-xs);
+.progress-bar {
+  height: 4px;
+  background: #535353;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--spotify-green);
+  border-radius: inherit;
+}
+.empty-message {
+  margin: 0;
+  padding: 24px;
+  background: #181818;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.6;
   color: var(--text-subdued);
+}
+@container (max-width: 550px) {
+  .request-row {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px 0;
+  }
+  .request-status {
+    grid-column: 2;
+  }
 }
 </style>
