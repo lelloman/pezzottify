@@ -1,6 +1,7 @@
 <template>
   <DetailPage
     v-if="album"
+    class="albumDetail"
     :title="album.name"
     kind="Album"
     @artwork-contextmenu.prevent="
@@ -8,16 +9,22 @@
     "
     :imageUrls="coverUrls || []"
   >
-    <template #meta
-      ><LoadClickableArtistsNames :artistsIds="album.artists_ids || []" /><span
-        v-if="albumMetaSummary"
-        >{{ albumMetaSummary }}</span
-      ><span
-        >{{ albumTrackCount }} tracks<span v-if="albumDuration">
-          · {{ albumDuration }} min</span
-        ></span
-      ></template
-    >
+    <template #meta>
+      <div class="albumHeaderMeta">
+        <LoadClickableArtistsNames
+          v-if="album.artists_ids?.length"
+          class="albumHeaderArtists"
+          :artistsIds="album.artists_ids"
+        />
+        <span v-if="albumReleaseYear" class="albumMetaPart">{{
+          albumReleaseYear
+        }}</span>
+        <span class="albumMetaPart"
+          >{{ albumTrackCount }} {{ albumTrackCount === 1 ? "track" : "tracks"
+          }}<span v-if="albumDuration">, {{ albumDurationLabel }}</span></span
+        >
+      </div>
+    </template>
     <template #actions>
       <DetailActions
         playLabel="Play album"
@@ -110,6 +117,7 @@
     <section
       v-if="
         albumSummary ||
+        albumExtraDetails ||
         albumBadges.length ||
         ['queued', 'running', 'failed', 'failed_enrichment'].includes(
           album.enrichment_status?.status,
@@ -118,6 +126,9 @@
       class="detailSupporting"
     >
       <h2 class="detailSectionTitle">About this album</h2>
+      <p v-if="albumExtraDetails" class="albumExtraDetails">
+        {{ albumExtraDetails }}
+      </p>
       <div v-if="albumSummary" class="albumSummaryBlock">
         <p
           ref="summaryTextRef"
@@ -220,6 +231,12 @@ const albumDuration = computed(() => {
     ? Math.round(durations.reduce((a, b) => a + b, 0) / 60000)
     : null;
 });
+const albumDurationLabel = computed(() => {
+  const minutes = albumDuration.value;
+  return minutes >= 60
+    ? `${Math.floor(minutes / 60)} hr ${minutes % 60} min`
+    : `${minutes} min`;
+});
 const coverUrls = ref(null);
 
 const playback = usePlaybackStore();
@@ -301,11 +318,13 @@ const formatDateRange = (start, end) => {
   return formattedStart || formattedEnd;
 };
 
-const albumMetaSummary = computed(() => {
+const albumReleaseYear = computed(
+  () =>
+    extractYear(albumProfile.value?.original_release_date) ||
+    extractYear(album.value?.release_date),
+);
+const albumExtraDetails = computed(() => {
   const profile = albumProfile.value;
-  const releaseYear =
-    extractYear(profile?.original_release_date) ||
-    extractYear(album.value?.release_date);
   const recordingRange = formatDateRange(
     profile?.recording_start_date,
     profile?.recording_end_date,
@@ -315,7 +334,6 @@ const albumMetaSummary = computed(() => {
     .join(" ");
 
   return [
-    releaseYear,
     recordingRange ? `Recorded ${recordingRange}` : null,
     profile?.release_country,
     label || null,
@@ -634,13 +652,35 @@ onUnmounted(() => {
   margin-top: 24px;
 }
 
-.albumMetaSummary {
-  margin: 12px 0 0;
-  color: var(--text-muted);
-  font-size: clamp(0.95rem, 1.3vw, 1.1rem);
-  font-weight: 650;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
+.albumDetail :deep(.detailIdentity h1:not(.longTitle)) {
+  font-size: clamp(2rem, 5.5cqw, 4rem);
+}
+.albumHeaderMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  font-weight: 400;
+}
+.albumHeaderArtists {
+  color: #fff;
+  font-weight: 700;
+}
+.albumMetaPart:not(:first-child)::before {
+  content: "•";
+  margin: 0 6px;
+}
+.albumExtraDetails {
+  color: var(--text-subdued);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+@container (max-width:560px) {
+  .albumDetail :deep(.detailIdentity h1:not(.longTitle)) {
+    font-size: clamp(2rem, 8cqw, 3rem);
+  }
 }
 
 .albumBadges {
