@@ -808,9 +808,11 @@ watch(
   }
 
   .playerControlsColumn {
+    display: contents;
+  }
+  .playerControlsButtonsRow {
     grid-column: 2;
     grid-row: 2;
-    gap: 0;
   }
 
   .playerControlsButtonsRow {

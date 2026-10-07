@@ -95,6 +95,17 @@ summary svg {
 .radioMenu button:focus-visible {
   background: #ffffff12;
 }
+@container (max-width: 560px) {
+  .radioAction {
+    position: static;
+  }
+  .radioMenu {
+    top: auto;
+    bottom: calc(100% + 8px);
+    left: 0;
+    max-width: 100%;
+  }
+}
 @media (hover: hover) {
   summary:hover {
     background: transparent;

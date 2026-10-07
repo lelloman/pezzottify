@@ -86,6 +86,7 @@ onDeactivated(close);
 </script>
 <style scoped>
 .detailActions {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 24px;
@@ -248,6 +249,15 @@ summary:hover {
   display: none;
 }
 @container (max-width:560px) {
+  .moreActions {
+    position: static;
+  }
+  .morePanel {
+    top: auto;
+    bottom: calc(100% + 8px);
+    left: 0;
+    max-width: 100%;
+  }
   .secondaryActions {
     display: none;
   }

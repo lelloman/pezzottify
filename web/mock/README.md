@@ -59,6 +59,7 @@ needs another interaction. State resets when the server restarts.
 ```sh
 npx playwright install chromium  # once, if needed
 npm run test:mock
+npm run test:mock:mobile
 npm run build
 ```
 
@@ -66,3 +67,7 @@ The smoke test launches its own separate server, visits the real screen routes,
 checks for browser exceptions and external requests, exercises playback, local
 login/callback, playlist edits and likes, and checks scenario behavior. It does
 not reset the server you are using for design work.
+
+The mobile check uses a separate server and dependency cache. It covers user-facing
+routes at 320, 390 and 768 pixels, mobile library/queue navigation, player progress,
+action menus, steering and radio dialogs, and playback controls.

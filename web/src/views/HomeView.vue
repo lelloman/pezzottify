@@ -8,9 +8,23 @@
       <TopBar @search="handleSearch" :initialQuery="searchQuery" />
       <div
         class="centralPanel"
-        :class="{ libraryExpanded: libraryLayout === 'wide' }"
+        :class="{
+          libraryExpanded: libraryLayout === 'wide',
+          mobileLibrary: mobileSurface === 'library',
+          mobileQueue: mobileSurface === 'queue',
+        }"
         :style="libraryStyle"
       >
+        <nav class="mobileNavigation" aria-label="Mobile navigation">
+          <button
+            v-for="surface in mobileSurfaces"
+            :key="surface.id"
+            :aria-pressed="mobileSurface === surface.id"
+            @click="mobileSurface = surface.id"
+          >
+            {{ surface.label }}
+          </button>
+        </nav>
         <UserContentSideBar
           @layout-change="libraryLayout = $event"
           :requested-layout="libraryLayout"
@@ -37,6 +51,12 @@ import { useUserStore } from "@/store/user";
 // Access the user store
 const userStore = useUserStore();
 const libraryLayout = ref("normal");
+const mobileSurface = ref("browse");
+const mobileSurfaces = [
+  { id: "browse", label: "Browse" },
+  { id: "library", label: "Your library" },
+  { id: "queue", label: "Queue" },
+];
 const libraryStyle = computed(() =>
   libraryLayout.value === "collapsed" ? { "--library-width": "72px" } : {},
 );
@@ -57,6 +77,7 @@ const route = useRoute();
 watch(
   () => route.fullPath,
   () => {
+    mobileSurface.value = "browse";
     if (libraryLayout.value === "wide") libraryLayout.value = "normal";
   },
 );
@@ -98,7 +119,11 @@ function handleSearch(query) {
   padding: 0 8px;
 }
 
-/* Mobile: Hide sidebars, full-width content */
+.mobileNavigation {
+  display: none;
+}
+
+/* Mobile: one selected surface fills the content area. */
 .sideBar {
   display: none;
 }
@@ -208,6 +233,44 @@ function handleSearch(query) {
 
 /* Mobile Player Height - auto handles collapse when player hidden */
 @media (max-width: 767px) {
+  .centralPanel {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .mobileNavigation {
+    display: flex;
+    gap: 8px;
+    padding: 0 8px;
+  }
+  .mobileNavigation button {
+    border: 0;
+    border-radius: 999px;
+    background: #232323;
+    color: var(--text-base);
+    padding: 8px 16px;
+    min-height: 40px;
+    font: inherit;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .mobileNavigation button[aria-pressed="true"] {
+    background: #fff;
+    color: #000;
+  }
+  .mobileNavigation button:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+  }
+  .mobileLibrary .mainContentPanel,
+  .mobileQueue .mainContentPanel {
+    display: none;
+  }
+  .mobileLibrary .userContentSideBar,
+  .mobileQueue .currentlyPlayingSideBar {
+    display: flex;
+    grid-row: 2;
+    min-height: 0;
+  }
+
   .mainContainer {
     grid-template-rows: var(--topbar-height) minmax(0, 1fr) auto;
   }
