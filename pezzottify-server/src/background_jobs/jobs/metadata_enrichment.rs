@@ -33,6 +33,10 @@ mod grounded;
 mod intervention;
 
 const ENRICHMENT_STALE_AFTER_SECS: i64 = 90 * 24 * 60 * 60;
+const MAX_RUNTIME: Duration = Duration::from_secs(2 * 60 * 60);
+// Stop claiming items early enough to release the rest of the batch and
+// finish as a success instead of being cancelled by the scheduler.
+const SOFT_RUNTIME: Duration = Duration::from_secs(105 * 60);
 const ALL_TIME_LISTENING_START_DATE: u32 = 0;
 const ALL_TIME_LISTENING_END_DATE: u32 = 99_991_231;
 const LISTENING_BACKFILL_REASON: &str = "listening_backfill";
@@ -199,6 +203,7 @@ pub struct MetadataEnrichmentJob {
     pub(super) settings: MetadataEnrichmentJobSettings,
     pub(super) agent: AgentSettings,
     pub(super) work_knowledge: std::sync::Arc<dyn super::work_knowledge::WorkKnowledgeLookup>,
+    pub(super) soft_runtime: Duration,
 }
 
 impl MetadataEnrichmentJob {
@@ -207,6 +212,7 @@ impl MetadataEnrichmentJob {
             settings: settings.clone(),
             agent,
             work_knowledge: std::sync::Arc::new(super::work_knowledge::WikidataWorkLookup),
+            soft_runtime: SOFT_RUNTIME,
         }
     }
 
@@ -497,7 +503,7 @@ impl BackgroundJob for MetadataEnrichmentJob {
     fn execution_policy(&self) -> JobExecutionPolicy {
         JobExecutionPolicy::new(JobResourceClass::IoBound)
             .with_queue_timeout(Duration::from_secs(60))
-            .with_max_runtime(Duration::from_secs(2 * 60 * 60))
+            .with_max_runtime(MAX_RUNTIME)
             .with_circuit_breaker(3, Duration::from_secs(60 * 60))
     }
 
@@ -510,24 +516,14 @@ impl BackgroundJob for MetadataEnrichmentJob {
     }
 
     fn execute_with_params(&self, ctx: &JobContext, params: Option<Value>) -> Result<(), JobError> {
-        let enrichment_db = ctx.enrichment_db.as_ref().ok_or_else(|| {
+        // Runs for up to SOFT_RUNTIME of network and LLM calls, so it must not
+        // occupy a database executor slot: an executor timeout abandons the
+        // closure without stopping it, and the single enrichment write lane
+        // would stay blocked. Each store call is a short SQLite operation.
+        let store = ctx.enrichment_store.as_ref().ok_or_else(|| {
             JobError::ExecutionFailed("Enrichment store not available in job context".to_string())
         })?;
-        let job = self.clone();
-        let cancellation_token = ctx.cancellation_token.clone();
-        let job_ctx = ctx.clone();
-        enrichment_db
-            .run_blocking(DbPriority::Background, move |store| {
-                job.execute_with_store(&job_ctx, params, store)
-                    .map_err(anyhow::Error::new)
-            })
-            .map_err(|error| {
-                if cancellation_token.is_cancelled() {
-                    JobError::Cancelled
-                } else {
-                    JobError::ExecutionFailed(error.to_string())
-                }
-            })
+        self.execute_with_store(ctx, params, store.as_ref())
     }
 }
 
@@ -698,11 +694,26 @@ impl MetadataEnrichmentJob {
             .agent
             .enabled
             .then(|| build_intervention_provider(&self.agent));
+        let deadline = std::time::Instant::now() + self.soft_runtime;
+        let mut deferred = 0usize;
         let mut processed = 0usize;
         let mut retryable_failures = 0usize;
         let mut permanent_failures = 0usize;
         let mut terminal_failures = 0usize;
         for (index, item) in batch.iter().enumerate() {
+            if std::time::Instant::now() >= deadline {
+                for item in &batch[index..] {
+                    store
+                        .release_enrichment_claim(item.id, "Deferred by runtime budget")
+                        .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+                }
+                deferred = batch.len() - index;
+                info!(
+                    "Metadata enrichment reached its {:?} runtime budget; deferred {} items",
+                    self.soft_runtime, deferred
+                );
+                break;
+            }
             let result = runtime.block_on(enrich_until_cancelled(
                 &ctx.cancellation_token,
                 store,
@@ -772,6 +783,7 @@ impl MetadataEnrichmentJob {
             "retry_scheduled": retryable_failures + permanent_failures - terminal_failures,
             "retryable_failures": retryable_failures,
             "permanent_failures": permanent_failures,
+            "deferred": deferred,
             "seeded": seeded,
             "batch_size": batch_size,
             "entity_types": selected_entity_types.clone(),
@@ -1796,6 +1808,43 @@ mod tests {
                 .priority,
             2
         );
+    }
+
+    #[test]
+    fn runtime_budget_releases_unprocessed_claims_and_succeeds() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let (ctx, _user_store, enrichment_store) = test_job_context(&temp_dir);
+        for track_id in ["track1", "track2"] {
+            enrichment_store
+                .enqueue_enrichment_if_missing_or_stale("track", track_id, "test", 0, 0)
+                .unwrap();
+        }
+        let mut job = MetadataEnrichmentJob::from_settings(
+            &MetadataEnrichmentJobSettings {
+                manual_only: false,
+                interval_hours: 6,
+                batch_size: 10,
+                retry_after_secs: 60,
+                work_daily_enqueue_limit: 0,
+            },
+            AgentSettings {
+                enabled: false,
+                ..AgentSettings::default()
+            },
+        );
+        job.soft_runtime = Duration::ZERO;
+
+        job.execute_with_params(&ctx, Some(serde_json::json!({"entity_types": ["track"]})))
+            .unwrap();
+
+        for track_id in ["track1", "track2"] {
+            let item = enrichment_store
+                .get_enrichment_queue_item("track", track_id)
+                .unwrap()
+                .unwrap();
+            assert_eq!(item.status, "queued");
+            assert_eq!(item.normal_attempts, 0);
+        }
     }
 
     #[test]
