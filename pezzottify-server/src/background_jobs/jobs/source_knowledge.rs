@@ -325,6 +325,22 @@ impl ReferenceClient {
         context: &Value,
         saved_mbid: Option<&str>,
     ) -> Result<Option<Value>> {
+        Ok(
+            match self.music_entity_lookup(kind, context, saved_mbid).await? {
+                EntityLookup::Found(value) => Some(value),
+                EntityLookup::Absent(_) | EntityLookup::Unresolved => None,
+            },
+        )
+    }
+
+    /// Like `music_entity`, but distinguishes a source that has no record of
+    /// the identifier from candidates that exist but do not resolve uniquely.
+    pub async fn music_entity_lookup(
+        &self,
+        kind: &str,
+        context: &Value,
+        saved_mbid: Option<&str>,
+    ) -> Result<EntityLookup> {
         let (entity, identifier, search_field, list) = match kind {
             "album" => (&context["album"], "external_id_upc", "barcode", "releases"),
             "track" => (&context["track"], "external_id_isrc", "isrc", "recordings"),
@@ -333,7 +349,7 @@ impl ReferenceClient {
         let Some(code) = entity[identifier].as_str().filter(|s| {
             !s.is_empty() && s.len() <= 32 && s.bytes().all(|c| c.is_ascii_alphanumeric())
         }) else {
-            return Ok(None);
+            return Ok(EntityLookup::Absent("catalog has no usable identifier"));
         };
         let resource = if kind == "album" {
             "release"
@@ -353,15 +369,19 @@ impl ReferenceClient {
             let rows = response[list]
                 .as_array()
                 .context("missing MusicBrainz candidates")?;
-            if response["count"].as_u64().unwrap_or(rows.len() as u64) > rows.len() as u64 {
-                return Ok(None);
+            let count = response["count"].as_u64().unwrap_or(rows.len() as u64);
+            if count == 0 && rows.is_empty() {
+                return Ok(EntityLookup::Absent("identifier not found in MusicBrainz"));
+            }
+            if count > rows.len() as u64 {
+                return Ok(EntityLookup::Unresolved);
             }
             let candidates: Vec<_> = rows
                 .iter()
                 .filter(|r| corroborates(r, context, kind))
                 .collect();
             if candidates.len() != 1 {
-                return Ok(None);
+                return Ok(EntityLookup::Unresolved);
             }
             candidates[0]["id"]
                 .as_str()
@@ -394,8 +414,15 @@ impl ReferenceClient {
                 .is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(code)))
         };
         ensure!(identifier_matches, "MusicBrainz identifier mismatch");
-        Ok(Some(result))
+        Ok(EntityLookup::Found(result))
     }
+}
+
+pub enum EntityLookup {
+    Found(Value),
+    /// Stable negative answer: the reference source does not know this entity.
+    Absent(&'static str),
+    Unresolved,
 }
 
 pub(super) fn music_facts(kind: &str, entity: &Value) -> Knowledge {
@@ -792,6 +819,55 @@ mod tests {
             .music_entity("album", &context, Some(WRONG))
             .await
             .is_err());
+    }
+
+    #[tokio::test]
+    async fn source_knowledge_distinguishes_absent_isrc_from_ambiguous_candidates() {
+        use simple_server::web::{routing::get, Json, Query, Router};
+        let app = Router::new().route(
+            "/recording",
+            get(
+                |Query(q): Query<std::collections::HashMap<String, String>>| async move {
+                    if q["query"] == "isrc:USAAA1200009" {
+                        Json(json!({"count":0,"recordings":[]}))
+                    } else {
+                        let row = |id: &str| {
+                            json!({"id":id,"title":"Song","isrcs":["USAAA1200002"],
+                            "artist-credit":[{"artist":{"name":"Artist"}}]})
+                        };
+                        Json(json!({"count":2,"recordings":[
+                            row("00000000-0000-0000-0000-000000000001"),
+                            row("00000000-0000-0000-0000-000000000002")]}))
+                    }
+                },
+            ),
+        );
+        let server = simple_server::testing::TestServer::tcp(app).await.unwrap();
+        let mut client = ReferenceClient::new().unwrap();
+        client.mb = format!("http://{}", server.address().unwrap());
+        let context = |isrc: &str| {
+            json!({"track":{"name":"Song","external_id_isrc":isrc},
+            "artists":[{"artist":{"name":"Artist"}}]})
+        };
+        let lookup = |isrc: &'static str| {
+            let client = &client;
+            let context = context(isrc);
+            async move {
+                client
+                    .music_entity_lookup("track", &context, None)
+                    .await
+                    .unwrap()
+            }
+        };
+        assert!(matches!(
+            lookup("USAAA1200009").await,
+            EntityLookup::Absent(_)
+        ));
+        assert!(matches!(lookup("").await, EntityLookup::Absent(_)));
+        assert!(matches!(
+            lookup("USAAA1200002").await,
+            EntityLookup::Unresolved
+        ));
     }
 
     #[tokio::test]

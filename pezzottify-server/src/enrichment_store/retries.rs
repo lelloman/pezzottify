@@ -86,6 +86,13 @@ pub(super) fn migrate(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+const WEEK_SECS: i64 = 7 * 24 * 60 * 60;
+
+/// 1, 2, 4, 8, 16, then 32 weeks for every later absence.
+fn absent_backoff_secs(absences: i64) -> i64 {
+    WEEK_SECS << (absences - 1).clamp(0, 5)
+}
+
 impl SqliteEnrichmentStore {
     pub(super) fn begin_attempt(&self, id: i64) -> Result<EnrichmentQueueItemV1> {
         let now = super::store::now_unix();
@@ -114,6 +121,37 @@ impl SqliteEnrichmentStore {
         drop(conn);
         self.get_enrichment_queue_item(&kind, &entity)?
             .ok_or_else(|| anyhow::anyhow!("queue item disappeared"))
+    }
+
+    /// Record that the reference source does not know this entity. This is a
+    /// stable answer, so it neither consumes the attempt budget nor escalates
+    /// to the agent stage; rechecks back off from one week up to 32 weeks.
+    pub(super) fn defer_absent(&self, id: i64, error: &str) -> Result<()> {
+        let now = super::store::now_unix();
+        let mut conn = self.write_conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let changed = tx.execute(
+            "UPDATE enrichment_attempts_v1 SET outcome='absent',error=?2,finished_at=?3
+             WHERE queue_id=?1 AND outcome='running'",
+            params![id, error, now],
+        )?;
+        ensure!(changed == 1, "no active enrichment attempt");
+        let absences: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM enrichment_attempts_v1 a JOIN enrichment_queue_v1 q ON q.id=a.queue_id
+             WHERE a.queue_id=?1 AND a.cycle=q.cycle AND a.outcome='absent'",
+            [id],
+            |r| r.get(0),
+        )?;
+        tx.execute(
+            "UPDATE enrichment_queue_v1 SET status='queued',
+                normal_attempts=normal_attempts-CASE WHEN stage='normal' THEN 1 ELSE 0 END,
+                agent_attempts=agent_attempts-CASE WHEN stage='agent' THEN 1 ELSE 0 END,
+                next_attempt_at=?3+?4,updated_at=?3,last_error=?2
+             WHERE id=?1 AND status='running'",
+            params![id, error, now, absent_backoff_secs(absences)],
+        )?;
+        tx.commit()?;
+        Ok(())
     }
 
     pub(super) fn history(&self, id: i64) -> Result<Vec<Value>> {
@@ -232,6 +270,38 @@ mod tests {
     fn attempt(store: &SqliteEnrichmentStore) -> EnrichmentQueueItemV1 {
         let claim = store.claim_enrichment_queue_batch(1).unwrap().remove(0);
         store.begin_enrichment_attempt(claim.id).unwrap()
+    }
+
+    #[test]
+    fn absent_source_backs_off_weekly_without_consuming_budget() {
+        let (store, _temp) = setup();
+        enqueue(&store, "track");
+        for (n, weeks) in [1, 2, 4, 8, 16, 32, 32].into_iter().enumerate() {
+            let item = attempt(&store);
+            assert_eq!(item.normal_attempts, 1, "absence {n} consumed budget");
+            let before = super::super::store::now_unix();
+            store
+                .defer_absent_enrichment_queue_item(item.id, "ISRC absent")
+                .unwrap();
+            let item = store
+                .get_enrichment_queue_item("track", "track")
+                .unwrap()
+                .unwrap();
+            assert_eq!(item.status, "queued");
+            assert_eq!(item.stage.as_deref(), Some("normal"));
+            assert_eq!(item.normal_attempts, 0);
+            let delay = item.next_attempt_at.unwrap() - before;
+            assert!(
+                (0..=2).contains(&(delay - weeks * WEEK_SECS)),
+                "absence {n}"
+            );
+            store
+                .write_conn
+                .lock()
+                .unwrap()
+                .execute("UPDATE enrichment_queue_v1 SET next_attempt_at=0", [])
+                .unwrap();
+        }
     }
 
     #[test]

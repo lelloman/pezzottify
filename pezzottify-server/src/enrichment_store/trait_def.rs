@@ -192,6 +192,8 @@ pub trait EnrichmentStore: Send + Sync {
         error: &str,
         retry_after_secs: Option<i64>,
     ) -> Result<()>;
+    /// The reference source has no record of the entity; recheck with backoff.
+    fn defer_absent_enrichment_queue_item(&self, id: i64, error: &str) -> Result<()>;
 
     fn get_entity_enrichment_status(
         &self,

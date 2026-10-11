@@ -42,6 +42,8 @@ impl MetadataEnrichmentJob {
         let error = match first {
             Ok(()) => return Ok(()),
             Err(ItemError::Permanent(error)) => return Err(ItemError::Permanent(error)),
+            // The source does not know the entity; research cannot verify it.
+            Err(ItemError::Absent(error)) => return Err(ItemError::Absent(error)),
             Err(ItemError::Retryable(error)) => error,
         };
         let error = error.chars().take(3000).collect::<String>();
