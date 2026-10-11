@@ -699,6 +699,7 @@ impl MetadataEnrichmentJob {
         let mut processed = 0usize;
         let mut retryable_failures = 0usize;
         let mut permanent_failures = 0usize;
+        let mut absent = 0usize;
         let mut terminal_failures = 0usize;
         for (index, item) in batch.iter().enumerate() {
             if std::time::Instant::now() >= deadline {
@@ -749,6 +750,16 @@ impl MetadataEnrichmentJob {
                         .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
                     retryable_failures += 1;
                 }
+                Err(ItemError::Absent(message)) => {
+                    info!(
+                        "Metadata enrichment deferred for {} {}: {}",
+                        item.entity_type, item.entity_id, message
+                    );
+                    store
+                        .defer_absent_enrichment_queue_item(item.id, &message)
+                        .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+                    absent += 1;
+                }
                 Err(ItemError::Permanent(message)) => {
                     warn!(
                         "Metadata enrichment permanently failed for {} {}: {}",
@@ -784,6 +795,7 @@ impl MetadataEnrichmentJob {
             "retryable_failures": retryable_failures,
             "permanent_failures": permanent_failures,
             "deferred": deferred,
+            "absent_from_source": absent,
             "seeded": seeded,
             "batch_size": batch_size,
             "entity_types": selected_entity_types.clone(),
@@ -801,6 +813,9 @@ impl MetadataEnrichmentJob {
 pub(super) enum ItemError {
     Retryable(String),
     Permanent(String),
+    /// The reference source has no record of the entity; neither retrying
+    /// soon nor agent research can verify it.
+    Absent(String),
 }
 
 impl ItemError {

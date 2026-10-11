@@ -1,5 +1,6 @@
 //! Conservative, auditable identification of the composition behind a track.
 use super::metadata_enrichment::{require_complete_answer, ItemError, MetadataEnrichmentJob};
+use super::source_knowledge::EntityLookup;
 use crate::agent::{CompletionOptions, LlmProvider, Message};
 use crate::background_jobs::{context::JobContext, job::JobError};
 use crate::db_executor::DbPriority;
@@ -92,11 +93,23 @@ impl MetadataEnrichmentJob {
             .map_err(retry)?
             .ok_or_else(|| ItemError::Permanent("track no longer exists".into()))?;
         let reference = super::source_knowledge::ReferenceClient::new().map_err(retry)?;
-        let recording = reference
-            .music_entity("track", &serde_json::to_value(track).map_err(retry)?, None)
+        let recording = match reference
+            .music_entity_lookup("track", &serde_json::to_value(track).map_err(retry)?, None)
             .await
             .map_err(retry)?
-            .ok_or_else(|| retry("recording identity unresolved; no verified Work relationship"))?;
+        {
+            EntityLookup::Found(recording) => recording,
+            EntityLookup::Absent(reason) => {
+                return Err(ItemError::Absent(format!(
+                    "recording ISRC absent: {reason}"
+                )))
+            }
+            EntityLookup::Unresolved => {
+                return Err(retry(
+                    "recording identity unresolved; no verified Work relationship",
+                ))
+            }
+        };
         let result = musicbrainz_work_evaluation(&recording);
         store
             .resolve_track_work(

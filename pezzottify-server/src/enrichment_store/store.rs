@@ -964,6 +964,10 @@ impl EnrichmentStore for SqliteEnrichmentStore {
         self.finish_attempt(id, Some(error), retry_after_secs)
     }
 
+    fn defer_absent_enrichment_queue_item(&self, id: i64, error: &str) -> Result<()> {
+        self.defer_absent(id, error)
+    }
+
     fn get_entity_enrichment_status(
         &self,
         entity_type: &str,
