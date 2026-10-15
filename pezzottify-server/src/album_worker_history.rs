@@ -38,6 +38,16 @@ fn timestamp(value: &str) -> Result<i64> {
         .timestamp_micros())
 }
 
+fn queue_timestamp(value: &str) -> Result<i64> {
+    // Python stored str(created_at) from the queue API (Unix seconds).
+    // New records use RFC3339; compare both formats in microseconds.
+    if let Ok(seconds) = value.parse::<i64>() {
+        seconds.checked_mul(1_000_000).context("Queue timestamp overflow")
+    } else {
+        timestamp(value)
+    }
+}
+
 pub(crate) struct History {
     connection: Mutex<Connection>,
 }
@@ -76,7 +86,7 @@ impl History {
                 started: timestamp(&started)?,
                 finished: finished.as_deref().map(timestamp).transpose()?,
                 priority,
-                created: created.as_deref().map(timestamp).transpose()?,
+                created: created.as_deref().map(queue_timestamp).transpose()?,
             })
         })
         .collect()
@@ -256,6 +266,22 @@ pub(crate) fn quota_ready_at(attempts: &[Attempt], now: i64) -> Result<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn legacy_unix_queue_dates_and_new_iso_dates_have_identical_ordering() {
+        let root = tempfile::TempDir::new().unwrap();
+        let history = History::open(&root.path().join("history.db"), &DbRegistry::new()).unwrap();
+        history.connection.lock().unwrap().execute_batch(
+            "INSERT INTO runs(id,started_at,status) VALUES(1,'2026-10-13T10:30:07.710466+00:00','COMPLETED');
+             INSERT INTO download_attempts(run_id,queue_item_id,album_id,started_at,finished_at,status,priority,queue_created_at)
+             VALUES(1,'old','a','2026-10-13T10:30:07.710466+00:00','2026-10-13T10:30:08.866431+00:00','COMPLETED',2,'1781769683'),
+                   (1,'new','b','2026-10-13T10:30:07.710466+00:00',NULL,'FAILED',2,'2026-06-18T08:01:23+00:00');"
+        ).unwrap();
+        let attempts = history.attempts().unwrap();
+        assert_eq!(attempts[0].created, Some(1_781_769_683_000_000));
+        assert_eq!(attempts[0].created, attempts[1].created);
+        assert!(queue_timestamp("9223372036854775807").is_err());
+        assert!(queue_timestamp("broken").is_err());
+    }
     fn attempt(
         album: &str,
         status: &str,

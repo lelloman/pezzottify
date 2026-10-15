@@ -149,7 +149,9 @@ impl Worker {
     fn candidates(&self, now: i64) -> Result<(Vec<QueueItem>, Option<i64>)> {
         let attempts = self.history.attempts()?;
         let blocked = album_worker_history::blacklisted(&attempts);
-        let quota = album_worker_history::quota_ready_at(&attempts, now * 1_000_000)? / 1_000_000;
+        let quota_micros = album_worker_history::quota_ready_at(&attempts, now * 1_000_000)?;
+        let quota = quota_micros.div_euclid(1_000_000)
+            + i64::from(quota_micros.rem_euclid(1_000_000) != 0);
         let mut ready = Vec::new();
         let mut future: Option<i64> = None;
         // Pagination prevents a large failed queue from hiding newer work.
@@ -367,7 +369,7 @@ impl Worker {
             let Some(item) = ready.into_iter().next() else {
                 return self.publish(future).await;
             };
-            let _demand = crate::power::acquire(true).await?;
+            let _demand = crate::power::acquire(false).await?;
             self.downloader.health_check().await?;
             let Some(token) = self
                 .manager
@@ -408,7 +410,7 @@ impl Worker {
         if due > now {
             return self.publish(Some(due)).await;
         }
-        let _activity = crate::power::acquire(true).await?;
+        let _activity = crate::power::acquire(false).await?;
         match self.advance().await {
             Ok(()) => {}
             Err(error) => {
@@ -553,6 +555,20 @@ mod tests {
                 }
             }));
         TestServer::tcp(router).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn deleted_request_stops_active_download_before_the_next_track() {
+        let root = tempfile::TempDir::new().unwrap();
+        let count = Arc::new(AtomicUsize::new(0));
+        let downloader = downloader(false, count.clone()).await;
+        let mut worker = fixture(root.path(), downloader.base_url().unwrap());
+        worker.step().await.unwrap();
+        assert_eq!(count.load(Ordering::SeqCst), 1);
+        assert!(worker.manager.delete_request("request", "admin").unwrap());
+        worker.step().await.unwrap();
+        assert!(worker.active.is_none());
+        assert_eq!(count.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]
