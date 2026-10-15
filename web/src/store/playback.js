@@ -20,6 +20,7 @@ import {
   appendRadioBatch,
 } from "../utils/radioContinuation";
 import * as gravity from "../utils/gravity";
+import { setPlaybackActivityProvider } from "../services/power";
 
 export const usePlaybackStore = defineStore("playback", () => {
   const staticsStore = useStaticsStore();
@@ -44,6 +45,7 @@ export const usePlaybackStore = defineStore("playback", () => {
 
   const mode = ref("local"); // 'local' | 'remote'
   const isPlaying = ref(false);
+  setPlaybackActivityProvider(() => isPlaying.value);
   const progressSec = ref(0);
   const progressPercent = ref(0.0);
   const localDuration = ref(0);

@@ -16,6 +16,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.lelloman.pezzottify.android.domain.remoteapi.PassiveNetworkRequests
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -85,8 +87,10 @@ class WebSocketInitializer internal constructor(
                     is ConnectionState.Connected -> {
                         if (wasDisconnected) {
                             // Reconnected after being disconnected - catch up on missed events
-                            syncManager.catchUp()
-                            catalogSyncManager.catchUp()
+                            withContext(PassiveNetworkRequests) {
+                                syncManager.catchUp()
+                                catalogSyncManager.catchUp()
+                            }
                         }
                         wasDisconnected = false
                     }

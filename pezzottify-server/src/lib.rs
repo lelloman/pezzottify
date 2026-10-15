@@ -3,6 +3,8 @@
 //! This library exposes the internal modules for testing and potential reuse.
 
 pub mod agent;
+pub(crate) mod album_worker;
+pub(crate) mod album_worker_history;
 pub mod background_jobs;
 pub mod backup;
 pub mod catalog_store;
@@ -17,6 +19,9 @@ pub mod mcp;
 pub mod media;
 pub mod notifications;
 pub mod oidc;
+pub mod power;
+pub(crate) mod power_http;
+pub(crate) mod power_jobs;
 pub mod push;
 pub mod related_artists;
 pub mod search;

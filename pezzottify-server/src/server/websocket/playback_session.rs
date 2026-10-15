@@ -108,6 +108,14 @@ impl From<PlaybackError> for PlaybackErrorPayload {
 }
 
 impl PlaybackSessionManager {
+    pub async fn has_active_playback(&self) -> bool {
+        self.sessions.read().await.values().any(|session| {
+            session.device_states.values().any(|device| {
+                device.state.is_playing && device.last_update.elapsed() < STALE_DEVICE_TIMEOUT
+            })
+        })
+    }
+
     /// Create a new playback session manager.
     pub fn new(
         connection_manager: Arc<ConnectionManager>,

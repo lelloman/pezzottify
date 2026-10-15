@@ -86,6 +86,7 @@ function harness() {
     "nextSnapshotBatch",
     "appendRadioBatch",
     "gravity",
+    "setPlaybackActivityProvider",
     source + "\nreturn usePlaybackStore;",
   );
   const useStore = factory(
@@ -104,6 +105,7 @@ function harness() {
     nextSnapshotBatch,
     appendRadioBatch,
     gravity,
+    () => {},
   );
   return { store: useStore(), calls, remote, user, storage, smartRequests };
 }

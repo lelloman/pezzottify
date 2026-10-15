@@ -49,6 +49,7 @@ async fn make_app_with_executor(
 ) -> Result<Router> {
     let catalog_store = crate::media::MediaCatalogView::wrap(catalog_store);
     // Initialize OIDC client if configured
+    let oidc_expected = oidc_config.is_some();
     let oidc_client = match oidc_config {
         Some(cfg) => {
             info!(
@@ -97,6 +98,8 @@ async fn make_app_with_executor(
         let shutdown = runtime_tasks.shutdown.clone();
         super::lifecycle::maintenance(&mut lifecycle, "playback-maintenance", async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            let mut playback_activity = None;
             loop {
                 tokio::select! {
                     biased;
@@ -104,6 +107,15 @@ async fn make_app_with_executor(
                     _ = interval.tick() => {}
                 }
                 playback_manager.check_stale_devices().await;
+                if playback_manager.has_active_playback().await {
+                    if playback_activity.is_none() {
+                        playback_activity = crate::power::acquire(true).await.unwrap_or_else(|error| {
+                            warn!(%error, "Playback activity admission unavailable"); None
+                        });
+                    }
+                } else {
+                    playback_activity = None;
+                }
             }
             Ok(())
         })?;
@@ -347,6 +359,14 @@ async fn make_app_with_executor(
         debug!("Ingestion not enabled");
     }
 
+    if std::env::var("ALBUM_WORKER_ENABLED").as_deref() == Ok("1") {
+        let manager = state.download_manager.clone().ok_or_else(||anyhow::anyhow!("Album worker requires download manager"))?;
+        let ingestion = state.ingestion_manager.clone().ok_or_else(||anyhow::anyhow!("Album worker requires ingestion manager"))?;
+        let url = config.downloader_url.clone().ok_or_else(||anyhow::anyhow!("Album worker requires downloader endpoint"))?;
+        let worker = crate::album_worker::Worker::new(manager,ingestion,config.db_dir.join("cron_downloader.db"),&state.db_registry,url)?;
+        super::lifecycle::maintenance(&mut lifecycle,"album-queue",worker.run(runtime_tasks.shutdown.clone()))?;
+    }
+
     let auth_routes = route_builder::auth_routes(&state);
     let route_limits = route_builder::RouteLimits::new();
 
@@ -368,7 +388,7 @@ async fn make_app_with_executor(
 
     let admin_routes = route_builder::admin_routes(&state, &route_limits);
 
-    Ok(route_builder::assemble_app(
+    let app = route_builder::assemble_app(
         &state,
         &config,
         auth_routes,
@@ -376,7 +396,14 @@ async fn make_app_with_executor(
         user_routes,
         admin_routes,
         sync_routes,
-    ))
+    );
+    if crate::power::enabled() {
+        anyhow::ensure!(!oidc_expected || state.oidc_client.is_some(), "OIDC initialization failed");
+        Ok(app.merge(crate::power_http::readiness_routes()?)
+            .layer(middleware::from_fn(crate::power_http::activity)))
+    } else {
+        Ok(app)
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

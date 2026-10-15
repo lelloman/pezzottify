@@ -1,5 +1,6 @@
 import { authorizationHeaderValue } from "./authorization.js";
 import { getCsrfToken } from "./csrf.js";
+import { ensureReady, isPassiveRequest } from "./power.js";
 
 // Keep native streaming responses while applying the same credentials as axios.
 export function createAuthenticatedFetch(oidc, fetchImpl = fetch) {
@@ -32,9 +33,17 @@ export function createAuthenticatedFetch(oidc, fetchImpl = fetch) {
 
 let authenticatedRequest;
 export async function authenticatedFetch(url, options) {
+  const headers = new Headers(options?.headers);
+  if (options?.powerPassive || (!options?.powerForeground && isPassiveRequest())) {
+    headers.set("X-Homelab-Wake", "passive");
+  } else {
+    await ensureReady();
+    options?.signal?.throwIfAborted();
+    headers.delete("X-Homelab-Wake");
+  }
   if (!authenticatedRequest) {
     const oidc = await import("./oidc.js");
     authenticatedRequest = createAuthenticatedFetch(oidc);
   }
-  return authenticatedRequest(url, options);
+  return authenticatedRequest(url, { ...options, headers });
 }

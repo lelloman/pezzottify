@@ -1,6 +1,7 @@
 package com.lelloman.pezzottify.android.remoteapi.internal
 
 import okhttp3.OkHttpClient
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -16,6 +17,6 @@ open class OkHttpClientFactory @Inject constructor() {
      * @return OkHttpClient.Builder
      */
     open fun createBuilder(baseUrl: String): OkHttpClient.Builder {
-        return OkHttpClient.Builder()
+        return OkHttpClient.Builder().addInterceptor(WakeGateInterceptor(baseUrl.toHttpUrl()))
     }
 }

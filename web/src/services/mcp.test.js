@@ -4,6 +4,7 @@ import { connect, disconnect, isConnected, callTool } from './mcp.js';
 
 const sockets = [];
 globalThis.window = { location: { protocol: 'https:', host: 'test' } };
+globalThis.fetch = async () => new Response('<html>legacy</html>', { headers: { 'content-type': 'text/html' } });
 globalThis.WebSocket = class {
   static OPEN = 1;
   readyState = 0;
@@ -23,9 +24,11 @@ test('concurrent connect callers share rejection and can retry', async () => {
   const second = connect();
   assert.equal(first, second);
   const results = Promise.allSettled([first, second]);
+  await new Promise(resolve => setImmediate(resolve));
   sockets.at(-1).onerror();
   assert.deepEqual((await results).map(r => r.status), ['rejected', 'rejected']);
   const retry = connect();
+  await new Promise(resolve => setImmediate(resolve));
   sockets.at(-1).open();
   await retry;
   assert.equal(isConnected.value, true);
@@ -34,14 +37,17 @@ test('concurrent connect callers share rejection and can retry', async () => {
 
 test('disconnect rejects outstanding RPCs and stale socket cannot kill reconnect', async () => {
   const first = connect();
+  await new Promise(resolve => setImmediate(resolve));
   const old = sockets.at(-1);
   old.open();
   await first;
   const rpc = callTool('catalog.get', {});
   const rejected = assert.rejects(rpc, /disconnected/);
+  await new Promise(resolve => setImmediate(resolve));
   disconnect();
   await rejected;
   const next = connect();
+  await new Promise(resolve => setImmediate(resolve));
   sockets.at(-1).open();
   await next;
   old.onclose();

@@ -16,6 +16,7 @@ import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
 import com.lelloman.pezzottify.android.logger.Logger
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.remoteapi.internal.OkHttpClientFactory
+import com.lelloman.pezzottify.android.remoteapi.internal.WakeGateInterceptor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -67,8 +68,24 @@ internal class WebSocketManagerImpl(
     private var reconnectJob: Job? = null
     private var heartbeatJob: Job? = null
     private var reconnectAttempt = 0
-    private var intentionalDisconnect = false
+    private var intentionalDisconnect = true
     private var hasAttemptedTokenRefresh = false
+
+    private var removeReadyListener: (() -> Unit)? = null
+
+    private fun observeReadiness() {
+        if (removeReadyListener != null) return
+        removeReadyListener = WakeGateInterceptor.onServerReady {
+            coroutineScope.launch {
+                if (!intentionalDisconnect && webSocket == null) {
+                    reconnectJob?.cancel()
+                    reconnectJob = null
+                    reconnectAttempt = 0
+                    connect()
+                }
+            }
+        }
+    }
 
     override suspend fun connect() {
         if (_connectionState.value is ConnectionState.Connecting ||
@@ -89,6 +106,7 @@ internal class WebSocketManagerImpl(
         hasAttemptedTokenRefresh = false
 
         intentionalDisconnect = false
+        observeReadiness()
         _connectionState.value = ConnectionState.Connecting
 
         // Ensure we have a fresh token before connecting
@@ -112,6 +130,7 @@ internal class WebSocketManagerImpl(
 
         val request = Request.Builder()
             .url(wsUrl)
+            .header("X-Homelab-Wake", "passive")
             .header("Authorization", bearerAuthorization(authToken))
             .build()
 
@@ -154,6 +173,8 @@ internal class WebSocketManagerImpl(
     override suspend fun disconnect() {
         logger.info("Disconnecting WebSocket intentionally")
         intentionalDisconnect = true
+        removeReadyListener?.invoke()
+        removeReadyListener = null
         reconnectJob?.cancel()
         reconnectJob = null
         heartbeatJob?.cancel()
@@ -229,6 +250,7 @@ internal class WebSocketManagerImpl(
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
             logger.info("WebSocket closing: code=$code, reason=$reason")
+            webSocket.close(code, reason)
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
@@ -240,7 +262,7 @@ internal class WebSocketManagerImpl(
             if (!intentionalDisconnect) {
                 // Unexpected close - treat as error and attempt reconnection
                 _connectionState.value = ConnectionState.Error(reason.ifEmpty { "Connection closed unexpectedly" })
-                scheduleReconnect()
+                scheduleReconnect(if (code == 4001) 60000 else 0)
             }
         }
 
@@ -264,7 +286,7 @@ internal class WebSocketManagerImpl(
                     // Unexpected failure - log error, set Error state, and attempt reconnection
                     logger.error("WebSocket failure: ${t.message}", t)
                     _connectionState.value = ConnectionState.Error(t.message ?: "Connection failed")
-                    scheduleReconnect()
+                    scheduleReconnect(if (responseCode == 503 || responseCode == 429) 60000 else 0)
                 }
             }
         }
@@ -391,10 +413,10 @@ internal class WebSocketManagerImpl(
         }
     }
 
-    private fun scheduleReconnect() {
+    private fun scheduleReconnect(minimumDelayMs: Long = 0) {
         reconnectJob?.cancel()
         reconnectJob = coroutineScope.launch {
-            val backoffMs = calculateBackoff()
+            val backoffMs = maxOf(calculateBackoff(), minimumDelayMs)
             logger.info("Scheduling reconnect in ${backoffMs}ms (attempt ${reconnectAttempt + 1})")
             delay(backoffMs)
             reconnectAttempt++

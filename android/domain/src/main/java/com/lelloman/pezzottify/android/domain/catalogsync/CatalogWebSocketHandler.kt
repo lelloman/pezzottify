@@ -1,5 +1,7 @@
 package com.lelloman.pezzottify.android.domain.catalogsync
 
+import com.lelloman.pezzottify.android.domain.remoteapi.PassiveNetworkRequests
+
 import com.lelloman.pezzottify.android.domain.app.AppInitializer
 import com.lelloman.pezzottify.android.domain.websocket.MessageHandler
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
@@ -88,7 +90,7 @@ class CatalogWebSocketHandler @Inject constructor(
                 triggeredBy = null,
             )
 
-            scope.launch {
+            scope.launch(PassiveNetworkRequests) {
                 catalogSyncManager.handleRealtimeEvent(event)
             }
         } catch (e: Exception) {

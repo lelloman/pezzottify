@@ -1,4 +1,41 @@
 impl IngestionManager {
+    /// Private worker entry point: files remain on disk, including across retries.
+    pub(crate) async fn worker_directory(&self, job_id: &str) -> Result<PathBuf, IngestionError> {
+        uuid::Uuid::parse_str(job_id).map_err(|error| IngestionError::InvalidContext(error.to_string()))?;
+        Ok(self.file_handler.create_job_dir(job_id).await?)
+    }
+
+    pub(crate) async fn ingest_download_directory(&self, job_id: &str, user_id: &str, queue_id: &str, name: &str) -> Result<(), IngestionError> {
+        self.validate_upload_context(user_id, IngestionContextType::DownloadRequest, Some(queue_id), false)?;
+        let dir = self.worker_directory(job_id).await?;
+        let files = self.file_handler.list_audio_files_recursive(&dir).await?;
+        if files.is_empty() { return Err(IngestionError::NoFiles); }
+        if let Some(job) = self.store.get_job(job_id)? {
+            if job.user_id != user_id || job.context_id.as_deref() != Some(queue_id) {
+                return Err(IngestionError::InvalidContext("Worker job identity mismatch".into()));
+            }
+            if job.status != IngestionJobStatus::Pending { return self.process_job(job_id).await; }
+        } else {
+            let total_size = files.iter().map(|path| std::fs::metadata(path).map(|m|m.len() as i64)).collect::<std::io::Result<Vec<_>>>()
+                .map_err(|error|IngestionError::Store(error.into()))?.into_iter().sum();
+            let job = IngestionJob::new(job_id,user_id,name,total_size,files.len() as i32)
+                .with_context(IngestionContextType::DownloadRequest,Some(queue_id.to_owned()))
+                .with_upload_info(Some(job_id.to_owned()),UploadType::Album);
+            self.store.create_job(&job)?;
+        }
+        // Repair a crash between the job row and its file rows without creating
+        // another ingestion job or discarding already durable download history.
+        let existing = self.store.get_files_for_job(job_id)?;
+        for path in files {
+            let path_string = path.to_string_lossy().to_string();
+            if existing.iter().any(|file|file.temp_file_path == path_string) { continue; }
+            let name = path.file_name().and_then(|n|n.to_str()).unwrap_or("audio");
+            let size = tokio::fs::metadata(&path).await.map_err(|error|IngestionError::Store(error.into()))?.len() as i64;
+            self.store.create_file(&IngestionFile::new(&uuid::Uuid::new_v4().to_string(),job_id,name,size,path_string))?;
+        }
+        self.process_job(job_id).await
+    }
+
     // =========================================================================
     // Job Creation
     // =========================================================================

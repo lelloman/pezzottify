@@ -295,6 +295,12 @@ impl JobScheduler {
         // prevents heavy jobs from being treated as immediately due merely
         // because their schedule row does not exist yet.
         self.initialize_missing_schedule_states().await;
+        if crate::power::enabled() {
+            if let Err(error) = self.initialize_power_schedules().await {
+                error!(%error, "Cannot initialize power schedules");
+                crate::power::schedules_synced(false).await;
+            }
+        }
 
         // Fire OnStartup hooks
         if !self.shutdown_token.is_cancelled() {
@@ -304,6 +310,15 @@ impl JobScheduler {
         loop {
             // Clean up completed job handles
             self.cleanup_completed_jobs().await;
+            if crate::power::enabled() {
+                match self.publish_power_schedule().await {
+                    Ok(()) => crate::power::schedules_synced(true).await,
+                    Err(error) => {
+                        error!(%error, "Wake schedule is not synchronized; sleep remains inhibited");
+                        crate::power::schedules_synced(false).await;
+                    }
+                }
+            }
 
             let sleep_duration = self.time_until_next_scheduled_job().await;
             debug!(
@@ -530,7 +545,9 @@ impl JobScheduler {
 
     /// Calculate time until the next scheduled job should run.
     async fn time_until_next_scheduled_job(&self) -> Duration {
-        let mut min_duration = Duration::from_secs(60); // Default check interval
+        // Monotonic timers pause in S3. Recheck UTC at least once a second on
+        // power-managed nodes, without replaying missed timer ticks.
+        let mut min_duration = Duration::from_secs(if crate::power::enabled() { 1 } else { 60 });
         let now = chrono::Utc::now();
 
         let pause_state = self.pause_state.read().await.clone();
@@ -645,6 +662,23 @@ impl JobScheduler {
             let now_millis = now.timestamp_millis();
             let state = self.shared_state.read().await;
             for (job_id, job) in &state.jobs {
+                if crate::power::enabled() && job_id == "album_embedding_sync" {
+                    let track_waiting = state.running_jobs.contains("track_embedding_sync")
+                        || (state.jobs.get("track_embedding_sync").is_some_and(|track| {
+                            !pause_state.is_paused(
+                                "track_embedding_sync",
+                                track.execution_policy().resource_class,
+                            )
+                        }) && self
+                            .server_store
+                            .get_schedule_state("track_embedding_sync")
+                            .ok()
+                            .flatten()
+                            .is_some_and(|schedule| schedule.next_run_at <= now));
+                    if track_waiting {
+                        continue;
+                    }
+                }
                 if state.running_jobs.contains(job_id) || self.running_handles.contains_key(job_id)
                 {
                     continue;
@@ -807,19 +841,31 @@ impl JobScheduler {
                 max_runtime: policy.max_runtime,
             };
             let acquire_capacity = execution_limits.acquire(Some(resource_class));
-            let permits = tokio::select! {
-                _ = run_cancel_token.cancelled() => Err(JobError::Cancelled),
-                result = tokio::time::timeout_at(budget.queue_deadline(start_time).expect("validated queue budget").into(), acquire_capacity) => {
-                    match result {
-                        Ok(result) => result.map_err(|_| JobError::Cancelled),
-                        Err(_) => Err(JobError::Timeout),
+            let mut activity = None;
+            let permits = match crate::power::acquire(false).await {
+                Err(_) => Err(JobError::ExecutionFailed(
+                    "Activity admission unavailable".to_string(),
+                )),
+                Ok(guard) => {
+                    activity = guard;
+                    tokio::select! {
+                    _ = run_cancel_token.cancelled() => Err(JobError::Cancelled),
+                    result = tokio::time::timeout_at(budget.queue_deadline(start_time).expect("validated queue budget").into(), acquire_capacity) => {
+                        match result {
+                            Ok(result) => result.map_err(|_| JobError::Cancelled),
+                            Err(_) => Err(JobError::Timeout),
+                        }
                     }
+                        }
                 }
             };
             let queue_wait = start_time.elapsed();
             metrics::background_job_waiting(resource_class, false);
 
             let (status, error_msg, status_label) = match permits {
+                Err(JobError::ExecutionFailed(message)) => {
+                    (JobRunStatus::Failed, Some(message), "activity_unavailable")
+                }
                 Err(JobError::Timeout) => {
                     warn!(
                         "Job {} exceeded its {:?} queue budget",
@@ -839,8 +885,10 @@ impl JobScheduler {
                 Ok(_permits) => {
                     metrics::background_job_started(resource_class, queue_wait);
                     let execution_started = Instant::now();
-                    let mut blocking_task =
-                        tokio::task::spawn_blocking(move || job.execute_with_params(&ctx, params));
+                    let mut blocking_task = tokio::task::spawn_blocking(move || {
+                        let _activity = activity;
+                        job.execute_with_params(&ctx, params)
+                    });
                     let completion = if let Some(runtime_deadline) =
                         budget.runtime_deadline(execution_started)
                     {
@@ -935,7 +983,12 @@ impl JobScheduler {
         };
 
         let completed_at = chrono::Utc::now();
-        if let Some(next_run) = Self::next_interval_run(job.schedule(), completed_at) {
+        let next_run = if crate::power::enabled() && crate::power_jobs::nightly(job_id) {
+            Some(crate::power_jobs::after_completion(job_id, completed_at))
+        } else {
+            Self::next_interval_run(job.schedule(), completed_at)
+        };
+        if let Some(next_run) = next_run {
             let state = crate::server_store::JobScheduleState {
                 job_id: job_id.to_string(),
                 next_run_at: next_run,
@@ -946,6 +999,118 @@ impl JobScheduler {
                 error!("Failed to update schedule state for {}: {}", job_id, e);
             }
         }
+    }
+
+    async fn initialize_power_schedules(&self) -> anyhow::Result<()> {
+        if self
+            .server_store
+            .get_state("power.nightly_policy.v1")?
+            .is_some()
+        {
+            return Ok(());
+        }
+        let now = chrono::Utc::now();
+        let jobs = self.shared_state.read().await;
+        for job_id in crate::power_jobs::NIGHTLY {
+            if !jobs.jobs.contains_key(*job_id) {
+                continue;
+            }
+            let previous = self.server_store.get_schedule_state(job_id)?;
+            let next_run = if *job_id == "concept_embedding_sync" {
+                crate::power_jobs::at_or_after(
+                    previous
+                        .as_ref()
+                        .map(|state| state.next_run_at)
+                        .unwrap_or(now)
+                        .max(now),
+                )
+            } else {
+                crate::power_jobs::after_completion(job_id, now)
+            };
+            self.server_store
+                .update_schedule_state(&crate::server_store::JobScheduleState {
+                    job_id: (*job_id).to_owned(),
+                    next_run_at: next_run,
+                    last_run_at: previous.and_then(|state| state.last_run_at),
+                })?;
+        }
+        self.server_store
+            .set_state("power.nightly_policy.v1", "enabled")?;
+        Ok(())
+    }
+
+    async fn publish_power_schedule(&self) -> anyhow::Result<()> {
+        let now = chrono::Utc::now();
+        let mut earliest = None;
+        {
+            let jobs = self.shared_state.read().await;
+            let paused = self.pause_state.read().await;
+            let circuits = self.circuit_breakers.read().await;
+            let batch_running = jobs
+                .running_jobs
+                .iter()
+                .any(|job| crate::power_jobs::nightly(job));
+            for job_id in crate::power_jobs::NIGHTLY {
+                let Some(job) = jobs.jobs.get(*job_id) else {
+                    continue;
+                };
+                if jobs.running_jobs.contains(*job_id)
+                    || paused.is_paused(job_id, job.execution_policy().resource_class)
+                {
+                    continue;
+                }
+                let Some(schedule) = self.server_store.get_schedule_state(job_id)? else {
+                    continue;
+                };
+                let mut deadline = schedule.next_run_at;
+                if batch_running && deadline <= now {
+                    continue;
+                }
+                if let Some(remaining) =
+                    circuits.remaining_open_millis(job_id, now.timestamp_millis())
+                {
+                    if let Some(retry_at) = chrono::DateTime::from_timestamp_millis(
+                        now.timestamp_millis()
+                            .saturating_add(i64::try_from(remaining).unwrap_or(i64::MAX)),
+                    ) {
+                        deadline = deadline.max(retry_at);
+                    }
+                }
+                earliest = Some(
+                    earliest.map_or(deadline, |value: chrono::DateTime<chrono::Utc>| {
+                        value.min(deadline)
+                    }),
+                );
+            }
+        }
+        let run_at =
+            earliest.map(|value| value.to_rfc3339_opts(chrono::SecondsFormat::Micros, true));
+        let previous: serde_json::Value = self
+            .server_store
+            .get_state("power.wakeup.nightly")?
+            .map(|value| serde_json::from_str(&value))
+            .transpose()?
+            .unwrap_or(serde_json::Value::Null);
+        let old_revision = previous["revision"].as_i64().unwrap_or(0);
+        let remote_revision = crate::power::schedule_revision("nightly").await?;
+        let changed = previous.is_null()
+            || previous["run_at"] != serde_json::json!(run_at)
+            || old_revision < remote_revision;
+        let revision = if changed {
+            old_revision
+                .max(remote_revision)
+                .checked_add(1)
+                .ok_or_else(|| anyhow::anyhow!("Wake revision exhausted"))?
+        } else {
+            old_revision
+        };
+        if changed {
+            self.server_store.set_state(
+                "power.wakeup.nightly",
+                &serde_json::json!({"revision":revision,"run_at":run_at}).to_string(),
+            )?;
+        }
+        crate::power::schedule("nightly", revision, run_at).await
     }
 
     /// Clean up handles for completed jobs.

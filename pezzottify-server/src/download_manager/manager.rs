@@ -213,6 +213,12 @@ impl DownloadManager {
         Ok(attempt)
     }
 
+    pub fn external_attempt_is_current(&self, id: &str, attempt: i64) -> Result<bool> {
+        Ok(self.queue_store.get_item(id)?.is_some_and(|item| {
+            item.status == QueueStatus::InProgress && item.last_attempt_at == Some(attempt)
+        }))
+    }
+
     pub fn fail_external_attempt(&self, id: &str, attempt: i64, message: &str) -> Result<bool> {
         let changed = self
             .queue_store

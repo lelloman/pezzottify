@@ -1,5 +1,7 @@
 package com.lelloman.pezzottify.android.domain.sync
 
+import com.lelloman.pezzottify.android.domain.remoteapi.PassiveNetworkRequests
+
 import com.lelloman.pezzottify.android.domain.app.AppInitializer
 import com.lelloman.pezzottify.android.domain.websocket.MessageHandler
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
@@ -60,7 +62,7 @@ class SyncWebSocketHandler @Inject constructor(
     private fun handleSyncPayload(payloadString: String) {
         try {
             val payload = json.decodeFromString<SyncMessagePayload>(payloadString)
-            scope.launch {
+            scope.launch(PassiveNetworkRequests) {
                 syncManager.handleSyncMessage(payload.event)
             }
         } catch (e: Exception) {

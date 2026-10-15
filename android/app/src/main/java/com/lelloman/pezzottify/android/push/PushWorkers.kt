@@ -14,6 +14,8 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import com.lelloman.pezzottify.android.domain.remoteapi.PassiveNetworkRequests
+import kotlinx.coroutines.withContext
 
 @EntryPoint
 @InstallIn(SingletonComponent::class)
@@ -31,7 +33,9 @@ class PushServerSyncWorker(
     params: WorkerParameters,
 ) : CoroutineWorker(appContext, params) {
 
-    override suspend fun doWork(): Result {
+    override suspend fun doWork(): Result = withContext(PassiveNetworkRequests) { performSync() }
+
+    private suspend fun performSync(): Result {
         val registration = applicationContext.pushRegistration()
         val outcome = when (inputData.getString(KEY_OPERATION)) {
             OP_REGISTER -> registration.registerOnServer()

@@ -140,6 +140,7 @@ async fn main() {
 }
 
 async fn run() -> Result<()> {
+    let startup_activity = pezzottify_server::power::initialize().await?;
     let cli_args = CliArgs::parse();
 
     logging::init(
@@ -173,6 +174,7 @@ async fn run() -> Result<()> {
     // Resolve final configuration (TOML overrides CLI)
     let cli_config: config::CliConfig = (&cli_args).into();
     let app_config = config::AppConfig::resolve(&cli_config, file_config)?;
+    pezzottify_server::power::watch_media(app_config.media_path.clone()).await?;
 
     info!("Configuration loaded:");
     info!("  db_dir: {:?}", app_config.db_dir);
@@ -504,6 +506,7 @@ async fn run() -> Result<()> {
         lifecycle.service("event-pruning", async move {
             let interval = Duration::from_secs(interval_hours * 60 * 60);
             let mut ticker = tokio::time::interval(interval);
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
             // Skip the first immediate tick, wait for the first interval
             ticker.tick().await;
@@ -522,8 +525,14 @@ async fn run() -> Result<()> {
                     - (retention_days as i64 * 24 * 60 * 60);
 
                 let store = pruning_user_store.clone();
-                match tokio::task::spawn_blocking(move || store.prune_events_older_than(cutoff))
-                    .await?
+                let Ok(activity) = pezzottify_server::power::acquire(false).await else {
+                    continue;
+                };
+                match tokio::task::spawn_blocking(move || {
+                    let _activity = activity;
+                    store.prune_events_older_than(cutoff)
+                })
+                .await?
                 {
                     Ok(count) => {
                         if count > 0 {
@@ -551,7 +560,11 @@ async fn run() -> Result<()> {
         // cache cannot stall metrics scrapes and API requests.
         let initial_db_dir = db_dir_for_metrics.clone();
         let initial_media_path = media_path_for_metrics.clone();
+        let initial_activity = pezzottify_server::power::acquire(false)
+            .await
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
         match tokio::task::spawn_blocking(move || {
+            let _activity = initial_activity;
             metrics::update_storage_metrics(&initial_db_dir, &initial_media_path);
         })
         .await
@@ -562,6 +575,7 @@ async fn run() -> Result<()> {
 
         // Then update periodically (every 15 minutes)
         let mut interval = tokio::time::interval(Duration::from_secs(15 * 60));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         interval.tick().await;
         loop {
             tokio::select! {
@@ -571,7 +585,11 @@ async fn run() -> Result<()> {
             }
             let db_dir = db_dir_for_metrics.clone();
             let media_path = media_path_for_metrics.clone();
+            let Ok(activity) = pezzottify_server::power::acquire(false).await else {
+                continue;
+            };
             if let Err(e) = tokio::task::spawn_blocking(move || {
+                let _activity = activity;
                 metrics::update_storage_metrics(&db_dir, &media_path);
             })
             .await
@@ -587,6 +605,7 @@ async fn run() -> Result<()> {
     let shutdown = lifecycle.shutdown();
     lifecycle.service("wal-checkpoint", async move {
         let mut interval = tokio::time::interval(Duration::from_secs(60 * 60));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         // Skip the first immediate tick
         interval.tick().await;
         loop {
@@ -596,7 +615,11 @@ async fn run() -> Result<()> {
                 _ = interval.tick() => {},
             }
             let registry = checkpoint_registry.clone();
+            let Ok(activity) = pezzottify_server::power::acquire(false).await else {
+                continue;
+            };
             if let Err(e) = tokio::task::spawn_blocking(move || {
+                let _activity = activity;
                 pezzottify_server::backup::passive_checkpoint_all(&registry);
             })
             .await
@@ -659,6 +682,8 @@ async fn run() -> Result<()> {
         Ok(())
     })?;
     info!("Ready to serve at port {}!", app_config.port);
+    pezzottify_server::power::initialized().await?;
+    drop(startup_activity);
     info!("Metrics available at port {}!", app_config.metrics_port);
     let report = lifecycle.run(signals.wait(), runtime_tasks.drain()).await?;
     info!(?report, "Graceful shutdown complete");

@@ -6,6 +6,7 @@
  */
 
 import { ref, computed } from "vue";
+import { onServerReady } from "./power.js";
 
 // Connection state (module-level, singleton)
 const socket = ref(null);
@@ -20,6 +21,10 @@ const handlers = new Map();
 // Reconnection state
 let reconnectTimeout = null;
 let intentionalClose = false;
+let connectionDesired = false;
+onServerReady(() => {
+  if (connectionDesired && !socket.value) connect();
+});
 
 /**
  * Register a handler for messages with a given type prefix.
@@ -44,7 +49,7 @@ export function unregisterHandler(typePrefix) {
  */
 function buildWsUrl() {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}/v1/ws`;
+  return `${protocol}//${window.location.host}/v1/ws?wake=passive`;
 }
 
 /**
@@ -52,6 +57,7 @@ function buildWsUrl() {
  * Requires authentication - call after successful login.
  */
 export function connect() {
+  connectionDesired = true;
   if (socket.value) {
     return; // Already connected or connecting
   }
@@ -93,11 +99,11 @@ export function connect() {
 
     // Auto-reconnect after delay (unless intentional close)
     if (!intentionalClose && event.code !== 1000) {
-      console.log("[WS] Will attempt reconnect in 3 seconds...");
+      const delay = event.code === 4001 || event.code === 1006 ? 60000 : 3000;
       reconnectTimeout = setTimeout(() => {
         reconnectTimeout = null;
         connect();
-      }, 3000);
+      }, delay);
     }
   };
 
@@ -111,6 +117,7 @@ export function connect() {
  * Call on logout.
  */
 export function disconnect() {
+  connectionDesired = false;
   intentionalClose = true;
 
   // Clear any pending reconnect
