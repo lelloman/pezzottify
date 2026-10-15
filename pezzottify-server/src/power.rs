@@ -5,6 +5,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 struct Client {
+    runtime: tokio::runtime::Handle,
     http: reqwest::Client,
     token: String,
     service: String,
@@ -109,6 +110,7 @@ pub async fn initialize() -> anyhow::Result<Option<Guard>> {
         .to_owned();
     anyhow::ensure!(token.len() >= 32, "Invalid power token");
     let client = Arc::new(Client {
+        runtime: tokio::runtime::Handle::current(),
         http: reqwest::Client::builder()
             .unix_socket(std::path::PathBuf::from(socket))
             .timeout(Duration::from_secs(5))
@@ -153,6 +155,10 @@ pub async fn acquire(demand: bool) -> anyhow::Result<Option<Guard>> {
     let Some(client) = CLIENT.get() else {
         return Ok(None);
     };
+    acquire_for(client, demand).await.map(Some)
+}
+
+async fn acquire_for(client: &Arc<Client>, demand: bool) -> anyhow::Result<Guard> {
     let key = format!(
         "{}.{}",
         client.instance,
@@ -163,7 +169,9 @@ pub async fn acquire(demand: bool) -> anyhow::Result<Option<Guard>> {
         client: client.clone(),
         key: key.clone(),
         renewal: None,
-        runtime: tokio::runtime::Handle::current(),
+        // Background jobs can enter a temporary runtime. Guard renewal and
+        // release must survive that runtime, including on errors/cancellation.
+        runtime: client.runtime.clone(),
     };
     client
         .call(
@@ -174,7 +182,7 @@ pub async fn acquire(demand: bool) -> anyhow::Result<Option<Guard>> {
         .await?;
     let renew_client = client.clone();
     let renew_key = key.clone();
-    let renewal = tokio::spawn(async move {
+    let renewal = client.runtime.spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(30)).await;
             if let Err(error) = renew_client
@@ -192,7 +200,7 @@ pub async fn acquire(demand: bool) -> anyhow::Result<Option<Guard>> {
         }
     });
     guard.renewal = Some(renewal);
-    Ok(Some(guard))
+    Ok(guard)
 }
 
 pub async fn initialized() -> anyhow::Result<()> {
@@ -409,4 +417,71 @@ pub async fn watch_media(root: std::path::PathBuf) -> anyhow::Result<()> {
         }
     });
     Ok(())
+}
+
+#[cfg(test)]
+mod runtime_tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn guard_release_survives_background_job_runtime_shutdown() {
+        let directory = tempfile::tempdir().unwrap();
+        let socket = directory.path().join("agent.sock");
+        let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+        let (released_tx, released_rx) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
+            let mut released_tx = Some(released_tx);
+            loop {
+                let (mut connection, _) = listener.accept().await.unwrap();
+                let mut request = vec![0; 8192];
+                let size = connection.read(&mut request).await.unwrap();
+                let is_release = request[..size].starts_with(b"DELETE ");
+                connection
+                    .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                    .await
+                    .unwrap();
+                if is_release {
+                    released_tx.take().unwrap().send(()).unwrap();
+                    break;
+                }
+            }
+        });
+        let client = Arc::new(Client {
+            runtime: tokio::runtime::Handle::current(),
+            http: reqwest::Client::builder()
+                .unix_socket(socket)
+                .build()
+                .unwrap(),
+            token: "test-token".into(),
+            service: "test".into(),
+            instance: "test".into(),
+            initialized: AtomicBool::new(true),
+            healthy: AtomicBool::new(true),
+            sequence: AtomicU64::new(0),
+            schedules_synced: AtomicBool::new(true),
+            worker_synced: AtomicBool::new(true),
+            media_probe: AtomicBool::new(false),
+            wanted_epoch: AtomicU64::new(0),
+            checked_epoch: AtomicU64::new(0),
+            probe_notify: tokio::sync::Notify::new(),
+        });
+        tokio::task::spawn_blocking(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            runtime.block_on(async {
+                let _guard = acquire_for(&client, false).await.unwrap();
+                // No further yield: the job's runtime ends as the guard drops.
+            });
+            drop(runtime);
+        })
+        .await
+        .unwrap();
+        tokio::time::timeout(Duration::from_secs(3), released_rx)
+            .await
+            .unwrap()
+            .unwrap();
+    }
 }
