@@ -2,6 +2,7 @@ import axios from "axios";
 import * as oidc from "./oidc";
 import { getCsrfToken } from "./csrf";
 import { authorizationHeaderValue } from "./authorization";
+import { ensureReady, isPassiveRequest } from "./power";
 
 let isRefreshing = false;
 let failedQueue = [];
@@ -57,6 +58,17 @@ export function setupAxiosInterceptors() {
   // Request interceptor: Add Authorization header
   axios.interceptors.request.use(
     async (config) => {
+      // Limit power handling to this application's origin.
+      const base = new URL(config.baseURL || "/", window.location.origin);
+      if (new URL(config.url || "/", base).origin === window.location.origin) {
+        if (config.powerPassive || (!config.powerForeground && isPassiveRequest())) {
+          config.headers["X-Homelab-Wake"] = "passive";
+        } else {
+          await ensureReady();
+          if (config.signal?.aborted) throw new axios.CanceledError();
+          delete config.headers["X-Homelab-Wake"];
+        }
+      }
       const method = (config.method || "get").toLowerCase();
       if (!["get", "head", "options"].includes(method)) {
         const token = getCsrfToken();

@@ -30,6 +30,7 @@ async-trait = "0.1.85"
 simple-server = { package = "lelloman-simple-server", version = "=0.1.3", features = ["static-files", "ws", "sse", "multipart", "lifecycle", "logging", "http-tracing", "body-limit", "response-headers", "tasks", "task-scheduling", "task-policies", "auth", "auth-cookies", "extract", "rate-limit", "database-sqlite", "database-migrations", "database-sqlite-schema"] }
 byte-unit = "5.1.6"
 chrono = "0.4.39"
+chrono-tz = "0.10.4"
 clap = { version = "4.4.11", features = ["derive"] }
 futures = "0.3.31"
 infer = "0.16.0"

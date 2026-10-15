@@ -1,5 +1,10 @@
 package com.lelloman.pezzottify.android.domain.sync
 
+import com.lelloman.pezzottify.android.domain.remoteapi.PassiveNetworkRequests
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlinx.coroutines.withContext
+
 import com.lelloman.pezzottify.android.domain.app.AppInitializer
 import com.lelloman.pezzottify.android.logger.Logger
 import kotlinx.coroutines.CompletableDeferred
@@ -71,6 +76,8 @@ abstract class BaseSynchronizer<T>(
      */
     protected open suspend fun onBeforeMainLoop() {}
 
+    private val foregroundAttempt = AtomicBoolean(false)
+
     override fun initialize() {
         scope.launch(dispatcher) {
             if (!initialized) {
@@ -86,6 +93,7 @@ abstract class BaseSynchronizer<T>(
      * check for new items to process. Also resets the sleep duration to minimum.
      */
     fun wakeUp() {
+        foregroundAttempt.set(true)
         logger.info("wakeUp()")
         wakeUpSignal.complete(Unit)
         sleepDuration = minSleepDuration
@@ -105,7 +113,11 @@ abstract class BaseSynchronizer<T>(
                 continue
             }
 
-            processItems(itemsToProcess)
+            // A new user action may wake the server once. Automatic retry
+            // loops defer while it sleeps, including pending offline writes.
+            withContext(if (foregroundAttempt.getAndSet(false)) EmptyCoroutineContext else PassiveNetworkRequests) {
+                processItems(itemsToProcess)
+            }
 
             logger.debug("mainLoop() going to wait for $sleepDuration")
             delay(sleepDuration)

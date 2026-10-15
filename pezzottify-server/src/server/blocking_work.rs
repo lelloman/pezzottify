@@ -87,6 +87,9 @@ impl BoundedBlockingPool {
         T: Send + 'static,
         F: FnOnce() -> T + Send + 'static,
     {
+        let activity = crate::power::acquire(false)
+            .await
+            .map_err(|_| BlockingWorkError::ShuttingDown)?;
         let admission = match &self.admitted {
             Some(slots) => match Arc::clone(slots).try_acquire_owned() {
                 Ok(permit) => Some(permit),
@@ -129,6 +132,7 @@ impl BoundedBlockingPool {
 
         let pool_name = self.name;
         let worker = tokio::task::spawn_blocking(move || {
+            let _activity = activity;
             let _admission = admission;
             let _permit = permit;
             let _metrics = BlockingExecutionGuard {

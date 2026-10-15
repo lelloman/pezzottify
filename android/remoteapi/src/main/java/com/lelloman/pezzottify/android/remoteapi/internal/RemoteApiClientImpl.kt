@@ -73,6 +73,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.currentCoroutineContext
+import com.lelloman.pezzottify.android.domain.remoteapi.PassiveNetworkRequests
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.BufferedReader
@@ -119,7 +121,12 @@ internal class RemoteApiClientImpl(
 
     private val retrofitFlow = hostUrlProvider.hostUrl
         .map { url -> url.takeIf { isValidHttpUrl(it) } }
-        .map { validUrl -> validUrl?.let(::makeRetrofit) }
+        .map { validUrl -> validUrl?.let { makeRetrofit(it) } }
+        .stateIn(coroutineScope, SharingStarted.Eagerly, null)
+
+    private val passiveRetrofitFlow = hostUrlProvider.hostUrl
+        .map { url -> url.takeIf { isValidHttpUrl(it) } }
+        .map { validUrl -> validUrl?.let { makeRetrofit(it, passive = true) } }
         .stateIn(coroutineScope, SharingStarted.Eagerly, null)
 
     private val <T>Response<T>.commonError
@@ -135,7 +142,8 @@ internal class RemoteApiClientImpl(
         }
 
     private suspend fun getRetrofit(): RetrofitApiClient =
-        retrofitFlow.filterNotNull().first()
+        (if (currentCoroutineContext()[PassiveNetworkRequests.Key] != null) passiveRetrofitFlow else retrofitFlow)
+            .filterNotNull().first()
 
     private fun <T> Response<T>.parsedBody(): RemoteApiResponse<T> =
         try {
@@ -153,8 +161,11 @@ internal class RemoteApiClientImpl(
     private fun <T> Response<T>.returnFromRetrofitResponse(): RemoteApiResponse<T> =
         commonError ?: parsedBody()
 
-    private fun makeRetrofit(baseUrl: String): RetrofitApiClient {
+    private fun makeRetrofit(baseUrl: String, passive: Boolean = false): RetrofitApiClient {
         val okHttpBuilder = okHttpClientFactory.createBuilder(baseUrl)
+        if (passive) okHttpBuilder.interceptors().add(0, Interceptor { chain ->
+            chain.proceed(chain.request().newBuilder().header("X-Homelab-Wake", "passive").build())
+        })
         // Radio computation may take longer than OkHttp's default read timeout.
         // The player controller bounds the entire operation to 60 seconds.
         okHttpBuilder.addInterceptor { chain ->

@@ -528,6 +528,7 @@ impl TrackMaterializer {
         track: Arc<InFlightTrack>,
         priority: DownloadPriority,
     ) -> Result<()> {
+        let _activity = crate::power::acquire(true).await?;
         let timeout = Duration::from_secs(self.settings.no_progress_timeout_secs);
         track.set_phase(ProxyJobPhase::WaitingForCapacity);
         let _slot = match priority {

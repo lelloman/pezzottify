@@ -3,7 +3,7 @@
 //! Handles WebSocket upgrade, message loop, and cleanup.
 
 use simple_server::extract::Extract;
-use simple_server::web::ws::{Message, WebSocket, WebSocketUpgrade};
+use simple_server::web::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use std::sync::Arc;
 
 use futures::{SinkExt, StreamExt};
@@ -177,6 +177,8 @@ async fn forward_outgoing(
         }
     }
 
+    let mut power_tick = tokio::time::interval(std::time::Duration::from_secs(1));
+    power_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     // Forward all subsequent messages
     loop {
         tokio::select! {
@@ -184,6 +186,12 @@ async fn forward_outgoing(
             _ = shutdown.requested() => {
                 let _ = ws_sink.send(Message::Close(None)).await;
                 break;
+            }
+            _ = power_tick.tick(), if crate::power::enabled() => {
+                if !crate::power::admission_open().await {
+                    let _ = ws_sink.send(Message::Close(Some(CloseFrame { code:4001,reason:"Server sleeping".into() }))).await;
+                    break;
+                }
             }
             Some(msg) = outgoing_rx.recv() => {
                 match serde_json::to_string(&msg) {
@@ -229,6 +237,22 @@ async fn process_incoming(
             Ok(Message::Text(text)) => {
                 match serde_json::from_str::<ClientMessage>(&text) {
                     Ok(msg) => {
+                        let _activity = if msg.msg_type == msg_types::PING {
+                            None
+                        } else {
+                            let demand = matches!(
+                                msg.msg_type.as_str(),
+                                msg_types::PLAYBACK_COMMAND
+                                    | msg_types::PLAYBACK_QUEUE_UPDATE
+                                    | msg_types::PLAYBACK_DEVICE_QUEUE
+                            );
+                            match crate::power::acquire(demand).await {
+                                Ok(guard) => guard,
+                                Err(_) => {
+                                    break;
+                                }
+                            }
+                        };
                         handle_client_message(user_id, device_id, msg, state).await;
                     }
                     Err(e) => {

@@ -9,12 +9,14 @@
  */
 
 import { ref, computed } from 'vue';
+import { ensureReady } from './power.js';
 
 // Module state
 let socket = null;
 let requestId = 0;
 let connectionPromise = null;
 let rejectConnection = null;
+let connectionGeneration = 0;
 const pendingRequests = new Map();
 const cachedTools = ref([]);
 const connected = ref(false);
@@ -96,11 +98,25 @@ function handleMessage(event) {
 export function connect() {
   if (connectionPromise) return connectionPromise;
   if (connected.value) return Promise.resolve();
+  const generation = connectionGeneration;
+  const promise = ensureReady().then(() => {
+    if (generation !== connectionGeneration) throw new Error('MCP disconnected');
+    connectionPromise = null;
+    return connectSocket();
+  });
+  connectionPromise = promise;
+  promise.catch(() => { if (connectionPromise === promise) connectionPromise = null; });
+  return promise;
+}
+
+function connectSocket() {
+  if (connectionPromise) return connectionPromise;
+  if (connected.value) return Promise.resolve();
   connecting.value = true;
   let ws;
   try {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${protocol}//${window.location.host}/v1/mcp`);
+    ws = new WebSocket(`${protocol}//${window.location.host}/v1/mcp?wake=passive`);
   } catch (error) {
     connecting.value = false;
     return Promise.reject(error);
@@ -150,6 +166,7 @@ export function connect() {
  * Invalidate callbacks and settle every waiter before closing the old socket.
  */
 export function disconnect() {
+  connectionGeneration++;
   const previous = socket;
   socket = null;
   const error = new Error('MCP disconnected');
@@ -195,6 +212,8 @@ export function getTools() {
  * Call a tool and return the result
  */
 export async function callTool(name, args) {
+  await ensureReady();
+  if (!connected.value) await connect();
   const result = await sendRequest('tools/call', {
     name,
     arguments: args,

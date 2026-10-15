@@ -2,7 +2,7 @@
 //!
 //! Handles WebSocket connections for MCP protocol.
 
-use simple_server::web::ws::{Message, WebSocket, WebSocketUpgrade};
+use simple_server::web::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use std::sync::Arc;
 
 use futures::{SinkExt, StreamExt};
@@ -69,6 +69,8 @@ async fn handle_mcp_socket(
 
     // Process messages
     let mut initialized = false;
+    let mut power_tick = tokio::time::interval(std::time::Duration::from_secs(1));
+    power_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     loop {
         let result = tokio::select! {
@@ -77,6 +79,13 @@ async fn handle_mcp_socket(
                 let _ = ws_sink.send(Message::Close(None)).await;
                 break;
             }
+            _ = power_tick.tick(), if crate::power::enabled() => {
+                if !crate::power::admission_open().await {
+                    let _ = ws_sink.send(Message::Close(Some(CloseFrame { code:4001,reason:"Server sleeping".into() }))).await;
+                    break;
+                }
+                continue;
+            }
             result = ws_stream.next() => match result {
                 Some(result) => result,
                 None => break,
@@ -84,6 +93,21 @@ async fn handle_mcp_socket(
         };
         match result {
             Ok(Message::Text(text)) => {
+                let demand = serde_json::from_str::<serde_json::Value>(&text)
+                    .ok()
+                    .is_some_and(|value| value["method"] == "tools/call");
+                let _activity = match crate::power::acquire(demand).await {
+                    Ok(guard) => guard,
+                    Err(_) => {
+                        let _ = ws_sink
+                            .send(Message::Close(Some(CloseFrame {
+                                code: 4001,
+                                reason: "Server sleeping".into(),
+                            })))
+                            .await;
+                        break;
+                    }
+                };
                 // Handshake authentication is not lifetime authorization.
                 let current_session = match crate::server::session::validate_session_token(
                     &session.token,

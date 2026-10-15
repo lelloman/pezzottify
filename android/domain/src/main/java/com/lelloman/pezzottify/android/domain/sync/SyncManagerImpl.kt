@@ -1,5 +1,7 @@
 package com.lelloman.pezzottify.android.domain.sync
 
+import com.lelloman.pezzottify.android.domain.remoteapi.PassiveNetworkRequests
+
 import com.lelloman.pezzottify.android.domain.download.DownloadStatusRepository
 import com.lelloman.pezzottify.android.domain.notifications.DownloadCompletedData
 import com.lelloman.pezzottify.android.domain.notifications.NotificationRepository
@@ -623,7 +625,7 @@ class SyncManagerImpl internal constructor(
             return
         }
 
-        retryJob = scope.launch {
+        retryJob = scope.launch(PassiveNetworkRequests) {
             logger.info("Scheduling retry in $currentRetryDelay")
             delay(currentRetryDelay)
 

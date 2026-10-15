@@ -420,6 +420,9 @@ where
         T: Send + 'static,
         F: FnOnce(&S) -> Result<T, AnyhowError> + Send + 'static,
     {
+        let activity = crate::power::acquire(false)
+            .await
+            .map_err(|_| DbRunError::ShuttingDown)?;
         let config = self.executor.priority_config(priority);
         let queue_deadline = Instant::now() + config.queue_timeout;
         let cancelled = Arc::new(AtomicBool::new(false));
@@ -428,6 +431,7 @@ where
         let (started_tx, started_rx) = oneshot::channel();
         let (result_tx, result_rx) = oneshot::channel();
         let task = Box::new(move || {
+            let _activity = activity;
             let _ = started_tx.send(());
             if task_cancelled.load(Ordering::Acquire) {
                 return;
