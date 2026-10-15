@@ -5,11 +5,11 @@
  * for features like user data sync, remote playback control, etc.
  */
 
-import { ref, computed } from "vue";
-import { onServerReady } from "./power.js";
+import { ref, shallowRef, computed } from "vue";
+import { onServerReady, powerStatus } from "./power.js";
 
 // Connection state (module-level, singleton)
-const socket = ref(null);
+const socket = shallowRef(null);
 const connected = ref(false);
 const connecting = ref(false);
 const deviceId = ref(null);
@@ -20,11 +20,44 @@ const handlers = new Map();
 
 // Reconnection state
 let reconnectTimeout = null;
-let intentionalClose = false;
 let connectionDesired = false;
+let reconnectCheck = null;
+
+function scheduleReconnect(delay = 5000) {
+  if (!connectionDesired || socket.value || reconnectTimeout || reconnectCheck) return;
+  reconnectTimeout = setTimeout(() => {
+    reconnectTimeout = null;
+    reconnectWhenReady();
+  }, delay);
+}
+
+function reconnectWhenReady() {
+  if (!connectionDesired || socket.value || reconnectCheck) return;
+  // Availability polling must never wake an otherwise idle server.
+  reconnectCheck = powerStatus()
+    .then((state) => {
+      if (state === "ready" && connectionDesired && !socket.value) connect();
+    })
+    .catch(() => {})
+    .finally(() => {
+      reconnectCheck = null;
+      scheduleReconnect();
+    });
+}
+
 onServerReady(() => {
   if (connectionDesired && !socket.value) connect();
 });
+
+if (typeof window !== "undefined") {
+  window.addEventListener("online", reconnectWhenReady);
+  window.addEventListener("focus", reconnectWhenReady);
+}
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) reconnectWhenReady();
+  });
+}
 
 /**
  * Register a handler for messages with a given type prefix.
@@ -68,19 +101,21 @@ export function connect() {
     reconnectTimeout = null;
   }
 
-  intentionalClose = false;
   connecting.value = true;
 
   const wsUrl = buildWsUrl();
   console.log("[WS] Connecting to", wsUrl);
 
-  socket.value = new WebSocket(wsUrl);
+  const ws = new WebSocket(wsUrl);
+  socket.value = ws;
 
-  socket.value.onopen = () => {
+  ws.onopen = () => {
+    if (socket.value !== ws) return;
     console.log("[WS] Connection opened, waiting for server confirmation...");
   };
 
-  socket.value.onmessage = (event) => {
+  ws.onmessage = (event) => {
+    if (socket.value !== ws) return;
     try {
       const msg = JSON.parse(event.data);
       handleMessage(msg);
@@ -89,7 +124,8 @@ export function connect() {
     }
   };
 
-  socket.value.onclose = (event) => {
+  ws.onclose = (event) => {
+    if (socket.value !== ws) return;
     console.log("[WS] Connection closed:", event.code, event.reason);
     connected.value = false;
     connecting.value = false;
@@ -97,17 +133,12 @@ export function connect() {
     serverVersion.value = null;
     socket.value = null;
 
-    // Auto-reconnect after delay (unless intentional close)
-    if (!intentionalClose && event.code !== 1000) {
-      const delay = event.code === 4001 || event.code === 1006 ? 60000 : 3000;
-      reconnectTimeout = setTimeout(() => {
-        reconnectTimeout = null;
-        connect();
-      }, delay);
-    }
+    // A normal server close is still retryable while the user is logged in.
+    scheduleReconnect();
   };
 
-  socket.value.onerror = (error) => {
+  ws.onerror = (error) => {
+    if (socket.value !== ws) return;
     console.error("[WS] Error:", error);
   };
 }
@@ -118,7 +149,6 @@ export function connect() {
  */
 export function disconnect() {
   connectionDesired = false;
-  intentionalClose = true;
 
   // Clear any pending reconnect
   if (reconnectTimeout) {
@@ -127,8 +157,9 @@ export function disconnect() {
   }
 
   if (socket.value) {
-    socket.value.close(1000, "Client disconnect");
+    const previous = socket.value;
     socket.value = null;
+    previous.close(1000, "Client disconnect");
     connected.value = false;
     connecting.value = false;
     deviceId.value = null;
