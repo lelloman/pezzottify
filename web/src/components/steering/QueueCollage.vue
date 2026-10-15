@@ -73,8 +73,8 @@ const albumIds = computed(() => {
   object-fit: cover;
 }
 
-.cell:not([src]),
-.single:not([src]) {
+.cell:not([data-image-state="loaded"]),
+.single:not([data-image-state="loaded"]) {
   opacity: 0;
 }
 

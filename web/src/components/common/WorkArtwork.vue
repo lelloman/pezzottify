@@ -48,7 +48,7 @@ const artistIds = computed(() => [...new Set(props.artistIds)].slice(0, 4));
   height: 100%;
   object-fit: cover;
 }
-.portrait img:not([src]) {
+.portrait img:not([data-image-state="loaded"]) {
   visibility: hidden;
 }
 .imageFallback {

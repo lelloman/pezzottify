@@ -119,7 +119,7 @@ const urls = computed(() => {
 }
 
 /* Transparent rather than hidden: the image only starts loading once visible. */
-.image:not([src]) {
+.image:not([data-image-state="loaded"]) {
   opacity: 0;
 }
 

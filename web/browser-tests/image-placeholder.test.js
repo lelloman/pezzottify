@@ -11,9 +11,22 @@ const entry = `import {createApp,h,reactive} from 'vue';
 import {createPinia} from 'pinia';
 import MultiSourceImage from '@/components/common/MultiSourceImage.vue';
 import {useDebugStore} from '@/store/debug';
+import DetailPage from '@/components/common/DetailPage.vue';
+import WorkArtwork from '@/components/common/WorkArtwork.vue';
+import QueueCollage from '@/components/steering/QueueCollage.vue';
+import SteeringArtwork from '@/components/steering/SteeringArtwork.vue';
+import {useStaticsStore} from '@/store/statics';
 const state=reactive({urls:['/art/first'],lazy:false,offset:0,mounted:true});
-const app=createApp({setup:()=>()=>state.mounted?h(MultiSourceImage,{urls:state.urls,lazy:state.lazy,alt:'Album cover',class:'artwork',style:{width:'120px',height:'120px',borderRadius:'50%',marginTop:state.offset+'px'}}):null});
+const fallbacks=new URLSearchParams(location.search).has('fallbacks');
+const app=createApp({setup:()=>()=>fallbacks?h('div',[
+  h(DetailPage,{title:'Artist',kind:'Artist',banner:true,imageUrls:state.urls}),
+  h(WorkArtwork,{artistIds:['artist'],style:{width:'80px',height:'80px'}}),
+  h(QueueCollage,{tracksIds:['album'],class:'singleQueue',style:{width:'80px'}}),
+  h(QueueCollage,{tracksIds:['a','b','c','d'],class:'fourQueue',style:{width:'80px'}}),
+  h(SteeringArtwork,{reference:{entity_type:'artist',entity_id:'artist',label:'Artist'}}),
+]):state.mounted?h(MultiSourceImage,{urls:state.urls,lazy:state.lazy,alt:'Album cover',class:'artwork',style:{width:'120px',height:'120px',borderRadius:'50%',marginTop:state.offset+'px'}}):null});
 app.use(createPinia());
+if(fallbacks) useStaticsStore().getTrack=id=>({item:{album_id:id}});
 window.fixture={state,debug:useDebugStore(),rerender:()=>state.urls=[...state.urls]};
 app.mount('#app');`;
 before(async () => {
@@ -35,7 +48,7 @@ before(async () => {
         },
         configureServer(vite) {
           vite.middlewares.use((req, res, next) => {
-            if (req.url !== "/") return next();
+            if (req.url.split("?")[0] !== "/") return next();
             res.setHeader("Content-Type", "text/html");
             res.end(
               '<!doctype html><div id="app"></div><script type="module" src="/@id/__x00__test-entry"></script>',
@@ -241,6 +254,113 @@ test("exhausted transient retries stop shimmering and remain a stable error", as
     assert.equal(attempts, 4);
     assert.equal(await page.locator("img").getAttribute("aria-busy"), "false");
   } finally {
+    await page.close();
+  }
+});
+
+test("caller fallbacks remain visible while loading, on failure and when disabled; loaded artwork replaces them", async () => {
+  const page = await browser.newPage({
+    viewport: { width: 1000, height: 1000 },
+  });
+  page.setDefaultTimeout(10000);
+  let release;
+  const pending = new Promise((resolve) => {
+    release = resolve;
+  });
+  try {
+    await page.route("**/art/first", async (route) => {
+      await pending;
+      await route.fulfill({ status: 404 }).catch(() => {});
+    });
+    await page.route("**/v1/content/image/*", async (route) => {
+      await pending;
+      await route.fulfill({ status: 404 }).catch(() => {});
+    });
+    await page.goto(origin + "/?fallbacks", { waitUntil: "domcontentloaded" });
+    const images = page.locator("img");
+    assert.equal(await images.count(), 8);
+    const banner = page.locator(".heroBackdrop");
+    const work = page.locator(".portrait img");
+    const steering = page.locator(".steeringArtwork img");
+    const queue = page.locator(".queueCollage img");
+    async function assertFallbacks(state) {
+      await page.waitForFunction(
+        (value) =>
+          [...document.querySelectorAll("img")].every(
+            (el) => el.dataset.imageState === value,
+          ),
+        state,
+      );
+      assert.equal(
+        await banner.evaluate((el) => getComputedStyle(el).visibility),
+        "hidden",
+      );
+      assert.match(
+        await page
+          .locator(".artistBanner")
+          .evaluate((el) => getComputedStyle(el).backgroundImage),
+        /linear-gradient/,
+      );
+      assert.equal(
+        await work.evaluate((el) => getComputedStyle(el).visibility),
+        "hidden",
+      );
+      assert.equal(await page.locator(".imageFallback").innerText(), "♪");
+      assert.equal(await page.locator(".imageFallback").isVisible(), true);
+      assert.equal(
+        await steering.evaluate((el) => getComputedStyle(el).opacity),
+        "0",
+      );
+      assert.equal(
+        await page.locator(".steeringArtwork .fallback").innerText(),
+        "A",
+      );
+      assert.equal(
+        await page.locator(".steeringArtwork .fallback").isVisible(),
+        true,
+      );
+      assert.deepEqual(
+        await queue.evaluateAll((els) =>
+          els.map((el) => getComputedStyle(el).opacity),
+        ),
+        ["0", "0", "0", "0", "0"],
+      );
+    }
+    await assertFallbacks("loading");
+    const bannerBox = await banner.boundingBox();
+    release();
+    await assertFallbacks("error");
+    await page.evaluate(() => (window.fixture.debug.imagesEnabled = false));
+    await assertFallbacks("disabled");
+    await page.route("**/art/first", fulfillImage);
+    await page.route("**/v1/content/image/*", fulfillImage);
+    await page.evaluate(() => (window.fixture.debug.imagesEnabled = true));
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll("img")].every(
+        (el) => el.dataset.imageState === "loaded",
+      ),
+    );
+    assert.equal(
+      await banner.evaluate((el) => getComputedStyle(el).visibility),
+      "visible",
+    );
+    assert.deepEqual(await banner.boundingBox(), bannerBox);
+    assert.equal(
+      await work.evaluate((el) => getComputedStyle(el).visibility),
+      "visible",
+    );
+    assert.equal(
+      await steering.evaluate((el) => getComputedStyle(el).opacity),
+      "1",
+    );
+    assert.deepEqual(
+      await queue.evaluateAll((els) =>
+        els.map((el) => getComputedStyle(el).opacity),
+      ),
+      ["1", "1", "1", "1", "1"],
+    );
+  } finally {
+    release();
     await page.close();
   }
 });

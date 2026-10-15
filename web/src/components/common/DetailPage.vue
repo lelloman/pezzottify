@@ -364,7 +364,7 @@ onBeforeUnmount(stopTracking);
   filter: none;
   opacity: var(--banner-image-opacity, 1);
 }
-.artistBanner .heroBackdrop:not([src]) {
+.artistBanner .heroBackdrop:not([data-image-state="loaded"]) {
   visibility: hidden;
 }
 .artistBanner::after {
