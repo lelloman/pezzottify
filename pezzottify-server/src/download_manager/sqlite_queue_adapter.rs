@@ -239,7 +239,8 @@ impl DownloadQueueStore for SqliteDownloadQueueStore {
              retry_count=retry_count + CASE WHEN last_attempt_at IS NULL THEN 0 ELSE 1 END,
              completed_at=NULL, next_retry_at=NULL, error_type=NULL, error_message=NULL
              WHERE id=?2 AND content_type='ALBUM' AND parent_id IS NULL
-             AND status IN ('PENDING', 'FAILED', 'IN_PROGRESS')
+             AND status IN ('PENDING', 'FAILED', 'IN_PROGRESS', 'RETRY_WAITING')
+             AND (next_retry_at IS NULL OR next_retry_at <= ?1)
              AND last_attempt_at IS ?3 RETURNING last_attempt_at",
             rusqlite::params![Self::now(), id, previous_attempt],
             |row| row.get(0),
