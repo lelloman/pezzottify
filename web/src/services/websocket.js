@@ -18,13 +18,52 @@ const serverVersion = ref(null);
 // Message handlers by type prefix
 const handlers = new Map();
 
-// Reconnection state
+// Retry and liveness work runs only while this tab is visible.
+const RETRY_MS = 30000;
+const CONNECTION_TIMEOUT_MS = 10000;
+const PONG_TIMEOUT_MS = 10000;
 let reconnectTimeout = null;
 let connectionDesired = false;
 let reconnectCheck = null;
+let checkTimeout = null;
+let connectionTimeout = null;
+let heartbeatTimeout = null;
+let pongTimeout = null;
+let connectionStartedAt = 0;
 
-function scheduleReconnect(delay = 5000) {
-  if (!connectionDesired || socket.value || reconnectTimeout || reconnectCheck) return;
+function foreground() {
+  return typeof document === "undefined" || !document.hidden;
+}
+
+function clearSocketTimers() {
+  clearTimeout(connectionTimeout);
+  clearTimeout(heartbeatTimeout);
+  clearTimeout(pongTimeout);
+  connectionTimeout = heartbeatTimeout = pongTimeout = null;
+}
+
+function cancelAvailabilityCheck() {
+  const previous = reconnectCheck;
+  reconnectCheck = null;
+  clearTimeout(checkTimeout);
+  checkTimeout = null;
+  previous?.abort();
+}
+
+function resetSocket(ws, delay = RETRY_MS) {
+  if (socket.value !== ws) return;
+  clearSocketTimers();
+  socket.value = null;
+  connected.value = false;
+  connecting.value = false;
+  deviceId.value = null;
+  serverVersion.value = null;
+  try { ws.close(1000, "Connection recovery"); } catch { /* Already closed. */ }
+  scheduleReconnect(delay);
+}
+
+function scheduleReconnect(delay = RETRY_MS) {
+  if (!foreground() || !connectionDesired || socket.value || reconnectTimeout || reconnectCheck) return;
   reconnectTimeout = setTimeout(() => {
     reconnectTimeout = null;
     reconnectWhenReady();
@@ -32,31 +71,97 @@ function scheduleReconnect(delay = 5000) {
 }
 
 function reconnectWhenReady() {
-  if (!connectionDesired || socket.value || reconnectCheck) return;
+  if (!foreground() || !connectionDesired || socket.value || reconnectCheck) return;
+  clearTimeout(reconnectTimeout);
+  reconnectTimeout = null;
+  const check = new AbortController();
+  reconnectCheck = check;
+  checkTimeout = setTimeout(() => {
+    if (reconnectCheck !== check) return;
+    cancelAvailabilityCheck();
+    scheduleReconnect();
+  }, 5000);
   // Availability polling must never wake an otherwise idle server.
-  reconnectCheck = powerStatus()
+  powerStatus({ signal: check.signal })
     .then((state) => {
-      if (state === "ready" && connectionDesired && !socket.value) connect();
+      if (reconnectCheck === check && foreground() && state === "ready" && connectionDesired && !socket.value) connect();
     })
     .catch(() => {})
     .finally(() => {
+      if (reconnectCheck !== check) return;
       reconnectCheck = null;
+      clearTimeout(checkTimeout);
+      checkTimeout = null;
       scheduleReconnect();
     });
 }
 
-onServerReady(() => {
-  if (connectionDesired && !socket.value) connect();
-});
+function scheduleHeartbeat() {
+  clearTimeout(heartbeatTimeout);
+  heartbeatTimeout = null;
+  if (foreground() && connected.value) {
+    heartbeatTimeout = setTimeout(probeSocket, RETRY_MS);
+  }
+}
+
+function probeSocket() {
+  heartbeatTimeout = null;
+  const ws = socket.value;
+  if (!foreground() || !connectionDesired || !ws || pongTimeout) return;
+  if (!connected.value || ws.readyState !== WebSocket.OPEN) {
+    resetSocket(ws, 0);
+    return;
+  }
+  pongTimeout = setTimeout(() => resetSocket(ws, 0), PONG_TIMEOUT_MS);
+  try { ws.send(JSON.stringify({ type: "ping", payload: null })); }
+  catch { resetSocket(ws, 0); }
+}
+
+function armConnectionTimeout(ws) {
+  clearTimeout(connectionTimeout);
+  connectionTimeout = null;
+  if (!foreground()) return;
+  const remaining = CONNECTION_TIMEOUT_MS - (Date.now() - connectionStartedAt);
+  if (remaining <= 0) resetSocket(ws, 0);
+  else connectionTimeout = setTimeout(() => resetSocket(ws), remaining);
+}
+
+function resumeConnection() {
+  if (!foreground()) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+    cancelAvailabilityCheck();
+    clearSocketTimers();
+    return;
+  }
+  if (!connectionDesired) return;
+  const ws = socket.value;
+  if (!ws) reconnectWhenReady();
+  else if (connected.value && ws.readyState === WebSocket.OPEN) {
+    clearTimeout(heartbeatTimeout);
+    heartbeatTimeout = null;
+    probeSocket();
+  } else if (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN) {
+    armConnectionTimeout(ws);
+  } else resetSocket(ws, 0);
+}
+
+onServerReady(resumeConnection);
 
 if (typeof window !== "undefined") {
-  window.addEventListener("online", reconnectWhenReady);
-  window.addEventListener("focus", reconnectWhenReady);
+  window.addEventListener("online", resumeConnection);
+  window.addEventListener("focus", resumeConnection);
+  window.addEventListener("pageshow", resumeConnection);
 }
 if (typeof document !== "undefined") {
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) reconnectWhenReady();
+  document.addEventListener("visibilitychange", resumeConnection);
+  document.addEventListener("freeze", () => {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+    cancelAvailabilityCheck();
+    clearSocketTimers();
   });
+  document.addEventListener("resume", resumeConnection);
 }
 
 /**
@@ -91,8 +196,10 @@ function buildWsUrl() {
  */
 export function connect() {
   connectionDesired = true;
+  if (!foreground()) return;
   if (socket.value) {
-    return; // Already connected or connecting
+    resumeConnection();
+    return;
   }
 
   // Clear any pending reconnect
@@ -108,6 +215,8 @@ export function connect() {
 
   const ws = new WebSocket(wsUrl);
   socket.value = ws;
+  connectionStartedAt = Date.now();
+  armConnectionTimeout(ws);
 
   ws.onopen = () => {
     if (socket.value !== ws) return;
@@ -118,7 +227,17 @@ export function connect() {
     if (socket.value !== ws) return;
     try {
       const msg = JSON.parse(event.data);
+      if (msg.type === "connected") {
+        clearTimeout(connectionTimeout);
+        connectionTimeout = null;
+      }
+      if (msg.type === "pong") {
+        clearTimeout(pongTimeout);
+        pongTimeout = null;
+        scheduleHeartbeat();
+      }
       handleMessage(msg);
+      if (msg.type === "connected") scheduleHeartbeat();
     } catch (e) {
       console.error("[WS] Failed to parse message:", e);
     }
@@ -127,14 +246,7 @@ export function connect() {
   ws.onclose = (event) => {
     if (socket.value !== ws) return;
     console.log("[WS] Connection closed:", event.code, event.reason);
-    connected.value = false;
-    connecting.value = false;
-    deviceId.value = null;
-    serverVersion.value = null;
-    socket.value = null;
-
-    // A normal server close is still retryable while the user is logged in.
-    scheduleReconnect();
+    resetSocket(ws);
   };
 
   ws.onerror = (error) => {
@@ -149,22 +261,12 @@ export function connect() {
  */
 export function disconnect() {
   connectionDesired = false;
+  clearTimeout(reconnectTimeout);
+  reconnectTimeout = null;
+  cancelAvailabilityCheck();
+  clearSocketTimers();
+  if (socket.value) resetSocket(socket.value);
 
-  // Clear any pending reconnect
-  if (reconnectTimeout) {
-    clearTimeout(reconnectTimeout);
-    reconnectTimeout = null;
-  }
-
-  if (socket.value) {
-    const previous = socket.value;
-    socket.value = null;
-    previous.close(1000, "Client disconnect");
-    connected.value = false;
-    connecting.value = false;
-    deviceId.value = null;
-    serverVersion.value = null;
-  }
 }
 
 /**

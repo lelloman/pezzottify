@@ -5,11 +5,11 @@ export function createPowerClient(fetcher, now = Date.now, onReady = () => {}) {
   let readyUntil = 0;
   let legacyUntil = 0;
 
-  async function status() {
+  async function status({ signal } = {}) {
     if (now() < legacyUntil) return "ready";
     const response = await fetcher("/_power/status", {
       credentials: "same-origin", cache: "no-store",
-      signal: AbortSignal.timeout(5000),
+      signal: signal || AbortSignal.timeout(5000),
     });
     // Rolling client deployment also works against the previous server, which
     // serves either a 404 or the SPA at this path.
