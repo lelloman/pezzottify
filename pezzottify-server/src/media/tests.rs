@@ -32,6 +32,57 @@ async fn occupy_filesystem(
 }
 
 #[tokio::test]
+async fn playback_lookup_survives_saturated_cache_and_maintenance_workers() {
+    use std::time::Duration;
+
+    let fixture = Fixture::new();
+    let mut held = occupy_filesystem(fixture.manager.filesystem.clone(), 4).await;
+    held.extend(occupy_filesystem(fixture.manager.publication.clone(), 1).await);
+
+    // Exercise both local playback and the lookup that precedes proxy fallback.
+    let playback = tokio::time::timeout(Duration::from_secs(2), async {
+        let (_, audio) = fixture
+            .manager
+            .lookup_audio("track1")
+            .await
+            .unwrap()
+            .unwrap();
+        let mut stream = audio.unwrap().range_stream(2, 4).await.unwrap();
+        let mut bytes = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            bytes.extend_from_slice(&chunk.unwrap());
+        }
+        assert_eq!(bytes, b"2345");
+
+        std::fs::remove_file(fixture.root.path().join("audio/track.mp3")).unwrap();
+        let (track, audio) = fixture
+            .manager
+            .lookup_audio("track1")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(track.id, "track1");
+        assert!(
+            audio.is_none(),
+            "missing local file must allow proxy fallback"
+        );
+        assert!(fixture
+            .manager
+            .lookup_audio("unknown")
+            .await
+            .unwrap()
+            .is_none());
+    })
+    .await;
+
+    for (release, task) in held {
+        let _ = release.send(());
+        task.await.unwrap();
+    }
+    playback.expect("cache work blocked playback lookup");
+}
+
+#[tokio::test]
 async fn image_burst_survives_cold_disk_and_competing_filesystem_work() {
     use std::time::{Duration, Instant};
 

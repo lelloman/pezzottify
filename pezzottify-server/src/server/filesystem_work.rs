@@ -30,6 +30,33 @@ impl Default for FilesystemWorkPool {
 }
 
 impl FilesystemWorkPool {
+    /// Playback must remain independent of slow cache publication and recovery.
+    pub(crate) fn audio_reads() -> Self {
+        Self {
+            inner: BoundedBlockingPool::new(
+                "audio_read",
+                DEFAULT_MAX_CONCURRENT,
+                DEFAULT_QUEUE_TIMEOUT,
+                DEFAULT_EXECUTION_TIMEOUT,
+            )
+            .with_admission_limit(128),
+        }
+    }
+
+    /// Publication is serialized by the media mutation lock. Queue asynchronously
+    /// instead of consuming general filesystem workers while waiting for it.
+    pub(crate) fn publication() -> Self {
+        Self {
+            inner: BoundedBlockingPool::new(
+                "media_publication",
+                1,
+                Duration::from_secs(10),
+                DEFAULT_EXECUTION_TIMEOUT,
+            )
+            .with_admission_limit(128),
+        }
+    }
+
     /// Foreground image reads must not queue behind durable publication/recovery.
     /// Allow the measured ~7s cold-disk stall without increasing read concurrency.
     pub(crate) fn image_reads() -> Self {

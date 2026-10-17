@@ -121,6 +121,8 @@ pub struct MediaManager {
     catalog: Arc<dyn CatalogStore>,
     catalog_read: DbHandle<dyn CatalogStore>,
     filesystem: FilesystemWorkPool,
+    audio_reads: FilesystemWorkPool,
+    publication: FilesystemWorkPool,
     image_reads: FilesystemWorkPool,
     cache_fills: FilesystemWorkPool,
     cache_fill_admission: Arc<CacheFillAdmission>,
@@ -269,6 +271,8 @@ impl MediaManager {
             catalog_read: DbHandle::new(catalog.clone(), executor, DbLane::CatalogRead),
             catalog,
             filesystem: FilesystemWorkPool::default(),
+            audio_reads: FilesystemWorkPool::audio_reads(),
+            publication: FilesystemWorkPool::publication(),
             image_reads: FilesystemWorkPool::image_reads(),
             cache_fills: FilesystemWorkPool::with_limits(
                 CACHE_FILL_CONCURRENCY,
@@ -361,7 +365,7 @@ impl MediaManager {
         let id = track_id.to_owned();
         let uri = track.audio_uri.clone();
         let opened = self
-            .filesystem
+            .audio_reads
             .run(move || {
                 if let (Some(cache), Some(uri)) = (cache.as_deref(), uri.as_deref()) {
                     if let Some(cached) = cached_audio(cache, &id, uri) {
@@ -516,13 +520,13 @@ impl MediaManager {
         provenance: Provenance,
     ) -> anyhow::Result<StagedMedia> {
         let manager = self.clone();
-        self.filesystem
+        self.publication
             .run(move || manager.begin_publication(&id, &extension, provenance))
             .await?
     }
     pub async fn commit(self: &Arc<Self>, stage: StagedMedia) -> anyhow::Result<CopyReceipt> {
         let manager = self.clone();
-        self.filesystem
+        self.publication
             .run(move || manager.commit_publication(stage))
             .await?
     }
@@ -534,7 +538,7 @@ impl MediaManager {
         provenance: Provenance,
     ) -> anyhow::Result<CopyReceipt> {
         let manager = self.clone();
-        self.filesystem
+        self.publication
             .run(move || {
                 let stage = manager.begin_publication(&id, &extension, provenance)?;
                 std::fs::copy(input, stage.path())?;
@@ -761,7 +765,7 @@ impl MediaManager {
         let cached_bytes = bytes.to_vec();
         let source_url = image_url.url.clone();
         let cached = self
-            .filesystem
+            .publication
             .run(move || -> anyhow::Result<()> {
                 let mut stage =
                     manager.begin_publication(&image_id, "jpg", Provenance::ImageCache)?;
