@@ -10,7 +10,12 @@ async fn worker_download_review_recovers_by_id_and_keeps_real_duration_mismatche
         RequestSource, SqliteDownloadQueueStore,
     };
     use crate::ingestion::*;
-    for mismatch in [false, true] {
+    for (status, mismatch) in [
+        (IngestionJobStatus::AwaitingReview, false),
+        (IngestionJobStatus::AwaitingReview, true),
+        (IngestionJobStatus::MappingTracks, false),
+        (IngestionJobStatus::Converting, false),
+    ] {
         let fixture = ready_fixture();
         let registry = crate::backup::DbRegistry::new();
         let connection =
@@ -47,7 +52,10 @@ async fn worker_download_review_recovers_by_id_and_keeps_real_duration_mismatche
                 Some("request".into()),
             )
             .with_upload_info(Some("job".into()), UploadType::Album);
-        job.status = IngestionJobStatus::AwaitingReview;
+        job.status = status;
+        if status == IngestionJobStatus::Converting {
+            job.tracks_matched = 3;
+        }
         job.matched_album_id = Some("album".into());
         job.match_source = Some(IngestionMatchSource::DownloadRequest);
         store.create_job(&job).unwrap();
@@ -65,6 +73,25 @@ async fn worker_download_review_recovers_by_id_and_keeps_real_duration_mismatche
                 IngestionFile::new(id, "job", format!("{id}.ogg"), 3, path.to_string_lossy());
             file.duration_ms = Some(duration + if mismatch && id == "mmm" { 30000 } else { 0 });
             file.conversion_reason = Some(ConversionReason::NoConversionNeeded);
+            if status == IngestionJobStatus::Converting {
+                file.matched_track_id = Some(id.into());
+                if id == "aaa" {
+                    let receipt = fixture
+                        .manager
+                        .publish_file(id.into(), "ogg".into(), path.clone(), Provenance::Ingested)
+                        .await
+                        .unwrap();
+                    file.converted = true;
+                    file.output_file_path = Some(
+                        fixture
+                            .root
+                            .path()
+                            .join(receipt.uri)
+                            .to_string_lossy()
+                            .into_owned(),
+                    );
+                }
+            }
             store.create_file(&file).unwrap();
         }
         let ingestion = IngestionManager::new(

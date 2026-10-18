@@ -18,6 +18,75 @@ mod tests {
     }
 
     #[test]
+    fn audio_publication_updates_only_the_affected_album() {
+        use std::sync::atomic::AtomicUsize;
+        let (store, _dir) = create_test_store();
+        let operations = Arc::new(AtomicUsize::new(0));
+        {
+            let conn = store.write_conn.lock().unwrap();
+            conn.execute_batch("INSERT INTO albums(id,name,album_type,label,popularity,release_date,release_date_precision) VALUES
+                ('target','Target','album','',0,'2026','year'),('other','Other','album','',0,'2026','year');
+                INSERT INTO tracks(id,name,album_rowid,track_number,popularity,disc_number,duration_ms,explicit,track_available) VALUES
+                ('one','One',1,1,0,1,1000,0,0),('two','Two',1,2,0,1,1000,0,0);
+                WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<20000)
+                INSERT INTO tracks(id,name,album_rowid,track_number,popularity,disc_number,duration_ms,explicit,track_available)
+                SELECT 'unrelated-'||x,'Other',2,x,0,1,1000,0,0 FROM n;
+                CREATE INDEX IF NOT EXISTS idx_tracks_available ON tracks(track_available);").unwrap();
+            let operations = operations.clone();
+            // A publication must not visit the 20,000 unrelated missing tracks.
+            conn.progress_handler(
+                100,
+                Some(move || operations.fetch_add(1, Ordering::SeqCst) >= 100),
+            );
+        }
+        assert!(store
+            .compare_exchange_audio("one", None, Some("audio/one.ogg"))
+            .unwrap());
+        assert_eq!(
+            store
+                .get_resolved_album("target")
+                .unwrap()
+                .unwrap()
+                .album
+                .album_availability,
+            AlbumAvailability::Partial
+        );
+        assert!(store
+            .compare_exchange_audio("two", None, Some("audio/two.ogg"))
+            .unwrap());
+        assert_eq!(
+            store
+                .get_resolved_album("target")
+                .unwrap()
+                .unwrap()
+                .album
+                .album_availability,
+            AlbumAvailability::Complete
+        );
+        assert!(store
+            .compare_exchange_audio("one", Some("audio/one.ogg"), None)
+            .unwrap());
+        assert!(store
+            .compare_exchange_audio("two", Some("audio/two.ogg"), None)
+            .unwrap());
+        assert_eq!(
+            store
+                .get_resolved_album("target")
+                .unwrap()
+                .unwrap()
+                .album
+                .album_availability,
+            AlbumAvailability::Missing
+        );
+        store
+            .write_conn
+            .lock()
+            .unwrap()
+            .progress_handler(0, None::<fn() -> bool>);
+        assert!(operations.load(Ordering::SeqCst) < 100);
+    }
+
+    #[test]
     fn genre_artwork_is_returned_consistently_in_list_and_detail() {
         let (store, _dir) = create_test_store();
         {

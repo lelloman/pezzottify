@@ -28,28 +28,32 @@ impl IngestionManager {
     /// Repair reviews created by the old filename-order comparison. Only the
     /// worker's own complete downloads with a perfect duration match qualify.
     pub(crate) async fn resume_verified_worker_downloads(&self) -> Result<(), IngestionError> {
-        for job in self
-            .store
-            .list_jobs_by_status(IngestionJobStatus::AwaitingReview, 1000)?
-        {
+        let mut jobs = Vec::new();
+        for status in [
+            IngestionJobStatus::AwaitingReview,
+            IngestionJobStatus::MappingTracks,
+            IngestionJobStatus::Converting,
+        ] {
+            jobs.extend(self.store.list_jobs_by_status(status, 1000)?);
+        }
+        for job in jobs {
             if !is_worker_download(&job)
                 || job.match_source != Some(IngestionMatchSource::DownloadRequest)
             {
                 continue;
             }
-            let Some(review) = self.store.get_review_item(&job.id)? else {
-                continue;
-            };
-            if review.resolved_at.is_some()
-                || !review.question.starts_with("Downloaded content for '")
-            {
-                continue;
+            let awaiting_review = job.status == IngestionJobStatus::AwaitingReview;
+            if awaiting_review {
+                let Some(review) = self.store.get_review_item(&job.id)? else {
+                    continue;
+                };
+                if review.resolved_at.is_some()
+                    || !review.question.starts_with("Downloaded content for '")
+                {
+                    continue;
+                }
             }
-            let _claim = self.claim_job(
-                &job.id,
-                "recover_download_identity",
-                &[IngestionJobStatus::AwaitingReview],
-            )?;
+            let _claim = self.claim_job(&job.id, "recover_download_identity", &[job.status])?;
             let (Some(album_id), Some(queue_id), Some(downloads)) = (
                 &job.matched_album_id,
                 &job.context_id,
@@ -76,10 +80,12 @@ impl IngestionManager {
                 continue;
             }
             info!(job_id = %job.id, "Resuming verified worker download after correcting track order");
-            self.store.resolve_review(&job.id, "system", "retry")?;
             let mut job = job;
-            job.status = IngestionJobStatus::IdentifyingAlbum;
-            self.store.update_job(&job)?;
+            if awaiting_review {
+                self.store.resolve_review(&job.id, "system", "retry")?;
+                job.status = IngestionJobStatus::IdentifyingAlbum;
+                self.store.update_job(&job)?;
+            }
             self.process_job_inner(&job.id).await?;
         }
         Ok(())

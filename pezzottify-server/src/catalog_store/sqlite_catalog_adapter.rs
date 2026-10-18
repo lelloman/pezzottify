@@ -1808,7 +1808,10 @@ impl CatalogStore for SqliteCatalogStore {
         if changed == 0 {
             return Ok(false);
         }
-        tx.execute("UPDATE albums SET album_availability = CASE WHEN (SELECT COUNT(*) FROM tracks WHERE album_rowid=albums.rowid AND track_available=1)=0 THEN 'missing' WHEN (SELECT COUNT(*) FROM tracks WHERE album_rowid=albums.rowid AND track_available=0)=0 THEN 'complete' ELSE 'partial' END WHERE rowid=(SELECT album_rowid FROM tracks WHERE id=?1)", params![id])?;
+        // Aggregate the affected album once. Filtering by track_available in
+        // separate subqueries can select the global availability index and
+        // scan millions of unrelated tracks for every published file.
+        tx.execute("UPDATE albums SET album_availability = (SELECT CASE WHEN COALESCE(SUM(CASE WHEN track_available=1 THEN 1 ELSE 0 END),0)=0 THEN 'missing' WHEN SUM(CASE WHEN track_available=1 THEN 1 ELSE 0 END)=COUNT(*) THEN 'complete' ELSE 'partial' END FROM tracks WHERE album_rowid=albums.rowid) WHERE rowid=(SELECT album_rowid FROM tracks WHERE id=?1)", params![id])?;
         tx.execute("UPDATE artists SET artist_available=EXISTS(SELECT 1 FROM artist_albums aa JOIN albums a ON aa.album_rowid=a.rowid WHERE aa.artist_rowid=artists.rowid AND lower(a.album_availability)!='missing') WHERE rowid IN (SELECT aa.artist_rowid FROM artist_albums aa JOIN tracks t ON t.album_rowid=aa.album_rowid WHERE t.id=?1)", params![id])?;
         tx.commit()?;
         Ok(true)
