@@ -724,6 +724,7 @@ impl AppConfig {
                         name,
                         path: PathBuf::from(cache.path),
                         max_bytes: cache.max_bytes,
+                        lru: cache.lru,
                     });
                 }
                 Some(MediaCacheSettings { caches })
@@ -1039,6 +1040,7 @@ pub struct MediaCacheDirectorySettings {
     pub name: String,
     pub path: PathBuf,
     pub max_bytes: u64,
+    pub lru: bool,
 }
 
 /// Settings for the agent LLM backend.

@@ -6,7 +6,7 @@
 
 use super::cache::{CacheEntry, CacheFillRequest, CacheKey, CacheSource, MediaCache};
 use super::vault::{AdapterError, AdapterResult, MediaKey, MediaKind};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -22,12 +22,14 @@ pub struct FilesystemCacheSettings {
     pub name: String,
     pub path: PathBuf,
     pub max_bytes: u64,
+    pub lru: bool,
 }
 
 struct CacheDirectory {
     name: String,
     root: PathBuf,
     max_bytes: u64,
+    lru: bool,
 }
 
 #[derive(Default)]
@@ -38,6 +40,9 @@ struct CacheState {
     // Reservations cover admitted fills before a path is allocated.
     charges: HashMap<PathBuf, (usize, u64)>,
     epochs: HashMap<MediaKey, u64>,
+    recent: HashMap<PathBuf, (MediaKey, u64)>,
+    clock: u64,
+    evicting: HashSet<MediaKey>,
     fills: HashMap<CacheKey, u64>,
     #[cfg(test)]
     fills_started: u64,
@@ -65,6 +70,11 @@ impl FilesystemCaches {
     ) -> anyhow::Result<Self> {
         // The catalog, not an epoch directory's name, establishes restart
         // validity. Keep only the exact current immutable audio revisions.
+        let audio_keys = audio_keys.into_iter().collect::<Vec<_>>();
+        let identities = audio_keys
+            .iter()
+            .map(|key| (id_hash(&key.media.id), key.media.clone()))
+            .collect::<HashMap<_, _>>();
         let audio_keys = audio_keys
             .into_iter()
             .filter(|key| {
@@ -151,6 +161,7 @@ impl FilesystemCaches {
                 name: setting.name,
                 root,
                 max_bytes: setting.max_bytes,
+                lru: setting.lru,
             });
         }
 
@@ -166,8 +177,23 @@ impl FilesystemCaches {
                 }
             }
         }
+        let mut recent = HashMap::new();
+        for path in charges.keys() {
+            // Identity is recovered from the catalog hash map below lazily on
+            // lookup; eviction also needs never-read recovered objects.
+            let identity = path
+                .parent()
+                .and_then(Path::parent)
+                .and_then(Path::file_name)
+                .map(|n| n.to_string_lossy().into_owned());
+            if let Some(identity) = identity {
+                if let Some(media) = identities.get(&identity) {
+                    recent.insert(path.clone(), (media.clone(), 0));
+                }
+            }
+        }
         let reserved = vec![0; caches.len()];
-        Ok(Self {
+        let instance = Self {
             caches,
             #[cfg(test)]
             after_rename: Mutex::new(None),
@@ -177,9 +203,12 @@ impl FilesystemCaches {
                 used,
                 reserved,
                 charges,
+                recent,
                 ..Default::default()
             }),
-        })
+        };
+        drop(instance.state());
+        Ok(instance)
     }
 
     fn remove_tombstone(&self, path: &Path) -> std::io::Result<()> {
@@ -197,10 +226,14 @@ impl FilesystemCaches {
             .collect()
     }
 
-    fn state(&self) -> MutexGuard<'_, CacheState> {
-        self.state
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    fn state(&self) -> StateGuard<'_> {
+        StateGuard {
+            caches: self,
+            state: self
+                .state
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()),
+        }
     }
 
     /// Directory holding every generation of one media identity. Invalidation
@@ -222,6 +255,102 @@ impl FilesystemCaches {
 
     fn current_epoch(&self, media: &MediaKey) -> u64 {
         self.state().epochs.get(media).copied().unwrap_or(0)
+    }
+
+    fn touch(&self, path: &Path, media: &MediaKey) {
+        let mut state = self.state();
+        if state.charges.contains_key(path) {
+            state.clock = state.clock.saturating_add(1);
+            let clock = state.clock;
+            state.recent.insert(path.to_owned(), (media.clone(), clock));
+        }
+    }
+
+    /// Claim candidates in memory, then try an exclusive descriptor lock and
+    /// unlink outside the policy mutex. Readers retain shared descriptor locks,
+    /// so neither their bytes nor their allocation are reclaimed early.
+    fn make_room(&self, bytes: u64) {
+        let candidates = {
+            let mut state = self.state();
+            if self.select_target(&state, bytes).is_some() {
+                return;
+            }
+            let mut candidates = state
+                .recent
+                .iter()
+                .filter_map(|(path, (media, stamp))| {
+                    let (index, _) = state.charges.get(path)?;
+                    let epoch = state.epochs.get(media).copied().unwrap_or(0);
+                    // Failed invalidation may have moved this allocation to
+                    // trash while keeping its original ledger path. Absence at
+                    // that path is not evidence that the bytes were freed.
+                    if !path.starts_with(self.object_epoch_dir(*index, media, epoch)) {
+                        return None;
+                    }
+                    if !self.caches[*index].lru
+                        || bytes > self.caches[*index].max_bytes
+                        || state.evicting.contains(media)
+                        || state.fills.keys().any(|key| &key.media == media)
+                    {
+                        return None;
+                    }
+                    Some((
+                        *stamp,
+                        path.clone(),
+                        media.clone(),
+                        *index,
+                        state.epochs.get(media).copied().unwrap_or(0),
+                    ))
+                })
+                .collect::<Vec<_>>();
+            candidates.sort_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1)));
+            // One candidate per identity avoids overlapping invalidation claims.
+            candidates.retain(|(_, _, media, _, _)| state.evicting.insert(media.clone()));
+            candidates
+        };
+        let _claims = EvictionClaims {
+            caches: self,
+            media: candidates
+                .iter()
+                .map(|(_, _, media, _, _)| media.clone())
+                .collect(),
+        };
+        for (_, path, media, index, epoch) in candidates {
+            if self.select_target(&self.state(), bytes).is_some() {
+                break;
+            }
+            let result = (|| -> std::io::Result<bool> {
+                let file = match File::open(&path) {
+                    Ok(file) => file,
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(true),
+                    Err(error) => return Err(error),
+                };
+                if file.try_lock().is_err() {
+                    return Ok(false);
+                }
+                #[cfg(test)]
+                if self.fail_removal.load(std::sync::atomic::Ordering::SeqCst) {
+                    return Err(std::io::Error::other("injected eviction removal failure"));
+                }
+                std::fs::remove_file(&path)?;
+                Ok(true)
+            })();
+            match result {
+                Ok(true) => {
+                    let mut state = self.state();
+                    if state.epochs.get(&media).copied().unwrap_or(0) == epoch {
+                        release_charge(&mut state, &path);
+                        event(&self.caches[index].name, "eviction");
+                    }
+                }
+                Ok(false) => event(&self.caches[index].name, "eviction_busy"),
+                Err(error) => {
+                    event(&self.caches[index].name, "eviction_failed");
+                    warn!(cache = self.caches[index].name, media_id = media.id, %error,
+                        "Media cache eviction failed; allocation retained");
+                }
+            }
+        }
     }
 
     fn select_target(&self, state: &CacheState, content_length: u64) -> Option<usize> {
@@ -247,7 +376,6 @@ impl FilesystemCaches {
         std::fs::create_dir_all(&directory).map_err(storage)?;
         let temporary = directory.join(format!(".tmp-{}", uuid::Uuid::new_v4()));
         let extension = extension_for(filename);
-        let destination = directory.join(format!("{}.{}", key_hash(key), extension));
 
         // Assign the admitted bytes to this exact temporary path before I/O.
         // Cleanup can then settle temporary and complete objects independently,
@@ -290,6 +418,8 @@ impl FilesystemCaches {
         file.sync_all().map_err(storage)?;
         drop(file);
 
+        let checksum = file_checksum(&mut File::open(&temporary).map_err(storage)?)?;
+        let destination = directory.join(format!("{}.{checksum}.{extension}", key_hash(key)));
         if destination.symlink_metadata().is_ok() {
             return Err(storage("cache object already exists"));
         }
@@ -320,6 +450,7 @@ impl FilesystemCaches {
         publication.published = true;
         temporary_file.disarm();
         sync_directory(&directory);
+        self.touch(&destination, &key.media);
         Ok(())
     }
 
@@ -380,9 +511,16 @@ impl FilesystemCaches {
                         if self.current_epoch(&key.media) != epoch {
                             return Ok(None);
                         }
+                        self.touch(&path, &key.media);
                         return Ok(Some(entry));
                     }
-                    Err(error) => last_error = Some(error),
+                    Err(AdapterError::Missing | AdapterError::Stale) => {}
+                    Err(error) => {
+                        warn!(cache = self.caches[index].name, media_id = key.media.id, %error,
+                            "Invalid or unreadable media cache entry; invalidating");
+                        self.invalidate(&key.media);
+                        last_error = Some(error);
+                    }
                 },
                 Ok(None) => {}
                 Err(error) => last_error = Some(error),
@@ -493,14 +631,17 @@ impl MediaCache for FilesystemCaches {
 
     fn populate(&self, request: CacheFillRequest) -> AdapterResult<()> {
         if request.content_length == 0 {
+            event("all", "fill_skipped_empty");
             return Ok(());
         }
         // A completed fill needs no second source read. This also keeps retries
         // and concurrent readers from reopening authoritative storage.
         if self.lookup(&request.key)?.is_some() {
+            event("all", "fill_skipped_present");
             return Ok(());
         }
 
+        self.make_room(request.content_length);
         let mut reservation = {
             let mut state = self.state();
             #[cfg(test)]
@@ -510,13 +651,16 @@ impl MediaCache for FilesystemCaches {
             // A read that began before an invalidation must not publish the
             // bytes it observed.
             let current = state.epochs.get(&request.key.media).copied().unwrap_or(0);
-            if current != request.epoch {
+            if current != request.epoch || state.evicting.contains(&request.key.media) {
+                event("all", "fill_skipped_invalidated");
                 return Ok(());
             }
             if state.fills.get(&request.key) == Some(&current) {
+                event("all", "fill_skipped_duplicate");
                 return Ok(());
             }
             let Some(index) = self.select_target(&state, request.content_length) else {
+                event("all", "fill_skipped_capacity");
                 return Ok(());
             };
             state.reserved[index] = state.reserved[index].saturating_add(request.content_length);
@@ -528,6 +672,7 @@ impl MediaCache for FilesystemCaches {
                 epoch: current,
                 content_length: request.content_length,
                 settled: false,
+                succeeded: false,
             }
         };
 
@@ -535,6 +680,8 @@ impl MediaCache for FilesystemCaches {
         // Once we own the marker, recheck outside the policy lock before opening
         // the source; completed concurrent work is a successful no-op.
         if self.lookup(&request.key)?.is_some() {
+            event("all", "fill_skipped_present");
+            reservation.succeeded = true;
             return Ok(());
         }
 
@@ -544,9 +691,74 @@ impl MediaCache for FilesystemCaches {
             request.content_length,
             request.source,
         );
+        reservation.succeeded = result.is_ok();
         drop(reservation);
         result
     }
+}
+
+struct StateGuard<'a> {
+    caches: &'a FilesystemCaches,
+    state: MutexGuard<'a, CacheState>,
+}
+impl std::ops::Deref for StateGuard<'_> {
+    type Target = CacheState;
+    fn deref(&self) -> &CacheState {
+        &self.state
+    }
+}
+impl std::ops::DerefMut for StateGuard<'_> {
+    fn deref_mut(&mut self) -> &mut CacheState {
+        &mut self.state
+    }
+}
+impl Drop for StateGuard<'_> {
+    fn drop(&mut self) {
+        for (index, cache) in self.caches.caches.iter().enumerate() {
+            for (kind, bytes) in [
+                ("allocated", self.state.used[index]),
+                ("reserved", self.state.reserved[index]),
+                ("budget", cache.max_bytes),
+            ] {
+                crate::server::metrics::MEDIA_CACHE_BYTES
+                    .with_label_values(&[&cache.name, kind])
+                    .set(bytes as f64);
+            }
+        }
+    }
+}
+
+struct EvictionClaims<'a> {
+    caches: &'a FilesystemCaches,
+    media: Vec<MediaKey>,
+}
+impl Drop for EvictionClaims<'_> {
+    fn drop(&mut self) {
+        let mut state = self.caches.state();
+        for media in &self.media {
+            state.evicting.remove(media);
+        }
+    }
+}
+
+fn file_checksum(file: &mut File) -> AdapterResult<String> {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 65536];
+    loop {
+        let count = file.read(&mut buffer).map_err(storage)?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn event(cache: &str, outcome: &str) {
+    crate::server::metrics::MEDIA_CACHE_EVENTS
+        .with_label_values(&[cache, outcome])
+        .inc();
 }
 
 /// Releases a reserved byte budget and the per-key fill marker on every exit,
@@ -558,10 +770,19 @@ struct FillReservation<'a> {
     epoch: u64,
     content_length: u64,
     settled: bool,
+    succeeded: bool,
 }
 
 impl Drop for FillReservation<'_> {
     fn drop(&mut self) {
+        event(
+            &self.caches.caches[self.index].name,
+            if self.succeeded {
+                "fill_completed"
+            } else {
+                "fill_failed"
+            },
+        );
         let mut state = self.caches.state();
         if !self.settled {
             state.reserved[self.index] -= self.content_length;
@@ -607,6 +828,7 @@ impl Drop for PublicationCharge<'_> {
 }
 
 fn release_charge(state: &mut CacheState, path: &Path) {
+    state.recent.remove(path);
     if let Some((index, bytes)) = state.charges.remove(path) {
         state.used[index] = state.used[index].saturating_sub(bytes);
     }
@@ -691,10 +913,14 @@ fn recover_directory(root: &Path, audio_keys: &HashMap<String, String>) -> anyho
                             .parse::<u64>()
                             .is_ok());
                 let name = entry.file_name().to_string_lossy();
-                let valid_name = name.strip_prefix(expected).is_some_and(|extension| {
-                    extension.strip_prefix('.').is_some_and(|extension| {
-                        !extension.is_empty()
-                            && extension.bytes().all(|byte| byte.is_ascii_alphanumeric())
+                let valid_name = name.strip_prefix(expected).is_some_and(|suffix| {
+                    suffix.strip_prefix('.').is_some_and(|suffix| {
+                        suffix.split_once('.').is_some_and(|(hash, extension)| {
+                            hash.len() == 64
+                                && hash.bytes().all(|b| b.is_ascii_hexdigit())
+                                && !extension.is_empty()
+                                && extension.bytes().all(|b| b.is_ascii_alphanumeric())
+                        })
                     })
                 });
                 if known_layout && valid_name {
@@ -801,18 +1027,38 @@ fn find_object(directory: &Path, hash: &str) -> AdapterResult<Option<(PathBuf, S
         return Ok(None);
     };
     let extension = name
-        .split_once('.')
+        .rsplit_once('.')
         .map(|(_, extension)| extension.to_owned())
         .unwrap_or_default();
     Ok(Some((directory.join(name), extension)))
 }
 
 fn open_object(path: &Path, extension: &str, media: &MediaKey) -> AdapterResult<CacheEntry> {
-    let file = File::open(path).map_err(storage)?;
+    let mut file = File::open(path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            AdapterError::Missing
+        } else {
+            storage(error)
+        }
+    })?;
+    file.try_lock_shared().map_err(|error| match error {
+        std::fs::TryLockError::WouldBlock => AdapterError::Stale,
+        error => storage(error),
+    })?;
     let metadata = file.metadata().map_err(storage)?;
     if !metadata.is_file() {
         return Err(storage("cache object is not a regular file"));
     }
+    let expected = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .and_then(|n| n.split('.').nth(1))
+        .ok_or_else(|| storage("missing cache checksum"))?;
+    if file_checksum(&mut file)? != expected {
+        return Err(storage("cache checksum mismatch"));
+    }
+    use std::io::Seek;
+    file.rewind().map_err(storage)?;
     let content_type = content_type(media, extension);
     Ok(CacheEntry {
         file,
@@ -870,6 +1116,7 @@ mod lookup_race_tests {
                 name: "ssd".into(),
                 path: path.clone(),
                 max_bytes: 1024,
+                lru: false,
             }],
             &media,
             std::iter::empty(),
@@ -921,6 +1168,7 @@ mod accounting_tests {
                     name: "ssd".into(),
                     path: root.path().join("cache"),
                     max_bytes: SIZE * 2,
+                    lru: false,
                 }],
                 &media,
                 std::iter::empty(),
@@ -1118,6 +1366,7 @@ mod accounting_tests {
                 name: "ssd".into(),
                 path: root.path().join("cache"),
                 max_bytes: SIZE * 2,
+                lru: false,
             }],
             &root.path().join("media"),
             std::iter::empty(),
@@ -1173,5 +1422,176 @@ mod accounting_tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod eviction_tests {
+    use super::*;
+    use std::io::Read;
+    use std::sync::Arc;
+
+    fn setup() -> (tempfile::TempDir, Arc<FilesystemCaches>) {
+        let root = tempfile::tempdir().unwrap();
+        let media = root.path().join("source");
+        std::fs::create_dir(&media).unwrap();
+        std::fs::write(media.join("original"), b"untouched").unwrap();
+        let caches = Arc::new(
+            FilesystemCaches::new(
+                vec![FilesystemCacheSettings {
+                    name: "lru-test".into(),
+                    path: root.path().join("cache"),
+                    max_bytes: 16,
+                    lru: true,
+                }],
+                &media,
+                [],
+            )
+            .unwrap(),
+        );
+        (root, caches)
+    }
+    fn key(id: &str) -> CacheKey {
+        CacheKey::image(id, "https://example.test/image.jpg", "test")
+    }
+    fn fill(caches: &FilesystemCaches, id: &str) {
+        caches
+            .populate(CacheFillRequest {
+                key: key(id),
+                epoch: caches.current_epoch(&key(id).media),
+                filename: "image.jpg".into(),
+                content_type: "image/jpeg".into(),
+                content_length: 8,
+                source: CacheSource::Bytes(Arc::from(&b"12345678"[..])),
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn lru_preserves_recent_entries_active_readers_and_originals() {
+        let (root, caches) = setup();
+        fill(&caches, "a");
+        fill(&caches, "b");
+        drop(caches.lookup(&key("a")).unwrap()); // b is now least recent
+        fill(&caches, "c");
+        assert!(caches.lookup(&key("b")).unwrap().is_none());
+        let mut a = caches.lookup(&key("a")).unwrap().unwrap();
+        let c = caches.lookup(&key("c")).unwrap().unwrap();
+        fill(&caches, "d"); // both readers held: no allocation can be freed
+        assert!(caches.lookup(&key("d")).unwrap().is_none());
+        assert_eq!(caches.used_bytes(0), 16);
+        let mut bytes = Vec::new();
+        a.file.read_to_end(&mut bytes).unwrap();
+        assert_eq!(bytes, b"12345678");
+        drop(a);
+        drop(c);
+        fill(&caches, "d");
+        assert!(caches.lookup(&key("d")).unwrap().is_some());
+        assert_eq!(
+            std::fs::read(root.path().join("source/original")).unwrap(),
+            b"untouched"
+        );
+        assert_eq!(caches.reserved_bytes(0), 0);
+    }
+
+    #[test]
+    fn concurrent_eviction_fills_and_reads_keep_capacity_bounded() {
+        let (_root, caches) = setup();
+        let threads = (0..8)
+            .map(|thread| {
+                let caches = caches.clone();
+                std::thread::spawn(move || {
+                    for iteration in 0..40 {
+                        let id = format!("{thread}-{iteration}");
+                        fill(&caches, &id);
+                        let _reader = caches.lookup(&key(&id)).unwrap();
+                        let state = caches.state();
+                        assert!(state.used[0] + state.reserved[0] <= 16);
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+        for thread in threads {
+            thread.join().unwrap();
+        }
+        assert_eq!(caches.pending_fills(), 0);
+        assert_eq!(caches.reserved_bytes(0), 0);
+        let physical: u64 = walkdir::WalkDir::new(&caches.caches[0].root)
+            .into_iter()
+            .map(Result::unwrap)
+            .filter(|entry| entry.file_type().is_file())
+            .map(|entry| entry.metadata().unwrap().len())
+            .sum();
+        assert_eq!(physical, caches.used_bytes(0));
+    }
+
+    #[test]
+    fn eviction_never_credits_missing_paths_whose_bytes_remain_in_trash() {
+        let (_root, caches) = setup();
+        fill(&caches, "a");
+        fill(&caches, "b");
+        caches
+            .fail_removal
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        caches.invalidate(&key("a").media);
+        assert_eq!(caches.used_bytes(0), 16);
+        caches
+            .fail_removal
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        // B can be evicted; A remains charged in trash. A's absent original
+        // pathname must never be credited as though its bytes were unlinked.
+        fill(&caches, "c");
+        assert!(caches.lookup(&key("c")).unwrap().is_some());
+        assert_eq!(caches.used_bytes(0), 16);
+        let physical: u64 = walkdir::WalkDir::new(&caches.caches[0].root)
+            .into_iter()
+            .map(Result::unwrap)
+            .filter(|entry| entry.file_type().is_file())
+            .map(|entry| entry.metadata().unwrap().len())
+            .sum();
+        assert_eq!(physical, caches.used_bytes(0));
+    }
+
+    #[test]
+    fn eviction_failure_retains_charge_and_is_retriable() {
+        let (_root, caches) = setup();
+        fill(&caches, "a");
+        fill(&caches, "b");
+        caches
+            .fail_removal
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        fill(&caches, "c");
+        assert_eq!(caches.used_bytes(0), 16);
+        assert!(caches.state().evicting.is_empty());
+        assert!(caches.lookup(&key("c")).unwrap().is_none());
+        caches
+            .fail_removal
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        fill(&caches, "c");
+        assert!(caches.lookup(&key("c")).unwrap().is_some());
+        assert_eq!(caches.used_bytes(0), 16);
+    }
+
+    #[test]
+    fn same_length_corruption_is_rejected_and_reclaimed() {
+        let (_root, caches) = setup();
+        fill(&caches, "a");
+        let path = caches.entry_path(0, &key("a")).unwrap();
+        std::fs::write(path, b"corrupt!").unwrap();
+        assert!(caches.lookup(&key("a")).is_err());
+        assert_eq!(caches.used_bytes(0), 0);
+        fill(&caches, "a");
+        assert!(caches.lookup(&key("a")).unwrap().is_some());
+    }
+
+    #[test]
+    fn missing_cache_object_is_reclaimed_under_pressure() {
+        let (_root, caches) = setup();
+        fill(&caches, "a");
+        fill(&caches, "b");
+        std::fs::remove_file(caches.entry_path(0, &key("a")).unwrap()).unwrap();
+        fill(&caches, "c");
+        assert!(caches.lookup(&key("c")).unwrap().is_some());
+        assert_eq!(caches.used_bytes(0), 16);
     }
 }

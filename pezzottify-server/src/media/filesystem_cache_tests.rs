@@ -54,6 +54,7 @@ impl CacheFixture {
                 name: format!("cache{index}"),
                 path: root.path().join(format!("cache{index}")),
                 max_bytes: *max_bytes,
+                lru: false,
             })
             .collect::<Vec<_>>();
         let caches = Arc::new(FilesystemCaches::new(settings, &media, std::iter::empty()).unwrap());
@@ -76,6 +77,7 @@ impl CacheFixture {
                 name: "cache0".into(),
                 path: self.root.path().join("cache0"),
                 max_bytes,
+                lru: false,
             }])
             .unwrap();
         manager
@@ -455,6 +457,7 @@ async fn restart_keeps_durable_audio_and_drops_process_scoped_images() {
         name: "ssd".to_owned(),
         path: base.path().join("cache"),
         max_bytes: 1024 * 1024,
+        lru: false,
     }];
     let audio_key = CacheKey::audio(
         "track1",
@@ -543,6 +546,7 @@ async fn full_audio_cache_recovers_nonzero_epoch_without_original_access() {
             name: "cache0".into(),
             path: fixture.root.path().join("cache0"),
             max_bytes: AUDIO.len() as u64,
+            lru: false,
         }],
         &fixture.media,
         [key.clone()],
@@ -684,11 +688,13 @@ fn population_uses_the_first_cache_with_room_and_lookup_follows_order() {
                 name: "small".to_owned(),
                 path: base.path().join("small"),
                 max_bytes: 4,
+                lru: false,
             },
             FilesystemCacheSettings {
                 name: "roomy".to_owned(),
                 path: base.path().join("roomy"),
                 max_bytes: 1024 * 1024,
+                lru: false,
             },
         ],
         &media,
@@ -715,11 +721,13 @@ fn population_uses_the_first_cache_with_room_and_lookup_follows_order() {
                 name: "first".to_owned(),
                 path: base.path().join("first"),
                 max_bytes: 1024 * 1024,
+                lru: false,
             },
             FilesystemCacheSettings {
                 name: "second".to_owned(),
                 path: base.path().join("second"),
                 max_bytes: 1024 * 1024,
+                lru: false,
             },
         ],
         &media,
@@ -756,6 +764,7 @@ fn cache_directories_cannot_overlap_media_storage_or_each_other() {
                 name: "bad".to_owned(),
                 path,
                 max_bytes: 1024,
+                lru: false,
             }],
             &media,
             std::iter::empty(),
@@ -771,11 +780,13 @@ fn cache_directories_cannot_overlap_media_storage_or_each_other() {
                 name: "outer".to_owned(),
                 path: nested.clone(),
                 max_bytes: 1024,
+                lru: false,
             },
             FilesystemCacheSettings {
                 name: "inner".to_owned(),
                 path: nested.join("inner"),
                 max_bytes: 1024,
+                lru: false,
             },
         ],
         &media,
@@ -788,6 +799,7 @@ fn cache_directories_cannot_overlap_media_storage_or_each_other() {
             name: "ok".to_owned(),
             path: base.path().join("ok"),
             max_bytes: 1024,
+            lru: false,
         }],
         &media,
         std::iter::empty()
@@ -1096,10 +1108,180 @@ fn startup_recovery_rejects_objects_symlink_into_original_media() {
             name: "ssd".into(),
             path: cache,
             max_bytes: 1024,
+            lru: false,
         }],
         &media,
         std::iter::empty(),
     );
     assert!(result.is_err());
     assert_eq!(std::fs::read(original).unwrap(), AUDIO);
+}
+
+/// Reproducible workload, not a physical-HDD benchmark. Run with --nocapture.
+#[tokio::test]
+async fn representative_audio_seek_artwork_workload() {
+    let fixture = CacheFixture::with_limits(&[16 * 1024 * 1024]);
+    let audio = vec![42u8; 4 * 1024 * 1024];
+    let uri = fixture
+        .publish("track1", "mp3", &audio, Provenance::Ingested)
+        .await;
+    fixture
+        .publish("album", "jpg", JPEG, Provenance::ImageCache)
+        .await;
+    let url = "https://example.test/workload.jpg";
+    fixture.seed_image_url(url);
+    let key = CacheKey::audio("track1", &uri).unwrap();
+    let image_key = CacheKey::image("album", url, super::mutations::process_epoch());
+    std::fs::write(fixture.root.path().join(".cache-cold-start"), []).unwrap();
+    let cold = Instant::now();
+    let (_, opened) = fixture
+        .manager
+        .lookup_audio("track1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        collect(
+            opened
+                .unwrap()
+                .range_stream(0, audio.len() as u64)
+                .await
+                .unwrap()
+        )
+        .await,
+        audio
+    );
+    let cold_audio = cold.elapsed();
+    let cold = Instant::now();
+    assert_eq!(
+        fixture.manager.read_image("album").await.unwrap().bytes,
+        JPEG
+    );
+    let cold_image = cold.elapsed();
+    wait_for_entry(&fixture.caches, &key).await;
+    wait_for_entry(&fixture.caches, &image_key).await;
+    while fixture.caches.pending_fills() != 0 {
+        tokio::task::yield_now().await;
+    }
+
+    // Includes open, stat, existence and pointer resolution: the entire original
+    // root is replaced by a regular file before all warm payload/metadata calls.
+    std::fs::write(fixture.root.path().join(".cache-cold-end"), []).unwrap();
+    fixture.reject_original_media();
+    std::fs::write(fixture.root.path().join(".cache-warm-start"), []).unwrap();
+    let warm = Instant::now();
+    let (_, opened) = fixture
+        .manager
+        .lookup_audio("track1")
+        .await
+        .unwrap()
+        .unwrap();
+    let opened = opened.unwrap();
+    assert_eq!(
+        opened.metadata().await.unwrap().content_length,
+        audio.len() as u64
+    );
+    assert_eq!(
+        collect(opened.range_stream(0, audio.len() as u64).await.unwrap()).await,
+        audio
+    );
+    let warm_audio = warm.elapsed();
+    let seeking = Instant::now();
+    for index in 0..16 {
+        let (_, opened) = fixture
+            .manager
+            .lookup_audio("track1")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            collect(
+                opened
+                    .unwrap()
+                    .range_stream(index * 4096, 4096)
+                    .await
+                    .unwrap()
+            )
+            .await,
+            vec![42; 4096]
+        );
+    }
+    let seek_time = seeking.elapsed();
+    let warm = Instant::now();
+    for _ in 0..16 {
+        assert_eq!(
+            fixture.manager.read_image("album").await.unwrap().bytes,
+            JPEG
+        );
+    }
+    let warm_image = warm.elapsed();
+    std::fs::write(fixture.root.path().join(".cache-warm-end"), []).unwrap();
+    eprintln!("workload: 4MiB audio cold={cold_audio:?} warm={warm_audio:?}; 16 seeks={seek_time:?}; artwork {}B cold={cold_image:?} warm16={:?}; warm root rejected; use scripts/verify-media-cache.sh to audit original-storage syscalls", JPEG.len(), warm_image);
+}
+
+#[tokio::test]
+async fn audio_cache_corruption_and_loss_fall_back_to_original() {
+    let fixture = CacheFixture::with_limits(&[1024 * 1024]);
+    let uri = fixture
+        .publish("track1", "mp3", AUDIO, Provenance::Ingested)
+        .await;
+    let key = fixture.fill_audio(&uri, AUDIO);
+    let path = fixture.caches.entry_path(0, &key).unwrap();
+    std::fs::write(&path, vec![b'X'; AUDIO.len()]).unwrap();
+    let (_, opened) = fixture
+        .manager
+        .lookup_audio("track1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        collect(
+            opened
+                .unwrap()
+                .range_stream(0, AUDIO.len() as u64)
+                .await
+                .unwrap()
+        )
+        .await,
+        AUDIO
+    );
+    wait_for_entry(&fixture.caches, &key).await;
+    std::fs::remove_file(fixture.caches.entry_path(0, &key).unwrap()).unwrap();
+    let (_, opened) = fixture
+        .manager
+        .lookup_audio("track1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        collect(
+            opened
+                .unwrap()
+                .range_stream(0, AUDIO.len() as u64)
+                .await
+                .unwrap()
+        )
+        .await,
+        AUDIO
+    );
+}
+
+#[tokio::test]
+async fn artwork_cache_corruption_falls_back_to_original() {
+    let fixture = CacheFixture::with_limits(&[1024 * 1024]);
+    fixture
+        .publish("album", "jpg", JPEG, Provenance::ImageCache)
+        .await;
+    let url = "https://example.test/corruption.jpg";
+    fixture.seed_image_url(url);
+    let key = CacheKey::image("album", url, super::mutations::process_epoch());
+    fixture.manager.read_image("album").await.unwrap();
+    wait_for_entry(&fixture.caches, &key).await;
+    let path = fixture.caches.entry_path(0, &key).unwrap();
+    std::fs::write(path, vec![0; JPEG.len()]).unwrap();
+    assert_eq!(
+        fixture.manager.read_image("album").await.unwrap().bytes,
+        JPEG
+    );
+    assert!(fixture.caches.lookup(&key).unwrap().is_none());
 }

@@ -305,6 +305,7 @@ impl MediaManager {
                 name: setting.name.clone(),
                 path: setting.path.clone(),
                 max_bytes: setting.max_bytes,
+                lru: setting.lru,
             })
             .collect();
         // Startup reconciliation reads only catalog metadata. Presence enrichment
@@ -413,6 +414,7 @@ impl MediaManager {
 
     fn schedule_audio_fill(&self, plan: AudioFillPlan) {
         let Some(permit) = self.cache_fill_admission.admit(&plan.key, 0) else {
+            cache_event("fill_skipped_admission");
             debug!(key = ?plan.key, "Media cache fill admission saturated");
             return;
         };
@@ -453,6 +455,7 @@ impl MediaManager {
         // Admit before copying the payload or spawning, so a saturated queue or
         // full byte budget never retains another image copy.
         let Some(permit) = self.cache_fill_admission.admit(&key, bytes.len() as u64) else {
+            cache_event("fill_skipped_admission");
             debug!(?key, "Media cache fill admission saturated");
             return;
         };
@@ -479,6 +482,7 @@ impl MediaManager {
         let key = request.key.clone();
         let pool = self.cache_fills.clone();
         let Ok(handle) = tokio::runtime::Handle::try_current() else {
+            cache_event("fill_skipped_runtime");
             debug!(?key, "No runtime available for media cache fill");
             return;
         };
@@ -486,7 +490,10 @@ impl MediaManager {
             match pool.run(cache_fill_work(cache, request, permit)).await {
                 Ok(Ok(())) => debug!(?key, "Media cache fill finished"),
                 Ok(Err(error)) => warn!(?key, %error, "Media cache fill failed"),
-                Err(error) => debug!(?key, %error, "Media cache fill skipped"),
+                Err(error) => {
+                    cache_event("fill_skipped_worker");
+                    debug!(?key, %error, "Media cache fill skipped");
+                }
             }
         });
     }
@@ -623,7 +630,10 @@ impl MediaManager {
                     cached_epoch = epoch;
                     match read_cache_bytes(entry) {
                         Ok(bytes) => match image_bytes(bytes, MediaReadError::InvalidLocalImage) {
-                            Ok(image) => return Ok(image),
+                            Ok(image) => {
+                                cache_event("image_hit");
+                                return Ok(image);
+                            }
                             Err(_) => warn!(
                                 image_id = id,
                                 "Invalid image cache entry; using authoritative storage"
@@ -653,6 +663,10 @@ impl MediaManager {
             }
         }
 
+        if self.cache.get().is_some() {
+            cache_event("image_miss");
+            cache_event("image_fallback_read");
+        }
         let manager = self.clone();
         let image_id = id.to_owned();
         // Resolve the pointer and read under one admission. Both can block on a
@@ -770,12 +784,27 @@ fn read_cache_bytes(entry: cache::CacheEntry) -> io::Result<Vec<u8>> {
     Ok(bytes)
 }
 
+fn cache_event(outcome: &str) {
+    crate::server::metrics::MEDIA_CACHE_EVENTS
+        .with_label_values(&["all", outcome])
+        .inc();
+}
+
 fn cached_audio(cache: &dyn cache::MediaCache, id: &str, uri: &str) -> Option<LocalAudio> {
     let key = cache::CacheKey::audio(id, uri)?;
     match cache.lookup(&key) {
-        Ok(Some(entry)) => Some(LocalAudio::from_cache(entry)),
-        Ok(None) => None,
+        Ok(Some(entry)) => {
+            cache_event("audio_hit");
+            Some(LocalAudio::from_cache(entry))
+        }
+        Ok(None) => {
+            cache_event("audio_miss");
+            cache_event("audio_fallback_read");
+            None
+        }
         Err(error) => {
+            cache_event("audio_error");
+            cache_event("audio_fallback_read");
             warn!(track_id = id, %error, "Media cache lookup failed; using authoritative storage");
             None
         }

@@ -90,6 +90,8 @@ pub struct MediaCacheDirectoryConfig {
     pub path: String,
     /// Maximum bytes of cached objects in this directory.
     pub max_bytes: u64,
+    #[serde(default)]
+    pub lru: bool,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]

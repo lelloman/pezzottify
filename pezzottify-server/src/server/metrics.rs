@@ -28,6 +28,15 @@ lazy_static! {
     // Global Prometheus registry
     pub static ref REGISTRY: Registry = Registry::new();
 
+    pub static ref MEDIA_CACHE_EVENTS: CounterVec = CounterVec::new(
+        Opts::new(format!("{PREFIX}_media_cache_events_total"), "Cache lookups, fallback attempts, fills and evictions"),
+        &["cache", "outcome"]
+    ).expect("media cache events");
+    pub static ref MEDIA_CACHE_BYTES: GaugeVec = GaugeVec::new(
+        Opts::new(format!("{PREFIX}_media_cache_bytes"), "Cache allocations, reservations and configured budget"),
+        &["cache", "state"]
+    ).expect("media cache bytes");
+
     // HTTP Request Metrics
     pub static ref HTTP_REQUESTS_TOTAL: CounterVec = CounterVec::new(
         Opts::new(format!("{PREFIX}_http_requests_total"), "Total number of HTTP requests"),
@@ -384,6 +393,8 @@ lazy_static! {
 
 /// Initialize all metrics and register them with the Prometheus registry
 pub fn init_metrics() {
+    let _ = REGISTRY.register(Box::new(MEDIA_CACHE_EVENTS.clone()));
+    let _ = REGISTRY.register(Box::new(MEDIA_CACHE_BYTES.clone()));
     // Register all metrics - ignore errors if already registered (for tests)
     let _ = REGISTRY.register(Box::new(HTTP_REQUESTS_TOTAL.clone()));
     let _ = REGISTRY.register(Box::new(HTTP_REQUEST_DURATION_SECONDS.clone()));

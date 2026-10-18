@@ -121,6 +121,7 @@ population preference; each directory has its own byte budget.
 name = "ssd"
 path = "/var/cache/pezzottify/media"
 max_bytes = 53687091200
+lru = true # optional; false (the default) skips population when full
 
 [[media_cache.caches]]
 name = "nvme"
@@ -148,8 +149,8 @@ cleanup failure remain conservatively charged until cleanup or startup recovery.
 All reservation transfers and ledger updates are ordered with invalidation under
 the short policy lock; filesystem operations remain outside it. Fills skip when the object is already present, when another fill for the same
 key is in flight, when no cache has room, or when the object is larger than every
-budget. Full caches therefore fall back to authoritative storage instead of
-evicting; eviction and richer diagnostics belong to #13.
+budget. With the default `lru = false`, full caches skip population. Optional
+eviction and diagnostics are described below.
 
 Population runs on a dedicated bounded filesystem pool, after the response has
 started. Admission is nonblocking and bounds both pending fills and retained payload
@@ -170,7 +171,7 @@ without holding the lock. A fill that started under an older epoch refuses to pu
 
 At startup, the manager pages through persisted catalog audio references without
 presence enrichment or original-media access, regardless of observed availability. Recovery matches each audio object's
-key hash to the current durable catalog revision, moves complete matches from any
+key hash to the current durable catalog revision, moves complete checksummed matches from any
 numeric epoch (or the earlier flat layout) into epoch zero, and removes obsolete
 revisions, unknown layouts, incomplete files and trash before rebuilding the exact
 allocation ledger. Epoch numbers are process-local ordering tokens, not evidence of
@@ -183,3 +184,71 @@ The resulting full cache can immediately serve unchanged audio after restart,
 without opening original media. Image
 objects are process-scoped, so startup removes them and images start cold. Legacy and
 unmanaged audio locators continue to bypass the cache entirely.
+
+
+## Eviction, integrity and diagnostics (#13)
+
+Set `lru = true` on a cache directory to opt into eviction. Lookup still follows
+configuration order; population first uses existing free space. Only when no cache
+has room does a background fill attempt eviction, considering the least recently
+used eligible complete objects across enabled caches. Oversized fills never evict.
+Hits and completed fills update in-memory recency. Restart resets recency, with
+recovered objects tied in deterministic pathname order. Policy changes take effect
+only at startup. Configure a directory for one server writer; sharing directories
+between running servers is unsupported.
+
+Eviction claims identities under the short policy mutex, then performs all file I/O
+outside it. It excludes in-flight fills and stale epochs. Readers hold shared
+nonblocking OS file locks on their descriptors. Eviction tries an exclusive lock
+and skips held readers, so their bytes remain readable **and charged**. It never
+waits for a reader. A failed unlink retains the allocation and can be retried; a
+concurrent invalidation owns settlement of its old epoch. In particular, files
+moved to trash after failed cleanup remain charged: their absent former paths are
+not evidence that disk space was freed. Trash is reclaimed on restart. A fill
+skips when locked readers or retained trash leave insufficient capacity.
+
+Complete filenames include a SHA-256 digest of the cache bytes, computed after the
+temporary copy is flushed. Lookup verifies that digest from the open cache
+descriptor, then rewinds it. This detects truncation and same-length corruption
+for audio and artwork without reading or probing original storage. Corrupt entries
+are invalidated and retrieval falls back. Checksum verification reads the entire
+cached object, including for a small seek; this trades cache-device I/O and CPU
+for corruption detection. The 64 KiB verification buffer is bounded. Existing
+pre-checksum audio cache files are uncertain and are discarded during startup;
+original media and catalog references are unaffected. Restart recovery continues
+to preserve matching checksummed durable audio and discard process-scoped images,
+partial files and obsolete revisions. External modification of originals still
+has the limitation documented above.
+
+The existing Prometheus endpoint exposes:
+
+| Metric | Labels / interpretation |
+| --- | --- |
+| `pezzottify_media_cache_events_total` | `cache`, `outcome`: audio/image `hit`, `miss` and `fallback_read` outcomes use `cache="all"`; fallback counts attempts to use the existing retrieval path, including failed reads |
+| Same counter | `fill_completed`, `fill_failed`, `eviction`, `eviction_busy`, `eviction_failed` have the configured cache name; failure includes unwinding fills |
+| Same counter | `fill_skipped_empty`, `fill_skipped_present`, `fill_skipped_invalidated`, `fill_skipped_duplicate`, `fill_skipped_capacity`, `fill_skipped_admission`, `fill_skipped_runtime`, `fill_skipped_worker` use `cache="all"`; worker timeout can precede a later completion because the bounded worker retains its admission |
+| `pezzottify_media_cache_bytes` | `cache`, `state`: `allocated` includes conservatively charged temporary/trash files, `reserved` covers admitted fills before allocation, `budget` is the configured maximum |
+
+Audio lookup errors additionally increment `audio_error`. Audio with legacy or
+unmanaged references bypasses cache lookup and is excluded from these hit/miss
+counts. Internal fill deduplication lookups do not count as consumer hits. Cache
+failures log identity and error; eviction failures also name the cache. Metrics
+labels never include media identities or paths.
+
+### Reproducing original-storage avoidance
+
+Run `cargo test --features fast --lib representative_audio_seek_artwork_workload
+-- --nocapture` in `pezzottify-server/`. It reports cold/warm elapsed time for a
+4 MiB audio payload, sixteen 4 KiB seeks and fixture JPEG artwork. Fills finish
+before the warm phase; the entire original media root is replaced by a regular
+file, rejecting original opens, stat/existence checks and image pointer resolution.
+The test also calls audio metadata before streaming the warm descriptor.
+
+On Linux, run `bash scripts/verify-media-cache.sh` from `pezzottify-server/`
+(requires `strace` and Python 3). It traces pathname operations **and** descriptor
+reads/metadata with resolved descriptor paths, counts original-media calls during
+the cold phase including background population, and asserts zero during the warm
+phase. Thus ignored original-media existence/stat probes also fail verification.
+Markers exclude fixture preparation and teardown. This is a reproducible local
+workload rather than a physical-HDD performance benchmark; recorded times depend
+on the host, filesystem, tracing overhead and build profile.
