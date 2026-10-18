@@ -199,7 +199,13 @@ between running servers is unsupported.
 
 Eviction claims identities under the short policy mutex, then performs all file I/O
 outside it. It excludes in-flight fills and stale epochs. Readers hold shared
-nonblocking OS file locks on their descriptors. Eviction tries an exclusive lock
+nonblocking OS file locks on their descriptors. Lookup first claims its media identity
+under the policy mutex, before any filesystem access; eviction skips pending
+lookup claims. Lookups encountering an existing eviction claim return a miss.
+The lookup claim is released on success, error or panic, with the shared descriptor
+lock taking over protection for a returned reader. This closes the interval between
+opening a descriptor and locking it without holding the policy mutex during I/O.
+Eviction tries an exclusive lock
 and skips held readers, so their bytes remain readable **and charged**. It never
 waits for a reader. A failed unlink retains the allocation and can be retried; a
 concurrent invalidation owns settlement of its old epoch. In particular, files

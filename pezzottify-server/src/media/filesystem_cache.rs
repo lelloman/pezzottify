@@ -43,6 +43,8 @@ struct CacheState {
     recent: HashMap<PathBuf, (MediaKey, u64)>,
     clock: u64,
     evicting: HashSet<MediaKey>,
+    // Lookup admissions cover the interval before a shared descriptor lock.
+    opening: HashMap<MediaKey, usize>,
     fills: HashMap<CacheKey, u64>,
     #[cfg(test)]
     fills_started: u64,
@@ -295,6 +297,7 @@ impl FilesystemCaches {
                     if !self.caches[*index].lru
                         || bytes > self.caches[*index].max_bytes
                         || state.evicting.contains(media)
+                        || state.opening.contains_key(media)
                         || state.fills.keys().any(|key| &key.media == media)
                     {
                         return None;
@@ -562,7 +565,22 @@ impl FilesystemCaches {
         mut open: impl FnMut(&Path, &str, &MediaKey) -> AdapterResult<CacheEntry>,
     ) -> AdapterResult<Option<CacheEntry>> {
         let hash = key_hash(key);
-        let epoch = self.current_epoch(&key.media);
+        // Admission and eviction claims are mutually exclusive under the policy
+        // mutex. Keep the admission until open/locking completes (including
+        // errors and unwinding); after return the descriptor's shared lock
+        // protects its allocation. No filesystem I/O holds the policy mutex.
+        let epoch = {
+            let mut state = self.state();
+            if state.evicting.contains(&key.media) {
+                return Ok(None);
+            }
+            *state.opening.entry(key.media.clone()).or_default() += 1;
+            state.epochs.get(&key.media).copied().unwrap_or(0)
+        };
+        let _opening = LookupAdmission {
+            caches: self,
+            media: &key.media,
+        };
         let mut last_error = None;
         for index in 0..self.caches.len() {
             let directory = self.object_epoch_dir(index, &key.media, epoch);
@@ -788,6 +806,22 @@ impl Drop for StateGuard<'_> {
                 crate::server::metrics::MEDIA_CACHE_BYTES
                     .with_label_values(&[&cache.name, kind])
                     .set(bytes as f64);
+            }
+        }
+    }
+}
+
+struct LookupAdmission<'a> {
+    caches: &'a FilesystemCaches,
+    media: &'a MediaKey,
+}
+impl Drop for LookupAdmission<'_> {
+    fn drop(&mut self) {
+        let mut state = self.caches.state();
+        if let Some(count) = state.opening.get_mut(self.media) {
+            *count -= 1;
+            if *count == 0 {
+                state.opening.remove(self.media);
             }
         }
     }
@@ -1102,13 +1136,22 @@ fn find_object(directory: &Path, hash: &str) -> AdapterResult<Option<(PathBuf, S
 }
 
 fn open_object(path: &Path, extension: &str, media: &MediaKey) -> AdapterResult<CacheEntry> {
-    let mut file = File::open(path).map_err(|error| {
+    let file = File::open(path).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
             AdapterError::Missing
         } else {
             storage(error)
         }
     })?;
+    lock_open_object(file, path, extension, media)
+}
+
+fn lock_open_object(
+    mut file: File,
+    path: &Path,
+    extension: &str,
+    media: &MediaKey,
+) -> AdapterResult<CacheEntry> {
     file.try_lock_shared().map_err(|error| match error {
         std::fs::TryLockError::WouldBlock => AdapterError::Stale,
         error => storage(error),
@@ -1533,6 +1576,100 @@ mod eviction_tests {
                 source: CacheSource::Bytes(Arc::from(&b"12345678"[..])),
             })
             .unwrap();
+    }
+
+    #[test]
+    fn lookup_admission_preserves_open_unlocked_allocation_under_eviction_pressure() {
+        use std::os::unix::fs::MetadataExt;
+        use std::sync::mpsc;
+        let (_root, caches) = setup();
+        fill(&caches, "a");
+        fill(&caches, "b");
+        let (opened_tx, opened_rx) = mpsc::channel();
+        let (resume_tx, resume_rx) = mpsc::channel();
+        let reader_caches = caches.clone();
+        let reader = std::thread::spawn(move || {
+            reader_caches
+                .lookup_with_open(&key("a"), |path, extension, media| {
+                    let file = File::open(path).unwrap();
+                    // Exactly the reviewed interleaving: descriptor exists, but
+                    // no shared file lock has been acquired yet.
+                    opened_tx.send(file.metadata().unwrap().len()).unwrap();
+                    resume_rx.recv().unwrap();
+                    lock_open_object(file, path, extension, media)
+                })
+                .unwrap()
+                .unwrap()
+        });
+        assert_eq!(opened_rx.recv().unwrap(), 8);
+        // B can be evicted, but A's pending admission must keep it charged.
+        for id in ["c", "d", "e"] {
+            fill(&caches, id);
+            assert!(caches.entry_path(0, &key("a")).is_some());
+            assert_eq!(caches.used_bytes(0), 16);
+            assert_eq!(caches.reserved_bytes(0), 0);
+        }
+        resume_tx.send(()).unwrap();
+        let mut entry = reader.join().unwrap();
+        // Once admission is released, the shared lock takes over protection.
+        fill(&caches, "f");
+        assert_eq!(entry.file.metadata().unwrap().nlink(), 1);
+        let mut bytes = Vec::new();
+        entry.file.read_to_end(&mut bytes).unwrap();
+        assert_eq!(bytes, b"12345678");
+        let visible: u64 = walkdir::WalkDir::new(&caches.caches[0].root)
+            .into_iter()
+            .map(Result::unwrap)
+            .filter(|entry| entry.file_type().is_file())
+            .map(|entry| entry.metadata().unwrap().len())
+            .sum();
+        // Count any retained unlinked allocation too, rather than relying
+        // solely on directory entries as the old stress test did.
+        let held = entry.file.metadata().unwrap();
+        let unlinked = if held.nlink() == 0 { held.len() } else { 0 };
+        assert_eq!(visible + unlinked, caches.used_bytes(0));
+        assert!(visible + unlinked <= 16);
+        assert!(caches.state().opening.is_empty());
+        drop(entry);
+        fill(&caches, "g");
+        assert!(caches.lookup(&key("a")).unwrap().is_none());
+    }
+
+    #[test]
+    fn eviction_claim_prevents_lookup_from_opening_a_descriptor() {
+        let (_root, caches) = setup();
+        fill(&caches, "a");
+        caches.state().evicting.insert(key("a").media.clone());
+        let claim = EvictionClaims {
+            caches: &caches,
+            media: vec![key("a").media],
+        };
+        assert!(caches
+            .lookup_with_open(&key("a"), |_, _, _| panic!("must not open during eviction"))
+            .unwrap()
+            .is_none());
+        assert!(caches.state().opening.is_empty());
+        drop(claim);
+        assert!(caches.lookup(&key("a")).unwrap().is_some());
+    }
+
+    #[test]
+    fn lookup_admission_is_released_after_error_and_panic() {
+        let (_root, caches) = setup();
+        fill(&caches, "a");
+        assert!(caches
+            .lookup_with_open(&key("a"), |_, _, _| Err(AdapterError::Stale))
+            .unwrap()
+            .is_none());
+        assert!(caches.state().opening.is_empty());
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = caches.lookup_with_open(&key("a"), |_, _, _| panic!("injected open panic"));
+        }));
+        assert!(result.is_err());
+        assert!(caches.state().opening.is_empty());
+        fill(&caches, "b");
+        fill(&caches, "c");
+        assert!(caches.lookup(&key("a")).unwrap().is_none());
     }
 
     #[test]
