@@ -79,6 +79,13 @@ pub trait CatalogStore: Send + Sync {
     /// Get a track by ID, returning the typed Track struct.
     fn get_track(&self, id: &str) -> Result<Option<super::Track>>;
 
+    /// Get a track without live physical-media enrichment. Cache identity uses
+    /// this so a hit never probes authoritative storage. Implementations that
+    /// enrich in `get_track` must override it with an unprobed read.
+    fn get_track_unprobed(&self, id: &str) -> Result<Option<super::Track>> {
+        self.get_track(id)
+    }
+
     // =========================================================================
     // Resolved Entity Retrieval
     // =========================================================================

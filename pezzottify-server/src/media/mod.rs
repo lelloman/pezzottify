@@ -2,6 +2,7 @@
 //! See docs/media-vaults.md for contracts and migration behavior.
 
 pub mod adapters;
+pub mod cache;
 mod copies;
 pub(crate) mod local;
 mod mutations;
@@ -43,6 +44,7 @@ pub struct MediaManager {
     image_adapter: Arc<dyn vault::VaultAdapter>,
     vaults: std::sync::RwLock<std::collections::HashMap<vault::VaultId, copies::RegisteredVault>>,
     materializer: OnceLock<Arc<TrackMaterializer>>,
+    cache: OnceLock<Arc<dyn cache::MediaCache>>,
     root: PathBuf,
     mutations: Arc<std::sync::Mutex<()>>,
     effects: OnceLock<mutations::Effects>,
@@ -75,13 +77,13 @@ pub(crate) struct ImageRead {
 pub(crate) struct LocalAudio {
     file: std::fs::File,
     filename: String,
-    content_type: &'static str,
+    content_type: String,
 }
 
 impl LocalAudio {
     fn new(file: std::fs::File, path: PathBuf) -> Self {
         Self {
-            content_type: audio_content_type(&path),
+            content_type: audio_content_type(&path).to_owned(),
             filename: path
                 .file_name()
                 .unwrap_or_default()
@@ -91,11 +93,19 @@ impl LocalAudio {
         }
     }
 
+    fn from_cache(entry: cache::CacheEntry) -> Self {
+        Self {
+            file: entry.file,
+            filename: entry.filename,
+            content_type: entry.content_type,
+        }
+    }
+
     pub async fn metadata(&self) -> io::Result<TrackStreamMetadata> {
         let file = tokio::fs::File::from_std(self.file.try_clone()?);
         Ok(TrackStreamMetadata {
             content_length: file.metadata().await?.len(),
-            content_type: self.content_type.to_owned(),
+            content_type: self.content_type.clone(),
         })
     }
 
@@ -147,11 +157,18 @@ impl MediaManager {
             image_adapter,
             vaults,
             materializer: OnceLock::new(),
+            cache: OnceLock::new(),
         }
     }
 
     pub(crate) fn filesystem_work(&self) -> FilesystemWorkPool {
         self.filesystem.clone()
+    }
+
+    /// Install the optional read cache. Without one every lookup keeps using
+    /// authoritative storage exactly as before.
+    pub fn configure_cache(&self, cache: Arc<dyn cache::MediaCache>) {
+        let _ = self.cache.set(cache);
     }
 
     /// Compatibility lookup preserves missing-track and local-open fallback behavior.
@@ -163,17 +180,24 @@ impl MediaManager {
         let Some(track) = self
             .catalog_read
             .run(DbPriority::Interactive, move |catalog| {
-                catalog.get_track(&id)
+                catalog.get_track_unprobed(&id)
             })
             .await?
         else {
             return Ok(None);
         };
         let adapter = self.local_adapter.clone();
+        let cache = self.cache.get().cloned();
+        let id = track_id.to_owned();
         let uri = track.audio_uri.clone();
         let opened = self
             .filesystem
             .run(move || {
+                if let (Some(cache), Some(uri)) = (cache.as_deref(), uri.as_deref()) {
+                    if let Some(cached) = cached_audio(cache, &id, uri) {
+                        return Some(cached);
+                    }
+                }
                 uri.and_then(|uri| adapter.open_file(&uri).ok())
                     .map(|(file, path)| LocalAudio::new(file, path))
             })
@@ -190,17 +214,27 @@ impl MediaManager {
         let track = self
             .catalog_read
             .run_blocking(DbPriority::Background, move |catalog| {
-                catalog.get_track(&id)
+                catalog.get_track_unprobed(&id)
             })?;
-        track
-            .and_then(|track| track.audio_uri)
-            .map(|uri| {
-                self.local_adapter
-                    .open_file(&uri)
-                    .map(|(file, path)| LocalAudio::new(file, path))
-                    .map_err(DbRunError::Store)
-            })
-            .transpose()
+        let Some(uri) = track.and_then(|track| track.audio_uri) else {
+            return Ok(None);
+        };
+        if let Some(cache) = self.cache.get() {
+            if let Some(cached) = cached_audio(cache.as_ref(), track_id, &uri) {
+                return Ok(Some(cached));
+            }
+        }
+        self.local_adapter
+            .open_file(&uri)
+            .map(|(file, path)| Some(LocalAudio::new(file, path)))
+            .map_err(DbRunError::Store)
+    }
+
+    /// Invalidation is ordered before an authoritative switch, never after it.
+    pub(super) fn invalidate_cache(&self, media: &vault::MediaKey) {
+        if let Some(cache) = self.cache.get() {
+            cache.invalidate(media);
+        }
     }
 
     pub async fn stage(
@@ -290,6 +324,58 @@ impl MediaManager {
         self: &Arc<Self>,
         id: &str,
     ) -> Result<ImageRead, MediaReadError> {
+        // Cache identity needs only catalog metadata, never the media disk. A
+        // catalog hiccup must not break a local read, so it only skips the cache.
+        let cached_source = if self.cache.get().is_some() {
+            let image_id = id.to_owned();
+            match self
+                .catalog_read
+                .run(DbPriority::Interactive, move |catalog_store| {
+                    catalog_store.get_item_image_url(&image_id)
+                })
+                .await
+            {
+                Ok(url) => url.map(|url| url.url),
+                Err(error) => {
+                    warn!(%error, image_id = id, "Skipping image cache lookup");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        if let (Some(cache), Some(source)) = (self.cache.get().cloned(), cached_source.as_deref()) {
+            let key = cache::CacheKey::image(id, source, mutations::process_epoch());
+            let lookup = self.image_reads.run(move || cache.lookup(&key)).await;
+            match lookup {
+                Ok(Ok(Some(entry))) => match read_cache_bytes(entry) {
+                    Ok(bytes) => match image_bytes(bytes, MediaReadError::InvalidLocalImage) {
+                        Ok(image) => return Ok(image),
+                        Err(_) => warn!(
+                            image_id = id,
+                            "Invalid image cache entry; using authoritative storage"
+                        ),
+                    },
+                    Err(error) => warn!(
+                        %error,
+                        image_id = id,
+                        "Image cache read failed; using authoritative storage"
+                    ),
+                },
+                Ok(Ok(None)) => {}
+                Ok(Err(error)) => warn!(
+                    %error,
+                    image_id = id,
+                    "Image cache lookup failed; using authoritative storage"
+                ),
+                Err(error) => warn!(
+                    %error,
+                    image_id = id,
+                    "Image cache work failed; using authoritative storage"
+                ),
+            }
+        }
+
         let manager = self.clone();
         let image_id = id.to_owned();
         // Resolve the pointer and read under one admission. Both can block on a
@@ -390,6 +476,25 @@ impl MediaManager {
     }
 }
 
+fn read_cache_bytes(entry: cache::CacheEntry) -> io::Result<Vec<u8>> {
+    let mut file = entry.file;
+    let mut bytes = Vec::with_capacity(entry.content_length.min(8 * 1024 * 1024) as usize);
+    std::io::Read::read_to_end(&mut file, &mut bytes)?;
+    Ok(bytes)
+}
+
+fn cached_audio(cache: &dyn cache::MediaCache, id: &str, uri: &str) -> Option<LocalAudio> {
+    let key = cache::CacheKey::audio(id, uri)?;
+    match cache.lookup(&key) {
+        Ok(Some(entry)) => Some(LocalAudio::from_cache(entry)),
+        Ok(None) => None,
+        Err(error) => {
+            warn!(track_id = id, %error, "Media cache lookup failed; using authoritative storage");
+            None
+        }
+    }
+}
+
 fn image_bytes(bytes: Vec<u8>, invalid: MediaReadError) -> Result<ImageRead, MediaReadError> {
     let content_type = infer::get(&bytes)
         .filter(|kind| kind.mime_type().starts_with("image/"))
@@ -419,6 +524,9 @@ pub(crate) fn audio_content_type(path: &Path) -> &'static str {
         _ => "application/octet-stream",
     }
 }
+
+#[cfg(test)]
+mod cache_tests;
 
 #[cfg(test)]
 mod tests;

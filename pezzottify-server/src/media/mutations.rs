@@ -81,7 +81,7 @@ pub(crate) fn mutation_lock(root: &Path) -> Arc<Mutex<()>> {
     locks.insert(key, Arc::downgrade(&lock));
     lock
 }
-fn process_epoch() -> &'static str {
+pub(super) fn process_epoch() -> &'static str {
     static EPOCH: OnceLock<String> = OnceLock::new();
     EPOCH
         .get_or_init(|| uuid::Uuid::new_v4().to_string())
@@ -368,6 +368,17 @@ impl MediaManager {
                     unlink(&pending)?;
                     anyhow::bail!("superseded publication");
                 }
+                // Invalidate before the new authoritative version becomes visible.
+                // A cache hit for the old version is then either consistent with
+                // the old authority or impossible after the switch.
+                self.invalidate_cache(&super::vault::MediaKey {
+                    kind: if record.image {
+                        super::vault::MediaKind::Image
+                    } else {
+                        super::vault::MediaKind::Audio
+                    },
+                    id: record.media_id.clone(),
+                });
                 let destination = self.root.join(&record.uri);
                 if !destination.exists() {
                     self.local_adapter.expose(&record.staging, &record.uri)?;
@@ -583,6 +594,16 @@ impl MediaManager {
                 && self.current_uri(record)? == Some(record.uri.clone())
             {
                 return unlink(&pending_path(&self.root, &record.revision));
+            }
+            if self.current_uri(record)? == Some(record.uri.clone()) {
+                self.invalidate_cache(&super::vault::MediaKey {
+                    kind: if record.image {
+                        super::vault::MediaKind::Image
+                    } else {
+                        super::vault::MediaKind::Audio
+                    },
+                    id: record.media_id.clone(),
+                });
             }
             if record.image {
                 if self.current_uri(record)? == Some(record.uri.clone()) {

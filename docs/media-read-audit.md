@@ -1,6 +1,8 @@
 # Published media read boundary
 
 Story #7 adds [explicit vaults, adapters and dependent-copy validity](media-vaults.md).
+Story #8 adds [optional read interception and cache validity](media-cache.md); with no
+cache configured the boundaries below are unchanged.
 
 Ticket: [LLPR/PEZZOTTIFY-5](https://crumbles.lelloman.com/w/LLPR/PEZZOTTIFY/5)
 

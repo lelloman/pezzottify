@@ -125,7 +125,8 @@ range reads, immutable publication, root confinement and idempotent removal.
 Existing media tests cover real HTTP image retrieval/source association and proxy
 streaming through the adapters, plus legacy publication/recovery regression tests.
 
-Multi-vault selection remains #8. New placement/eviction policies, live configuration,
+Read interception and cache validity are defined in [media-cache.md](media-cache.md) (#8).
+Multi-vault selection and cache population remain later stories. New placement/eviction policies, live configuration,
 actual federation, YouTube integration, client cache migration and database response
 caching are excluded. Generic orphan/old-generation garbage collection remains
 separate from deletion of explicitly registered cache copies.

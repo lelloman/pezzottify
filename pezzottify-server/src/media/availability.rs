@@ -76,6 +76,9 @@ impl CatalogStore for MediaCatalogView {
         }
         Ok(track)
     }
+    fn get_track_unprobed(&self, id: &str) -> Result<Option<crate::catalog_store::Track>> {
+        self.inner.get_track_unprobed(id)
+    }
     fn get_resolved_artist_json(&self, id: &str) -> Result<Option<serde_json::Value>> {
         self.inner.get_resolved_artist_json(id)
     }
