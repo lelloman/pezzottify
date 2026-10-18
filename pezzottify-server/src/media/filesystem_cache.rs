@@ -58,7 +58,21 @@ impl FilesystemCaches {
     ///
     /// Cache directories may not overlap media storage or each other: publishing,
     /// invalidation and removal must never be able to touch authoritative media.
-    pub fn new(settings: Vec<FilesystemCacheSettings>, media_root: &Path) -> anyhow::Result<Self> {
+    pub fn new(
+        settings: Vec<FilesystemCacheSettings>,
+        media_root: &Path,
+        audio_keys: impl IntoIterator<Item = CacheKey>,
+    ) -> anyhow::Result<Self> {
+        // The catalog, not an epoch directory's name, establishes restart
+        // validity. Keep only the exact current immutable audio revisions.
+        let audio_keys = audio_keys
+            .into_iter()
+            .filter(|key| {
+                key.media.kind == MediaKind::Audio
+                    && key.generation == super::cache::CacheGeneration::Durable
+            })
+            .map(|key| (id_hash(&key.media.id), key_hash(&key)))
+            .collect::<HashMap<_, _>>();
         anyhow::ensure!(!settings.is_empty(), "at least one media cache is required");
         let media_root = media_root
             .canonicalize()
@@ -118,7 +132,13 @@ impl FilesystemCaches {
                     root.display()
                 )
             })?;
-            recover_directory(&root)?;
+            recover_directory(&root, &audio_keys).map_err(|error| {
+                anyhow::anyhow!(
+                    "media cache '{}' recovery at {} failed: {error}",
+                    setting.name,
+                    root.display()
+                )
+            })?;
             prepared.push((setting.name.clone(), root.clone()));
             caches.push(CacheDirectory {
                 name: setting.name,
@@ -615,28 +635,101 @@ fn overlaps(first: &Path, second: &Path) -> bool {
     first == second || first.starts_with(second) || second.starts_with(first)
 }
 
-fn recover_directory(root: &Path) -> anyhow::Result<()> {
+fn recover_directory(root: &Path, audio_keys: &HashMap<String, String>) -> anyhow::Result<()> {
     let trash = root.join(TRASH);
-    if trash.exists() {
-        std::fs::remove_dir_all(&trash)?;
+    if trash.symlink_metadata().is_ok() {
+        remove_cached_path(&trash)?;
     }
     // Image entries are process-scoped, so a restart starts cold for images.
     let images = root.join(OBJECTS).join(kind_name(&MediaKind::Image));
-    if images.exists() {
-        std::fs::remove_dir_all(&images)?;
+    if images.symlink_metadata().is_ok() {
+        remove_cached_path(&images)?;
     }
-    // Any temporary file belongs to a fill that did not complete.
-    for entry in walkdir::WalkDir::new(root.join(OBJECTS))
-        .into_iter()
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| entry.file_type().is_file())
-    {
-        let name = entry.file_name().to_string_lossy();
-        if name.starts_with(".tmp-") {
-            let _ = std::fs::remove_file(entry.path());
+    let audio = root.join(OBJECTS).join(kind_name(&MediaKind::Audio));
+    match audio.symlink_metadata() {
+        Ok(metadata) if metadata.is_dir() => {}
+        Ok(_) => {
+            remove_cached_path(&audio)?;
+            return Ok(());
         }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.into()),
+    }
+    for identity in std::fs::read_dir(&audio)? {
+        let identity = identity?;
+        let name = identity.file_name();
+        let expected = audio_keys.get(name.to_string_lossy().as_ref());
+        if !identity.file_type()?.is_dir() || expected.is_none() {
+            remove_cached_path(&identity.path())?;
+            continue;
+        }
+        let expected = expected.unwrap();
+        let directory = identity.path();
+        let canonical = directory.join("0");
+        // Epochs only order concurrent work within one process. On restart,
+        // rebase exact catalog-version matches to zero, independent of epoch
+        // magnitude. Also accept the original flat layout; all other files,
+        // partial fills and obsolete versions are disposable.
+        let mut candidates = Vec::new();
+        for entry in walkdir::WalkDir::new(&directory).min_depth(1) {
+            let entry = entry?;
+            if entry.file_type().is_file() {
+                let relative = entry.path().strip_prefix(&directory)?;
+                let parts = relative.components().collect::<Vec<_>>();
+                let known_layout = parts.len() == 1
+                    || (parts.len() == 2
+                        && parts[0]
+                            .as_os_str()
+                            .to_string_lossy()
+                            .parse::<u64>()
+                            .is_ok());
+                let name = entry.file_name().to_string_lossy();
+                let valid_name = name.strip_prefix(expected).is_some_and(|extension| {
+                    extension.strip_prefix('.').is_some_and(|extension| {
+                        !extension.is_empty()
+                            && extension.bytes().all(|byte| byte.is_ascii_alphanumeric())
+                    })
+                });
+                if known_layout && valid_name {
+                    candidates.push(entry.path().to_owned());
+                } else {
+                    std::fs::remove_file(entry.path())?;
+                }
+            } else if entry.file_type().is_symlink() {
+                std::fs::remove_file(entry.path())?;
+            }
+        }
+        std::fs::create_dir_all(&canonical)?;
+        candidates.sort();
+        for path in candidates {
+            let destination = canonical.join(path.file_name().unwrap());
+            if path != destination {
+                if destination.exists() {
+                    // Both copies have the same immutable catalog revision.
+                    std::fs::remove_file(path)?;
+                } else {
+                    std::fs::rename(path, destination)?;
+                }
+            }
+        }
+        for entry in std::fs::read_dir(&directory)? {
+            let entry = entry?;
+            if entry.path() != canonical {
+                remove_cached_path(&entry.path())?;
+            }
+        }
+        sync_directory(&canonical);
+        sync_directory(&directory);
     }
     Ok(())
+}
+
+fn remove_cached_path(path: &Path) -> std::io::Result<()> {
+    if path.symlink_metadata()?.is_dir() {
+        std::fs::remove_dir_all(path)
+    } else {
+        std::fs::remove_file(path)
+    }
 }
 
 fn kind_name(kind: &MediaKind) -> &'static str {
@@ -772,6 +865,7 @@ mod lookup_race_tests {
                 max_bytes: 1024,
             }],
             &media,
+            std::iter::empty(),
         )
         .unwrap();
         let key = CacheKey::image("cover", "https://example.test/cover.jpg", "process");
@@ -822,6 +916,7 @@ mod accounting_tests {
                     max_bytes: SIZE * 2,
                 }],
                 &media,
+                std::iter::empty(),
             )
             .unwrap(),
         );
@@ -1018,6 +1113,7 @@ mod accounting_tests {
                 max_bytes: SIZE * 2,
             }],
             &root.path().join("media"),
+            std::iter::empty(),
         )
         .unwrap();
         // Both image entries and retained trash are discarded on restart.

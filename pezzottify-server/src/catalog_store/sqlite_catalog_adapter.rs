@@ -1775,6 +1775,24 @@ impl CatalogStore for SqliteCatalogStore {
         Ok(rows)
     }
 
+    fn media_cache_audio_page(
+        &self,
+        after: i64,
+        limit: usize,
+    ) -> Result<Vec<(i64, String, String)>> {
+        let connection = self.get_read_conn();
+        let connection = connection.lock().unwrap();
+        let mut statement = connection.prepare_cached(
+            "SELECT rowid,id,audio_uri FROM tracks WHERE rowid>?1 AND audio_uri IS NOT NULL ORDER BY rowid LIMIT ?2",
+        )?;
+        let rows = statement
+            .query_map(params![after, limit.min(1000) as i64], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
     fn compare_exchange_audio(
         &self,
         id: &str,

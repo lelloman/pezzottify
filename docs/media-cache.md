@@ -98,8 +98,8 @@ Pezzottify-made changes are reflected through the publication, replacement and
 deletion paths. Arbitrary files changed outside Pezzottify cannot be detected
 instantly without monitoring or probing: if an external process rewrites an
 authoritative file in place without changing the managed catalog reference, audio
-entries for that reference may serve the old bytes until the media is republished or
-the server restarts. This story deliberately does not add per-hit original-storage
+entries for that reference may serve the old bytes until the media is republished
+with a new revision or the disposable cache is cleared. This story deliberately does not add per-hit original-storage
 validation to hide that limitation.
 
 ## Failure behavior
@@ -165,7 +165,20 @@ Invalidation increments a per-media epoch under the lock before any cleanup; loo
 captures the current epoch before opening and rechecks it after obtaining the
 descriptor, so old entries become unreachable even if the filesystem cleanup fails
 or invalidation races with the open. Cleanup then removes stale epoch directories
-without holding the lock. A fill that started under an older epoch refuses to publish. Audio
-objects survive restart because their keys embed the durable managed revision. Image
+without holding the lock. A fill that started under an older epoch refuses to publish.
+
+At startup, the manager pages through persisted catalog audio references without
+presence enrichment or original-media access, regardless of observed availability. Recovery matches each audio object's
+key hash to the current durable catalog revision, moves complete matches from any
+numeric epoch (or the earlier flat layout) into epoch zero, and removes obsolete
+revisions, unknown layouts, incomplete files and trash before rebuilding the exact
+allocation ledger. Epoch numbers are process-local ordering tokens, not evidence of
+validity: recovery never chooses the largest epoch. If a mutation changed or deleted
+the catalog reference while cleanup failed, the old key cannot match and its bytes
+are reclaimed. A crash during normalization leaves complete revision-keyed files
+that the same reconciliation can safely process again. Recovery errors abort cache
+installation with cache/path context instead of installing uncertain accounting.
+The resulting full cache can immediately serve unchanged audio after restart,
+without opening original media. Image
 objects are process-scoped, so startup removes them and images start cold. Legacy and
 unmanaged audio locators continue to bypass the cache entirely.

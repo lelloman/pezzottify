@@ -150,6 +150,13 @@ impl CatalogStore for MediaCatalogView {
     ) -> Result<Vec<(i64, String, Option<String>)>> {
         self.inner.media_presence_page(_after, _limit)
     }
+    fn media_cache_audio_page(
+        &self,
+        after: i64,
+        limit: usize,
+    ) -> Result<Vec<(i64, String, String)>> {
+        self.inner.media_cache_audio_page(after, limit)
+    }
     fn compare_exchange_audio(
         &self,
         _id: &str,

@@ -156,6 +156,17 @@ pub trait CatalogStore: Send + Sync {
         Ok(Vec::new())
     }
 
+    /// Page durable audio references for startup cache reconciliation. This is
+    /// metadata only and deliberately independent of observed availability: a
+    /// valid cached revision remains useful while original storage is offline.
+    fn media_cache_audio_page(
+        &self,
+        _after: i64,
+        _limit: usize,
+    ) -> Result<Vec<(i64, String, String)>> {
+        anyhow::bail!("audio cache reconciliation is unsupported")
+    }
+
     /// Atomically attach/detach a validated media revision and its derived flags.
     fn compare_exchange_audio(
         &self,

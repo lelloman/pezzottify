@@ -307,7 +307,30 @@ impl MediaManager {
                 max_bytes: setting.max_bytes,
             })
             .collect();
-        let caches = filesystem_cache::FilesystemCaches::new(settings, &self.root)?;
+        // Startup reconciliation reads only catalog metadata. Presence enrichment
+        // and original-media probes must not participate in cache recovery.
+        let mut audio_keys = Vec::new();
+        let mut after = 0;
+        loop {
+            let page = self
+                .catalog
+                .media_cache_audio_page(after, 1000)
+                .map_err(|error| {
+                    anyhow::anyhow!(
+                        "failed to read catalog audio revisions for cache recovery: {error}"
+                    )
+                })?;
+            if page.is_empty() {
+                break;
+            }
+            for (rowid, id, uri) in page {
+                after = rowid;
+                if let Some(key) = cache::CacheKey::audio(&id, &uri) {
+                    audio_keys.push(key);
+                }
+            }
+        }
+        let caches = filesystem_cache::FilesystemCaches::new(settings, &self.root, audio_keys)?;
         debug!(caches = ?caches.names(), "Installed media caches");
         self.configure_cache(Arc::new(caches));
         Ok(())

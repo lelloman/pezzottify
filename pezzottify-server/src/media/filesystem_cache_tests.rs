@@ -56,7 +56,7 @@ impl CacheFixture {
                 max_bytes: *max_bytes,
             })
             .collect::<Vec<_>>();
-        let caches = Arc::new(FilesystemCaches::new(settings, &media).unwrap());
+        let caches = Arc::new(FilesystemCaches::new(settings, &media, std::iter::empty()).unwrap());
         manager.configure_cache(caches.clone());
         Self {
             root,
@@ -64,6 +64,45 @@ impl CacheFixture {
             manager,
             caches,
         }
+    }
+
+    fn restarted_manager(&self, max_bytes: u64) -> MediaManager {
+        let manager = MediaManager::new(
+            self.manager.catalog.clone(),
+            DbExecutor::new(Default::default()),
+        );
+        manager
+            .configure_filesystem_caches(&[crate::config::MediaCacheDirectorySettings {
+                name: "cache0".into(),
+                path: self.root.path().join("cache0"),
+                max_bytes,
+            }])
+            .unwrap();
+        manager
+    }
+
+    fn complete_cache_bytes(&self) -> u64 {
+        walkdir::WalkDir::new(self.root.path().join("cache0"))
+            .into_iter()
+            .map(Result::unwrap)
+            .filter(|entry| entry.file_type().is_file())
+            .map(|entry| entry.metadata().unwrap().len())
+            .sum()
+    }
+
+    fn fill_audio(&self, uri: &str, bytes: &[u8]) -> CacheKey {
+        let key = CacheKey::audio("track1", uri).unwrap();
+        self.caches
+            .populate(CacheFillRequest {
+                epoch: self.caches.invalidation_epoch(&key.media),
+                key: key.clone(),
+                filename: "track1.mp3".into(),
+                content_type: "audio/mpeg".into(),
+                content_length: bytes.len() as u64,
+                source: CacheSource::Bytes(Arc::from(bytes)),
+            })
+            .unwrap();
+        key
     }
 
     fn seed_image_url(&self, url: &str) {
@@ -425,7 +464,7 @@ async fn restart_keeps_durable_audio_and_drops_process_scoped_images() {
     let image_key = CacheKey::image("album", "https://example.test/cover.jpg", "first-process");
 
     {
-        let caches = FilesystemCaches::new(settings.clone(), &media).unwrap();
+        let caches = FilesystemCaches::new(settings.clone(), &media, std::iter::empty()).unwrap();
         caches
             .populate(CacheFillRequest {
                 key: audio_key.clone(),
@@ -450,10 +489,182 @@ async fn restart_keeps_durable_audio_and_drops_process_scoped_images() {
         assert!(caches.lookup(&image_key).unwrap().is_some());
     }
 
-    let restarted = FilesystemCaches::new(settings, &media).unwrap();
+    let restarted = FilesystemCaches::new(settings, &media, [audio_key.clone()]).unwrap();
     assert!(restarted.lookup(&audio_key).unwrap().is_some());
     assert!(restarted.lookup(&image_key).unwrap().is_none());
     assert_eq!(restarted.used_bytes(0), AUDIO.len() as u64);
+}
+
+#[tokio::test]
+async fn full_audio_cache_recovers_nonzero_epoch_without_original_access() {
+    let fixture = CacheFixture::with_limits(&[AUDIO.len() as u64]);
+    let uri = fixture
+        .publish("track1", "mp3", AUDIO, Provenance::Ingested)
+        .await;
+    let key = CacheKey::audio("track1", &uri).unwrap();
+    fixture.caches.invalidate(&key.media);
+    assert!(fixture.caches.invalidation_epoch(&key.media) > 0);
+    fixture.fill_audio(&uri, AUDIO);
+    assert_eq!(fixture.caches.used_bytes(0), AUDIO.len() as u64);
+    assert_eq!(fixture.complete_cache_bytes(), AUDIO.len() as u64);
+
+    // Build a new manager through production startup recovery, with every
+    // original-media open/stat/presence operation rejected by the media root.
+    fixture.reject_original_media();
+    // Availability projections may mark original storage unavailable without
+    // changing its durable revision. That must not discard a useful warm copy.
+    rusqlite::Connection::open(fixture.root.path().join("catalog.db"))
+        .unwrap()
+        .execute("UPDATE tracks SET track_available=0 WHERE id='track1'", [])
+        .unwrap();
+    for _ in 0..2 {
+        let manager = fixture.restarted_manager(AUDIO.len() as u64);
+        let caches = manager.cache.get().unwrap();
+        assert_eq!(caches.invalidation_epoch(&key.media), 0);
+        assert!(caches.lookup(&key).unwrap().is_some());
+        let (_, opened) = manager.lookup_audio("track1").await.unwrap().unwrap();
+        assert_eq!(
+            collect(
+                opened
+                    .unwrap()
+                    .range_stream(0, AUDIO.len() as u64)
+                    .await
+                    .unwrap()
+            )
+            .await,
+            AUDIO
+        );
+        assert_eq!(fixture.complete_cache_bytes(), AUDIO.len() as u64);
+    }
+    // Independently inspect the reconstructed ledger, and prove the recovered
+    // full allocation rejects another admission rather than oversubscribing.
+    let recovered = FilesystemCaches::new(
+        vec![FilesystemCacheSettings {
+            name: "cache0".into(),
+            path: fixture.root.path().join("cache0"),
+            max_bytes: AUDIO.len() as u64,
+        }],
+        &fixture.media,
+        [key.clone()],
+    )
+    .unwrap();
+    assert_eq!(recovered.used_bytes(0), AUDIO.len() as u64);
+    assert_eq!(recovered.reserved_bytes(0), 0);
+    let another = CacheKey::audio(
+        "track2",
+        &format!("audio/.managed/track2.{}.mp3", uuid::Uuid::new_v4()),
+    )
+    .unwrap();
+    recovered
+        .populate(CacheFillRequest {
+            key: another.clone(),
+            epoch: 0,
+            filename: "track2.mp3".into(),
+            content_type: "audio/mpeg".into(),
+            content_length: AUDIO.len() as u64,
+            source: CacheSource::Open(Box::new(|| {
+                panic!("full recovered cache must not open source")
+            })),
+        })
+        .unwrap();
+    assert!(recovered.lookup(&another).unwrap().is_none());
+    assert_eq!(recovered.used_bytes(0), AUDIO.len() as u64);
+}
+
+#[tokio::test]
+async fn restart_reconciles_failed_audio_cleanup_after_replacement_and_deletion() {
+    for delete in [false, true] {
+        let fixture = CacheFixture::with_limits(&[AUDIO.len() as u64]);
+        let old_uri = fixture
+            .publish("track1", "mp3", AUDIO, Provenance::Ingested)
+            .await;
+        let old_key = fixture.fill_audio(&old_uri, AUDIO);
+        // A file blocks mkdir(trash), so invalidation cannot remove the old
+        // epoch. Recovery must use the catalog revision, not the largest epoch.
+        let trash = fixture.root.path().join("cache0/trash");
+        std::fs::write(&trash, []).unwrap();
+        let replacement = b"fedcba9876543210";
+        let new_uri = if delete {
+            let copy = fixture
+                .manager
+                .authoritative_audio("track1")
+                .unwrap()
+                .unwrap();
+            assert!(fixture.manager.delete_authoritative_audio(&copy).unwrap());
+            None
+        } else {
+            Some(
+                fixture
+                    .publish("track1", "mp3", replacement, Provenance::Ingested)
+                    .await,
+            )
+        };
+        assert!(fixture.caches.lookup(&old_key).unwrap().is_none());
+        assert_eq!(fixture.caches.used_bytes(0), AUDIO.len() as u64);
+        assert_eq!(fixture.complete_cache_bytes(), AUDIO.len() as u64);
+        let manager = fixture.restarted_manager(AUDIO.len() as u64);
+        let caches = manager.cache.get().unwrap();
+        assert!(caches.lookup(&old_key).unwrap().is_none());
+        assert_eq!(fixture.complete_cache_bytes(), 0);
+        assert!(!trash.exists());
+        if let Some(uri) = new_uri {
+            let key = CacheKey::audio("track1", &uri).unwrap();
+            caches
+                .populate(CacheFillRequest {
+                    epoch: caches.invalidation_epoch(&key.media),
+                    key: key.clone(),
+                    filename: "track1.mp3".into(),
+                    content_type: "audio/mpeg".into(),
+                    content_length: replacement.len() as u64,
+                    source: CacheSource::Bytes(Arc::from(&replacement[..])),
+                })
+                .unwrap();
+            assert!(caches.lookup(&key).unwrap().is_some());
+            assert_eq!(fixture.complete_cache_bytes(), replacement.len() as u64);
+            fixture.reject_original_media();
+            let manager = fixture.restarted_manager(AUDIO.len() as u64);
+            let (_, opened) = manager.lookup_audio("track1").await.unwrap().unwrap();
+            assert_eq!(
+                collect(
+                    opened
+                        .unwrap()
+                        .range_stream(0, replacement.len() as u64)
+                        .await
+                        .unwrap()
+                )
+                .await,
+                replacement
+            );
+        } else {
+            fixture.reject_original_media();
+            assert!(manager
+                .lookup_audio("track1")
+                .await
+                .unwrap()
+                .unwrap()
+                .1
+                .is_none());
+        }
+    }
+}
+
+#[tokio::test]
+async fn restart_reconciles_legacy_layout_and_discards_uncertain_audio_files() {
+    let fixture = CacheFixture::with_limits(&[AUDIO.len() as u64]);
+    let uri = fixture
+        .publish("track1", "mp3", AUDIO, Provenance::Ingested)
+        .await;
+    let key = fixture.fill_audio(&uri, AUDIO);
+    let path = fixture.caches.entry_path(0, &key).unwrap();
+    let identity = path.parent().unwrap().parent().unwrap();
+    // Original flat layout, plus unpublishable/unknown leftovers.
+    std::fs::rename(&path, identity.join(path.file_name().unwrap())).unwrap();
+    std::fs::write(identity.join(".tmp-interrupted"), AUDIO).unwrap();
+    std::fs::write(identity.join("unknown.mp3"), AUDIO).unwrap();
+    fixture.reject_original_media();
+    let manager = fixture.restarted_manager(AUDIO.len() as u64);
+    assert!(manager.cache.get().unwrap().lookup(&key).unwrap().is_some());
+    assert_eq!(fixture.complete_cache_bytes(), AUDIO.len() as u64);
 }
 
 #[test]
@@ -481,6 +692,7 @@ fn population_uses_the_first_cache_with_room_and_lookup_follows_order() {
             },
         ],
         &media,
+        std::iter::empty(),
     )
     .unwrap();
     too_small_then_roomy
@@ -511,6 +723,7 @@ fn population_uses_the_first_cache_with_room_and_lookup_follows_order() {
             },
         ],
         &media,
+        std::iter::empty(),
     )
     .unwrap();
     both_roomy
@@ -545,6 +758,7 @@ fn cache_directories_cannot_overlap_media_storage_or_each_other() {
                 max_bytes: 1024,
             }],
             &media,
+            std::iter::empty(),
         );
         assert!(result.is_err());
     }
@@ -565,6 +779,7 @@ fn cache_directories_cannot_overlap_media_storage_or_each_other() {
             },
         ],
         &media,
+        std::iter::empty(),
     );
     assert!(result.is_err());
 
@@ -575,6 +790,7 @@ fn cache_directories_cannot_overlap_media_storage_or_each_other() {
             max_bytes: 1024,
         }],
         &media,
+        std::iter::empty()
     )
     .is_ok());
 }
