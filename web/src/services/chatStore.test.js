@@ -15,13 +15,14 @@ function storeWith({ stream, connect = async () => {}, confirm = () => false } =
   globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
   globalThis.window = { confirm };
   const calls = [];
+  const diagnostics = [];
   const mcp = { isConnected: { value: false }, connect, disconnect() {}, getTools: () => [] };
   const tools = { getTools: () => [{ name: 'ui.deletePlaylist', inputSchema: { type: 'object' } }], isUiTool: () => true, callTool: async (...args) => { calls.push(args); return 'ok'; } };
   const sessionClass = { create: options => AssistantSession.create({ ...options, createEngine: async (config, id, archive) => new AssistantEngine(JSON.stringify(config), id, archive ? JSON.stringify(archive) : undefined) }) };
-  const source = readFileSync(new URL('../store/chat.js', import.meta.url), 'utf8').replace(/^import .*;\n/gm, '').replace('export const useChatStore', 'const useChatStore');
-  const factory = new Function('defineStore','ref','shallowRef','computed','watch','AssistantSession','useAssistant','createProvider','getProvider','getProviderIds','mcpClient','uiTools','LANGUAGES','getLanguage','getToolDescription','getToolResultDescription','ASSISTANT_PROMPT','assistantModes','requiresConfirmation',source+'\nreturn useChatStore;');
-  const useStore = factory(defineStore,ref,shallowRef,computed,watch,sessionClass,useAssistant,()=>({stream}),()=>({}),()=>[],mcp,tools,[],code=>({code,name:'English'}),()=>'',()=>'',ASSISTANT_PROMPT,assistantModes,requiresConfirmation);
-  return { store: useStore(), calls, mcp };
+  const source = readFileSync(new URL('../store/chat.js', import.meta.url), 'utf8').replace(/^import [\s\S]*?;\n/gm, '').replace('export const useChatStore', 'const useChatStore');
+  const factory = new Function('defineStore','ref','shallowRef','computed','watch','AssistantSession','useAssistant','createProvider','getProvider','getProviderIds','mcpClient','uiTools','LANGUAGES','getLanguage','getToolDescription','getToolResultDescription','ASSISTANT_PROMPT','assistantModes','requiresConfirmation','useFeedbackStore',source+'\nreturn useChatStore;');
+  const useStore = factory(defineStore,ref,shallowRef,computed,watch,sessionClass,useAssistant,()=>({stream}),()=>({}),()=>[],mcp,tools,[],code=>({code,name:'English'}),()=>'',()=>'',ASSISTANT_PROMPT,assistantModes,requiresConfirmation,()=>({epoch:()=>0,record(...args){diagnostics.push(args);},clear:async()=>{},show(){}}));
+  return { store: useStore(), calls, mcp, diagnostics };
 }
 async function until(predicate) { for(let i=0;i<300;i++){if(predicate())return;await delay(5);}throw new Error('Timed out'); }
 test('session reset during connection prevents initialization and model calls',async()=>{
@@ -49,4 +50,10 @@ test('reconnect refreshes available tools and retains transcript', async () => {
  await store.sendMessage('second'); await until(()=>!store.isLoading);
  assert.equal(connections,2); assert.equal(store.messages.filter(m=>m.role==='user').length,2);
  assert.ok(requests.at(-1).tools.some(t=>t.name==='catalog.search')); store.resetSession();
+});
+test('real engine diagnostics correlate reply, confirmation, result and completion without altering history',async()=>{
+ let round=0; const {store,diagnostics}=storeWith({confirm:()=>true,stream:async function*(){if(round++===0)yield {type:'tool_use',id:'call-1',name:'ui.deletePlaylist',input:{playlistId:'A'}};else yield {type:'text',content:'Done'};yield {type:'done'};}});
+ store.setLanguage('en');await store.sendMessage('delete');await until(()=>!store.isLoading);
+ const events=diagnostics.map(args=>args[2]);for(const kind of ['user','assistant','tool_call','tool_result','confirmation','metadata'])assert.ok(events.some(e=>e.kind===kind),kind);
+ assert.equal(new Set(diagnostics.map(args=>args[0])).size,1);assert.equal(diagnostics.at(-1)[3],'completed');assert.equal(store.messages.find(m=>m.role==='assistant'&&m.content)?.content,'Done');store.resetSession();
 });

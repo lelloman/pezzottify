@@ -1,6 +1,7 @@
 <template>
   <div class="settingsPage">
     <h1 class="pageTitle">Settings</h1>
+    <FeedbackSettings />
 
     <div class="settingsSection">
       <h2 class="sectionTitle">Search</h2>
@@ -96,6 +97,7 @@
 </template>
 
 <script setup>
+import FeedbackSettings from "../feedback/FeedbackSettings.vue";
 import { useDebugStore } from "@/store/debug";
 import { useUserStore } from "@/store/user";
 import { storeToRefs } from "pinia";

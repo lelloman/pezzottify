@@ -296,3 +296,34 @@ Signing keys, URLs, remote bodies and report text are absent from delivery logs
 and administrative audit data. The existing report body admission limits,
 frequency controls, sensitive-body logging exclusions and no-store responses also
 apply to these endpoints.
+
+## Web flow
+
+Settings contains account-scoped local recording consent and the feedback form.
+The assistant's “Report a response” controls select only the turn correlated with
+that reply; including all retained turns is a separate explicit choice. Recording
+starts with future activity and never imports existing model history. Tool
+confirmations/results, cancellation, compaction, versions and partial streams are
+recorded separately from the assistant archive. IndexedDB keeps a bounded v1
+recording and recovers running turns as interrupted. Transactional clear epochs
+reject writes from another tab that predates a clear/account change.
+
+Both attachment checkboxes start off for each form. Technical logs can be pasted
+into a separate field; there is no global console or HTTP-body collector. Review
+freezes the complete request string and UUID. Send/retry uses that string without
+collecting newer activity, and retries are manual. Editing creates a new UUID.
+The form displays the receipt and a refreshable, paginated owner status list.
+
+Requests use native fetch with no-store and redirects disabled, outside general
+API retry/interceptor handling. Before dispatch, the explicit OIDC or password-login
+bearer credential is checked against the current owner at `/v1/auth/session`, then
+that same credential is used with cookies omitted. This prevents a cookie/account
+switch in another tab from retargeting a report. A session without an available
+explicit credential must sign in again; the client does not fall back to ambient
+cookies for report content. Clear, disable and account changes invalidate previews
+and abort pending requests; already dispatched reports may still reach the original
+account. Cross-tab clear/account notifications invalidate local previews too.
+
+Browser persistence is best effort. Storage failures are visible and nonfatal to
+chat, and an evicted recording is treated as absent with recording off. No automatic
+upload, attachment forwarding, or deployment is part of the web flow.

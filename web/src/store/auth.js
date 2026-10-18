@@ -56,8 +56,12 @@ export const useAuthStore = defineStore("auth", {
         if (localStorage.getItem('ai_chat_owner') !== response.data.user_handle) {
           const { useChatStore } = await import('./chat');
           useChatStore().resetSession();
+        const { useFeedbackStore } = await import("./feedback");
+        await useFeedbackStore().account(null);
           localStorage.setItem('ai_chat_owner', response.data.user_handle);
         }
+        const { useFeedbackStore } = await import("./feedback");
+        if (this.user?.handle !== response.data.user_handle) await useFeedbackStore().account(response.data.user_handle);
         this.user = {
           handle: response.data.user_handle,
           permissions: response.data.permissions,
@@ -97,6 +101,8 @@ export const useAuthStore = defineStore("auth", {
         console.debug("Session check failed:", error?.response?.status);
         const { useChatStore } = await import('./chat');
         useChatStore().resetSession();
+        const { useFeedbackStore } = await import("./feedback");
+        await useFeedbackStore().account(null);
         localStorage.removeItem('ai_chat_owner');
         this.user = null;
         this.sessionChecked = true;
@@ -126,6 +132,8 @@ export const useAuthStore = defineStore("auth", {
       // Stop AI work and its separate authenticated MCP socket before switching accounts.
       const { useChatStore } = await import('./chat');
       useChatStore().resetSession();
+      const { useFeedbackStore } = await import("./feedback");
+      await useFeedbackStore().account(null);
       localStorage.removeItem('ai_chat_owner');
       // Save the current username for login hint before clearing auth
       if (this.user?.handle) {
