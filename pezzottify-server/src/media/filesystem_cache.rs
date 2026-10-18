@@ -269,10 +269,15 @@ impl FilesystemCaches {
     /// Claim candidates in memory, then try an exclusive descriptor lock and
     /// unlink outside the policy mutex. Readers retain shared descriptor locks,
     /// so neither their bytes nor their allocation are reclaimed early.
-    fn make_room(&self, bytes: u64) {
+    fn make_room(&self, request: &CacheFillRequest) {
+        let bytes = request.content_length;
         let candidates = {
             let mut state = self.state();
-            if self.select_target(&state, bytes).is_some() {
+            if self.select_target(&state, bytes).is_some()
+                || state.epochs.get(&request.key.media).copied().unwrap_or(0) != request.epoch
+                || state.fills.contains_key(&request.key)
+                || state.evicting.contains(&request.key.media)
+            {
                 return;
             }
             let mut candidates = state
@@ -641,7 +646,7 @@ impl MediaCache for FilesystemCaches {
             return Ok(());
         }
 
-        self.make_room(request.content_length);
+        self.make_room(&request);
         let mut reservation = {
             let mut state = self.state();
             #[cfg(test)]
@@ -673,6 +678,7 @@ impl MediaCache for FilesystemCaches {
                 content_length: request.content_length,
                 settled: false,
                 succeeded: false,
+                report: true,
             }
         };
 
@@ -681,7 +687,7 @@ impl MediaCache for FilesystemCaches {
         // the source; completed concurrent work is a successful no-op.
         if self.lookup(&request.key)?.is_some() {
             event("all", "fill_skipped_present");
-            reservation.succeeded = true;
+            reservation.report = false;
             return Ok(());
         }
 
@@ -771,18 +777,21 @@ struct FillReservation<'a> {
     content_length: u64,
     settled: bool,
     succeeded: bool,
+    report: bool,
 }
 
 impl Drop for FillReservation<'_> {
     fn drop(&mut self) {
-        event(
-            &self.caches.caches[self.index].name,
-            if self.succeeded {
-                "fill_completed"
-            } else {
-                "fill_failed"
-            },
-        );
+        if self.report {
+            event(
+                &self.caches.caches[self.index].name,
+                if self.succeeded {
+                    "fill_completed"
+                } else {
+                    "fill_failed"
+                },
+            );
+        }
         let mut state = self.caches.state();
         if !self.settled {
             state.reserved[self.index] -= self.content_length;
@@ -1570,6 +1579,61 @@ mod eviction_tests {
         fill(&caches, "c");
         assert!(caches.lookup(&key("c")).unwrap().is_some());
         assert_eq!(caches.used_bytes(0), 16);
+    }
+
+    #[test]
+    fn diagnostics_report_allocations_fills_failures_and_eviction() {
+        let (_root, mut caches) = setup();
+        Arc::get_mut(&mut caches).unwrap().caches[0].name = "diagnostics-test".into();
+        crate::server::metrics::init_metrics();
+        fill(&caches, "a");
+        fill(&caches, "b");
+        fill(&caches, "c");
+        let counters = &crate::server::metrics::MEDIA_CACHE_EVENTS;
+        assert_eq!(
+            counters
+                .with_label_values(&["diagnostics-test", "fill_completed"])
+                .get(),
+            3.0
+        );
+        assert_eq!(
+            counters
+                .with_label_values(&["diagnostics-test", "eviction"])
+                .get(),
+            1.0
+        );
+        assert!(caches
+            .populate(CacheFillRequest {
+                key: key("d"),
+                epoch: 0,
+                filename: "image.jpg".into(),
+                content_type: "image/jpeg".into(),
+                content_length: 8,
+                source: CacheSource::Open(Box::new(|| Err(std::io::Error::other("source failed")))),
+            })
+            .is_err());
+        assert_eq!(
+            counters
+                .with_label_values(&["diagnostics-test", "fill_failed"])
+                .get(),
+            1.0
+        );
+        assert_eq!(
+            crate::server::metrics::MEDIA_CACHE_BYTES
+                .with_label_values(&["diagnostics-test", "allocated"])
+                .get(),
+            8.0
+        );
+        assert_eq!(
+            crate::server::metrics::MEDIA_CACHE_BYTES
+                .with_label_values(&["diagnostics-test", "reserved"])
+                .get(),
+            0.0
+        );
+        assert!(crate::server::metrics::REGISTRY
+            .gather()
+            .iter()
+            .any(|family| family.get_name() == "pezzottify_media_cache_events_total"));
     }
 
     #[test]

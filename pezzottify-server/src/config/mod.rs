@@ -2016,6 +2016,7 @@ mod tests {
 name = "ssd"
 path = "/var/cache/pezzottify/media"
 max_bytes = 1024
+lru = true
 
 [[media_cache.caches]]
 name = "nvme"
@@ -2031,8 +2032,10 @@ max_bytes = 2048
         assert_eq!(caches[0].name, "ssd");
         assert_eq!(caches[0].path, PathBuf::from("/var/cache/pezzottify/media"));
         assert_eq!(caches[0].max_bytes, 1024);
+        assert!(caches[0].lru);
         assert_eq!(caches[1].name, "nvme");
         assert_eq!(caches[1].max_bytes, 2048);
+        assert!(!caches[1].lru);
     }
 
     #[test]
