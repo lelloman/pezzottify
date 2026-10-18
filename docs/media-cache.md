@@ -138,8 +138,14 @@ Each cache keeps complete objects under
 `<path>/objects/<kind>/<id-hash>/<epoch>/`; lookup opens only the current epoch
 directory. A fill creates a temporary file, copies and flushes it, and renames it
 into place, so a partial read or interrupted write is never visible. The byte budget
-is enforced by tracking persisted usage at startup plus reservations for in-flight
-fills. Fills skip when the object is already present, when another fill for the same
+is enforced by tracking persisted usage at startup plus reservations for admitted
+fills. An in-memory ledger charges each allocated temporary path before writing,
+then moves that exact charge to the destination before rename. Invalidation releases
+only ledger charges for successfully removed epochs; it never subtracts a measured
+directory size from committed usage. Retained temporary or complete files after a
+cleanup failure remain conservatively charged until cleanup or startup recovery.
+All reservation transfers and ledger updates are ordered with invalidation under
+the short policy lock; filesystem operations remain outside it. Fills skip when the object is already present, when another fill for the same
 key is in flight, when no cache has room, or when the object is larger than every
 budget. Full caches therefore fall back to authoritative storage instead of
 evicting; eviction and richer diagnostics belong to #13.

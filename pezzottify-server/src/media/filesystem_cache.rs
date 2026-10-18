@@ -8,7 +8,7 @@ use super::cache::{CacheEntry, CacheFillRequest, CacheKey, CacheSource, MediaCac
 use super::vault::{AdapterError, AdapterResult, MediaKey, MediaKind};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use tracing::warn;
@@ -34,6 +34,9 @@ struct CacheDirectory {
 struct CacheState {
     used: Vec<u64>,
     reserved: Vec<u64>,
+    // Exact allocated paths credited to used, including temporary files.
+    // Reservations cover admitted fills before a path is allocated.
+    charges: HashMap<PathBuf, (usize, u64)>,
     epochs: HashMap<MediaKey, u64>,
     fills: HashMap<CacheKey, u64>,
     #[cfg(test)]
@@ -44,6 +47,10 @@ struct CacheState {
 pub struct FilesystemCaches {
     caches: Vec<CacheDirectory>,
     state: Mutex<CacheState>,
+    #[cfg(test)]
+    after_rename: Mutex<Option<Box<dyn FnOnce() + Send>>>,
+    #[cfg(test)]
+    fail_removal: std::sync::atomic::AtomicBool,
 }
 
 impl FilesystemCaches {
@@ -120,19 +127,40 @@ impl FilesystemCaches {
             });
         }
 
-        let used = caches
-            .iter()
-            .map(|cache| super::availability::directory_size(&cache.root.join(OBJECTS)))
-            .collect::<Vec<_>>();
+        let mut used = vec![0u64; caches.len()];
+        let mut charges = HashMap::new();
+        for (index, cache) in caches.iter().enumerate() {
+            for entry in walkdir::WalkDir::new(cache.root.join(OBJECTS)) {
+                let entry = entry?;
+                if entry.file_type().is_file() {
+                    let bytes = entry.metadata()?.len();
+                    used[index] = used[index].saturating_add(bytes);
+                    charges.insert(entry.path().to_owned(), (index, bytes));
+                }
+            }
+        }
         let reserved = vec![0; caches.len()];
         Ok(Self {
             caches,
+            #[cfg(test)]
+            after_rename: Mutex::new(None),
+            #[cfg(test)]
+            fail_removal: std::sync::atomic::AtomicBool::new(false),
             state: Mutex::new(CacheState {
                 used,
                 reserved,
+                charges,
                 ..Default::default()
             }),
         })
+    }
+
+    fn remove_tombstone(&self, path: &Path) -> std::io::Result<()> {
+        #[cfg(test)]
+        if self.fail_removal.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(std::io::Error::other("injected tombstone removal failure"));
+        }
+        std::fs::remove_dir_all(path)
     }
 
     pub fn names(&self) -> Vec<&str> {
@@ -180,48 +208,89 @@ impl FilesystemCaches {
 
     fn write_entry(
         &self,
-        index: usize,
-        epoch: u64,
-        key: &CacheKey,
+        reservation: &mut FillReservation<'_>,
         filename: &str,
         content_length: u64,
         source: CacheSource,
     ) -> AdapterResult<()> {
+        let index = reservation.index;
+        let epoch = reservation.epoch;
+        let key = &reservation.key;
         let directory = self.object_epoch_dir(index, &key.media, epoch);
         std::fs::create_dir_all(&directory).map_err(storage)?;
         let temporary = directory.join(format!(".tmp-{}", uuid::Uuid::new_v4()));
-        let mut temporary_file = TemporaryFile::new(temporary.clone());
         let extension = extension_for(filename);
         let destination = directory.join(format!("{}.{}", key_hash(key), extension));
 
+        // Assign the admitted bytes to this exact temporary path before I/O.
+        // Cleanup can then settle temporary and complete objects independently,
+        // including retained trash after failed removal.
+        let mut publication = PublicationCharge {
+            caches: self,
+            path: temporary.clone(),
+            temporary: temporary.clone(),
+            media: key.media.clone(),
+            epoch,
+            published: false,
+        };
+        {
+            let mut state = self.state();
+            if state.epochs.get(&key.media).copied().unwrap_or(0) != epoch {
+                return Err(storage("media invalidated during cache fill"));
+            }
+            state.reserved[index] -= content_length;
+            reservation.settled = true;
+            state.used[index] = state.used[index].saturating_add(content_length);
+            state
+                .charges
+                .insert(temporary.clone(), (index, content_length));
+        }
+
+        let mut temporary_file = TemporaryFile::new(temporary.clone());
         let mut reader = source.open().map_err(storage)?;
         let mut file = OpenOptions::new()
             .create_new(true)
             .write(true)
             .open(&temporary)
             .map_err(storage)?;
-        let copied = std::io::copy(&mut reader, &mut file).map_err(storage)?;
-        if copied != content_length {
+        let copied =
+            std::io::copy(&mut reader.by_ref().take(content_length), &mut file).map_err(storage)?;
+        let mut extra = [0u8; 1];
+        if copied != content_length || reader.read(&mut extra).map_err(storage)? != 0 {
             return Err(storage("source length changed during cache fill"));
         }
         file.flush().map_err(storage)?;
         file.sync_all().map_err(storage)?;
         drop(file);
 
+        if destination.symlink_metadata().is_ok() {
+            return Err(storage("cache object already exists"));
+        }
+        // Move the existing charge to the destination before rename, ordered
+        // with invalidation; no bytes are credited twice at publication.
         // Only the epoch check needs the shared policy lock: it is the one
         // ordering point with invalidation. Rename and directory fsync are
         // filesystem work and must never block foreground lookups or reads.
         {
-            let state = self.state();
+            let mut state = self.state();
             let current = state.epochs.get(&key.media).copied().unwrap_or(0);
             if current != epoch {
                 return Err(storage("media invalidated during cache fill"));
             }
-        }
-        if destination.symlink_metadata().is_ok() {
-            return Err(storage("cache object already exists"));
+            if let Some(charge) = state.charges.remove(&temporary) {
+                state.charges.insert(destination.clone(), charge);
+            }
+            publication.path = destination.clone();
         }
         std::fs::rename(&temporary, &destination).map_err(storage)?;
+        #[cfg(test)]
+        {
+            let hook = self.after_rename.lock().unwrap().take();
+            if let Some(hook) = hook {
+                hook();
+            }
+        }
+        publication.published = true;
         temporary_file.disarm();
         sync_directory(&directory);
         Ok(())
@@ -329,11 +398,16 @@ impl MediaCache for FilesystemCaches {
                     continue;
                 }
             };
-            let current = epoch.to_string();
             let stale = entries
                 .filter_map(|entry| entry.ok())
                 .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
-                .filter(|entry| entry.file_name().to_string_lossy() != current)
+                .filter(|entry| {
+                    entry
+                        .file_name()
+                        .to_string_lossy()
+                        .parse::<u64>()
+                        .is_ok_and(|old| old < epoch)
+                })
                 .map(|entry| entry.path())
                 .collect::<Vec<_>>();
             for directory in stale {
@@ -351,7 +425,7 @@ impl MediaCache for FilesystemCaches {
                     break;
                 }
                 match std::fs::rename(&directory, &tombstone) {
-                    Ok(()) => trash.push((index, tombstone)),
+                    Ok(()) => trash.push((index, directory, tombstone)),
                     Err(error) => warn!(
                         cache = self.caches[index].name,
                         media_id = media.id,
@@ -363,9 +437,8 @@ impl MediaCache for FilesystemCaches {
         }
         // Removal happens outside the policy lock. Accounting stays conservative
         // until the tombstone is gone, so a concurrent fill cannot overshoot.
-        for (index, tombstone) in trash {
-            let removed = super::availability::directory_size(&tombstone);
-            if let Err(error) = std::fs::remove_dir_all(&tombstone) {
+        for (index, directory, tombstone) in trash {
+            if let Err(error) = self.remove_tombstone(&tombstone) {
                 warn!(
                     cache = self.caches[index].name,
                     media_id = media.id,
@@ -375,7 +448,15 @@ impl MediaCache for FilesystemCaches {
                 continue;
             }
             let mut state = self.state();
-            state.used[index] = state.used[index].saturating_sub(removed);
+            let removed = state
+                .charges
+                .keys()
+                .filter(|path| path.starts_with(&directory))
+                .cloned()
+                .collect::<Vec<_>>();
+            for path in removed {
+                release_charge(&mut state, &path);
+            }
         }
     }
 
@@ -419,7 +500,7 @@ impl MediaCache for FilesystemCaches {
                 key: request.key.clone(),
                 epoch: current,
                 content_length: request.content_length,
-                published: false,
+                settled: false,
             }
         };
 
@@ -431,16 +512,11 @@ impl MediaCache for FilesystemCaches {
         }
 
         let result = self.write_entry(
-            reservation.index,
-            reservation.epoch,
-            &reservation.key,
+            &mut reservation,
             &request.filename,
             request.content_length,
             request.source,
         );
-        if result.is_ok() {
-            reservation.mark_published();
-        }
         drop(reservation);
         result
     }
@@ -454,25 +530,58 @@ struct FillReservation<'a> {
     key: CacheKey,
     epoch: u64,
     content_length: u64,
-    published: bool,
-}
-
-impl FillReservation<'_> {
-    fn mark_published(&mut self) {
-        self.published = true;
-    }
+    settled: bool,
 }
 
 impl Drop for FillReservation<'_> {
     fn drop(&mut self) {
         let mut state = self.caches.state();
-        state.reserved[self.index] = state.reserved[self.index].saturating_sub(self.content_length);
-        if self.published {
-            state.used[self.index] = state.used[self.index].saturating_add(self.content_length);
+        if !self.settled {
+            state.reserved[self.index] -= self.content_length;
         }
         if state.fills.get(&self.key) == Some(&self.epoch) {
             state.fills.remove(&self.key);
         }
+    }
+}
+
+// Failed publication releases only its own precredited charge, and only once
+// absence is confirmed. Files left behind by errors/unwind stay conservatively
+// charged. Successful invalidation also removes from this same ledger.
+struct PublicationCharge<'a> {
+    caches: &'a FilesystemCaches,
+    path: PathBuf,
+    temporary: PathBuf,
+    media: MediaKey,
+    epoch: u64,
+    published: bool,
+}
+
+impl Drop for PublicationCharge<'_> {
+    fn drop(&mut self) {
+        if !self.published
+            && self
+                .temporary
+                .symlink_metadata()
+                .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+            && self
+                .path
+                .symlink_metadata()
+                .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+        {
+            let mut state = self.caches.state();
+            // Once invalidated, cleanup owns settlement: the file may have
+            // moved to trash and still occupy disk even though this path is gone.
+            if state.epochs.get(&self.media).copied().unwrap_or(0) == self.epoch {
+                release_charge(&mut state, &self.path);
+            }
+        }
+    }
+}
+
+fn release_charge(state: &mut CacheState, path: &Path) {
+    if let Some((index, bytes)) = state.charges.remove(path) {
+        state.used[index] = state.used[index].saturating_sub(bytes);
     }
 }
 
@@ -690,5 +799,276 @@ mod lookup_race_tests {
             .unwrap();
         assert!(hit.is_none());
         assert!(caches.lookup(&key).unwrap().is_none());
+    }
+}
+
+#[cfg(test)]
+mod accounting_tests {
+    use super::*;
+    use std::io::{Cursor, Read};
+    use std::sync::Arc;
+
+    const SIZE: u64 = 8192;
+
+    fn setup() -> (tempfile::TempDir, Arc<FilesystemCaches>) {
+        let root = tempfile::tempdir().unwrap();
+        let media = root.path().join("media");
+        std::fs::create_dir(&media).unwrap();
+        let caches = Arc::new(
+            FilesystemCaches::new(
+                vec![FilesystemCacheSettings {
+                    name: "ssd".into(),
+                    path: root.path().join("cache"),
+                    max_bytes: SIZE * 2,
+                }],
+                &media,
+            )
+            .unwrap(),
+        );
+        (root, caches)
+    }
+
+    fn key(id: &str) -> CacheKey {
+        CacheKey::image(id, "https://example.test/cover.jpg", "process")
+    }
+
+    fn request(id: &str) -> CacheFillRequest {
+        CacheFillRequest {
+            key: key(id),
+            epoch: 0,
+            filename: "cover.jpg".into(),
+            content_type: "image/jpeg".into(),
+            content_length: SIZE,
+            source: CacheSource::Bytes(Arc::from(vec![7; SIZE as usize])),
+        }
+    }
+
+    fn complete_bytes(caches: &FilesystemCaches) -> u64 {
+        walkdir::WalkDir::new(&caches.caches[0].root)
+            .into_iter()
+            .map(Result::unwrap)
+            .filter(|entry| {
+                entry.file_type().is_file()
+                    && !entry.file_name().to_string_lossy().starts_with(".tmp-")
+            })
+            .map(|entry| entry.metadata().unwrap().len())
+            .sum()
+    }
+
+    fn assert_capacity(caches: &FilesystemCaches, expected: u64) {
+        assert_eq!(caches.used_bytes(0), expected);
+        assert_eq!(complete_bytes(caches), expected);
+        assert_eq!(caches.reserved_bytes(0), 0);
+        assert_eq!(caches.pending_fills(), 0);
+        assert!(expected <= SIZE * 2);
+    }
+
+    struct InvalidateOnEof {
+        bytes: Cursor<Vec<u8>>,
+        caches: Arc<FilesystemCaches>,
+    }
+
+    impl Read for InvalidateOnEof {
+        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+            if self.bytes.position() == SIZE {
+                // copy has written B's entire temporary file, but not published.
+                assert_eq!(self.caches.used_bytes(0), SIZE * 2);
+                assert_eq!(self.caches.reserved_bytes(0), 0);
+                self.caches.invalidate(&key("B").media);
+            }
+            self.bytes.read(buffer)
+        }
+    }
+
+    #[test]
+    fn invalidating_temporary_fill_never_debits_another_entry() {
+        let (_root, caches) = setup();
+        caches.populate(request("A")).unwrap();
+        let mut b = request("B");
+        let source_cache = caches.clone();
+        b.source = CacheSource::Open(Box::new(move || {
+            Ok(Box::new(InvalidateOnEof {
+                bytes: Cursor::new(vec![7; SIZE as usize]),
+                caches: source_cache,
+            }))
+        }));
+        assert!(caches.populate(b).is_err());
+        assert_capacity(&caches, SIZE);
+        caches.populate(request("C")).unwrap();
+        caches.populate(request("D")).unwrap();
+        assert_capacity(&caches, SIZE * 2);
+        assert!(caches.lookup(&key("A")).unwrap().is_some());
+        assert!(caches.lookup(&key("C")).unwrap().is_some());
+        assert!(caches.lookup(&key("D")).unwrap().is_none());
+    }
+
+    #[test]
+    fn growing_source_cannot_write_past_its_admitted_budget() {
+        struct GrowingReader {
+            caches: Arc<FilesystemCaches>,
+            remaining: usize,
+        }
+        impl Read for GrowingReader {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                let size = buffer.len().min(self.remaining);
+                self.remaining -= size;
+                buffer[..size].fill(7);
+                let physical: u64 = walkdir::WalkDir::new(&self.caches.caches[0].root)
+                    .into_iter()
+                    .map(Result::unwrap)
+                    .filter(|entry| entry.file_type().is_file())
+                    .map(|entry| entry.metadata().unwrap().len())
+                    .sum();
+                assert!(physical <= SIZE, "source wrote past its allocation");
+                Ok(size)
+            }
+        }
+        let (_root, caches) = setup();
+        let mut a = request("A");
+        let source_cache = caches.clone();
+        a.source = CacheSource::Open(Box::new(move || {
+            Ok(Box::new(GrowingReader {
+                caches: source_cache,
+                remaining: SIZE as usize * 4,
+            }))
+        }));
+        assert!(caches.populate(a).is_err());
+        assert_capacity(&caches, 0);
+        caches.populate(request("A")).unwrap();
+        assert_capacity(&caches, SIZE);
+    }
+
+    #[test]
+    fn retained_temporary_trash_stays_charged_after_source_unwind() {
+        struct InvalidateAndPanic {
+            bytes: Cursor<Vec<u8>>,
+            caches: Arc<FilesystemCaches>,
+        }
+        impl Read for InvalidateAndPanic {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                if self.bytes.position() == SIZE {
+                    self.caches.invalidate(&key("B").media);
+                    panic!("source unwind after temporary file moved to trash");
+                }
+                self.bytes.read(buffer)
+            }
+        }
+        let (_root, caches) = setup();
+        caches.populate(request("A")).unwrap();
+        caches
+            .fail_removal
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let source_cache = caches.clone();
+        let mut b = request("B");
+        b.source = CacheSource::Open(Box::new(move || {
+            Ok(Box::new(InvalidateAndPanic {
+                bytes: Cursor::new(vec![7; SIZE as usize]),
+                caches: source_cache,
+            }))
+        }));
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| caches.populate(b))).is_err()
+        );
+        assert_eq!(caches.used_bytes(0), SIZE * 2);
+        assert_eq!(caches.reserved_bytes(0), 0);
+        assert_eq!(caches.pending_fills(), 0);
+        assert_eq!(complete_bytes(&caches), SIZE);
+        let physical: u64 = walkdir::WalkDir::new(&caches.caches[0].root)
+            .into_iter()
+            .map(Result::unwrap)
+            .filter(|entry| entry.file_type().is_file())
+            .map(|entry| entry.metadata().unwrap().len())
+            .sum();
+        assert_eq!(physical, SIZE * 2);
+        caches.populate(request("C")).unwrap();
+        assert!(caches.lookup(&key("C")).unwrap().is_none());
+        assert!(caches.lookup(&key("A")).unwrap().is_some());
+        assert!(caches.lookup(&key("B")).unwrap().is_none());
+    }
+
+    #[test]
+    fn failed_tombstone_removal_remains_charged_through_unwind_until_restart() {
+        let (root, caches) = setup();
+        caches.populate(request("A")).unwrap();
+        caches
+            .fail_removal
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let weak = Arc::downgrade(&caches);
+        *caches.after_rename.lock().unwrap() = Some(Box::new(move || {
+            weak.upgrade().unwrap().invalidate(&key("B").media);
+            panic!("unwind with published bytes retained in trash");
+        }));
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+            || caches.populate(request("B"))
+        ))
+        .is_err());
+        assert_capacity(&caches, SIZE * 2);
+        assert!(std::fs::read_dir(caches.caches[0].root.join(TRASH))
+            .unwrap()
+            .next()
+            .is_some());
+        caches.populate(request("C")).unwrap();
+        assert!(caches.lookup(&key("C")).unwrap().is_none());
+        assert_capacity(&caches, SIZE * 2);
+        drop(caches);
+        let restarted = FilesystemCaches::new(
+            vec![FilesystemCacheSettings {
+                name: "ssd".into(),
+                path: root.path().join("cache"),
+                max_bytes: SIZE * 2,
+            }],
+            &root.path().join("media"),
+        )
+        .unwrap();
+        // Both image entries and retained trash are discarded on restart.
+        assert_capacity(&restarted, 0);
+        restarted.populate(request("C")).unwrap();
+        assert_capacity(&restarted, SIZE);
+    }
+
+    #[test]
+    fn invalidation_after_rename_settles_exact_charge_even_on_unwind_or_cleanup_failure() {
+        for fail_cleanup in [false, true] {
+            for unwind in [false, true] {
+                let (_root, caches) = setup();
+                caches.populate(request("A")).unwrap();
+                if fail_cleanup {
+                    std::fs::write(caches.caches[0].root.join(TRASH), []).unwrap();
+                }
+                let weak = Arc::downgrade(&caches);
+                *caches.after_rename.lock().unwrap() = Some(Box::new(move || {
+                    let caches = weak.upgrade().unwrap();
+                    caches.invalidate(&key("B").media);
+                    if unwind {
+                        panic!("unwind after rename and invalidation");
+                    }
+                }));
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    caches.populate(request("B"))
+                }));
+                assert_eq!(result.is_err(), unwind);
+                if !unwind {
+                    result.unwrap().unwrap();
+                }
+                let expected = if fail_cleanup { SIZE * 2 } else { SIZE };
+                assert_capacity(&caches, expected);
+                assert!(caches.lookup(&key("B")).unwrap().is_none());
+                caches.populate(request("C")).unwrap();
+                caches.populate(request("D")).unwrap();
+                assert_capacity(&caches, SIZE * 2);
+                assert_eq!(caches.lookup(&key("C")).unwrap().is_some(), !fail_cleanup);
+                assert!(caches.lookup(&key("D")).unwrap().is_none());
+                // A later cleanup releases the retained exact B charge once.
+                if fail_cleanup {
+                    std::fs::remove_file(caches.caches[0].root.join(TRASH)).unwrap();
+                    caches.invalidate(&key("B").media);
+                    assert_capacity(&caches, SIZE);
+                    caches.invalidate(&key("B").media);
+                    assert_capacity(&caches, SIZE);
+                    caches.populate(request("D")).unwrap();
+                    assert_capacity(&caches, SIZE * 2);
+                }
+            }
+        }
     }
 }
