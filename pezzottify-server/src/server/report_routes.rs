@@ -158,6 +158,25 @@ async fn update(
     }
     output(run(db, move |s| s.update(&id, session.user_id, input)).await)
 }
+async fn notes(
+    Extract(session): Extract<Session>,
+    State(db): State<DatabaseHandles>,
+    Path(id): Path<String>,
+    Query(query): Query<ReportFilter>,
+) -> Response {
+    if let Err(r) = permission(&session, true) {
+        return r.into_response();
+    }
+    let resource = id.clone();
+    let result = run(db, move |s| {
+        s.notes(&id, query.before, query.limit.unwrap_or(25))
+    })
+    .await;
+    if matches!(result, Err(ReportError::Storage)) {
+        tracing::error!(report_id = %resource, operation = "report_notes", "Report notes database operation failed");
+    }
+    output(result)
+}
 async fn events(
     Extract(session): Extract<Session>,
     State(db): State<DatabaseHandles>,
@@ -290,6 +309,7 @@ pub fn routes(state: ServerState) -> Router {
         .route("/v1/admin/reports/stats", get(stats))
         .route("/v1/admin/reports/{id}", get(admin_get).patch(update))
         .route("/v1/admin/reports/{id}/events", get(events))
+        .route("/v1/admin/reports/{id}/notes", get(notes))
         .route(
             "/v1/admin/reports/{id}/attachments/{attachment}",
             get(admin_attachment).delete(admin_delete_attachment),

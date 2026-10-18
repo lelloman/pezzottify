@@ -328,6 +328,47 @@ impl ReportRepository for SqliteServerStore {
         Ok(result)
     }
 
+    fn notes(&self, id: &str, before: Option<i64>, limit: usize) -> ReportResult<EventPage> {
+        if !(1..=100).contains(&limit) {
+            return Err(ReportError::Invalid("Invalid pagination".into()));
+        }
+        let conn = self.conn.lock().map_err(|_| ReportError::Storage)?;
+        get(&conn, id, None)?;
+        let mut q = conn.prepare(
+            "SELECT seq,id,actor_id,kind,data,created_at FROM report_events
+            WHERE report_id=?1 AND kind='note' AND (?2 IS NULL OR seq<?2)
+            ORDER BY seq DESC LIMIT ?3",
+        )?;
+        let mut items = q
+            .query_map(params![id, before, (limit + 1) as i64], |r| {
+                let data: String = r.get(4)?;
+                let data = serde_json::from_str(&data).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        4,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })?;
+                Ok(ReportEvent {
+                    seq: r.get(0)?,
+                    id: r.get(1)?,
+                    actor_id: r.get::<_, i64>(2)? as usize,
+                    kind: r.get(3)?,
+                    data,
+                    created_at: r.get(5)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        let has_more = items.len() > limit;
+        items.truncate(limit);
+        let next_cursor = if has_more {
+            items.last().map(|e| e.seq)
+        } else {
+            None
+        };
+        Ok(EventPage { items, next_cursor })
+    }
+
     fn events(&self, id: &str, before: Option<i64>, limit: usize) -> ReportResult<EventPage> {
         if !(1..=100).contains(&limit) {
             return Err(ReportError::Invalid("Invalid pagination".into()));

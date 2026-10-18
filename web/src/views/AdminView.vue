@@ -109,8 +109,8 @@ const allSections = [
   },
   {
     id: "bug-reports",
-    label: "Bug Reports",
-    permission: "ServerAdmin",
+    label: "Feedback Reports",
+    permissions: ["TriageReports", "ViewReportDiagnostics", "ManageReportIntegrations"],
     component: BugReports,
     route: "/admin/bug-reports",
   },
@@ -132,7 +132,7 @@ const allSections = [
 
 const availableSections = computed(() => {
   return allSections.filter((section) =>
-    userStore.hasPermission(section.permission),
+    section.permissions ? section.permissions.some((p) => userStore.hasPermission(p)) : userStore.hasPermission(section.permission),
   );
 });
 
@@ -147,20 +147,20 @@ onMounted(async () => {
   isLoading.value = false;
 
   // If we're at /admin with no section, redirect to first available
-  if (!activeSection.value && availableSections.value.length > 0) {
+  if (!availableSections.value.some((s) => s.id === activeSection.value) && availableSections.value.length > 0) {
     router.replace(availableSections.value[0].route);
   }
 });
 
 // Watch for permission changes
 watch(availableSections, (sections) => {
-  if (!activeSection.value && sections.length > 0) {
+  if (!sections.some((s) => s.id === activeSection.value) && sections.length > 0) {
     router.replace(sections[0].route);
   }
 });
 
 const activeSectionComponent = computed(() => {
-  const section = allSections.find((s) => s.id === activeSection.value);
+  const section = availableSections.value.find((s) => s.id === activeSection.value);
   return section?.component || null;
 });
 </script>

@@ -103,7 +103,7 @@ const router = createRouter({
         {
           path: "",
           name: "admin",
-          redirect: "/admin/users",
+          // AdminView selects the first section permitted for this account.
         },
         {
           path: "users",

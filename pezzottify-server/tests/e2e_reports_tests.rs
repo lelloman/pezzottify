@@ -493,3 +493,113 @@ async fn automation_permission_is_separate_and_control_changes_are_audited() {
     assert!(kinds.contains(&"deliveries_listed"));
     assert!(!events.to_string().contains(secret));
 }
+
+#[tokio::test]
+async fn triage_notes_are_paginated_and_separate_from_sensitive_audit() {
+    let server = TestServer::spawn().await;
+    let user = TestClient::authenticated(server.base_url.clone()).await;
+    let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
+    let base = &server.base_url;
+    let receipt: Value = user.client.post(format!("{base}/v1/reports"))
+        .json(&json!({"client_request_id":uuid::Uuid::new_v4().to_string(),"kind":"feature","category":"ui","description":"notes test","client_type":"web"}))
+        .send().await.unwrap().json().await.unwrap();
+    let id = receipt["id"].as_str().unwrap();
+    let url = format!("{base}/v1/admin/reports/{id}");
+    assert_eq!(
+        user.client
+            .get(format!("{url}/notes"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        admin
+            .client
+            .post(format!("{base}/v1/admin/users/testuser/permissions"))
+            .json(&json!({"permission":"TriageReports"}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
+    for version in 1..=2 {
+        assert_eq!(user.client.patch(&url).json(&json!({"expected_version":version,"note":format!("<script>note {version}</script>")}))
+            .send().await.unwrap().status(), StatusCode::OK);
+    }
+    assert_eq!(
+        user.client
+            .get(format!("{url}/events"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    let first = user
+        .client
+        .get(format!("{url}/notes?limit=1"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(first.status(), StatusCode::OK);
+    assert_eq!(first.headers()["cache-control"], "no-store");
+    let first: Value = first.json().await.unwrap();
+    assert_eq!(first["items"][0]["kind"], "note");
+    assert_eq!(first["items"][0]["data"]["text"], "<script>note 2</script>");
+    let cursor = first["next_cursor"].as_i64().unwrap();
+    let second: Value = user
+        .client
+        .get(format!("{url}/notes?limit=1&before={cursor}"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        second["items"][0]["data"]["text"],
+        "<script>note 1</script>"
+    );
+    assert!(second["next_cursor"].is_null());
+    assert_eq!(
+        user.client
+            .get(format!("{url}/notes?limit=101"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        user.client
+            .get(format!("{base}/v1/admin/reports/missing/notes"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    let owner: Value = user
+        .client
+        .get(format!("{base}/v1/reports/{id}"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(!owner.to_string().contains("<script>note"));
+    assert_eq!(
+        user.client
+            .patch(&url)
+            .json(&json!({"expected_version":1,"note":"stale"}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+}

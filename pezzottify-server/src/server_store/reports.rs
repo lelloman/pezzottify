@@ -331,6 +331,7 @@ pub trait ReportRepository: Send + Sync {
     fn list(&self, owner: Option<usize>, filter: ReportFilter) -> ReportResult<ReportPage>;
     fn get(&self, id: &str, owner: Option<usize>) -> ReportResult<Report>;
     fn update(&self, id: &str, actor: usize, input: ReportUpdate) -> ReportResult<Report>;
+    fn notes(&self, id: &str, before: Option<i64>, limit: usize) -> ReportResult<EventPage>;
     fn events(&self, id: &str, before: Option<i64>, limit: usize) -> ReportResult<EventPage>;
     fn attachment(
         &self,

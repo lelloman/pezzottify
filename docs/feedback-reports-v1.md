@@ -61,6 +61,7 @@ Statuses: new, investigating, planned, resolved, closed; admins may reopen repor
 | DELETE /v1/reports/{id}/attachments/{attachment_id} | Owner deletion of own sensitive attachment |
 | GET /v1/admin/reports | Filterable administrative summary listing |
 | GET/PATCH /v1/admin/reports/{id} | Inspect/update status, internal note or duplicate link |
+| GET /v1/admin/reports/{id}/notes | Triage-only notes, cursor-paginated; excludes diagnostic/audit events |
 | GET /v1/admin/reports/{id}/events | Cursor-paginated administrative audit trail |
 | GET/DELETE /v1/admin/reports/{id}/attachments/{attachment_id} | Audited diagnostic access/deletion |
 | GET/PUT /v1/admin/reports/settings | Effective limits/retention, version-checked updates |
@@ -327,3 +328,19 @@ account. Cross-tab clear/account notifications invalidate local previews too.
 Browser persistence is best effort. Storage failures are visible and nonfatal to
 chat, and an evicted recording is treated as absent with recording off. No automatic
 upload, attachment forwarding, or deployment is part of the web flow.
+
+## Web administration
+
+The existing Feedback Reports section uses the versioned APIs and accepts any of
+TriageReports, ViewReportDiagnostics or ManageReportIntegrations for navigation.
+Each capability has independent controls and requests. Diagnostic-only operators
+can inspect/delete an attachment by known report/attachment IDs and inspect audit
+resources without permission to browse report metadata. Notes have a separate
+triage-only paginated endpoint; owner detail/list responses never include notes.
+All transcript fields, including tool arguments/results, are inert plain text.
+
+Integration controls list existing destinations and confirm enable/disable and
+single-attempt retry. Creating destinations/obtaining signing keys remains an API
+administration operation; this UI never creates a live destination or stores keys.
+Limits/retention updates require the complete current version and confirmation.
+Conflicts require an explicit refresh and review rather than automatic replay.

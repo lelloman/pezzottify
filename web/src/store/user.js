@@ -3,7 +3,7 @@ import { ref, computed } from "vue";
 import { useRemoteStore } from "./remote";
 
 // Admin permissions that grant access to admin panel
-const ADMIN_PERMISSIONS = ["ManagePermissions", "ViewAnalytics", "ServerAdmin"];
+const ADMIN_PERMISSIONS = ["ManagePermissions", "ViewAnalytics", "ServerAdmin", "TriageReports", "ViewReportDiagnostics", "ManageReportIntegrations"];
 
 export const useUserStore = defineStore("user", () => {
   const remoteStore = useRemoteStore();
