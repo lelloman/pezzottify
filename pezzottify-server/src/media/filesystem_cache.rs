@@ -500,6 +500,56 @@ impl FilesystemCaches {
 }
 
 impl FilesystemCaches {
+    /// A missing disposable file can be reconciled even when LRU is disabled.
+    /// Recency acts as an allocation incarnation: a completed refill changes it,
+    /// and its fill marker protects the interval before publication/touch.
+    fn reconcile_missing(&self, index: usize, key: &CacheKey, epoch: u64) {
+        self.reconcile_missing_with_probe(index, key, epoch, |path| path.symlink_metadata());
+    }
+
+    fn reconcile_missing_with_probe(
+        &self,
+        index: usize,
+        key: &CacheKey,
+        epoch: u64,
+        mut probe: impl FnMut(&Path) -> std::io::Result<std::fs::Metadata>,
+    ) {
+        let directory = self.object_epoch_dir(index, &key.media, epoch);
+        let hash = key_hash(key);
+        let candidates = self
+            .state()
+            .recent
+            .iter()
+            .filter(|(path, _)| {
+                path.parent() == Some(directory.as_path())
+                    && path
+                        .file_name()
+                        .is_some_and(|name| entry_matches(&name.to_string_lossy(), &hash))
+            })
+            .map(|(path, recent)| (path.clone(), recent.clone()))
+            .collect::<Vec<_>>();
+        for (path, incarnation) in candidates {
+            match probe(&path) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Ok(_) => continue,
+                Err(error) => {
+                    warn!(cache = self.caches[index].name, media_id = key.media.id, %error,
+                        "Failed to reconcile missing media cache allocation");
+                    continue;
+                }
+            }
+            let mut state = self.state();
+            if state.epochs.get(&key.media).copied().unwrap_or(0) == epoch
+                && !state.fills.contains_key(key)
+                && !state.evicting.contains(&key.media)
+                && state.recent.get(&path) == Some(&incarnation)
+            {
+                release_charge(&mut state, &path);
+                event(&self.caches[index].name, "missing_reclaimed");
+            }
+        }
+    }
+
     fn lookup_with_open(
         &self,
         key: &CacheKey,
@@ -521,7 +571,8 @@ impl FilesystemCaches {
                         self.touch(&path, &key.media);
                         return Ok(Some(entry));
                     }
-                    Err(AdapterError::Missing | AdapterError::Stale) => {}
+                    Err(AdapterError::Missing) => self.reconcile_missing(index, key, epoch),
+                    Err(AdapterError::Stale) => {}
                     Err(error) => {
                         warn!(cache = self.caches[index].name, media_id = key.media.id, %error,
                             "Invalid or unreadable media cache entry; invalidating");
@@ -529,7 +580,7 @@ impl FilesystemCaches {
                         last_error = Some(error);
                     }
                 },
-                Ok(None) => {}
+                Ok(None) => self.reconcile_missing(index, key, epoch),
                 Err(error) => last_error = Some(error),
             }
         }
@@ -1669,6 +1720,57 @@ mod eviction_tests {
         assert_eq!(caches.used_bytes(0), 0);
         fill(&caches, "a");
         assert!(caches.lookup(&key("a")).unwrap().is_some());
+    }
+
+    #[test]
+    fn missing_probe_never_releases_a_concurrent_refills_charge() {
+        let (_root, caches) = setup();
+        fill(&caches, "a");
+        fill(&caches, "b");
+        std::fs::remove_file(caches.entry_path(0, &key("a")).unwrap()).unwrap();
+        caches.reconcile_missing_with_probe(0, &key("a"), 0, |path| {
+            let missing = path.symlink_metadata();
+            assert!(missing.is_err());
+            // A different worker reconciles and finishes a refill after this
+            // worker's missing-file observation, before it settles the ledger.
+            fill(&caches, "a");
+            missing
+        });
+        assert!(caches.lookup(&key("a")).unwrap().is_some());
+        assert!(caches.lookup(&key("b")).unwrap().is_some());
+        assert_eq!(caches.used_bytes(0), 16);
+        assert_eq!(
+            caches
+                .state()
+                .charges
+                .values()
+                .map(|(_, bytes)| bytes)
+                .sum::<u64>(),
+            16
+        );
+    }
+
+    #[test]
+    fn cache_loss_reclaims_capacity_with_eviction_disabled() {
+        let (_root, mut caches) = setup();
+        Arc::get_mut(&mut caches).unwrap().caches[0].lru = false;
+        fill(&caches, "a");
+        fill(&caches, "b");
+        std::fs::remove_file(caches.entry_path(0, &key("a")).unwrap()).unwrap();
+        assert!(caches.lookup(&key("a")).unwrap().is_none());
+        assert_eq!(caches.used_bytes(0), 8);
+        fill(&caches, "a");
+        assert!(caches.lookup(&key("a")).unwrap().is_some());
+        assert_eq!(caches.used_bytes(0), 16);
+        assert_eq!(
+            caches
+                .state()
+                .charges
+                .values()
+                .map(|(_, bytes)| bytes)
+                .sum::<u64>(),
+            16
+        );
     }
 
     #[test]

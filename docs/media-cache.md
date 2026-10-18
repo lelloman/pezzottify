@@ -205,7 +205,11 @@ waits for a reader. A failed unlink retains the allocation and can be retried; a
 concurrent invalidation owns settlement of its old epoch. In particular, files
 moved to trash after failed cleanup remain charged: their absent former paths are
 not evidence that disk space was freed. Trash is reclaimed on restart. A fill
-skips when locked readers or retained trash leave insufficient capacity.
+skips when locked readers or retained trash leave insufficient capacity. Lookup
+reconciles missing complete files even when LRU is disabled, restoring capacity
+after cache loss. It checks the allocation's recency incarnation and excludes
+active fills, eviction claims and changed invalidation epochs, so a missing-file
+probe cannot release a newer refill or bytes retained in trash.
 
 Complete filenames include a SHA-256 digest of the cache bytes, computed after the
 temporary copy is flushed. Lookup verifies that digest from the open cache
@@ -225,7 +229,7 @@ The existing Prometheus endpoint exposes:
 | Metric | Labels / interpretation |
 | --- | --- |
 | `pezzottify_media_cache_events_total` | `cache`, `outcome`: audio/image `hit`, `miss` and `fallback_read` outcomes use `cache="all"`; fallback counts attempts to use the existing retrieval path, including failed reads |
-| Same counter | `fill_completed`, `fill_failed`, `eviction`, `eviction_busy`, `eviction_failed` have the configured cache name; failure includes unwinding fills |
+| Same counter | `fill_completed`, `fill_failed`, `eviction`, `eviction_busy`, `eviction_failed`, `missing_reclaimed` have the configured cache name; failure includes unwinding fills |
 | Same counter | `fill_skipped_empty`, `fill_skipped_present`, `fill_skipped_invalidated`, `fill_skipped_duplicate`, `fill_skipped_capacity`, `fill_skipped_admission`, `fill_skipped_runtime`, `fill_skipped_worker` use `cache="all"`; worker timeout can precede a later completion because the bounded worker retains its admission |
 | `pezzottify_media_cache_bytes` | `cache`, `state`: `allocated` includes conservatively charged temporary/trash files, `reserved` covers admitted fills before allocation, `budget` is the configured maximum |
 
