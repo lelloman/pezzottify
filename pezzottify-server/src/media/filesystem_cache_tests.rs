@@ -1152,6 +1152,28 @@ async fn representative_audio_seek_artwork_workload() {
         audio
     );
     let cold_audio = cold.elapsed();
+    // A separate cache-disabled manager keeps every baseline seek cold even
+    // when the background fill triggered above finishes during the batch.
+    let uncached = MediaManager::new(
+        fixture.manager.catalog.clone(),
+        DbExecutor::new(Default::default()),
+    );
+    let seeking = Instant::now();
+    for index in 0..16 {
+        let (_, opened) = uncached.lookup_audio("track1").await.unwrap().unwrap();
+        assert_eq!(
+            collect(
+                opened
+                    .unwrap()
+                    .range_stream(index * 4096, 4096)
+                    .await
+                    .unwrap()
+            )
+            .await,
+            vec![42; 4096]
+        );
+    }
+    let cold_seeks = seeking.elapsed();
     let cold = Instant::now();
     assert_eq!(
         fixture.manager.read_image("album").await.unwrap().bytes,
@@ -1216,7 +1238,7 @@ async fn representative_audio_seek_artwork_workload() {
     }
     let warm_image = warm.elapsed();
     std::fs::write(fixture.root.path().join(".cache-warm-end"), []).unwrap();
-    eprintln!("workload: 4MiB audio cold={cold_audio:?} warm={warm_audio:?}; 16 seeks={seek_time:?}; artwork {}B cold={cold_image:?} warm16={:?}; warm root rejected; use scripts/verify-media-cache.sh to audit original-storage syscalls", JPEG.len(), warm_image);
+    eprintln!("workload: 4MiB audio cold={cold_audio:?} warm={warm_audio:?}; 16 seeks cold={cold_seeks:?} warm={seek_time:?}; artwork {}B cold={cold_image:?} warm16={:?}; warm root rejected; use scripts/verify-media-cache.sh to audit original-storage syscalls", JPEG.len(), warm_image);
 }
 
 #[tokio::test]

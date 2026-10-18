@@ -243,7 +243,8 @@ labels never include media identities or paths.
 
 Run `cargo test --features fast --lib representative_audio_seek_artwork_workload
 -- --nocapture` in `pezzottify-server/`. It reports cold/warm elapsed time for a
-4 MiB audio payload, sixteen 4 KiB seeks and fixture JPEG artwork. Fills finish
+4 MiB audio payload, sixteen 4 KiB seeks (both cache-disabled baseline and warm)
+and fixture JPEG artwork. Fills finish
 before the warm phase; the entire original media root is replaced by a regular
 file, rejecting original opens, stat/existence checks and image pointer resolution.
 The test also calls audio metadata before streaming the warm descriptor.
@@ -257,9 +258,7 @@ Markers exclude fixture preparation and teardown. This is a reproducible local
 workload rather than a physical-HDD performance benchmark; recorded times depend
 on the host, filesystem, tracing overhead and build profile.
 
-Example session measurement (unoptimized test build, with syscall tracing): 4 MiB
-audio cold 49 ms / warm 195 ms, sixteen seeks 2.31 s total; 224-byte JPEG cold
-7.1 ms / sixteen warm reads 37 ms total. The audit observed 603 original-media
-syscalls cold and **zero warm**. These timings demonstrate the checksum overhead
-on this local filesystem; they do not establish a latency improvement on a real
-HDD. Run the same workload on the target storage to measure that benefit.
+The PR and ticket handoff record the measured cold/warm times and original-media
+call counts for the reviewed workload. Full-object checksum verification can
+dominate warm latency in an unoptimized build; zero original-media calls establishes
+HDD avoidance, while target-storage benchmarking is needed to establish a speedup.
