@@ -427,8 +427,10 @@ impl FilesystemCaches {
 
         let checksum = file_checksum(&mut File::open(&temporary).map_err(storage)?)?;
         let destination = directory.join(format!("{}.{checksum}.{extension}", key_hash(key)));
-        if destination.symlink_metadata().is_ok() {
-            return Err(storage("cache object already exists"));
+        match destination.symlink_metadata() {
+            Ok(_) => return Err(storage("cache object already exists")),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(storage(error)),
         }
         // Move the existing charge to the destination before rename, ordered
         // with invalidation; no bytes are credited twice at publication.
@@ -442,6 +444,10 @@ impl FilesystemCaches {
                 return Err(storage("media invalidated during cache fill"));
             }
             if let Some(charge) = state.charges.remove(&temporary) {
+                // The destination was proven absent, the epoch is unchanged,
+                // and our fill marker excludes another publisher/evictor.
+                // Settle any older lost-file charge before replacing its slot.
+                release_charge(&mut state, &destination);
                 state.charges.insert(destination.clone(), charge);
             }
             publication.path = destination.clone();
