@@ -350,6 +350,9 @@ android.defaultConfig {
     buildConfigField("long", "ASSISTANT_OLLAMA_TIMEOUT_SECONDS", "${assistantOllamaTimeoutSeconds}L")
 }
 
+// One contract fixture is shared with the server and web tests.
+android.sourceSets.getByName("test").resources.srcDir(rootProject.file("../docs/fixtures"))
+
 dependencies {
     implementation(project(":paravoid-api"))
     "paravoidAndroidImplementation"(project(":paravoid-runtime"))

@@ -603,3 +603,175 @@ async fn triage_notes_are_paginated_and_separate_from_sensitive_audit() {
         StatusCode::CONFLICT
     );
 }
+
+/// The same UTF-8 envelope is consumed by Android recovery and the web recorder.
+/// Exercise the deployed HTTP contract, rather than only its serde types.
+#[tokio::test]
+async fn shared_client_snapshot_contract_exact_bytes_and_manual_replay() {
+    let server = TestServer::spawn().await;
+    let user = TestClient::authenticated(server.base_url.clone()).await;
+    let url = format!("{}/v1/reports", server.base_url);
+    let fixture = include_str!("../../docs/fixtures/assistant-diagnostics-v1.json").trim();
+    for client in ["android", "web"] {
+        let request = json!({
+            "client_request_id": uuid::Uuid::new_v4().to_string(),
+            "kind": "feature", "category": "assistant", "description": "Unicode 🌍",
+            "client_type": client,
+            "attachments": [{"kind": "assistant", "content": fixture, "consent": true}]
+        });
+        let first = user.client.post(&url).json(&request).send().await.unwrap();
+        assert_eq!(first.status(), StatusCode::CREATED);
+        let receipt: Value = first.json().await.unwrap();
+        // Independent in-flight manual retries must resolve to the same receipt.
+        let (a, b) = tokio::join!(
+            user.client.post(&url).json(&request).send(),
+            user.client.post(&url).json(&request).send()
+        );
+        for response in [a.unwrap(), b.unwrap()] {
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(response.json::<Value>().await.unwrap()["id"], receipt["id"]);
+        }
+        let id = receipt["id"].as_str().unwrap();
+        let detail: Value = user
+            .client
+            .get(format!("{url}/{id}"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(detail["client_type"], client);
+        let attachment = &detail["attachments"][0];
+        let attachment_id = attachment["id"].as_str().unwrap();
+        let response = user
+            .client
+            .get(format!("{url}/{id}/attachments/{attachment_id}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.headers()["cache-control"], "no-store");
+        let uploaded: Value = response.json().await.unwrap();
+        assert_eq!(uploaded["content"], fixture); // byte-identical to the preview
+        let mut changed = request.clone();
+        changed["description"] = json!("edited after preview");
+        assert_eq!(
+            user.client
+                .post(&url)
+                .json(&changed)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::CONFLICT
+        );
+        let mut unconsented = request.clone();
+        unconsented["client_request_id"] = json!(uuid::Uuid::new_v4().to_string());
+        unconsented["attachments"][0]["consent"] = json!(false);
+        assert_eq!(
+            user.client
+                .post(&url)
+                .json(&unconsented)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+    let list: Value = user
+        .client
+        .get(&url)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(list["items"].as_array().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn diagnostic_utf8_boundary_and_invalid_schema_leave_submission_recoverable() {
+    let server = TestServer::spawn().await;
+    let user = TestClient::authenticated(server.base_url.clone()).await;
+    let url = format!("{}/v1/reports", server.base_url);
+    let mut envelope: Value = serde_json::from_str(include_str!(
+        "../../docs/fixtures/assistant-diagnostics-v1.json"
+    ))
+    .unwrap();
+    envelope["turns"][0]["events"][0]["content"] = json!("");
+    let overhead = serde_json::to_string(&envelope).unwrap().len();
+    let remaining = 2_097_152 - overhead;
+    envelope["turns"][0]["events"][0]["content"] =
+        json!("🌍".repeat(remaining / 4) + &"x".repeat(remaining % 4));
+    let exact = serde_json::to_string(&envelope).unwrap();
+    assert_eq!(exact.len(), 2_097_152);
+    let mut request = json!({
+        "client_request_id": uuid::Uuid::new_v4().to_string(), "kind": "bug",
+        "category": "assistant", "description": "boundary", "client_type": "web",
+        "attachments": [{"kind": "assistant", "content": exact, "consent": true}]
+    });
+    // A rejected attempt must not reserve the idempotency key or charge quotas.
+    request["attachments"][0]["content"] = json!(exact.clone() + " ");
+    let oversized = user.client.post(&url).json(&request).send().await.unwrap();
+    assert_eq!(oversized.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(oversized.headers()["cache-control"], "no-store");
+    let mut unsupported = envelope.clone();
+    unsupported["schema_version"] = json!(2);
+    request["attachments"][0]["content"] = json!(serde_json::to_string(&unsupported).unwrap());
+    assert_eq!(
+        user.client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+    // The pinned Android serializer omits default-valued schema_version.
+    // Keep the server fail-closed; qualify the client fix with FeedbackContractTest.
+    let mut missing_version = envelope.clone();
+    missing_version
+        .as_object_mut()
+        .unwrap()
+        .remove("schema_version");
+    request["attachments"][0]["content"] = json!(serde_json::to_string(&missing_version).unwrap());
+    assert_eq!(
+        user.client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+    request["attachments"][0]["content"] = json!(exact);
+    let accepted = user.client.post(&url).json(&request).send().await.unwrap();
+    assert_eq!(accepted.status(), StatusCode::CREATED);
+    let receipt: Value = accepted.json().await.unwrap();
+    let id = receipt["id"].as_str().unwrap();
+    let detail: Value = user
+        .client
+        .get(format!("{url}/{id}"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(detail["attachments"][0]["size_bytes"], 2_097_152);
+    let attachment = detail["attachments"][0]["id"].as_str().unwrap();
+    let uploaded: Value = user
+        .client
+        .get(format!("{url}/{id}/attachments/{attachment}"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(uploaded["content"], request["attachments"][0]["content"]);
+}

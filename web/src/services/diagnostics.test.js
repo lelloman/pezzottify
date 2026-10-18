@@ -190,3 +190,20 @@ for (const [name, invalidate] of [
     });
   }
 }
+
+test("shared contract snapshot survives checkpoint recovery without changing preview bytes", async () => {
+  const disk = storage();
+  await disk.save({ owner: "server/A", enabled: true, envelope: fixture });
+  const recorder = new DiagnosticRecorder(disk, now);
+  await recorder.account("server/A");
+  const preview = recorder.snapshot("turn-example");
+  assert.deepEqual(JSON.parse(preview), fixture);
+  assert.equal(bytes(preview), bytes(JSON.stringify(fixture)));
+  const recovered = new DiagnosticRecorder(disk, now);
+  await recovered.account("server/A");
+  assert.equal(recovered.snapshot("turn-example"), preview);
+  await recovered.account("server/B");
+  assert.throws(() => recovered.snapshot("turn-example"), /disabled/);
+  // The already previewed string stays fixed; it cannot silently become B's data.
+  assert.deepEqual(JSON.parse(preview), fixture);
+});

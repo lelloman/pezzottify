@@ -208,10 +208,13 @@ at its original server; it is never retargeted to a newly selected account.
 
 The form shows submitted report IDs and a refreshable, paginated owner status list.
 English and Italian UI explain local deletion versus already submitted reports,
-size/quota/capacity errors, and privacy limitations. Debug builds can use the isolated
-library checkout via `-PassistantCheckout=/tmp/simple-android-assistant-feedback`.
-The immutable library revision must be published before ordinary JitPack-based
-builds can resolve it; publication/deployment is a separate authorized step.
+size/quota/capacity errors, and privacy limitations. Builds use the source revision
+in `simple-android-assistant.rev`, provisioned by
+`scripts/checkout-simple-android-assistant.sh`, with an explicit
+`-PassistantCheckout=/path/to/checkout` override for development. Composite dependency
+substitution avoids requiring publication of the historical JitPack pin.
+See [qualification and rollout gates](feedback-qualification.md) for test coverage,
+remaining Android/device checks and the separately authorized rollout sequence.
 
 ## Controlled automation v1 implementation
 
