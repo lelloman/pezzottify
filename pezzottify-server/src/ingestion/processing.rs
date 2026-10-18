@@ -421,7 +421,7 @@ impl IngestionManager {
         );
 
         // Verify using duration fingerprint comparison
-        let uploaded_durations = self.extract_ordered_durations(&job_id).await?;
+        let uploaded_durations = self.download_request_durations(job, album_id).await?;
         let catalog_durations = self
             .catalog
             .get_album_track_durations(album_id)
@@ -856,5 +856,4 @@ impl IngestionManager {
 
         Ok(())
     }
-
 }

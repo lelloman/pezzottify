@@ -463,6 +463,14 @@ impl Worker {
         mut self,
         shutdown: simple_server::lifecycle::Shutdown,
     ) -> std::io::Result<()> {
+        match crate::power::acquire(false).await {
+            Ok(_activity) => {
+                if let Err(error) = self.ingestion.resume_verified_worker_downloads().await {
+                    tracing::error!(%error, "Could not resume verified worker downloads");
+                }
+            }
+            Err(error) => tracing::warn!(%error, "Download review recovery admission deferred"),
+        }
         let mut interval = tokio::time::interval(Duration::from_secs(5));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {

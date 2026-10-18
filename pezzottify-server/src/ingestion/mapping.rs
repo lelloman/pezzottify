@@ -120,6 +120,22 @@ impl IngestionManager {
             std::collections::HashSet::new();
 
         for file in &mut files {
+            // The worker already knows the source track identity. Do not guess
+            // from duration: alternate takes can have identical lengths.
+            if is_worker_download(&job) {
+                let id = Path::new(&file.filename)
+                    .file_stem()
+                    .and_then(|id| id.to_str());
+                if let Some(track) = tracks.iter().find(|track| Some(track.id.as_str()) == id) {
+                    if claimed_track_ids.insert(track.id.clone()) {
+                        file.matched_track_id = Some(track.id.clone());
+                        file.match_confidence = Some(1.0);
+                        matched += 1;
+                        self.store.update_file(file)?;
+                        continue;
+                    }
+                }
+            }
             // Try to match by disc + track number first
             let disc_num = file.tag_disc_num.unwrap_or(1);
             if let Some(track_num) = file.tag_track_num {
@@ -308,5 +324,4 @@ impl IngestionManager {
 
         Ok(())
     }
-
 }

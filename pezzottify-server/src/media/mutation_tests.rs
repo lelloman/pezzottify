@@ -3,6 +3,118 @@ use super::tests::Fixture;
 use super::*;
 use std::io::Read;
 
+#[tokio::test]
+async fn worker_download_review_recovers_by_id_and_keeps_real_duration_mismatches() {
+    use crate::download_manager::{
+        DownloadContentType, DownloadManager, DownloadQueueStore, QueueItem, QueuePriority,
+        RequestSource, SqliteDownloadQueueStore,
+    };
+    use crate::ingestion::*;
+    for mismatch in [false, true] {
+        let fixture = ready_fixture();
+        let registry = crate::backup::DbRegistry::new();
+        let connection =
+            rusqlite::Connection::open(fixture.root.path().join("catalog.db")).unwrap();
+        connection.execute_batch("UPDATE tracks SET id='zzz', duration_ms=100000;
+            INSERT INTO tracks(id,name,album_rowid,track_number,popularity,disc_number,duration_ms,explicit,track_available)
+            VALUES ('mmm','Second',1,2,0,1,200000,0,0), ('aaa','Third',1,1,0,2,300000,0,0);").unwrap();
+        let queue = Arc::new(
+            SqliteDownloadQueueStore::new(fixture.root.path().join("queue.db"), &registry).unwrap(),
+        );
+        let mut request = QueueItem::new(
+            "request".into(),
+            DownloadContentType::Album,
+            "album".into(),
+            QueuePriority::User,
+            RequestSource::User,
+            8,
+        );
+        request.requested_by_user_id = Some("1".into());
+        queue.enqueue(request).unwrap();
+        let downloads = Arc::new(DownloadManager::new(
+            queue.clone(),
+            fixture.manager.catalog.clone(),
+            fixture.root.path().to_owned(),
+            Default::default(),
+        ));
+        let store = Arc::new(
+            SqliteIngestionStore::open(&fixture.root.path().join("ingestion.db"), &registry)
+                .unwrap(),
+        );
+        let mut job = IngestionJob::new("job", "1", "Album", 30, 3)
+            .with_context(
+                IngestionContextType::DownloadRequest,
+                Some("request".into()),
+            )
+            .with_upload_info(Some("job".into()), UploadType::Album);
+        job.status = IngestionJobStatus::AwaitingReview;
+        job.matched_album_id = Some("album".into());
+        job.match_source = Some(IngestionMatchSource::DownloadRequest);
+        store.create_job(&job).unwrap();
+        store
+            .create_review_item(
+                "job",
+                "Downloaded content for 'Album' has low fingerprint match",
+                "[]",
+            )
+            .unwrap();
+        for (id, duration) in [("aaa", 300000), ("mmm", 200000), ("zzz", 100000)] {
+            let path = fixture.root.path().join(format!("{id}.ogg"));
+            std::fs::write(&path, id.as_bytes()).unwrap();
+            let mut file =
+                IngestionFile::new(id, "job", format!("{id}.ogg"), 3, path.to_string_lossy());
+            file.duration_ms = Some(duration + if mismatch && id == "mmm" { 30000 } else { 0 });
+            file.conversion_reason = Some(ConversionReason::NoConversionNeeded);
+            store.create_file(&file).unwrap();
+        }
+        let ingestion = IngestionManager::new(
+            store.clone(),
+            fixture.manager.catalog.clone(),
+            Arc::new(crate::search::NoopSearchVault),
+            IngestionManagerConfig {
+                media_dir: fixture.root.path().to_owned(),
+                temp_dir: fixture.root.path().join("uploads"),
+                ..Default::default()
+            },
+            Some(downloads),
+        )
+        .with_media(fixture.manager.clone());
+        ingestion.resume_verified_worker_downloads().await.unwrap();
+        if mismatch {
+            assert_eq!(
+                store.get_job("job").unwrap().unwrap().status,
+                IngestionJobStatus::AwaitingReview
+            );
+            assert!(store
+                .get_review_item("job")
+                .unwrap()
+                .unwrap()
+                .resolved_at
+                .is_none());
+        } else {
+            assert_eq!(
+                store.get_job("job").unwrap().unwrap().status,
+                IngestionJobStatus::Completed
+            );
+            for id in ["aaa", "mmm", "zzz"] {
+                let file = store.get_file(id).unwrap().unwrap();
+                assert_eq!(file.matched_track_id.as_deref(), Some(id));
+                assert!(file.converted);
+                let track = fixture.manager.catalog.get_track(id).unwrap().unwrap();
+                assert_eq!(
+                    std::fs::read(fixture.root.path().join(track.audio_uri.unwrap())).unwrap(),
+                    id.as_bytes()
+                );
+            }
+            assert_eq!(
+                queue.get_item("request").unwrap().unwrap().status,
+                crate::download_manager::QueueStatus::Completed
+            );
+            ingestion.resume_verified_worker_downloads().await.unwrap();
+        }
+    }
+}
+
 fn ready_fixture() -> Fixture {
     let fixture = Fixture::new();
     fixture

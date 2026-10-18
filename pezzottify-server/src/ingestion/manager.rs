@@ -238,6 +238,7 @@ pub struct IngestionManager {
 include!("setup.rs");
 include!("upload.rs");
 include!("fingerprint_workflow.rs");
+include!("download_identity.rs");
 include!("analysis.rs");
 include!("processing.rs");
 include!("mapping.rs");
