@@ -1,11 +1,12 @@
 //! Read interception contract for optional media caches.
 //!
-//! See docs/media-cache.md. A cache is supplied by server configuration; this module
-//! only defines identity and validity. Population policy belongs to a later story.
+//! See docs/media-cache.md. Identity and validity live here; the filesystem
+//! implementation and its population policy live in `filesystem_cache.rs`.
 
 use super::vault::{AdapterResult, MediaKey, MediaKind};
 #[cfg(test)]
 use std::collections::HashMap;
+use std::sync::Arc;
 #[cfg(test)]
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
@@ -87,6 +88,35 @@ pub struct CacheEntry {
     pub content_type: String,
 }
 
+/// Bytes for a cache fill, either already validated in memory or reopened from
+/// authoritative storage only after the fill is admitted.
+pub enum CacheSource {
+    Bytes(Arc<[u8]>),
+    Open(Box<dyn FnOnce() -> std::io::Result<Box<dyn std::io::Read + Send>> + Send>),
+}
+
+impl CacheSource {
+    pub fn open(self) -> std::io::Result<Box<dyn std::io::Read + Send>> {
+        match self {
+            Self::Bytes(bytes) => Ok(Box::new(std::io::Cursor::new(bytes))),
+            Self::Open(open) => open(),
+        }
+    }
+}
+
+/// One best-effort population attempt. `content_length` is the length observed
+/// on the authoritative read that produced this request.
+pub struct CacheFillRequest {
+    pub key: CacheKey,
+    /// Invalidation epoch observed before the authoritative read. A fill whose
+    /// media was invalidated after this point refuses to publish.
+    pub epoch: u64,
+    pub filename: String,
+    pub content_type: String,
+    pub content_length: u64,
+    pub source: CacheSource,
+}
+
 /// Optional read-through cache supplied by server configuration.
 ///
 /// Implementations must:
@@ -102,6 +132,19 @@ pub trait MediaCache: Send + Sync {
     /// Drop every entry for this media. Called before an authoritative
     /// publication, replacement or deletion becomes visible.
     fn invalidate(&self, media: &MediaKey);
+
+    /// Current invalidation epoch for a media identity, captured before an
+    /// authoritative read so a fill cannot publish bytes read before a mutation.
+    fn invalidation_epoch(&self, _media: &MediaKey) -> u64 {
+        0
+    }
+
+    /// Best-effort population on a background filesystem worker. Implementations
+    /// skip a fill that is already in flight or has no room; a failure never
+    /// affects the read that produced it.
+    fn populate(&self, _request: CacheFillRequest) -> AdapterResult<()> {
+        Ok(())
+    }
 }
 
 #[cfg(test)]

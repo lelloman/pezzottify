@@ -1,5 +1,5 @@
 mod logging;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::{Duration as ChronoDuration, Utc};
 use clap::Parser;
 use std::sync::Arc;
@@ -321,6 +321,11 @@ async fn run() -> Result<()> {
     }
 
     let media = job_context.media.clone();
+    if let Some(media_cache) = &app_config.media_cache {
+        media
+            .configure_filesystem_caches(&media_cache.caches)
+            .context("invalid media cache configuration")?;
+    }
     let (mut scheduler, scheduler_handle) = create_scheduler(
         server_store.clone(),
         hook_receiver,

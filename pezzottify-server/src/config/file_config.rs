@@ -34,6 +34,7 @@ pub struct FileConfig {
     pub search: Option<SearchConfig>,
     pub oidc: Option<OidcConfig>,
     pub catalog_store: Option<CatalogStoreConfig>,
+    pub media_cache: Option<MediaCacheConfig>,
     pub agent: Option<AgentConfig>,
     pub ingestion: Option<IngestionConfig>,
     pub related_artists: Option<RelatedArtistsConfig>,
@@ -72,6 +73,23 @@ pub struct ProxyModeConfig {
 #[serde(default)]
 pub struct CatalogStoreConfig {
     pub read_pool_size: Option<usize>,
+}
+
+/// Extra disposable media copies on faster storage, in lookup/population order.
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct MediaCacheConfig {
+    pub caches: Vec<MediaCacheDirectoryConfig>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct MediaCacheDirectoryConfig {
+    /// Stable operator-visible name used in logs and diagnostics.
+    pub name: String,
+    /// Directory for disposable copies. Must not overlap media storage.
+    pub path: String,
+    /// Maximum bytes of cached objects in this directory.
+    pub max_bytes: u64,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]

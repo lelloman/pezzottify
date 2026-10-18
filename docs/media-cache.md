@@ -110,3 +110,44 @@ bounded filesystem pools; it does not hold catalog transactions or the media mut
 lock while serving bytes. No cache state is cached in a way that a panic or a failed
 fill can poison later reads: the manager consults the cache on each lookup and falls
 back on any error.
+
+## Filesystem caches (#12)
+
+Operators configure one or more ordered cache directories. Order is lookup and
+population preference; each directory has its own byte budget.
+
+```toml
+[[media_cache.caches]]
+name = "ssd"
+path = "/var/cache/pezzottify/media"
+max_bytes = 53687091200
+
+[[media_cache.caches]]
+name = "nvme"
+path = "/mnt/nvme/pezzottify-media"
+max_bytes = 1073741824
+```
+
+Configuration is read at startup. A deployment without a `[[media_cache.caches]]`
+entry behaves exactly as before. Cache directory names must be unique, budgets must
+be positive, and directories may not overlap media storage or each other (compared
+after canonicalization). Startup fails on an invalid layout rather than risking a
+cache that could delete authoritative files.
+
+Each cache keeps complete objects under `<path>/objects/<kind>/<id-hash>/`; lookup
+opens only that directory. A fill creates a temporary file, copies and flushes it,
+and renames it into place, so a partial read or interrupted write is never visible.
+The byte budget is enforced by tracking persisted usage at startup plus reservations
+for in-flight fills. Fills skip when the object is already present, when another fill
+for the same key is in flight, when no cache has room, or when the object is larger
+than every budget. Full caches therefore fall back to authoritative storage instead
+of evicting; eviction and richer diagnostics belong to #13.
+
+Population runs on a dedicated bounded filesystem pool, after the response has
+started. A slow or failing cache write therefore never gates streaming, and a failed
+fill leaves no entry behind. Invalidation increments a per-media epoch and removes
+the media directory before the new authoritative state is visible; a fill that
+started under an older epoch refuses to publish. Audio objects survive restart
+because their keys embed the durable managed revision. Image objects are
+process-scoped, so startup removes them and images start cold. Legacy and unmanaged
+audio locators continue to bypass the cache entirely.

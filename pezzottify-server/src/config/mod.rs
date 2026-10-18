@@ -6,8 +6,8 @@ pub use file_config::{
     AudioEmbeddingsConfig, AuditLogCleanupJobConfig, BackgroundJobsConfig,
     CatalogAvailabilityStatsJobConfig, CatalogStoreConfig, DevicePruningJobConfig,
     DownloadManagerConfig, FileConfig, IngestionCleanupJobConfig, IngestionConfig,
-    IntervalJobConfig, MetadataEnrichmentJobConfig, OidcConfig, PopularContentJobConfig,
-    PushConfig, RelatedArtistsConfig, SearchConfig,
+    IntervalJobConfig, MediaCacheConfig, MediaCacheDirectoryConfig, MetadataEnrichmentJobConfig,
+    OidcConfig, PopularContentJobConfig, PushConfig, RelatedArtistsConfig, SearchConfig,
     StreamingSearchConfig as StreamingSearchFileConfig,
 };
 
@@ -121,6 +121,7 @@ pub struct AppConfig {
     pub background_jobs: BackgroundJobsSettings,
     pub search: SearchSettings,
     pub catalog_store: CatalogStoreSettings,
+    pub media_cache: Option<MediaCacheSettings>,
     pub agent: AgentSettings,
     pub ingestion: IngestionSettings,
     pub related_artists: Option<RelatedArtistsSettings>,
@@ -701,6 +702,35 @@ impl AppConfig {
             _ => None,
         };
 
+        let media_cache = match file.media_cache {
+            Some(config) if !config.caches.is_empty() => {
+                let mut seen = std::collections::HashSet::new();
+                let mut caches = Vec::with_capacity(config.caches.len());
+                for cache in config.caches {
+                    let name = cache.name.trim().to_owned();
+                    if name.is_empty() {
+                        bail!("media_cache.caches[].name must not be empty");
+                    }
+                    if !seen.insert(name.clone()) {
+                        bail!("media_cache cache name '{}' is duplicated", name);
+                    }
+                    if cache.max_bytes == 0 {
+                        bail!("media_cache '{}' max_bytes must be greater than zero", name);
+                    }
+                    if cache.path.trim().is_empty() {
+                        bail!("media_cache '{}' path must not be empty", name);
+                    }
+                    caches.push(MediaCacheDirectorySettings {
+                        name,
+                        path: PathBuf::from(cache.path),
+                        max_bytes: cache.max_bytes,
+                    });
+                }
+                Some(MediaCacheSettings { caches })
+            }
+            _ => None,
+        };
+
         Ok(Self {
             db_dir,
             media_path,
@@ -723,6 +753,7 @@ impl AppConfig {
             background_jobs,
             search,
             catalog_store,
+            media_cache,
             agent,
             ingestion,
             related_artists,
@@ -995,6 +1026,19 @@ impl Default for CatalogStoreSettings {
     fn default() -> Self {
         Self { read_pool_size: 4 }
     }
+}
+
+/// Ordered filesystem caches for published audio and images.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MediaCacheSettings {
+    pub caches: Vec<MediaCacheDirectorySettings>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MediaCacheDirectorySettings {
+    pub name: String,
+    pub path: PathBuf,
+    pub max_bytes: u64,
 }
 
 /// Settings for the agent LLM backend.
@@ -1955,6 +1999,56 @@ mod tests {
             config.download_queue_db_path(),
             temp_dir.path().join("download_queue.db")
         );
+    }
+
+    #[test]
+    fn test_resolve_media_caches_in_order() {
+        let temp_dir = make_temp_db_dir();
+        let cli = CliConfig {
+            db_dir: Some(temp_dir.path().to_path_buf()),
+            ..Default::default()
+        };
+        let file: FileConfig = toml::from_str(
+            r#"
+[[media_cache.caches]]
+name = "ssd"
+path = "/var/cache/pezzottify/media"
+max_bytes = 1024
+
+[[media_cache.caches]]
+name = "nvme"
+path = "/mnt/nvme/media"
+max_bytes = 2048
+"#,
+        )
+        .unwrap();
+
+        let config = AppConfig::resolve(&cli, Some(file)).unwrap();
+        let caches = config.media_cache.unwrap().caches;
+        assert_eq!(caches.len(), 2);
+        assert_eq!(caches[0].name, "ssd");
+        assert_eq!(caches[0].path, PathBuf::from("/var/cache/pezzottify/media"));
+        assert_eq!(caches[0].max_bytes, 1024);
+        assert_eq!(caches[1].name, "nvme");
+        assert_eq!(caches[1].max_bytes, 2048);
+    }
+
+    #[test]
+    fn test_resolve_media_caches_rejects_invalid_entries() {
+        let temp_dir = make_temp_db_dir();
+        let cli = CliConfig {
+            db_dir: Some(temp_dir.path().to_path_buf()),
+            ..Default::default()
+        };
+        for body in [
+            "[[media_cache.caches]]\nname = \"\"\npath = \"/tmp/a\"\nmax_bytes = 1\n",
+            "[[media_cache.caches]]\nname = \"a\"\npath = \"/tmp/a\"\nmax_bytes = 0\n",
+            "[[media_cache.caches]]\nname = \"a\"\npath = \"\"\nmax_bytes = 1\n",
+            "[[media_cache.caches]]\nname = \"a\"\npath = \"/tmp/a\"\nmax_bytes = 1\n[[media_cache.caches]]\nname = \"a\"\npath = \"/tmp/b\"\nmax_bytes = 1\n",
+        ] {
+            let file: FileConfig = toml::from_str(body).unwrap();
+            assert!(AppConfig::resolve(&cli, Some(file)).is_err(), "{body}");
+        }
     }
 }
 
