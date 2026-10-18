@@ -330,8 +330,10 @@ impl FilesystemCaches {
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(true),
                     Err(error) => return Err(error),
                 };
-                if file.try_lock().is_err() {
-                    return Ok(false);
+                match file.try_lock() {
+                    Ok(()) => {}
+                    Err(std::fs::TryLockError::WouldBlock) => return Ok(false),
+                    Err(std::fs::TryLockError::Error(error)) => return Err(error),
                 }
                 #[cfg(test)]
                 if self.fail_removal.load(std::sync::atomic::Ordering::SeqCst) {
@@ -1559,6 +1561,27 @@ mod eviction_tests {
             .map(|entry| entry.metadata().unwrap().len())
             .sum();
         assert_eq!(physical, caches.used_bytes(0));
+    }
+
+    #[test]
+    fn stale_fill_does_not_evict_valid_entries() {
+        let (_root, caches) = setup();
+        fill(&caches, "a");
+        fill(&caches, "b");
+        caches.invalidate(&key("stale").media);
+        caches
+            .populate(CacheFillRequest {
+                key: key("stale"),
+                epoch: 0,
+                filename: "image.jpg".into(),
+                content_type: "image/jpeg".into(),
+                content_length: 8,
+                source: CacheSource::Open(Box::new(|| panic!("stale fill must not open source"))),
+            })
+            .unwrap();
+        assert!(caches.lookup(&key("a")).unwrap().is_some());
+        assert!(caches.lookup(&key("b")).unwrap().is_some());
+        assert_eq!(caches.used_bytes(0), 16);
     }
 
     #[test]

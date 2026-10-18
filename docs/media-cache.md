@@ -252,3 +252,10 @@ phase. Thus ignored original-media existence/stat probes also fail verification.
 Markers exclude fixture preparation and teardown. This is a reproducible local
 workload rather than a physical-HDD performance benchmark; recorded times depend
 on the host, filesystem, tracing overhead and build profile.
+
+Example session measurement (unoptimized test build, with syscall tracing): 4 MiB
+audio cold 49 ms / warm 195 ms, sixteen seeks 2.31 s total; 224-byte JPEG cold
+7.1 ms / sixteen warm reads 37 ms total. The audit observed 603 original-media
+syscalls cold and **zero warm**. These timings demonstrate the checksum overhead
+on this local filesystem; they do not establish a latency improvement on a real
+HDD. Run the same workload on the target storage to measure that benefit.
