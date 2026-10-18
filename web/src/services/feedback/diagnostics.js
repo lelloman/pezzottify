@@ -224,7 +224,7 @@ export class DiagnosticRecorder {
     this.envelope = { schema_version: 1, captured_at: this.now(), turns: [] };
     return this.enqueue(generation, async () => {
       await this.storage.clear();
-      if (this.enabled && this.owner)
+      if (generation === this.generation && this.enabled && this.owner)
         await this.storage.save({
           owner: this.owner,
           enabled: true,
@@ -233,7 +233,12 @@ export class DiagnosticRecorder {
     });
   }
   async enable(value) {
-    await this.clear(!value);
+    const owner = this.owner;
+    const clearing = this.clear(!value);
+    const generation = this.generation;
+    await clearing;
+    // Consent belongs only to the account and lifecycle that initiated it.
+    if (generation !== this.generation || owner !== this.owner) return;
     this.enabled = !!value && !!this.owner;
     await this.persist();
   }

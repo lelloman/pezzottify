@@ -144,3 +144,49 @@ test("credential fields inside serialized tool-result JSON are redacted", () => 
   assert.doesNotMatch(result, /private/);
   assert.match(result, /music/);
 });
+
+for (const [name, invalidate] of [
+  ["account switch", (r) => r.account("server/B")],
+  ["logout", (r) => r.account(null)],
+  ["clear", (r) => r.clear()],
+  ["disable", (r) => r.enable(false)],
+  ["cross-tab clear", (r) => r.forget()],
+  ["cross-tab account switch", (r) => r.forget(true)],
+]) {
+  for (const inFlight of [false, true]) {
+    test(`pending consent cannot survive ${name} (clear ${inFlight ? "in flight" : "queued"})`, async () => {
+      const disk = storage();
+      const recorder = new DiagnosticRecorder(disk, now);
+      await recorder.account("server/A");
+      const saved = [];
+      const save = disk.save;
+      disk.save = async (value) => {
+        saved.push(structuredClone(value));
+        await save(value);
+      };
+      let release, started;
+      const entered = new Promise((resolve) => {
+        started = resolve;
+      });
+      const held = new Promise((resolve) => {
+        release = resolve;
+      });
+      const clear = disk.clear;
+      disk.clear = async () => {
+        started();
+        await held;
+        await clear();
+      };
+      const enabling = recorder.enable(true);
+      if (inFlight) await entered;
+      const invalidating = invalidate(recorder);
+      release();
+      await Promise.all([enabling, invalidating]);
+      await recorder.writes;
+      assert.equal(recorder.enabled, false);
+      assert.equal(disk.value, undefined);
+      assert.deepEqual(saved, []);
+      assert.throws(() => recorder.snapshot("t"), /disabled/);
+    });
+  }
+}
