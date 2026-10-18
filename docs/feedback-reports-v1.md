@@ -210,3 +210,79 @@ size/quota/capacity errors, and privacy limitations. Debug builds can use the is
 library checkout via `-PassistantCheckout=/tmp/simple-android-assistant-feedback`.
 The immutable library revision must be published before ordinary JitPack-based
 builds can resolve it; publication/deployment is a separate authorized step.
+
+## Controlled automation v1 implementation
+
+Server schema v9 adds `report_integrations` and `report_deliveries`; upgrading
+preserves existing reports and creates **no destinations**. Migration has no
+backfill or historical replay. Back up `server.db` before upgrading. Signing keys
+are stored in that database and its backups, which require the same protection
+as existing diagnostic data. There is no deployment or external destination setup
+in this change.
+
+The integrations collection returns an array of `{id,url,enabled,version}`.
+`POST` accepts only `{url}` and returns 201 with `{integration,secret}`: `secret`
+is a randomly generated 32-byte key encoded as standard base64, returned once.
+Decode that base64 before verifying HMAC. `PATCH /integrations/{id}` accepts
+`{expected_version,enabled}`. URLs and keys are immutable; creating another
+disabled integration is required for a new receiver. All ten slots include disabled
+integrations. No deletion/rotation endpoint is provided in v1.
+
+Only `submitted` (including legacy submission) and `updated` events enqueue
+outbound work. Their audit event UUID is the outbound `event_id`; every destination
+has its own stable delivery UUID. Each JSON body contains `schema_version:1`,
+`event_id`, `event_type`, `created_at` (Unix seconds), and
+`report:{id,kind,category,status,version}`. The exact serialized body is persisted
+with the audit event and report mutation in one transaction, so retries retain
+identical bytes. Reads, notes, attachment access/deletion and administrative audit
+events never enqueue work. Existing immutable events may still describe reports
+that were subsequently changed or deleted through legacy administration.
+
+The worker starts with report admission, claims at most one delivery at a time,
+and performs network work outside database transactions/executor slots. A claim
+consumes an attempt and grants a 60-second lease with a unique token; expired
+leases recover after crash and late completions cannot overwrite another claim.
+One DNS-plus-HTTP attempt has a ten-second deadline. DNS is resolved on every
+attempt, every result must be globally routable, and at most 64 results are
+accepted. The resulting addresses are pinned into a fresh HTTPS client. Redirects
+are terminal for that attempt and are never followed; environment proxies are
+disabled. Non-global/special-purpose IPv4 and IPv6, mapped IPv4, transition ranges
+and mixed public/private DNS answers fail closed. This intentionally rejects some
+special-purpose ranges conservatively. Only body bytes up to 4 KiB are accepted;
+remote bodies and error text are never saved or logged.
+
+All HTTP statuses are recorded as `http_<status>`; only 2xx succeeds. Other outcomes
+are bounded reason codes (`destination_rejected`, `transport_error`,
+`response_too_large`, `deadline`, `lease_expired`). Logs carry delivery/event IDs
+and the same outcome. Retries use 30, 60, 120 and 240-second backoff for five total
+automatic attempts. A 429 `Retry-After` delta or HTTP date can increase that delay,
+capped at one hour. After failure, each explicit retry grants **one** additional
+attempt; at most five manual retries are permitted (ten lifetime claims). Crash
+recovery also consumes this budget. Disabling an integration prevents future
+claims, including retries; an in-flight request cannot be recalled. Re-enabling
+resumes pending work.
+
+`GET /deliveries` accepts `before`, `limit` (1–100, default 25), `state` and
+`integration_id`, and returns `{items,next_cursor}` in descending sequence order.
+Items expose stable IDs, current state, attempt/manual-retry counts, next scheduled
+Unix timestamp, version and last outcome, without payloads or keys. This is current
+state inspection, not an unbounded per-attempt history. `POST /deliveries/{id}/retry`
+accepts `{expected_version}`, requires a failed delivery with remaining manual
+budget, and returns JSON null. Stale versions/invalid states/exhausted budgets
+return 409. Report stats include pending/leased/succeeded/failed delivery counts.
+
+The hard bounds are ten integrations, 10,000 total retained deliveries (including
+terminal records), and 256 KiB per outbound event. Terminal delivery records older
+than 30 days are pruned when new eligible work is enqueued; pending and leased work
+is never evicted. These limits bound queue storage even if delivery fails. At
+capacity an eligible report mutation fails with the existing structured 503 and
+rolls back completely, including its audit event; exact idempotent submission
+replay still succeeds. Owner diagnostic deletion never depends on outbox capacity.
+All integration/delivery reads and control mutations require
+`ManageReportIntegrations` and are audited under
+`/v1/admin/reports/administration/events` (inspection of that audit trail separately
+requires `ViewReportDiagnostics`). Control-plane audit capacity fails closed.
+Signing keys, URLs, remote bodies and report text are absent from delivery logs
+and administrative audit data. The existing report body admission limits,
+frequency controls, sensitive-body logging exclusions and no-store responses also
+apply to these endpoints.

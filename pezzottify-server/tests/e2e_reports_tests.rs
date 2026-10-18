@@ -325,3 +325,171 @@ async fn reports_owner_api_and_legacy_submission() {
         StatusCode::OK
     );
 }
+
+#[tokio::test]
+async fn automation_permission_is_separate_and_control_changes_are_audited() {
+    let server = TestServer::spawn().await;
+    let user = TestClient::authenticated(server.base_url.clone()).await;
+    let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
+    let base = &server.base_url;
+    let integrations = format!("{base}/v1/admin/reports/integrations");
+    let deliveries = format!("{base}/v1/admin/reports/deliveries");
+    assert_eq!(
+        reqwest::get(&integrations).await.unwrap().status(),
+        StatusCode::UNAUTHORIZED
+    );
+    for url in [&integrations, &deliveries] {
+        assert_eq!(
+            user.client.get(url).send().await.unwrap().status(),
+            StatusCode::FORBIDDEN
+        );
+    }
+    assert_eq!(
+        user.client
+            .post(&integrations)
+            .json(&json!({"url":"https://example.invalid/"}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    for permission in ["TriageReports", "ViewReportDiagnostics"] {
+        assert_eq!(
+            admin
+                .client
+                .post(format!("{base}/v1/admin/users/testuser/permissions"))
+                .json(&json!({"permission":permission}))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::CREATED
+        );
+        assert_eq!(
+            user.client
+                .get(&integrations)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+    }
+    assert_eq!(
+        admin
+            .client
+            .post(format!("{base}/v1/admin/users/testuser/permissions"))
+            .json(&json!({"permission":"ManageReportIntegrations"}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
+    assert_eq!(
+        user.client
+            .post(&integrations)
+            .json(&json!({"url":"http://example.invalid/"}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+    let response = user
+        .client
+        .post(&integrations)
+        .json(&json!({"url":"https://example.invalid/hook"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(response.headers()["cache-control"], "no-store");
+    let created: Value = response.json().await.unwrap();
+    assert_eq!(created["integration"]["enabled"], false);
+    let id = created["integration"]["id"].as_str().unwrap();
+    let secret = created["secret"].as_str().unwrap();
+    assert!(!secret.is_empty());
+    let listed = user
+        .client
+        .get(&integrations)
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    assert!(!listed.contains("secret"));
+    assert!(!listed.contains(secret));
+    let url = format!("{integrations}/{id}");
+    // Keep test destinations disabled: no external request is configured or dispatched.
+    assert_eq!(
+        user.client
+            .patch(&url)
+            .json(&json!({"expected_version":1,"enabled":false}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        user.client
+            .patch(&url)
+            .json(&json!({"expected_version":1,"enabled":true}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        user.client
+            .get(format!("{deliveries}?limit=101"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+    let page: Value = user
+        .client
+        .get(&deliveries)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(page["items"], json!([]));
+    assert_eq!(
+        user.client
+            .post(format!("{deliveries}/unknown/retry"))
+            .json(&json!({"expected_version":1}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    let events: Value = user
+        .client
+        .get(format!("{base}/v1/admin/reports/administration/events"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let kinds: Vec<_> = events["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["kind"].as_str().unwrap())
+        .collect();
+    assert!(kinds.contains(&"integration_created"));
+    assert!(kinds.contains(&"integration_disabled"));
+    assert!(kinds.contains(&"deliveries_listed"));
+    assert!(!events.to_string().contains(secret));
+}

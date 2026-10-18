@@ -70,7 +70,7 @@ async fn run<T: Send + 'static>(
         .await
         .map_err(|_| ReportError::Storage)?
 }
-fn output<T: Serialize>(result: ReportResult<T>) -> Response {
+pub(super) fn output<T: Serialize>(result: ReportResult<T>) -> Response {
     match result {
         Ok(v) => Json(v).into_response(),
         Err(e) => e.into_response(),
@@ -262,15 +262,20 @@ async fn stats(
     if let Err(r) = permission(&session, true) {
         return r.into_response();
     }
-    match run(db, |s| s.stats()).await {
+    match run(db.clone(), |s| s.stats()).await {
         Ok(s) => {
-            Json(serde_json::json!({"storage":s,"admission":admission.stats()})).into_response()
+            let deliveries = super::report_automation::stats(db).await;
+            match deliveries {
+                Ok(deliveries) => Json(serde_json::json!({"storage":s,"admission":admission.stats(),"deliveries":deliveries})).into_response(),
+                Err(e) => e.into_response(),
+            }
         }
         Err(e) => e.into_response(),
     }
 }
 pub fn routes(state: ServerState) -> Router {
     Router::new()
+        .merge(super::report_automation::routes())
         .route("/v1/reports", post(submit).get(owner_list))
         .route("/v1/reports/{id}", get(owner_get))
         .route(

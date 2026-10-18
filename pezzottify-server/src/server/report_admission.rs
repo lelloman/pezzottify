@@ -52,6 +52,7 @@ impl Drop for Slot {
 }
 impl Admission {
     pub fn new(server: ServerState) -> Arc<Self> {
+        super::report_automation::start(&server);
         let state = Arc::new(Self {
             server,
             counters: Mutex::new(Counters::default()),

@@ -47,8 +47,11 @@ pub(super) fn event(
     data: serde_json::Value,
 ) -> ReportResult<()> {
     super::report_limits::event_capacity(conn, id, data.to_string().len())?;
+    let event_id = uuid::Uuid::new_v4().to_string();
+    let timestamp = now();
     conn.execute("INSERT INTO report_events(id,report_id,actor_id,kind,data,created_at) VALUES (?1,?2,?3,?4,?5,?6)",
-        params![uuid::Uuid::new_v4().to_string(),id,actor as i64,kind,data.to_string(),now()])?;
+        params![event_id,id,actor as i64,kind,data.to_string(),timestamp])?;
+    super::report_automation::enqueue(conn, id, &event_id, kind, timestamp)?;
     Ok(())
 }
 

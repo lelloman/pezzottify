@@ -238,6 +238,9 @@ impl SqliteServerStore {
 }
 
 impl ServerStore for SqliteServerStore {
+    fn report_automation(&self) -> Option<&dyn super::report_automation::AutomationRepository> {
+        Some(self)
+    }
     fn reports(&self) -> Option<&dyn super::reports::ReportRepository> {
         Some(self)
     }

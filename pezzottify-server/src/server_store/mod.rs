@@ -1,4 +1,5 @@
 mod models;
+pub mod report_automation;
 mod report_limits;
 mod report_repository;
 mod report_schema;
@@ -19,6 +20,9 @@ pub use sqlite_server_store::SqliteServerStore;
 use anyhow::Result;
 
 pub trait ServerStore: Send + Sync {
+    fn report_automation(&self) -> Option<&dyn report_automation::AutomationRepository> {
+        None
+    }
     fn reports(&self) -> Option<&dyn reports::ReportRepository> {
         None
     }

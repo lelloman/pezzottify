@@ -456,6 +456,27 @@ pub const SERVER_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
         ],
         migration: Some(super::report_schema::migrate),
     },
+    VersionedSchema {
+        version: 9,
+        tables: &[
+            JOB_RUNS_TABLE_V1,
+            JOB_SCHEDULES_TABLE_V1,
+            SERVER_STATE_TABLE_V2,
+            JOB_AUDIT_LOG_TABLE_V3,
+            BUG_REPORTS_TABLE_V4,
+            CATALOG_EVENTS_TABLE_V5,
+            WHATSNEW_PENDING_ALBUMS_TABLE_V6,
+            WHATSNEW_BATCHES_TABLE_V6,
+            WHATSNEW_BATCH_ALBUMS_TABLE_V6,
+            PROXY_MATERIALIZATIONS_TABLE_V7,
+            super::report_schema::REPORT_METADATA,
+            super::report_schema::REPORT_ATTACHMENTS,
+            super::report_schema::REPORT_EVENTS,
+            super::report_automation::INTEGRATIONS,
+            super::report_automation::DELIVERIES,
+        ],
+        migration: Some(super::report_automation::migrate),
+    },
 ];
 
 #[cfg(test)]

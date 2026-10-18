@@ -2453,6 +2453,7 @@ dependencies = [
  "ctrlc",
  "ece",
  "futures",
+ "hmac",
  "http 1.2.0",
  "indicatif",
  "infer",
