@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 use tracing::warn;
 
 const OBJECTS: &str = "objects";
@@ -142,12 +142,31 @@ impl FilesystemCaches {
             .collect()
     }
 
+    fn state(&self) -> MutexGuard<'_, CacheState> {
+        self.state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Directory holding every generation of one media identity. Invalidation
+    /// removes these subdirectories, but only after bumping the epoch so stale
+    /// entries are unreachable even when cleanup fails.
     fn object_dir(&self, index: usize, media: &MediaKey) -> PathBuf {
         self.caches[index]
             .root
             .join(OBJECTS)
             .join(kind_name(&media.kind))
             .join(id_hash(&media.id))
+    }
+
+    /// Entries are stored under their invalidation epoch. A failed cleanup can
+    /// leave old bytes on disk, but lookup only ever opens the current epoch.
+    fn object_epoch_dir(&self, index: usize, media: &MediaKey, epoch: u64) -> PathBuf {
+        self.object_dir(index, media).join(epoch.to_string())
+    }
+
+    fn current_epoch(&self, media: &MediaKey) -> u64 {
+        self.state().epochs.get(media).copied().unwrap_or(0)
     }
 
     fn select_target(&self, state: &CacheState, content_length: u64) -> Option<usize> {
@@ -168,67 +187,69 @@ impl FilesystemCaches {
         content_length: u64,
         source: CacheSource,
     ) -> AdapterResult<()> {
-        let directory = self.object_dir(index, &key.media);
+        let directory = self.object_epoch_dir(index, &key.media, epoch);
         std::fs::create_dir_all(&directory).map_err(storage)?;
         let temporary = directory.join(format!(".tmp-{}", uuid::Uuid::new_v4()));
+        let mut temporary_file = TemporaryFile::new(temporary.clone());
         let extension = extension_for(filename);
         let destination = directory.join(format!("{}.{}", key_hash(key), extension));
 
-        let result = (|| -> AdapterResult<()> {
-            let mut reader = source.open().map_err(storage)?;
-            let mut file = OpenOptions::new()
-                .create_new(true)
-                .write(true)
-                .open(&temporary)
-                .map_err(storage)?;
-            let copied = std::io::copy(&mut reader, &mut file).map_err(storage)?;
-            if copied != content_length {
-                return Err(storage("source length changed during cache fill"));
-            }
-            file.flush().map_err(storage)?;
-            file.sync_all().map_err(storage)?;
-            drop(file);
+        let mut reader = source.open().map_err(storage)?;
+        let mut file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary)
+            .map_err(storage)?;
+        let copied = std::io::copy(&mut reader, &mut file).map_err(storage)?;
+        if copied != content_length {
+            return Err(storage("source length changed during cache fill"));
+        }
+        file.flush().map_err(storage)?;
+        file.sync_all().map_err(storage)?;
+        drop(file);
 
-            // Publish under the policy lock so invalidation cannot interleave
-            // between the epoch check and the rename.
-            let state = self.state.lock().unwrap();
+        // Only the epoch check needs the shared policy lock: it is the one
+        // ordering point with invalidation. Rename and directory fsync are
+        // filesystem work and must never block foreground lookups or reads.
+        {
+            let state = self.state();
             let current = state.epochs.get(&key.media).copied().unwrap_or(0);
             if current != epoch {
                 return Err(storage("media invalidated during cache fill"));
             }
-            if destination.symlink_metadata().is_ok() {
-                let _ = std::fs::remove_file(&temporary);
-                return Err(storage("cache object already exists"));
-            }
-            std::fs::rename(&temporary, &destination).map_err(storage)?;
-            sync_directory(&directory);
-            Ok(())
-        })();
-
-        if result.is_err() {
-            let _ = std::fs::remove_file(&temporary);
         }
-        result
+        if destination.symlink_metadata().is_ok() {
+            return Err(storage("cache object already exists"));
+        }
+        std::fs::rename(&temporary, &destination).map_err(storage)?;
+        temporary_file.disarm();
+        sync_directory(&directory);
+        Ok(())
     }
 
     #[cfg(test)]
     pub fn used_bytes(&self, index: usize) -> u64 {
-        self.state.lock().unwrap().used[index]
+        self.state().used[index]
     }
 
     #[cfg(test)]
     pub fn fills_started(&self) -> u64 {
-        self.state.lock().unwrap().fills_started
+        self.state().fills_started
     }
 
     #[cfg(test)]
     pub fn pending_fills(&self) -> usize {
-        self.state.lock().unwrap().fills.len()
+        self.state().fills.len()
+    }
+
+    #[cfg(test)]
+    pub fn reserved_bytes(&self, index: usize) -> u64 {
+        self.state().reserved[index]
     }
 
     #[cfg(test)]
     pub fn entry_path(&self, index: usize, key: &CacheKey) -> Option<PathBuf> {
-        let directory = self.object_dir(index, &key.media);
+        let directory = self.object_epoch_dir(index, &key.media, self.current_epoch(&key.media));
         let hash = key_hash(key);
         let mut names = std::fs::read_dir(directory)
             .ok()?
@@ -237,18 +258,20 @@ impl FilesystemCaches {
             .filter(|name| entry_matches(name, &hash))
             .collect::<Vec<_>>();
         names.sort();
-        names
-            .first()
-            .map(|name| self.object_dir(index, &key.media).join(name))
+        names.first().map(|name| {
+            self.object_epoch_dir(index, &key.media, self.current_epoch(&key.media))
+                .join(name)
+        })
     }
 }
 
 impl MediaCache for FilesystemCaches {
     fn lookup(&self, key: &CacheKey) -> AdapterResult<Option<CacheEntry>> {
         let hash = key_hash(key);
+        let epoch = self.current_epoch(&key.media);
         let mut last_error = None;
         for index in 0..self.caches.len() {
-            let directory = self.object_dir(index, &key.media);
+            let directory = self.object_epoch_dir(index, &key.media, epoch);
             match find_object(&directory, &hash) {
                 Ok(Some((path, extension))) => match open_object(&path, &extension, &key.media) {
                     Ok(entry) => return Ok(Some(entry)),
@@ -265,26 +288,50 @@ impl MediaCache for FilesystemCaches {
     }
 
     fn invalidate(&self, media: &MediaKey) {
+        // Bumping the epoch under the lock makes every older entry unreachable
+        // immediately, even if the filesystem cleanup below cannot run.
+        let epoch = {
+            let mut state = self.state();
+            let epoch = state.epochs.entry(media.clone()).or_insert(0);
+            *epoch += 1;
+            *epoch
+        };
         let mut trash = Vec::new();
-        {
-            let mut state = self.state.lock().unwrap();
-            *state.epochs.entry(media.clone()).or_insert(0) += 1;
-            for index in 0..self.caches.len() {
-                let directory = self.object_dir(index, media);
-                if directory.symlink_metadata().is_err() {
+        for index in 0..self.caches.len() {
+            let directory = self.object_dir(index, media);
+            let entries = match std::fs::read_dir(&directory) {
+                Ok(entries) => entries,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => {
+                    warn!(
+                        cache = self.caches[index].name,
+                        media_id = media.id,
+                        %error,
+                        "Failed to inspect invalidated media cache entries"
+                    );
                     continue;
                 }
+            };
+            let current = epoch.to_string();
+            let stale = entries
+                .filter_map(|entry| entry.ok())
+                .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+                .filter(|entry| entry.file_name().to_string_lossy() != current)
+                .map(|entry| entry.path())
+                .collect::<Vec<_>>();
+            for directory in stale {
                 let tombstone = self.caches[index]
                     .root
                     .join(TRASH)
                     .join(uuid::Uuid::new_v4().to_string());
-                if std::fs::create_dir_all(self.caches[index].root.join(TRASH)).is_err() {
+                if let Err(error) = std::fs::create_dir_all(self.caches[index].root.join(TRASH)) {
                     warn!(
                         cache = self.caches[index].name,
                         media_id = media.id,
-                        "Failed to prepare media cache trash; keeping stale entries"
+                        %error,
+                        "Failed to prepare media cache trash; stale entries are unreachable"
                     );
-                    continue;
+                    break;
                 }
                 match std::fs::rename(&directory, &tombstone) {
                     Ok(()) => trash.push((index, tombstone)),
@@ -292,7 +339,7 @@ impl MediaCache for FilesystemCaches {
                         cache = self.caches[index].name,
                         media_id = media.id,
                         %error,
-                        "Failed to invalidate media cache entries"
+                        "Failed to clean up invalidated media cache entries; they are unreachable"
                     ),
                 }
             }
@@ -310,19 +357,13 @@ impl MediaCache for FilesystemCaches {
                 );
                 continue;
             }
-            let mut state = self.state.lock().unwrap();
+            let mut state = self.state();
             state.used[index] = state.used[index].saturating_sub(removed);
         }
     }
 
     fn invalidation_epoch(&self, media: &MediaKey) -> u64 {
-        self.state
-            .lock()
-            .unwrap()
-            .epochs
-            .get(media)
-            .copied()
-            .unwrap_or(0)
+        self.current_epoch(media)
     }
 
     fn populate(&self, request: CacheFillRequest) -> AdapterResult<()> {
@@ -335,16 +376,11 @@ impl MediaCache for FilesystemCaches {
             return Ok(());
         }
 
-        let (index, epoch) = {
-            let mut state = self.state.lock().unwrap();
+        let mut reservation = {
+            let mut state = self.state();
             #[cfg(test)]
             {
                 state.fills_started += 1;
-            }
-            // Recheck while serialized: a lookup that ran before another fill
-            // published its entry must not start a second fill.
-            if self.lookup(&request.key)?.is_some() {
-                return Ok(());
             }
             // A read that began before an invalidation must not publish the
             // bytes it observed.
@@ -360,27 +396,85 @@ impl MediaCache for FilesystemCaches {
             };
             state.reserved[index] = state.reserved[index].saturating_add(request.content_length);
             state.fills.insert(request.key.clone(), current);
-            (index, current)
+            FillReservation {
+                caches: self,
+                index,
+                key: request.key.clone(),
+                epoch: current,
+                content_length: request.content_length,
+                published: false,
+            }
         };
 
         let result = self.write_entry(
-            index,
-            epoch,
-            &request.key,
+            reservation.index,
+            reservation.epoch,
+            &reservation.key,
             &request.filename,
             request.content_length,
             request.source,
         );
-
-        let mut state = self.state.lock().unwrap();
-        state.reserved[index] = state.reserved[index].saturating_sub(request.content_length);
         if result.is_ok() {
-            state.used[index] = state.used[index].saturating_add(request.content_length);
+            reservation.mark_published();
         }
-        if state.fills.get(&request.key) == Some(&epoch) {
-            state.fills.remove(&request.key);
-        }
+        drop(reservation);
         result
+    }
+}
+
+/// Releases a reserved byte budget and the per-key fill marker on every exit,
+/// including an unwinding panic from the source or the writer.
+struct FillReservation<'a> {
+    caches: &'a FilesystemCaches,
+    index: usize,
+    key: CacheKey,
+    epoch: u64,
+    content_length: u64,
+    published: bool,
+}
+
+impl FillReservation<'_> {
+    fn mark_published(&mut self) {
+        self.published = true;
+    }
+}
+
+impl Drop for FillReservation<'_> {
+    fn drop(&mut self) {
+        let mut state = self.caches.state();
+        state.reserved[self.index] = state.reserved[self.index].saturating_sub(self.content_length);
+        if self.published {
+            state.used[self.index] = state.used[self.index].saturating_add(self.content_length);
+        }
+        if state.fills.get(&self.key) == Some(&self.epoch) {
+            state.fills.remove(&self.key);
+        }
+    }
+}
+
+/// Removes a fill's temporary file unless publication succeeded. Also covers a
+/// panic escaping `write_entry`, where an explicit error-path cleanup would not
+/// run.
+struct TemporaryFile {
+    path: PathBuf,
+    armed: bool,
+}
+
+impl TemporaryFile {
+    fn new(path: PathBuf) -> Self {
+        Self { path, armed: true }
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for TemporaryFile {
+    fn drop(&mut self) {
+        if self.armed {
+            let _ = std::fs::remove_file(&self.path);
+        }
     }
 }
 

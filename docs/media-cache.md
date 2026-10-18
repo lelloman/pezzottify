@@ -134,20 +134,30 @@ be positive, and directories may not overlap media storage or each other (compar
 after canonicalization). Startup fails on an invalid layout rather than risking a
 cache that could delete authoritative files.
 
-Each cache keeps complete objects under `<path>/objects/<kind>/<id-hash>/`; lookup
-opens only that directory. A fill creates a temporary file, copies and flushes it,
-and renames it into place, so a partial read or interrupted write is never visible.
-The byte budget is enforced by tracking persisted usage at startup plus reservations
-for in-flight fills. Fills skip when the object is already present, when another fill
-for the same key is in flight, when no cache has room, or when the object is larger
-than every budget. Full caches therefore fall back to authoritative storage instead
-of evicting; eviction and richer diagnostics belong to #13.
+Each cache keeps complete objects under
+`<path>/objects/<kind>/<id-hash>/<epoch>/`; lookup opens only the current epoch
+directory. A fill creates a temporary file, copies and flushes it, and renames it
+into place, so a partial read or interrupted write is never visible. The byte budget
+is enforced by tracking persisted usage at startup plus reservations for in-flight
+fills. Fills skip when the object is already present, when another fill for the same
+key is in flight, when no cache has room, or when the object is larger than every
+budget. Full caches therefore fall back to authoritative storage instead of
+evicting; eviction and richer diagnostics belong to #13.
 
 Population runs on a dedicated bounded filesystem pool, after the response has
-started. A slow or failing cache write therefore never gates streaming, and a failed
-fill leaves no entry behind. Invalidation increments a per-media epoch and removes
-the media directory before the new authoritative state is visible; a fill that
-started under an older epoch refuses to publish. Audio objects survive restart
-because their keys embed the durable managed revision. Image objects are
-process-scoped, so startup removes them and images start cold. Legacy and unmanaged
-audio locators continue to bypass the cache entirely.
+started. Admission is nonblocking and bounds both pending fills and retained payload
+bytes before an image copy is made; a saturated queue simply skips population. A
+slow or failing cache write therefore never gates streaming. The shared policy lock
+only guards in-memory accounting and the epoch check: source reads, temporary-file
+writes, renames, directory fsyncs and invalidation cleanup all run outside it, so
+foreground lookups never wait on cache I/O. A failed fill removes its temporary file
+and releases its reservation and deduplication marker, including when the source
+panics.
+
+Invalidation increments a per-media epoch under the lock before any cleanup; lookup
+only opens entries in the current epoch, so old entries become unreachable even if
+the filesystem cleanup fails. Cleanup then removes stale epoch directories without
+holding the lock. A fill that started under an older epoch refuses to publish. Audio
+objects survive restart because their keys embed the durable managed revision. Image
+objects are process-scoped, so startup removes them and images start cold. Legacy and
+unmanaged audio locators continue to bypass the cache entirely.

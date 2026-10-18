@@ -584,3 +584,222 @@ fn legacy_audio_keys_have_no_cache_identity() {
     assert!(CacheKey::audio("legacy", "audio/legacy.mp3").is_none());
     assert!(CacheKey::audio("track1", "audio/.managed/track1.not-a-uuid.mp3").is_none());
 }
+
+#[test]
+fn failed_cleanup_does_not_keep_stale_entries_reachable() {
+    let fixture = CacheFixture::with_limits(&[1024 * 1024]);
+    let key = CacheKey::image("album", "https://example.test/cover.jpg", "first-process");
+    fixture
+        .caches
+        .populate(CacheFillRequest {
+            key: key.clone(),
+            epoch: 0,
+            filename: "album.jpg".to_owned(),
+            content_type: "image/jpeg".to_owned(),
+            content_length: JPEG.len() as u64,
+            source: CacheSource::Bytes(Arc::from(JPEG)),
+        })
+        .unwrap();
+    assert!(fixture.caches.lookup(&key).unwrap().is_some());
+
+    // Force invalidation cleanup to fail: the trash directory cannot be
+    // prepared because a regular file occupies its path.
+    std::fs::write(fixture.root.path().join("cache0/trash"), b"not a directory").unwrap();
+    fixture.caches.invalidate(&key.media);
+
+    assert!(
+        fixture.caches.lookup(&key).unwrap().is_none(),
+        "an old entry must be unreachable even when cleanup fails"
+    );
+    assert!(fixture.caches.entry_path(0, &key).is_none());
+}
+
+#[test]
+fn slow_fill_does_not_block_lookup_or_invalidation_epoch() {
+    let fixture = CacheFixture::with_limits(&[1024 * 1024]);
+    let key = CacheKey::audio(
+        "track1",
+        &format!("audio/.managed/track1.{}.mp3", uuid::Uuid::new_v4()),
+    )
+    .unwrap();
+    let started = Arc::new(Barrier::new(2));
+    let release = Arc::new(Barrier::new(2));
+
+    let caches = fixture.caches.clone();
+    let worker_key = key.clone();
+    let worker_started = started.clone();
+    let worker_release = release.clone();
+    let worker = std::thread::spawn(move || {
+        caches.populate(CacheFillRequest {
+            key: worker_key,
+            epoch: 0,
+            filename: "track1.mp3".to_owned(),
+            content_type: "audio/mpeg".to_owned(),
+            content_length: AUDIO.len() as u64,
+            source: CacheSource::Open(Box::new(move || {
+                worker_started.wait();
+                worker_release.wait();
+                Ok(Box::new(Cursor::new(AUDIO)))
+            })),
+        })
+    });
+
+    started.wait();
+    let begin = Instant::now();
+    assert!(fixture.caches.lookup(&key).unwrap().is_none());
+    assert_eq!(fixture.caches.invalidation_epoch(&key.media), 0);
+    assert!(
+        begin.elapsed() < Duration::from_millis(500),
+        "foreground cache queries waited on a stalled fill"
+    );
+    release.wait();
+    assert!(worker.join().unwrap().is_ok());
+    assert!(fixture.caches.lookup(&key).unwrap().is_some());
+
+    fixture.caches.invalidate(&key.media);
+    assert!(fixture.caches.lookup(&key).unwrap().is_none());
+    assert_eq!(fixture.caches.used_bytes(0), 0);
+}
+
+#[test]
+fn panicked_fill_releases_reservation_dedup_and_temporary_file() {
+    struct PanickingReader;
+    impl Read for PanickingReader {
+        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+            buffer.fill(b'x');
+            panic!("source read panicked");
+        }
+    }
+
+    let limit = (AUDIO.len() * 2) as u64;
+    let fixture = CacheFixture::with_limits(&[limit]);
+    let key = CacheKey::audio(
+        "track1",
+        &format!("audio/.managed/track1.{}.mp3", uuid::Uuid::new_v4()),
+    )
+    .unwrap();
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        fixture.caches.populate(CacheFillRequest {
+            key: key.clone(),
+            epoch: 0,
+            filename: "track1.mp3".to_owned(),
+            content_type: "audio/mpeg".to_owned(),
+            content_length: AUDIO.len() as u64,
+            source: CacheSource::Open(Box::new(|| Ok(Box::new(PanickingReader)))),
+        })
+    }));
+    assert!(result.is_err());
+    assert_eq!(fixture.caches.pending_fills(), 0);
+    assert_eq!(fixture.caches.reserved_bytes(0), 0);
+    assert!(fixture.caches.entry_path(0, &key).is_none());
+
+    let temporary = walkdir::WalkDir::new(fixture.root.path().join("cache0/objects"))
+        .into_iter()
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.file_type().is_file())
+        .filter(|entry| entry.file_name().to_string_lossy().starts_with(".tmp-"))
+        .count();
+    assert_eq!(temporary, 0, "panicked fill left a temporary file");
+
+    fixture
+        .caches
+        .populate(CacheFillRequest {
+            key: key.clone(),
+            epoch: 0,
+            filename: "track1.mp3".to_owned(),
+            content_type: "audio/mpeg".to_owned(),
+            content_length: AUDIO.len() as u64,
+            source: CacheSource::Bytes(Arc::from(AUDIO)),
+        })
+        .unwrap();
+    assert!(fixture.caches.lookup(&key).unwrap().is_some());
+
+    let other = CacheKey::audio(
+        "track2",
+        &format!("audio/.managed/track2.{}.mp3", uuid::Uuid::new_v4()),
+    )
+    .unwrap();
+    fixture
+        .caches
+        .populate(CacheFillRequest {
+            key: other.clone(),
+            epoch: 0,
+            filename: "track2.mp3".to_owned(),
+            content_type: "audio/mpeg".to_owned(),
+            content_length: AUDIO.len() as u64,
+            source: CacheSource::Bytes(Arc::from(AUDIO)),
+        })
+        .unwrap();
+    assert!(fixture.caches.lookup(&other).unwrap().is_some());
+    assert_eq!(fixture.caches.used_bytes(0), limit);
+}
+
+#[test]
+fn cache_fill_admission_bounds_pending_keys_and_retained_bytes() {
+    let fixture = CacheFixture::with_limits(&[1024 * 1024]);
+    let key = |id: &str| {
+        CacheKey::audio(
+            id,
+            &format!("audio/.managed/{id}.{}.mp3", uuid::Uuid::new_v4()),
+        )
+        .unwrap()
+    };
+
+    let keys = (0..CACHE_FILL_MAX_PENDING)
+        .map(|index| key(&format!("track{index}")))
+        .collect::<Vec<_>>();
+    let mut permits = keys
+        .iter()
+        .map(|key| {
+            fixture
+                .manager
+                .cache_fill_admission
+                .admit(key, 0)
+                .expect("pending slot")
+        })
+        .collect::<Vec<_>>();
+
+    assert!(fixture
+        .manager
+        .cache_fill_admission
+        .admit(&keys[0], 0)
+        .is_none());
+    let extra = key("extra");
+    assert!(fixture
+        .manager
+        .cache_fill_admission
+        .admit(&extra, 0)
+        .is_none());
+    permits.pop();
+    assert!(fixture
+        .manager
+        .cache_fill_admission
+        .admit(&extra, 0)
+        .is_some());
+    drop(permits);
+
+    let first = key("image-one");
+    assert!(fixture
+        .manager
+        .cache_fill_admission
+        .admit(&first, CACHE_FILL_MAX_RETAINED_BYTES + 1)
+        .is_none());
+    let half = CACHE_FILL_MAX_RETAINED_BYTES / 2 + 1;
+    let held = fixture
+        .manager
+        .cache_fill_admission
+        .admit(&first, half)
+        .expect("half budget");
+    let second = key("image-two");
+    assert!(fixture
+        .manager
+        .cache_fill_admission
+        .admit(&second, half)
+        .is_none());
+    drop(held);
+    assert!(fixture
+        .manager
+        .cache_fill_admission
+        .admit(&second, half)
+        .is_some());
+}

@@ -59,6 +59,12 @@ impl FilesystemWorkPool {
         }
     }
 
+    /// Bound queued plus executing work, not just executing workers.
+    pub(crate) fn with_admission_limit(mut self, max_admitted: usize) -> Self {
+        self.inner = self.inner.with_admission_limit(max_admitted);
+        self
+    }
+
     pub(crate) async fn run<T, F>(&self, work: F) -> Result<T, FilesystemWorkError>
     where
         T: Send + 'static,

@@ -20,10 +20,11 @@ use crate::downloader::DownloadPriority;
 use crate::server::filesystem_work::{FilesystemWorkError, FilesystemWorkPool};
 use bytes::Bytes;
 use futures::Stream;
+use std::collections::HashMap;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, BufReader, SeekFrom};
 use tokio_util::io::ReaderStream;
@@ -34,9 +35,72 @@ pub(crate) use track_materializer::{ProxyMaterializerStatus, TrackStreamMetadata
 
 const STREAM_BUFFER_SIZE: usize = 64 * 1024;
 const CACHE_FILL_CONCURRENCY: usize = 2;
+const CACHE_FILL_MAX_PENDING: usize = CACHE_FILL_CONCURRENCY * 4;
+const CACHE_FILL_MAX_RETAINED_BYTES: u64 = 32 * 1024 * 1024;
 const CACHE_FILL_QUEUE_TIMEOUT: Duration = Duration::from_millis(250);
 const CACHE_FILL_EXECUTION_TIMEOUT: Duration = Duration::from_secs(600);
 pub type MediaStream = Pin<Box<dyn Stream<Item = io::Result<Bytes>> + Send>>;
+
+/// Nonblocking admission for background cache fills. It bounds both the number
+/// of tasks and, for fills that retain payloads in memory, their retained bytes.
+/// The per-key marker also deduplicates pending fills before any payload copy.
+#[derive(Default)]
+struct CacheFillAdmission {
+    state: Mutex<CacheFillAdmissionState>,
+}
+
+#[derive(Default)]
+struct CacheFillAdmissionState {
+    pending: HashMap<cache::CacheKey, u64>,
+    retained_bytes: u64,
+}
+
+impl CacheFillAdmission {
+    fn lock(&self) -> MutexGuard<'_, CacheFillAdmissionState> {
+        self.state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn admit(
+        self: &Arc<Self>,
+        key: &cache::CacheKey,
+        retained_bytes: u64,
+    ) -> Option<CacheFillPermit> {
+        let mut state = self.lock();
+        if state.pending.contains_key(key) {
+            return None;
+        }
+        if state.pending.len() >= CACHE_FILL_MAX_PENDING {
+            return None;
+        }
+        if state.retained_bytes.saturating_add(retained_bytes) > CACHE_FILL_MAX_RETAINED_BYTES {
+            return None;
+        }
+        state.pending.insert(key.clone(), retained_bytes);
+        state.retained_bytes = state.retained_bytes.saturating_add(retained_bytes);
+        Some(CacheFillPermit {
+            admission: self.clone(),
+            key: key.clone(),
+            retained_bytes,
+        })
+    }
+}
+
+/// Releases admission on completion, cancellation or unwind.
+struct CacheFillPermit {
+    admission: Arc<CacheFillAdmission>,
+    key: cache::CacheKey,
+    retained_bytes: u64,
+}
+
+impl Drop for CacheFillPermit {
+    fn drop(&mut self) {
+        let mut state = self.admission.lock();
+        state.pending.remove(&self.key);
+        state.retained_bytes = state.retained_bytes.saturating_sub(self.retained_bytes);
+    }
+}
 
 /// Both foreground HTTP consumers and background jobs share this service.
 /// The optional remote backend is attached once during server initialization.
@@ -46,6 +110,7 @@ pub struct MediaManager {
     filesystem: FilesystemWorkPool,
     image_reads: FilesystemWorkPool,
     cache_fills: FilesystemWorkPool,
+    cache_fill_admission: Arc<CacheFillAdmission>,
     local_adapter: adapters::FilesystemAdapter,
     image_adapter: Arc<dyn vault::VaultAdapter>,
     vaults: std::sync::RwLock<std::collections::HashMap<vault::VaultId, copies::RegisteredVault>>,
@@ -196,7 +261,9 @@ impl MediaManager {
                 CACHE_FILL_CONCURRENCY,
                 CACHE_FILL_QUEUE_TIMEOUT,
                 CACHE_FILL_EXECUTION_TIMEOUT,
-            ),
+            )
+            .with_admission_limit(CACHE_FILL_MAX_PENDING),
+            cache_fill_admission: Arc::new(CacheFillAdmission::default()),
             image_adapter,
             vaults,
             materializer: OnceLock::new(),
@@ -309,6 +376,10 @@ impl MediaManager {
     }
 
     fn schedule_audio_fill(&self, plan: AudioFillPlan) {
+        let Some(permit) = self.cache_fill_admission.admit(&plan.key, 0) else {
+            debug!(key = ?plan.key, "Media cache fill admission saturated");
+            return;
+        };
         let adapter = self.local_adapter.clone();
         let uri = plan.uri;
         let source = cache::CacheSource::Open(Box::new(move || {
@@ -317,33 +388,17 @@ impl MediaManager {
                 .map(|(file, _)| Box::new(file) as Box<dyn Read + Send>)
                 .map_err(io::Error::other)
         }));
-        self.schedule_cache_fill(cache::CacheFillRequest {
-            key: plan.key,
-            epoch: plan.epoch,
-            filename: plan.filename,
-            content_type: plan.content_type,
-            content_length: plan.content_length,
-            source,
-        });
-    }
-
-    fn schedule_cache_fill(&self, request: cache::CacheFillRequest) {
-        let Some(cache) = self.cache.get().cloned() else {
-            return;
-        };
-        let key = request.key.clone();
-        let pool = self.cache_fills.clone();
-        let Ok(handle) = tokio::runtime::Handle::try_current() else {
-            debug!(?key, "No runtime available for media cache fill");
-            return;
-        };
-        handle.spawn(async move {
-            match pool.run(move || cache.populate(request)).await {
-                Ok(Ok(())) => debug!(?key, "Media cache fill finished"),
-                Ok(Err(error)) => warn!(?key, %error, "Media cache fill failed"),
-                Err(error) => debug!(?key, %error, "Media cache fill skipped"),
-            }
-        });
+        self.spawn_cache_fill(
+            cache::CacheFillRequest {
+                key: plan.key,
+                epoch: plan.epoch,
+                filename: plan.filename,
+                content_type: plan.content_type,
+                content_length: plan.content_length,
+                source,
+            },
+            permit,
+        );
     }
 
     fn schedule_image_fill(
@@ -359,16 +414,45 @@ impl MediaManager {
             return;
         };
         let key = cache::CacheKey::image(id, source_url, mutations::process_epoch());
+        // Admit before copying the payload or spawning, so a saturated queue or
+        // full byte budget never retains another image copy.
+        let Some(permit) = self.cache_fill_admission.admit(&key, bytes.len() as u64) else {
+            debug!(?key, "Media cache fill admission saturated");
+            return;
+        };
         let extension = infer::get(bytes)
             .map(|kind| kind.extension())
             .unwrap_or("img");
-        self.schedule_cache_fill(cache::CacheFillRequest {
-            key,
-            epoch,
-            filename: format!("{id}.{extension}"),
-            content_type: content_type.to_owned(),
-            content_length: bytes.len() as u64,
-            source: cache::CacheSource::Bytes(Arc::from(bytes)),
+        self.spawn_cache_fill(
+            cache::CacheFillRequest {
+                key,
+                epoch,
+                filename: format!("{id}.{extension}"),
+                content_type: content_type.to_owned(),
+                content_length: bytes.len() as u64,
+                source: cache::CacheSource::Bytes(Arc::from(bytes)),
+            },
+            permit,
+        );
+    }
+
+    fn spawn_cache_fill(&self, request: cache::CacheFillRequest, permit: CacheFillPermit) {
+        let Some(cache) = self.cache.get().cloned() else {
+            return;
+        };
+        let key = request.key.clone();
+        let pool = self.cache_fills.clone();
+        let Ok(handle) = tokio::runtime::Handle::try_current() else {
+            debug!(?key, "No runtime available for media cache fill");
+            return;
+        };
+        handle.spawn(async move {
+            let _permit = permit;
+            match pool.run(move || cache.populate(request)).await {
+                Ok(Ok(())) => debug!(?key, "Media cache fill finished"),
+                Ok(Err(error)) => warn!(?key, %error, "Media cache fill failed"),
+                Err(error) => debug!(?key, %error, "Media cache fill skipped"),
+            }
         });
     }
 
@@ -468,9 +552,7 @@ impl MediaManager {
     ) -> Result<ImageRead, MediaReadError> {
         // Cache identity needs only catalog metadata, never the media disk. A
         // catalog hiccup must not break a local read, so it only skips the cache.
-        // The invalidation epoch is captured before the authoritative read so a
-        // concurrent replacement cannot make this read populate a stale entry.
-        let (cached_source, cached_epoch) = if let Some(cache) = self.cache.get().cloned() {
+        let cached_source = if self.cache.get().is_some() {
             let image_id = id.to_owned();
             match self
                 .catalog_read
@@ -479,45 +561,55 @@ impl MediaManager {
                 })
                 .await
             {
-                Ok(url) => {
-                    let epoch = cache.invalidation_epoch(&vault::MediaKey {
-                        kind: vault::MediaKind::Image,
-                        id: id.to_owned(),
-                    });
-                    (url.map(|url| url.url), epoch)
-                }
+                Ok(url) => url.map(|url| url.url),
                 Err(error) => {
                     warn!(%error, image_id = id, "Skipping image cache lookup");
-                    (None, 0)
+                    None
                 }
             }
         } else {
-            (None, 0)
+            None
         };
+        // The epoch and lookup both run on the image filesystem pool: neither
+        // may block a runtime worker, and the epoch is captured before the
+        // authoritative read so a concurrent replacement cannot publish stale.
+        let mut cached_epoch = 0;
         if let (Some(cache), Some(source)) = (self.cache.get().cloned(), cached_source.as_deref()) {
             let key = cache::CacheKey::image(id, source, mutations::process_epoch());
-            let lookup = self.image_reads.run(move || cache.lookup(&key)).await;
+            let lookup = self
+                .image_reads
+                .run(move || {
+                    let epoch = cache.invalidation_epoch(&key.media);
+                    (epoch, cache.lookup(&key))
+                })
+                .await;
             match lookup {
-                Ok(Ok(Some(entry))) => match read_cache_bytes(entry) {
-                    Ok(bytes) => match image_bytes(bytes, MediaReadError::InvalidLocalImage) {
-                        Ok(image) => return Ok(image),
-                        Err(_) => warn!(
+                Ok((epoch, Ok(Some(entry)))) => {
+                    cached_epoch = epoch;
+                    match read_cache_bytes(entry) {
+                        Ok(bytes) => match image_bytes(bytes, MediaReadError::InvalidLocalImage) {
+                            Ok(image) => return Ok(image),
+                            Err(_) => warn!(
+                                image_id = id,
+                                "Invalid image cache entry; using authoritative storage"
+                            ),
+                        },
+                        Err(error) => warn!(
+                            %error,
                             image_id = id,
-                            "Invalid image cache entry; using authoritative storage"
+                            "Image cache read failed; using authoritative storage"
                         ),
-                    },
-                    Err(error) => warn!(
+                    }
+                }
+                Ok((epoch, Ok(None))) => cached_epoch = epoch,
+                Ok((epoch, Err(error))) => {
+                    cached_epoch = epoch;
+                    warn!(
                         %error,
                         image_id = id,
-                        "Image cache read failed; using authoritative storage"
-                    ),
-                },
-                Ok(Ok(None)) => {}
-                Ok(Err(error)) => warn!(
-                    %error,
-                    image_id = id,
-                    "Image cache lookup failed; using authoritative storage"
-                ),
+                        "Image cache lookup failed; using authoritative storage"
+                    );
+                }
                 Err(error) => warn!(
                     %error,
                     image_id = id,
