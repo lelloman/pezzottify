@@ -131,8 +131,9 @@ max_bytes = 1073741824
 Configuration is read at startup. A deployment without a `[[media_cache.caches]]`
 entry behaves exactly as before. Cache directory names must be unique, budgets must
 be positive, and directories may not overlap media storage or each other (compared
-after canonicalization). Startup fails on an invalid layout rather than risking a
-cache that could delete authoritative files.
+after canonicalization). The cache's internal `objects` directory cannot be a
+symlink, so recovery cannot follow it into original storage. Startup fails on an
+invalid layout rather than risking a cache that could delete authoritative files.
 
 Each cache keeps complete objects under
 `<path>/objects/<kind>/<id-hash>/<epoch>/`; lookup opens only the current epoch

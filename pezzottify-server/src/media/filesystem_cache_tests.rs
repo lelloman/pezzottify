@@ -1079,3 +1079,27 @@ async fn timed_out_fill_retains_payload_budget_and_dedup_until_worker_finishes()
         .admit(&key, CACHE_FILL_MAX_RETAINED_BYTES)
         .is_some());
 }
+
+#[cfg(unix)]
+#[test]
+fn startup_recovery_rejects_objects_symlink_into_original_media() {
+    let root = tempfile::tempdir().unwrap();
+    let media = root.path().join("media");
+    std::fs::create_dir_all(media.join("audio/.managed")).unwrap();
+    let original = media.join("audio/.managed/original.mp3");
+    std::fs::write(&original, AUDIO).unwrap();
+    let cache = root.path().join("cache");
+    std::fs::create_dir(&cache).unwrap();
+    std::os::unix::fs::symlink(&media, cache.join("objects")).unwrap();
+    let result = FilesystemCaches::new(
+        vec![FilesystemCacheSettings {
+            name: "ssd".into(),
+            path: cache,
+            max_bytes: 1024,
+        }],
+        &media,
+        std::iter::empty(),
+    );
+    assert!(result.is_err());
+    assert_eq!(std::fs::read(original).unwrap(), AUDIO);
+}

@@ -132,6 +132,13 @@ impl FilesystemCaches {
                     root.display()
                 )
             })?;
+            anyhow::ensure!(
+                !std::fs::symlink_metadata(root.join(OBJECTS))?
+                    .file_type()
+                    .is_symlink(),
+                "media cache '{}' objects directory must not be a symlink",
+                setting.name
+            );
             recover_directory(&root, &audio_keys).map_err(|error| {
                 anyhow::anyhow!(
                     "media cache '{}' recovery at {} failed: {error}",
