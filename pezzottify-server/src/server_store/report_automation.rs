@@ -50,9 +50,22 @@ pub(super) const DELIVERIES: Table = Table {
     ],
     unique_constraints: &[&["id"]],
 };
+// Separate bounded storage keeps monitoring and general report capacity from
+// disabling safety controls. Only fixed kinds and bounded resource IDs enter it.
+const AUDIT_PARTITION_LIMIT: usize = 1_000;
+pub(super) const AUTOMATION_AUDIT: Table = Table {
+    name: "report_automation_audit",
+    columns: super::report_schema::REPORT_EVENTS.columns,
+    indices: &[(
+        "idx_report_automation_audit_partition",
+        "report_id, seq DESC",
+    )],
+    unique_constraints: &[&["id"]],
+};
 pub(super) fn migrate(c: &Connection) -> anyhow::Result<()> {
     INTEGRATIONS.create(c)?;
     DELIVERIES.create(c)?;
+    AUTOMATION_AUDIT.create(c)?;
     Ok(())
 }
 
@@ -275,13 +288,42 @@ fn integration_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Integration> {
     })
 }
 fn audit(c: &Connection, actor: usize, kind: &str, id: &str) -> ReportResult<()> {
-    super::report_repository::event(
-        c,
-        "administration",
-        actor,
-        kind,
-        serde_json::json!({"resource_id":id}),
-    )
+    let partition = if matches!(kind, "integrations_listed" | "deliveries_listed") {
+        "inspection"
+    } else {
+        "control"
+    };
+    let data = serde_json::json!({"resource_id":id}).to_string();
+    if id.len() > 128 || kind.len() > 64 || data.len() > 256 {
+        return Err(ReportError::Invalid(
+            "Invalid automation audit record".into(),
+        ));
+    }
+    let now = chrono::Utc::now().timestamp();
+    // Pruning and insertion commit atomically with the operation. Retain at most
+    // 30 days and 1,000 records per partition, evicting oldest records on overflow.
+    c.execute(
+        "DELETE FROM report_automation_audit WHERE created_at<?1",
+        [now - 30 * 86400],
+    )?;
+    c.execute(
+        "DELETE FROM report_automation_audit WHERE report_id=?1 AND seq NOT IN
+        (SELECT seq FROM report_automation_audit WHERE report_id=?1 ORDER BY seq DESC LIMIT ?2)",
+        params![partition, (AUDIT_PARTITION_LIMIT - 1) as i64],
+    )?;
+    c.execute(
+        "INSERT INTO report_automation_audit(id,report_id,actor_id,kind,data,created_at)
+        VALUES (?1,?2,?3,?4,?5,?6)",
+        params![
+            uuid::Uuid::new_v4().to_string(),
+            partition,
+            actor as i64,
+            kind,
+            data,
+            now
+        ],
+    )?;
+    Ok(())
 }
 fn delivery_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Delivery> {
     Ok(Delivery {
@@ -588,7 +630,7 @@ mod tests {
             ),
             Err(ReportError::Capacity)
         ));
-        let events = s.events("administration", None, 100).unwrap();
+        let events = s.events("automation", None, 100).unwrap();
         assert_eq!(
             events
                 .items
@@ -601,6 +643,154 @@ mod tests {
             .items
             .iter()
             .all(|e| e.actor_id == 9 && !e.data.to_string().contains(&d.secret)));
+    }
+    #[test]
+    fn audit_saturation_never_blocks_disable_and_retention_recovers() {
+        let (_dir, s) = setup();
+        let integration = enabled(&s);
+        s.create(1, "a", request()).unwrap();
+        // Reproduce the reviewer's polling sequence beyond the old shared budget.
+        for _ in 0..2_001 {
+            s.deliveries(9, DeliveryFilter::default()).unwrap();
+        }
+        {
+            let c = s.conn.lock().unwrap();
+            let inspections: usize = c
+                .query_row(
+                    "SELECT COUNT(*) FROM report_automation_audit WHERE report_id='inspection'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(inspections, AUDIT_PARTITION_LIMIT);
+            // Exhaust the general global count and administration resource budget.
+            c.execute(
+                "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<200000)
+                INSERT INTO report_events(id,report_id,actor_id,kind,data,created_at)
+                SELECT 'filler-'||x,'administration',1,'test','{}',0 FROM n",
+                [],
+            )
+            .unwrap();
+            // Exhaust the configured metadata ceiling as well.
+            let limits = ReportSettings {
+                metadata_bytes: 1,
+                ..ReportSettings::default()
+            };
+            c.execute("INSERT INTO server_state(key,value,updated_at) VALUES ('report_settings',?1,'test')",
+                [serde_json::to_string(&limits).unwrap()]).unwrap();
+            // Fill the independent control partition, including expired records.
+            c.execute(
+                "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<1000)
+                INSERT INTO report_automation_audit(id,report_id,actor_id,kind,data,created_at)
+                SELECT 'control-'||x,'control',1,'test','{}',?1 FROM n",
+                [chrono::Utc::now().timestamp()],
+            )
+            .unwrap();
+            c.execute(
+                "INSERT INTO report_automation_audit(id,report_id,actor_id,kind,data,created_at)
+                VALUES ('expired','inspection',1,'test','{}',0)",
+                [],
+            )
+            .unwrap();
+        }
+        // General audit storage really is full; its errors must not affect controls.
+        assert!(matches!(
+            super::super::report_limits::event_capacity(
+                &s.conn.lock().unwrap(),
+                "administration",
+                2
+            ),
+            Err(ReportError::Capacity)
+        ));
+        let disabled = s
+            .update_integration(
+                9,
+                &integration.integration.id,
+                IntegrationUpdate {
+                    expected_version: 2,
+                    enabled: false,
+                },
+            )
+            .unwrap();
+        assert!(!disabled.enabled);
+        assert!(s
+            .claim_delivery(chrono::Utc::now().timestamp())
+            .unwrap()
+            .is_none());
+        let events = s.events("automation", None, 1).unwrap();
+        assert_eq!(events.items[0].kind, "integration_disabled");
+        assert_eq!(events.items[0].actor_id, 9);
+        assert_eq!(
+            events.items[0].data["resource_id"],
+            integration.integration.id
+        );
+        let c = s.conn.lock().unwrap();
+        let (controls, expired): (usize, usize) = c
+            .query_row(
+                "SELECT SUM(report_id='control'),SUM(id='expired') FROM report_automation_audit",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(controls, AUDIT_PARTITION_LIMIT);
+        assert_eq!(expired, 0);
+        assert!(events.next_cursor.is_some());
+        drop(c);
+        assert!(s.events("automation", events.next_cursor, 1).is_ok());
+    }
+    #[test]
+    fn failed_automation_audit_rolls_back_control_and_pruning() {
+        let (_dir, s) = setup();
+        let integration = enabled(&s);
+        {
+            let c = s.conn.lock().unwrap();
+            c.execute("UPDATE report_automation_audit SET created_at=0", [])
+                .unwrap();
+            c.execute_batch(
+                "CREATE TRIGGER fail_automation_audit BEFORE INSERT ON report_automation_audit
+                BEGIN SELECT RAISE(ABORT, 'test audit failure'); END;",
+            )
+            .unwrap();
+        }
+        assert!(s
+            .update_integration(
+                9,
+                &integration.integration.id,
+                IntegrationUpdate {
+                    expected_version: 2,
+                    enabled: false
+                }
+            )
+            .is_err());
+        {
+            let c = s.conn.lock().unwrap();
+            let current = super::integration(&c, &integration.integration.id).unwrap();
+            assert!(current.enabled);
+            assert_eq!(current.version, 2);
+            let retained: usize = c
+                .query_row(
+                    "SELECT COUNT(*) FROM report_automation_audit WHERE created_at=0",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(retained, 2);
+            c.execute_batch("DROP TRIGGER fail_automation_audit")
+                .unwrap();
+        }
+        // A transient audit failure does not cache a failed state or poison the store.
+        assert!(
+            !s.update_integration(
+                9,
+                &integration.integration.id,
+                IntegrationUpdate {
+                    expected_version: 2,
+                    enabled: false
+                }
+            )
+            .unwrap()
+            .enabled
+        );
     }
     #[test]
     fn durable_atomic_private_and_idempotent_fanout() {

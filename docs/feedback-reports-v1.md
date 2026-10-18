@@ -144,9 +144,10 @@ remain subject to the server's separate backup policy; expiration is not secure 
 Report operations are additionally bounded to 120 requests/user/minute; admission
 keeps at most 4,096 user windows and holds slots through parsing and handler execution.
 Non-submission report bodies are limited to 128 KiB (including JSON escaping).
-Audit storage is capped at 2,000 events/resource and 200,000 globally, also subject
+General report audit storage is capped at 2,000 events/resource and 200,000 globally, also subject
 to the aggregate metadata-byte ceiling. One event and 512 bytes are reserved per live
-attachment for owner deletion. Other new audited operations fail closed at capacity.
+attachment for owner deletion. Other general report audited operations fail closed at capacity. Automation uses
+the independent bounded retention described below.
 `GET /v1/admin/reports/settings/events` and `/v1/admin/reports/administration/events`
 expose settings changes and legacy whole-report deletion requests with diagnostic
 permission. Legacy whole-report deletion retains a separate deletion-request audit
@@ -280,8 +281,17 @@ rolls back completely, including its audit event; exact idempotent submission
 replay still succeeds. Owner diagnostic deletion never depends on outbox capacity.
 All integration/delivery reads and control mutations require
 `ManageReportIntegrations` and are audited under
-`/v1/admin/reports/administration/events` (inspection of that audit trail separately
-requires `ViewReportDiagnostics`). Control-plane audit capacity fails closed.
+`/v1/admin/reports/automation/events` (inspection of that audit trail separately
+requires `ViewReportDiagnostics`). Automation auditing uses separate storage from general report audit/metadata quotas.
+Inspection and control each retain the newest 1,000 records, for at most 30 days;
+pruning runs atomically on every automation audit write. Polling cannot evict control
+records or exhaust the disable budget. At capacity, the oldest records in that
+partition are evicted, including for manual retries and enable/disable operations.
+Records have bounded resource IDs (128 bytes), kinds (64 bytes), and JSON data
+(256 bytes): at most 2,000 records and under 1 MiB of serialized text, independent
+of report metadata limits. Storage failures still roll back the operation and audit
+together. The `automation` audit cursor is independent of `administration`, which
+continues to hold legacy deletion audit records.
 Signing keys, URLs, remote bodies and report text are absent from delivery logs
 and administrative audit data. The existing report body admission limits,
 frequency controls, sensitive-body logging exclusions and no-store responses also

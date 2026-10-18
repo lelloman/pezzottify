@@ -474,6 +474,7 @@ pub const SERVER_VERSIONED_SCHEMAS: &[VersionedSchema] = &[
             super::report_schema::REPORT_EVENTS,
             super::report_automation::INTEGRATIONS,
             super::report_automation::DELIVERIES,
+            super::report_automation::AUTOMATION_AUDIT,
         ],
         migration: Some(super::report_automation::migrate),
     },

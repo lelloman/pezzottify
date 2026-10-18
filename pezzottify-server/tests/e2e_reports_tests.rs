@@ -475,7 +475,7 @@ async fn automation_permission_is_separate_and_control_changes_are_audited() {
     );
     let events: Value = user
         .client
-        .get(format!("{base}/v1/admin/reports/administration/events"))
+        .get(format!("{base}/v1/admin/reports/automation/events"))
         .send()
         .await
         .unwrap()

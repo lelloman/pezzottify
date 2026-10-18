@@ -333,13 +333,17 @@ impl ReportRepository for SqliteServerStore {
             return Err(ReportError::Invalid("Invalid pagination".into()));
         }
         let conn = self.conn.lock().map_err(|_| ReportError::Storage)?;
-        if !["settings", "administration"].contains(&id) {
+        if !["settings", "administration", "automation"].contains(&id) {
             get(&conn, id, None)?;
         }
-        let mut q = conn.prepare(
+        let query = if id == "automation" {
+            "SELECT seq,id,actor_id,kind,data,created_at FROM report_automation_audit
+             WHERE (?2 IS NULL OR seq<?2) AND ?1='automation' ORDER BY seq DESC LIMIT ?3"
+        } else {
             "SELECT seq,id,actor_id,kind,data,created_at FROM report_events
-            WHERE report_id=?1 AND (?2 IS NULL OR seq<?2) ORDER BY seq DESC LIMIT ?3",
-        )?;
+             WHERE report_id=?1 AND (?2 IS NULL OR seq<?2) ORDER BY seq DESC LIMIT ?3"
+        };
+        let mut q = conn.prepare(query)?;
         let mut items = q
             .query_map(params![id, before, (limit + 1) as i64], |r| {
                 Ok(ReportEvent {
