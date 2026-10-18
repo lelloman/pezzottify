@@ -265,16 +265,27 @@ impl FilesystemCaches {
     }
 }
 
-impl MediaCache for FilesystemCaches {
-    fn lookup(&self, key: &CacheKey) -> AdapterResult<Option<CacheEntry>> {
+impl FilesystemCaches {
+    fn lookup_with_open(
+        &self,
+        key: &CacheKey,
+        mut open: impl FnMut(&Path, &str, &MediaKey) -> AdapterResult<CacheEntry>,
+    ) -> AdapterResult<Option<CacheEntry>> {
         let hash = key_hash(key);
         let epoch = self.current_epoch(&key.media);
         let mut last_error = None;
         for index in 0..self.caches.len() {
             let directory = self.object_epoch_dir(index, &key.media, epoch);
             match find_object(&directory, &hash) {
-                Ok(Some((path, extension))) => match open_object(&path, &extension, &key.media) {
-                    Ok(entry) => return Ok(Some(entry)),
+                Ok(Some((path, extension))) => match open(&path, &extension, &key.media) {
+                    Ok(entry) => {
+                        // The descriptor must predate invalidation. Cleanup may
+                        // fail, leaving an old epoch physically openable.
+                        if self.current_epoch(&key.media) != epoch {
+                            return Ok(None);
+                        }
+                        return Ok(Some(entry));
+                    }
                     Err(error) => last_error = Some(error),
                 },
                 Ok(None) => {}
@@ -285,6 +296,12 @@ impl MediaCache for FilesystemCaches {
             Some(error) => Err(error),
             None => Ok(None),
         }
+    }
+}
+
+impl MediaCache for FilesystemCaches {
+    fn lookup(&self, key: &CacheKey) -> AdapterResult<Option<CacheEntry>> {
+        self.lookup_with_open(key, open_object)
     }
 
     fn invalidate(&self, media: &MediaKey) {
@@ -405,6 +422,13 @@ impl MediaCache for FilesystemCaches {
                 published: false,
             }
         };
+
+        // Another fill can finish between the initial lookup and reservation.
+        // Once we own the marker, recheck outside the policy lock before opening
+        // the source; completed concurrent work is a successful no-op.
+        if self.lookup(&request.key)?.is_some() {
+            return Ok(());
+        }
 
         let result = self.write_entry(
             reservation.index,
@@ -619,4 +643,52 @@ fn sync_directory(directory: &Path) {
 
 fn storage(error: impl std::fmt::Display) -> AdapterError {
     AdapterError::Storage(error.to_string())
+}
+
+#[cfg(test)]
+mod lookup_race_tests {
+    use super::*;
+    use std::sync::Arc;
+
+    #[test]
+    fn invalidation_before_open_rejects_old_descriptor_even_when_cleanup_fails() {
+        let root = tempfile::tempdir().unwrap();
+        let media = root.path().join("media");
+        std::fs::create_dir(&media).unwrap();
+        let path = root.path().join("cache");
+        let caches = FilesystemCaches::new(
+            vec![FilesystemCacheSettings {
+                name: "ssd".into(),
+                path: path.clone(),
+                max_bytes: 1024,
+            }],
+            &media,
+        )
+        .unwrap();
+        let key = CacheKey::image("cover", "https://example.test/cover.jpg", "process");
+        caches
+            .populate(CacheFillRequest {
+                key: key.clone(),
+                epoch: 0,
+                filename: "cover.jpg".into(),
+                content_type: "image/jpeg".into(),
+                content_length: 3,
+                source: CacheSource::Bytes(Arc::from(&b"old"[..])),
+            })
+            .unwrap();
+        let old_path = caches.entry_path(0, &key).unwrap();
+        std::fs::write(path.join(TRASH), b"prevent cleanup").unwrap();
+
+        // Gate precisely between selecting the old epoch and opening it. This
+        // also proves invalidation can acquire the state lock during open I/O.
+        let hit = caches
+            .lookup_with_open(&key, |path, extension, media| {
+                caches.invalidate(media);
+                assert!(old_path.exists(), "cleanup failure must leave the old file");
+                open_object(path, extension, media)
+            })
+            .unwrap();
+        assert!(hit.is_none());
+        assert!(caches.lookup(&key).unwrap().is_none());
+    }
 }

@@ -803,3 +803,63 @@ fn cache_fill_admission_bounds_pending_keys_and_retained_bytes() {
         .admit(&second, half)
         .is_some());
 }
+
+#[tokio::test]
+async fn timed_out_fill_retains_payload_budget_and_dedup_until_worker_finishes() {
+    let fixture = CacheFixture::with_limits(&[CACHE_FILL_MAX_RETAINED_BYTES]);
+    let key = CacheKey::image("one", "https://example.test/one.jpg", "process");
+    let other = CacheKey::image("two", "https://example.test/two.jpg", "process");
+    let admission = fixture.manager.cache_fill_admission.clone();
+    let permit = admission
+        .admit(&key, CACHE_FILL_MAX_RETAINED_BYTES)
+        .unwrap();
+    let payload: Arc<[u8]> = vec![0; CACHE_FILL_MAX_RETAINED_BYTES as usize].into();
+    let weak_payload = Arc::downgrade(&payload);
+    let (started, worker_started) = tokio::sync::oneshot::channel();
+    let (release, worker_release) = std::sync::mpsc::channel();
+    let request = CacheFillRequest {
+        key: key.clone(),
+        epoch: 0,
+        filename: "one.jpg".into(),
+        content_type: "image/jpeg".into(),
+        content_length: payload.len() as u64,
+        source: CacheSource::Open(Box::new(move || {
+            let _ = started.send(());
+            // Bound the stall so a failed assertion cannot hang runtime exit.
+            worker_release.recv_timeout(Duration::from_secs(5)).unwrap();
+            Ok(Box::new(Cursor::new(payload)))
+        })),
+    };
+    let pool =
+        FilesystemWorkPool::with_limits(1, Duration::from_secs(1), Duration::from_millis(50));
+    let caches = fixture.caches.clone();
+    let worker =
+        tokio::spawn(async move { pool.run(cache_fill_work(caches, request, permit)).await });
+    worker_started.await.unwrap();
+    let error = worker.await.unwrap().unwrap_err();
+    assert!(error.to_string().contains("execution timed out"));
+    assert!(weak_payload.upgrade().is_some());
+    assert!(
+        admission.admit(&key, 0).is_none(),
+        "pending key released early"
+    );
+    assert!(
+        admission.admit(&other, 1).is_none(),
+        "payload budget released early"
+    );
+    release.send(()).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if admission.lock().pending.is_empty() {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(weak_payload.upgrade().is_none());
+    assert!(admission
+        .admit(&key, CACHE_FILL_MAX_RETAINED_BYTES)
+        .is_some());
+}

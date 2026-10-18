@@ -102,6 +102,19 @@ impl Drop for CacheFillPermit {
     }
 }
 
+// Admission follows the blocking closure, not its async waiter: a timeout or
+// cancellation cannot stop a worker that still owns the request's payload.
+fn cache_fill_work(
+    cache: Arc<dyn cache::MediaCache>,
+    request: cache::CacheFillRequest,
+    permit: CacheFillPermit,
+) -> impl FnOnce() -> vault::AdapterResult<()> + Send {
+    move || {
+        let _permit = permit;
+        cache.populate(request)
+    }
+}
+
 /// Both foreground HTTP consumers and background jobs share this service.
 /// The optional remote backend is attached once during server initialization.
 pub struct MediaManager {
@@ -447,8 +460,7 @@ impl MediaManager {
             return;
         };
         handle.spawn(async move {
-            let _permit = permit;
-            match pool.run(move || cache.populate(request)).await {
+            match pool.run(cache_fill_work(cache, request, permit)).await {
                 Ok(Ok(())) => debug!(?key, "Media cache fill finished"),
                 Ok(Err(error)) => warn!(?key, %error, "Media cache fill failed"),
                 Err(error) => debug!(?key, %error, "Media cache fill skipped"),

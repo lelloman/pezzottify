@@ -152,12 +152,14 @@ only guards in-memory accounting and the epoch check: source reads, temporary-fi
 writes, renames, directory fsyncs and invalidation cleanup all run outside it, so
 foreground lookups never wait on cache I/O. A failed fill removes its temporary file
 and releases its reservation and deduplication marker, including when the source
-panics.
+panics. Pending-key and retained-payload admission remains with the blocking worker
+until it releases its request, even if its async waiter times out or is cancelled.
 
 Invalidation increments a per-media epoch under the lock before any cleanup; lookup
-only opens entries in the current epoch, so old entries become unreachable even if
-the filesystem cleanup fails. Cleanup then removes stale epoch directories without
-holding the lock. A fill that started under an older epoch refuses to publish. Audio
+captures the current epoch before opening and rechecks it after obtaining the
+descriptor, so old entries become unreachable even if the filesystem cleanup fails
+or invalidation races with the open. Cleanup then removes stale epoch directories
+without holding the lock. A fill that started under an older epoch refuses to publish. Audio
 objects survive restart because their keys embed the durable managed revision. Image
 objects are process-scoped, so startup removes them and images start cold. Legacy and
 unmanaged audio locators continue to bypass the cache entirely.
