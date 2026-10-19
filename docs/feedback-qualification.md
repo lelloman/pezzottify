@@ -4,29 +4,21 @@ This is the qualification record for the feedback/assistant diagnostics feature.
 The normative API and privacy contract is [feedback-reports-v1.md](feedback-reports-v1.md).
 This record authorizes no production deployment, publication, or live destination.
 
-## Qualification blocker
+## Android dependency qualification
 
-The assistant source pinned at `87a499561a4db146d75051c34d46f89f4dac9e85`
-declares `DiagnosticEnvelope.schema_version` with default `1` and calls the default
-`Json.encodeToString` in `DiagnosticRecorder.snapshot()` (lines 20 and 115 of
-`android/assistant-core/src/main/java/com/lelloman/simpleaiassistant/diagnostics/DiagnosticRecorder.kt`).
-Default Kotlin serialization omits default-valued fields; see
-[encodeDefaults](https://kotlinlang.org/api/kotlinx.serialization/kotlinx-serialization-json/kotlinx.serialization.json/-json-builder/encode-defaults.html).
-Thus source inspection predicts every Android snapshot lacks `schema_version`.
-The host `AndroidFeedback.prepare()` uploads `snapshot.content` unchanged, while
-server `validate_diagnostics` requires an explicit numeric version. The HTTP
-qualification test verifies that omission is rejected with 400 and a corrected
-request can still use the same key. The new Android shared-fixture test asserts
-that the outgoing snapshot contains version 1 and should expose this mismatch.
-It has not been executed here because Java/Android tooling is unavailable.
+The source pin now targets `1b1d53e3bcaaa09d33371c200bb7535d70fe8239`,
+the reviewed repair delivered by task 29. The recorder uses one
+`Json { encodeDefaults = true; explicitNulls = false }` encoder for persistence
+and snapshots: required schema/version and turn status fields are explicit,
+absent optional event fields stay omitted, and nested payload nulls survive.
+Library regressions assert actual serialized output, shared-fixture recovery and
+persisted/snapshot UTF-8 byte ceilings, including Unicode pressure.
 
-Decision needed: route a scoped assistant-library fix to emit the mandatory version
-(and other required default-valued fields, such as running turn status), test actual
-serialized snapshots against the shared contract, and update this repository's
-source pin. Explicit encoding must preserve the persisted/snapshot byte ceilings.
-Do not weaken server validation or silently reinterpret unversioned uploads.
-This qualification ticket must remain blocked until that dependency is resolved;
-no library source was edited or published by this ticket.
+The unchanged host `FeedbackContractTest` checks version 1, running status,
+exact recovered turns, UTF-8 accounting and account invalidation. Server tests
+continue to reject missing schema versions; validation has not been relaxed.
+These Android regressions still require execution with Java/Android tooling;
+source compatibility inspection is not runtime qualification.
 
 ## Reproducible coverage
 

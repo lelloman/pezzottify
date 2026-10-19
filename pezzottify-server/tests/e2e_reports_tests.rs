@@ -730,7 +730,7 @@ async fn diagnostic_utf8_boundary_and_invalid_schema_leave_submission_recoverabl
             .status(),
         StatusCode::BAD_REQUEST
     );
-    // The pinned Android serializer omits default-valued schema_version.
+    // Older Android serializers omitted default-valued schema_version.
     // Keep the server fail-closed; qualify the client fix with FeedbackContractTest.
     let mut missing_version = envelope.clone();
     missing_version
