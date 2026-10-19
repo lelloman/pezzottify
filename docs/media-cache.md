@@ -75,9 +75,10 @@ existing media mutation lock:
    in-flight reader either opened the old object while it was authoritative, or must
    miss the cache after invalidation and re-read the new authoritative state.
 
-Audio keys make stale entries unreachable even if best-effort invalidation did not
-complete. Invalidation is cleanup, not the correctness boundary. Recovery replays the
-same ordering for interrupted publications and removals.
+Managed audio revisions make old keys unreachable after the catalog reference
+changes. For every entry, invalidation advances its epoch before best-effort file
+cleanup, so failed cleanup cannot make invalidated bytes reachable again. Recovery
+replays the same ordering for interrupted publications and removals.
 
 Readers hold descriptors. Invalidation never waits for or interrupts a reader, and a
 later physical unlink cannot change bytes already exposed through an open descriptor.
@@ -228,8 +229,8 @@ integrity, like original media. They must not be modified externally.
 
 Old checksum-named entries are discarded during startup and repopulated on demand;
 original media and catalog references are unaffected. Restart recovery preserves
-matching length-tagged durable audio and discards process-scoped images, partial
-files and obsolete revisions. External modification of originals still has the
+matching length-tagged durable audio and discards process-scoped audio and images,
+partial files and obsolete revisions. External modification of originals still has the
 limitation documented above.
 
 The existing Prometheus endpoint exposes:
