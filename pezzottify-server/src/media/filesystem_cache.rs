@@ -616,6 +616,22 @@ impl FilesystemCaches {
 }
 
 impl MediaCache for FilesystemCaches {
+    fn snapshots(&self) -> Vec<super::cache::CacheSnapshot> {
+        let state = self.state();
+        self.caches
+            .iter()
+            .enumerate()
+            .map(|(index, cache)| super::cache::CacheSnapshot {
+                name: cache.name.clone(),
+                path: cache.root.clone(),
+                max_bytes: cache.max_bytes,
+                allocated_bytes: state.used[index],
+                reserved_bytes: state.reserved[index],
+                lru: cache.lru,
+            })
+            .collect()
+    }
+
     fn lookup(&self, key: &CacheKey) -> AdapterResult<Option<CacheEntry>> {
         self.lookup_with_open(key, open_object)
     }

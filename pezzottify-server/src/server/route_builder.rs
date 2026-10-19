@@ -280,6 +280,7 @@ pub(super) fn admin_routes(state: &ServerState, limits: &RouteLimits) -> Router 
         .route("/reboot", post(reboot_server))
         .route("/backup/prepare", post(admin_prepare_backup))
         .route("/storage", get(admin_get_storage_report))
+        .route("/media-cache", get(admin_get_media_cache_report))
         .route("/jobs", get(admin_list_jobs))
         .route("/jobs/audit", get(admin_get_job_audit_log))
         .route("/jobs/controls", get(admin_get_job_controls))

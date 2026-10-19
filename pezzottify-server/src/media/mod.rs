@@ -294,6 +294,10 @@ impl MediaManager {
         let _ = self.cache.set(cache);
     }
 
+    pub(crate) fn cache_snapshots(&self) -> Option<Vec<cache::CacheSnapshot>> {
+        self.cache.get().map(|cache| cache.snapshots())
+    }
+
     /// Validate and install ordered filesystem caches from startup configuration.
     pub fn configure_filesystem_caches(
         &self,
@@ -645,21 +649,22 @@ impl MediaManager {
                             "Image cache read failed; using authoritative storage"
                         ),
                     }
+                    cache_event("image_error");
                 }
                 Ok((epoch, Ok(None))) => cached_epoch = epoch,
                 Ok((epoch, Err(error))) => {
                     cached_epoch = epoch;
+                    cache_event("image_error");
                     warn!(
                         %error,
                         image_id = id,
                         "Image cache lookup failed; using authoritative storage"
                     );
                 }
-                Err(error) => warn!(
-                    %error,
-                    image_id = id,
-                    "Image cache work failed; using authoritative storage"
-                ),
+                Err(error) => {
+                    cache_event("image_error");
+                    warn!(%error, image_id = id, "Image cache work failed; using authoritative storage");
+                }
             }
         }
 

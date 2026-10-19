@@ -298,3 +298,25 @@ async fn catalog_sync_honors_a_smaller_requested_page_limit() {
     assert_eq!(page["has_more"], true);
     assert_eq!(page["next_since"], 17);
 }
+
+#[tokio::test]
+async fn media_cache_report_requires_admin_and_reports_disabled_without_disk_scan() {
+    let server = TestServer::spawn().await;
+    let url = format!("{}/v1/admin/media-cache", server.base_url);
+    let anonymous = reqwest::Client::new().get(&url).send().await.unwrap();
+    assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED);
+    let user = TestClient::authenticated(server.base_url.clone()).await;
+    assert_eq!(
+        user.client.get(&url).send().await.unwrap().status(),
+        StatusCode::FORBIDDEN
+    );
+    let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
+    let response = admin.client.get(&url).send().await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["cache-control"], "no-store");
+    let report: Value = response.json().await.unwrap();
+    assert_eq!(report["enabled"], false);
+    assert_eq!(report["caches"], json!([]));
+    assert_eq!(report["audio"]["hits"], 0);
+    assert_eq!(report["image"]["hit_ratio"], Value::Null);
+}

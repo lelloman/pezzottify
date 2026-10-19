@@ -104,6 +104,17 @@ pub enum CacheSource {
     Open(Box<dyn FnOnce() -> std::io::Result<Box<dyn std::io::Read + Send>> + Send>),
 }
 
+/// A memory-only allocation snapshot for operator visibility.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct CacheSnapshot {
+    pub name: String,
+    pub path: std::path::PathBuf,
+    pub max_bytes: u64,
+    pub allocated_bytes: u64,
+    pub reserved_bytes: u64,
+    pub lru: bool,
+}
+
 impl CacheSource {
     pub fn open(self) -> std::io::Result<Box<dyn std::io::Read + Send>> {
         match self {
@@ -136,6 +147,11 @@ pub struct CacheFillRequest {
 /// - treat `invalidate` as durable enough that a later fill cannot resurrect an
 ///   entry for the invalidated media without a fresh authoritative read.
 pub trait MediaCache: Send + Sync {
+    /// Read accounting without inspecting cache files or original media.
+    fn snapshots(&self) -> Vec<CacheSnapshot> {
+        Vec::new()
+    }
+
     fn lookup(&self, key: &CacheKey) -> AdapterResult<Option<CacheEntry>>;
 
     /// Drop every entry for this media. Called before an authoritative

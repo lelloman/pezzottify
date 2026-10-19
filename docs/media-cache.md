@@ -242,7 +242,8 @@ The existing Prometheus endpoint exposes:
 | Same counter | `fill_skipped_empty`, `fill_skipped_present`, `fill_skipped_invalidated`, `fill_skipped_duplicate`, `fill_skipped_capacity`, `fill_skipped_admission`, `fill_skipped_runtime`, `fill_skipped_worker` use `cache="all"`; worker timeout can precede a later completion because the bounded worker retains its admission |
 | `pezzottify_media_cache_bytes` | `cache`, `state`: `allocated` includes conservatively charged temporary/trash files, `reserved` covers admitted fills before allocation, `budget` is the configured maximum |
 
-Audio lookup errors additionally increment `audio_error`. Existing audio paths
+Cache read/lookup errors increment `audio_error` or `image_error`. Image errors
+also count as image misses; audio lookup errors are separate from audio misses. Existing audio paths
 participate in the same hit/miss counts as managed audio. Internal fill
 deduplication lookups do not count as consumer hits. Cache
 failures log identity and error; eviction failures also name the cache. Metrics
@@ -273,3 +274,20 @@ call counts for the reviewed workload. The Linux regression
 accounting to prove opening a 64 MiB cache object and reading a 4 KiB range does
 not scan the payload. Target-storage benchmarking is still needed to quantify
 the speedup on a physical HDD/SSD setup.
+
+## Web admin visibility
+
+Admin → Server → Media cache shows installed cache directories, their byte budgets,
+allocated and reserved bytes, eviction policy, completed fills, evictions and errors.
+Audio and artwork hit rates cover all caches together; individual cache hit rates
+are not measured. Hit rate is hits divided by hits plus fallback attempts, and is
+absent until the first request. Errors may also count as misses, so those columns
+are not additive. Counters reset at server restart; allocation includes recovered
+objects. Allocated bytes include temporary/trash files, and reservations cover
+admitted fills before allocation.
+
+`GET /v1/admin/media-cache` requires `ServerAdmin` and returns a non-cacheable JSON
+snapshot from in-memory accounting and counters, without scanning cache directories
+or original media. The panel refreshes every 15 seconds while visible, supports
+manual refresh, and marks retained data as stale after a failed refresh. This is
+read-only visibility; cache configuration remains in the server configuration file.

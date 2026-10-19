@@ -23,6 +23,8 @@
       {{ rebootError }}
     </div>
 
+    <MediaCacheStatus />
+
     <h2 class="sectionTitle storageTitle">Storage</h2>
 
     <div class="storageCard">
@@ -422,6 +424,7 @@
 <script setup>
 import { ref, watch, onMounted, reactive } from "vue";
 import { useRemoteStore } from "@/store/remote";
+import MediaCacheStatus from "@/components/admin/MediaCacheStatus.vue";
 import ConfirmationDialog from "@/components/common/ConfirmationDialog.vue";
 import { wsConnectionStatus } from "@/services/websocket";
 

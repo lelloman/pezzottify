@@ -1455,3 +1455,23 @@ async fn artwork_cache_truncation_falls_back_to_original() {
     );
     assert!(fixture.caches.lookup(&key).unwrap().is_none());
 }
+
+#[test]
+fn admin_snapshot_reads_accounting_without_accessing_original_or_cache_files() {
+    let fixture = CacheFixture::with_limits(&[1024]);
+    let uri = format!("audio/.managed/track1.{}.mp3", uuid::Uuid::new_v4());
+    fixture.fill_audio(&uri, AUDIO);
+    fixture.reject_original_media();
+    // Snapshot must not depend even on the cache directory being accessible.
+    std::fs::rename(
+        fixture.root.path().join("cache0"),
+        fixture.root.path().join("cache-hidden"),
+    )
+    .unwrap();
+    let snapshots = fixture.caches.snapshots();
+    assert_eq!(snapshots.len(), 1);
+    assert_eq!(snapshots[0].allocated_bytes, AUDIO.len() as u64);
+    assert_eq!(snapshots[0].reserved_bytes, 0);
+    assert_eq!(snapshots[0].max_bytes, 1024);
+    assert!(!snapshots[0].lru);
+}

@@ -58,6 +58,11 @@ async fn admin_get_storage_report(
     }
 }
 
+async fn admin_get_media_cache_report(State(media): State<GuardedMediaManager>) -> Response {
+    let report = super::media_cache_report::collect(media.cache_snapshots());
+    ([(header::CACHE_CONTROL, "no-store")], Json(report)).into_response()
+}
+
 // ============================================================================
 // Admin Job API handlers
 // ============================================================================
