@@ -428,8 +428,8 @@ impl FilesystemCaches {
         file.sync_all().map_err(storage)?;
         drop(file);
 
-        let checksum = file_checksum(&mut File::open(&temporary).map_err(storage)?)?;
-        let destination = directory.join(format!("{}.{checksum}.{extension}", key_hash(key)));
+        let destination =
+            directory.join(format!("{}.len{content_length}.{extension}", key_hash(key)));
         match destination.symlink_metadata() {
             Ok(_) => return Err(storage("cache object already exists")),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -840,20 +840,6 @@ impl Drop for EvictionClaims<'_> {
     }
 }
 
-fn file_checksum(file: &mut File) -> AdapterResult<String> {
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 65536];
-    loop {
-        let count = file.read(&mut buffer).map_err(storage)?;
-        if count == 0 {
-            break;
-        }
-        hasher.update(&buffer[..count]);
-    }
-    Ok(format!("{:x}", hasher.finalize()))
-}
-
 fn event(cache: &str, outcome: &str) {
     crate::server::metrics::MEDIA_CACHE_EVENTS
         .with_label_values(&[cache, outcome])
@@ -1017,9 +1003,11 @@ fn recover_directory(root: &Path, audio_keys: &HashMap<String, String>) -> anyho
                 let name = entry.file_name().to_string_lossy();
                 let valid_name = name.strip_prefix(expected).is_some_and(|suffix| {
                     suffix.strip_prefix('.').is_some_and(|suffix| {
-                        suffix.split_once('.').is_some_and(|(hash, extension)| {
-                            hash.len() == 64
-                                && hash.bytes().all(|b| b.is_ascii_hexdigit())
+                        suffix.split_once('.').is_some_and(|(length, extension)| {
+                            length
+                                .strip_prefix("len")
+                                .and_then(|n| n.parse::<u64>().ok())
+                                .is_some()
                                 && !extension.is_empty()
                                 && extension.bytes().all(|b| b.is_ascii_alphanumeric())
                         })
@@ -1147,7 +1135,7 @@ fn open_object(path: &Path, extension: &str, media: &MediaKey) -> AdapterResult<
 }
 
 fn lock_open_object(
-    mut file: File,
+    file: File,
     path: &Path,
     extension: &str,
     media: &MediaKey,
@@ -1164,12 +1152,12 @@ fn lock_open_object(
         .file_name()
         .and_then(|n| n.to_str())
         .and_then(|n| n.split('.').nth(1))
-        .ok_or_else(|| storage("missing cache checksum"))?;
-    if file_checksum(&mut file)? != expected {
-        return Err(storage("cache checksum mismatch"));
+        .and_then(|n| n.strip_prefix("len"))
+        .and_then(|n| n.parse::<u64>().ok())
+        .ok_or_else(|| storage("missing cache length"))?;
+    if metadata.len() != expected {
+        return Err(storage("cache length mismatch"));
     }
-    use std::io::Seek;
-    file.rewind().map_err(storage)?;
     let content_type = content_type(media, extension);
     Ok(CacheEntry {
         file,
@@ -1853,12 +1841,46 @@ mod eviction_tests {
             .any(|family| family.get_name() == "pezzottify_media_cache_events_total"));
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
-    fn same_length_corruption_is_rejected_and_reclaimed() {
+    fn cache_open_and_small_range_do_not_scan_payload() {
+        use std::io::{Seek, SeekFrom};
+        fn read_chars() -> u64 {
+            std::fs::read_to_string("/proc/thread-self/io")
+                .unwrap()
+                .lines()
+                .find_map(|line| line.strip_prefix("rchar: "))
+                .unwrap()
+                .trim()
+                .parse()
+                .unwrap()
+        }
+        let root = tempfile::tempdir().unwrap();
+        let length = 64 * 1024 * 1024;
+        let path = root.path().join(format!("key.len{length}.mp3"));
+        File::create(&path).unwrap().set_len(length).unwrap();
+        let media = MediaKey {
+            kind: MediaKind::Audio,
+            id: "track".into(),
+        };
+        let before = read_chars();
+        let mut entry = open_object(&path, "mp3", &media).unwrap();
+        entry.file.seek(SeekFrom::Start(length / 2)).unwrap();
+        let mut range = [0u8; 4096];
+        entry.file.read_exact(&mut range).unwrap();
+        let read = read_chars() - before;
+        // Includes reading procfs itself; a whole-object scan reads 64 MiB.
+        assert!(read < 8192, "small range read consumed {read} bytes");
+        assert_eq!(range, [0; 4096]);
+        assert_eq!(entry.content_length, length);
+    }
+
+    #[test]
+    fn truncated_file_is_rejected_and_reclaimed() {
         let (_root, caches) = setup();
         fill(&caches, "a");
         let path = caches.entry_path(0, &key("a")).unwrap();
-        std::fs::write(path, b"corrupt!").unwrap();
+        std::fs::write(path, b"short").unwrap();
         assert!(caches.lookup(&key("a")).is_err());
         assert_eq!(caches.used_bytes(0), 0);
         fill(&caches, "a");

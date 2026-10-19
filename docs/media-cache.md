@@ -171,7 +171,7 @@ without holding the lock. A fill that started under an older epoch refuses to pu
 
 At startup, the manager pages through persisted catalog audio references without
 presence enrichment or original-media access, regardless of observed availability. Recovery matches each audio object's
-key hash to the current durable catalog revision, moves complete checksummed matches from any
+key hash to the current durable catalog revision, moves complete length-tagged matches from any
 numeric epoch (or the earlier flat layout) into epoch zero, and removes obsolete
 revisions, unknown layouts, incomplete files and trash before rebuilding the exact
 allocation ledger. Epoch numbers are process-local ordering tokens, not evidence of
@@ -217,18 +217,21 @@ after cache loss. It checks the allocation's recency incarnation and excludes
 active fills, eviction claims and changed invalidation epochs, so a missing-file
 probe cannot release a newer refill or bytes retained in trash.
 
-Complete filenames include a SHA-256 digest of the cache bytes, computed after the
-temporary copy is flushed. Lookup verifies that digest from the open cache
-descriptor, then rewinds it. This detects truncation and same-length corruption
-for audio and artwork without reading or probing original storage. Corrupt entries
-are invalidated and retrieval falls back. Checksum verification reads the entire
-cached object, including for a small seek; this trades cache-device I/O and CPU
-for corruption detection. The 64 KiB verification buffer is bounded. Existing
-pre-checksum audio cache files are uncertain and are discarded during startup;
-original media and catalog references are unaffected. Restart recovery continues
-to preserve matching checksummed durable audio and discard process-scoped images,
-partial files and obsolete revisions. External modification of originals still
-has the limitation documented above.
+Complete filenames record the expected byte length (`<key-hash>.len<bytes>.<extension>`).
+Lookup checks regular-file metadata and length without reading payload bytes.
+Cache fills validate the copied length and publish atomically after flush/sync;
+no payload hashing is performed during population or lookup. Key hashes only
+encode identity/version information into safe filenames. Freshness still comes
+from catalog versions and invalidation epochs, independently of byte integrity.
+Truncated or unreadable entries fall back to existing retrieval. Same-length
+external corruption is not detected: cache files rely on normal filesystem
+integrity, like original media. They must not be modified externally.
+
+Old checksum-named entries are discarded during startup and repopulated on demand;
+original media and catalog references are unaffected. Restart recovery preserves
+matching length-tagged durable audio and discards process-scoped images, partial
+files and obsolete revisions. External modification of originals still has the
+limitation documented above.
 
 The existing Prometheus endpoint exposes:
 
@@ -265,6 +268,8 @@ workload rather than a physical-HDD performance benchmark; recorded times depend
 on the host, filesystem, tracing overhead and build profile.
 
 The PR and ticket handoff record the measured cold/warm times and original-media
-call counts for the reviewed workload. Full-object checksum verification can
-dominate warm latency in an unoptimized build; zero original-media calls establishes
-HDD avoidance, while target-storage benchmarking is needed to establish a speedup.
+call counts for the reviewed workload. The Linux regression
+`cache_open_and_small_range_do_not_scan_payload` uses per-thread kernel read
+accounting to prove opening a 64 MiB cache object and reading a 4 KiB range does
+not scan the payload. Target-storage benchmarking is still needed to quantify
+the speedup on a physical HDD/SSD setup.

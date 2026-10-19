@@ -665,10 +665,22 @@ async fn restart_reconciles_legacy_layout_and_discards_uncertain_audio_files() {
     std::fs::rename(&path, identity.join(path.file_name().unwrap())).unwrap();
     std::fs::write(identity.join(".tmp-interrupted"), AUDIO).unwrap();
     std::fs::write(identity.join("unknown.mp3"), AUDIO).unwrap();
+    // Old payload-checksum entries are disposable, even for the current key.
+    let key_hash = path
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .split('.')
+        .next()
+        .unwrap();
+    let old_checksum_entry = identity.join(format!("{key_hash}.{}.mp3", "a".repeat(64)));
+    std::fs::write(&old_checksum_entry, AUDIO).unwrap();
     fixture.reject_original_media();
     let manager = fixture.restarted_manager(AUDIO.len() as u64);
     assert!(manager.cache.get().unwrap().lookup(&key).unwrap().is_some());
     assert_eq!(fixture.complete_cache_bytes(), AUDIO.len() as u64);
+    assert!(!old_checksum_entry.exists());
 }
 
 #[test]
@@ -1242,14 +1254,14 @@ async fn representative_audio_seek_artwork_workload() {
 }
 
 #[tokio::test]
-async fn audio_cache_corruption_and_loss_fall_back_to_original() {
+async fn audio_cache_truncation_and_loss_fall_back_to_original() {
     let fixture = CacheFixture::with_limits(&[1024 * 1024]);
     let uri = fixture
         .publish("track1", "mp3", AUDIO, Provenance::Ingested)
         .await;
     let key = fixture.fill_audio(&uri, AUDIO);
     let path = fixture.caches.entry_path(0, &key).unwrap();
-    std::fs::write(&path, vec![b'X'; AUDIO.len()]).unwrap();
+    std::fs::write(&path, vec![b'X'; AUDIO.len() - 1]).unwrap();
     let (_, opened) = fixture
         .manager
         .lookup_audio("track1")
@@ -1289,7 +1301,7 @@ async fn audio_cache_corruption_and_loss_fall_back_to_original() {
 }
 
 #[tokio::test]
-async fn artwork_cache_corruption_falls_back_to_original() {
+async fn artwork_cache_truncation_falls_back_to_original() {
     let fixture = CacheFixture::with_limits(&[1024 * 1024]);
     fixture
         .publish("album", "jpg", JPEG, Provenance::ImageCache)
@@ -1300,7 +1312,7 @@ async fn artwork_cache_corruption_falls_back_to_original() {
     fixture.manager.read_image("album").await.unwrap();
     wait_for_entry(&fixture.caches, &key).await;
     let path = fixture.caches.entry_path(0, &key).unwrap();
-    std::fs::write(path, vec![0; JPEG.len()]).unwrap();
+    std::fs::write(path, vec![0; JPEG.len() - 1]).unwrap();
     assert_eq!(
         fixture.manager.read_image("album").await.unwrap().bytes,
         JPEG
