@@ -42,10 +42,10 @@ A cache object is immutable and identified by `CacheKey`:
 Audio keys use the managed authoritative locator
 (`audio/.managed/{id}.{revision}.{ext}`) as their version. The revision is an immutable
 publication UUID, so replacement and deletion cannot reuse an old key. The version is
-read from the catalog database, not from the media disk. Legacy and unmanaged locators
-(`audio/track.mp3`, hashed or imported paths without a publication revision) are not
-cacheable; they bypass the cache and continue to be read in place. This is the legacy
-validity rule.
+read from the catalog database, not from the media disk. Existing locators without
+a publication revision are also cacheable: their key uses the catalog path and a
+process generation. They fill on first access, serve subsequent reads from cache,
+and are discarded on restart. No migration or special filename is required.
 
 Image keys use the catalog source URL for the item. The catalog database is the fast
 metadata source; the image pointer under `.media/images` is not consulted for a hit.
@@ -89,18 +89,18 @@ read.
 
 ## Restart and external changes
 
-Audio entries can survive a restart: their version is the durable managed revision
+Managed audio entries can survive a restart: their version is the durable managed revision
 from the catalog. An entry whose key does not match the current catalog reference is
-ignored. Image entries are process-scoped as described above, so a restart starts
-cold for images and falls back safely.
+ignored. Existing audio paths without a durable revision and image entries are
+process-scoped, so a restart discards those copies and refills them on demand.
 
 Pezzottify-made changes are reflected through the publication, replacement and
 deletion paths. Arbitrary files changed outside Pezzottify cannot be detected
 instantly without monitoring or probing: if an external process rewrites an
-authoritative file in place without changing the managed catalog reference, audio
-entries for that reference may serve the old bytes until the media is republished
-with a new revision or the disposable cache is cleared. This story deliberately does not add per-hit original-storage
-validation to hide that limitation.
+authoritative file in place without changing the catalog reference, cached entries
+may serve old bytes until the media is republished or the disposable cache is
+cleared. For audio without a durable revision, restarting the server also discards
+the old copy. Cache hits do not probe original storage to detect external changes.
 
 ## Failure behavior
 
@@ -180,10 +180,9 @@ the catalog reference while cleanup failed, the old key cannot match and its byt
 are reclaimed. A crash during normalization leaves complete revision-keyed files
 that the same reconciliation can safely process again. Recovery errors abort cache
 installation with cache/path context instead of installing uncertain accounting.
-The resulting full cache can immediately serve unchanged audio after restart,
-without opening original media. Image
-objects are process-scoped, so startup removes them and images start cold. Legacy and
-unmanaged audio locators continue to bypass the cache entirely.
+The resulting full cache can immediately serve unchanged managed audio after restart,
+without opening original media. Images and audio without durable revisions are
+process-scoped: startup removes them and the next access refills them.
 
 
 ## Eviction, integrity and diagnostics (#13)
@@ -242,9 +241,9 @@ The existing Prometheus endpoint exposes:
 | Same counter | `fill_skipped_empty`, `fill_skipped_present`, `fill_skipped_invalidated`, `fill_skipped_duplicate`, `fill_skipped_capacity`, `fill_skipped_admission`, `fill_skipped_runtime`, `fill_skipped_worker` use `cache="all"`; worker timeout can precede a later completion because the bounded worker retains its admission |
 | `pezzottify_media_cache_bytes` | `cache`, `state`: `allocated` includes conservatively charged temporary/trash files, `reserved` covers admitted fills before allocation, `budget` is the configured maximum |
 
-Audio lookup errors additionally increment `audio_error`. Audio with legacy or
-unmanaged references bypasses cache lookup and is excluded from these hit/miss
-counts. Internal fill deduplication lookups do not count as consumer hits. Cache
+Audio lookup errors additionally increment `audio_error`. Existing audio paths
+participate in the same hit/miss counts as managed audio. Internal fill
+deduplication lookups do not count as consumer hits. Cache
 failures log identity and error; eviction failures also name the cache. Metrics
 labels never include media identities or paths.
 

@@ -15,9 +15,8 @@ use std::sync::{
 
 /// The authority token a cached copy was derived from.
 ///
-/// Audio uses the managed authoritative locator, which embeds the immutable
-/// publication revision. Images use their catalog source URL because no faster
-/// durable revision exists yet.
+/// Audio uses its catalog locator. Managed locators embed a durable publication
+/// revision; other locators are scoped to this process. Images use their source URL.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CacheVersion(pub String);
 
@@ -40,17 +39,27 @@ pub struct CacheKey {
 }
 
 impl CacheKey {
-    /// Managed audio locators are the only cacheable audio versions. Legacy
-    /// filenames and unmanaged paths carry no durable content revision.
+    /// Every nonempty audio locator is cacheable. Without a durable publication
+    /// revision, entries live for this process and are discarded on restart.
+    /// Publication/deletion invalidation protects both kinds during this process.
     pub fn audio(id: &str, uri: &str) -> Option<Self> {
-        let revision = managed_audio_revision(id, uri)?;
+        if uri.is_empty() {
+            return None;
+        }
+        let (version, generation) = match managed_audio_revision(id, uri) {
+            Some(revision) => (format!("{uri}#{revision}"), CacheGeneration::Durable),
+            None => (
+                uri.to_owned(),
+                CacheGeneration::Process(super::mutations::process_epoch().to_owned()),
+            ),
+        };
         Some(Self {
             media: MediaKey {
                 kind: MediaKind::Audio,
                 id: id.to_owned(),
             },
-            version: CacheVersion(format!("{uri}#{revision}")),
-            generation: CacheGeneration::Durable,
+            version: CacheVersion(version),
+            generation,
         })
     }
 

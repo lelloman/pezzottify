@@ -819,10 +819,147 @@ fn cache_directories_cannot_overlap_media_storage_or_each_other() {
     .is_ok());
 }
 
-#[test]
-fn legacy_audio_keys_have_no_cache_identity() {
-    assert!(CacheKey::audio("legacy", "audio/legacy.mp3").is_none());
-    assert!(CacheKey::audio("track1", "audio/.managed/track1.not-a-uuid.mp3").is_none());
+#[tokio::test]
+async fn legacy_audio_fills_and_serves_ranges_with_original_unavailable() {
+    let fixture = CacheFixture::with_limits(&[1024 * 1024]);
+    let key = CacheKey::audio("legacy", "audio/legacy.mp3").unwrap();
+    assert!(matches!(key.generation, cache::CacheGeneration::Process(_)));
+    let (_, opened) = fixture
+        .manager
+        .lookup_audio("legacy")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        collect(
+            opened
+                .unwrap()
+                .range_stream(0, AUDIO.len() as u64)
+                .await
+                .unwrap()
+        )
+        .await,
+        AUDIO
+    );
+    wait_for_entry(&fixture.caches, &key).await;
+    fixture.reject_original_media();
+    let (_, opened) = fixture
+        .manager
+        .lookup_audio("legacy")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        collect(opened.unwrap().range_stream(3, 4).await.unwrap()).await,
+        &AUDIO[3..7]
+    );
+    let manager = fixture.manager.clone();
+    let opened = tokio::task::spawn_blocking(move || {
+        manager
+            .open_local_audio_blocking("legacy")
+            .unwrap()
+            .unwrap()
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        collect(opened.range_stream(2, 5).await.unwrap()).await,
+        &AUDIO[2..7]
+    );
+}
+
+#[tokio::test]
+async fn legacy_audio_replacement_invalidates_old_copy_and_pending_fill() {
+    let fixture = CacheFixture::with_limits(&[1024 * 1024]);
+    let old = CacheKey::audio("legacy", "audio/legacy.mp3").unwrap();
+    fixture.manager.lookup_audio("legacy").await.unwrap();
+    wait_for_entry(&fixture.caches, &old).await;
+    let old_epoch = fixture.caches.invalidation_epoch(&old.media);
+    let uri = fixture
+        .publish("legacy", "mp3", b"replacement", Provenance::Ingested)
+        .await;
+    assert!(fixture.caches.lookup(&old).unwrap().is_none());
+    fixture
+        .caches
+        .populate(CacheFillRequest {
+            key: old.clone(),
+            epoch: old_epoch,
+            filename: "legacy.mp3".to_owned(),
+            content_type: "audio/mpeg".to_owned(),
+            content_length: AUDIO.len() as u64,
+            source: CacheSource::Bytes(Arc::from(AUDIO)),
+        })
+        .unwrap();
+    assert!(fixture.caches.lookup(&old).unwrap().is_none());
+    let (_, opened) = fixture
+        .manager
+        .lookup_audio("legacy")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        collect(opened.unwrap().range_stream(0, 11).await.unwrap()).await,
+        b"replacement"
+    );
+    wait_for_entry(&fixture.caches, &CacheKey::audio("legacy", &uri).unwrap()).await;
+    let current = fixture
+        .manager
+        .authoritative_audio("legacy")
+        .unwrap()
+        .unwrap();
+    assert!(fixture
+        .manager
+        .delete_authoritative_audio(&current)
+        .unwrap());
+    assert!(fixture
+        .manager
+        .lookup_audio("legacy")
+        .await
+        .unwrap()
+        .unwrap()
+        .1
+        .is_none());
+}
+
+#[tokio::test]
+async fn legacy_audio_restart_discards_old_bytes_and_refills_existing_path() {
+    let fixture = CacheFixture::with_limits(&[1024 * 1024]);
+    let key = CacheKey::audio("legacy", "audio/legacy.mp3").unwrap();
+    fixture.manager.lookup_audio("legacy").await.unwrap();
+    wait_for_entry(&fixture.caches, &key).await;
+    // Simulate a same-length external replacement while the server is stopped.
+    std::fs::write(fixture.media.join("audio/legacy.mp3"), b"fedcba9876543210").unwrap();
+    let restarted = fixture.restarted_manager(1024 * 1024);
+    assert!(restarted
+        .cache
+        .get()
+        .unwrap()
+        .lookup(&key)
+        .unwrap()
+        .is_none());
+    let (_, opened) = restarted.lookup_audio("legacy").await.unwrap().unwrap();
+    assert_eq!(
+        collect(opened.unwrap().range_stream(0, 16).await.unwrap()).await,
+        b"fedcba9876543210"
+    );
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while restarted
+        .cache
+        .get()
+        .unwrap()
+        .lookup(&key)
+        .unwrap()
+        .is_none()
+    {
+        assert!(Instant::now() < deadline);
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    fixture.reject_original_media();
+    let (_, opened) = restarted.lookup_audio("legacy").await.unwrap().unwrap();
+    assert_eq!(
+        collect(opened.unwrap().range_stream(0, 16).await.unwrap()).await,
+        b"fedcba9876543210"
+    );
 }
 
 #[test]
@@ -1134,21 +1271,20 @@ fn startup_recovery_rejects_objects_symlink_into_original_media() {
 async fn representative_audio_seek_artwork_workload() {
     let fixture = CacheFixture::with_limits(&[16 * 1024 * 1024]);
     let audio = vec![42u8; 4 * 1024 * 1024];
-    let uri = fixture
-        .publish("track1", "mp3", &audio, Provenance::Ingested)
-        .await;
+    let uri = "audio/legacy.mp3";
+    std::fs::write(fixture.media.join(uri), &audio).unwrap();
     fixture
         .publish("album", "jpg", JPEG, Provenance::ImageCache)
         .await;
     let url = "https://example.test/workload.jpg";
     fixture.seed_image_url(url);
-    let key = CacheKey::audio("track1", &uri).unwrap();
+    let key = CacheKey::audio("legacy", uri).unwrap();
     let image_key = CacheKey::image("album", url, super::mutations::process_epoch());
     std::fs::write(fixture.root.path().join(".cache-cold-start"), []).unwrap();
     let cold = Instant::now();
     let (_, opened) = fixture
         .manager
-        .lookup_audio("track1")
+        .lookup_audio("legacy")
         .await
         .unwrap()
         .unwrap();
@@ -1172,7 +1308,7 @@ async fn representative_audio_seek_artwork_workload() {
     );
     let seeking = Instant::now();
     for index in 0..16 {
-        let (_, opened) = uncached.lookup_audio("track1").await.unwrap().unwrap();
+        let (_, opened) = uncached.lookup_audio("legacy").await.unwrap().unwrap();
         assert_eq!(
             collect(
                 opened
@@ -1206,7 +1342,7 @@ async fn representative_audio_seek_artwork_workload() {
     let warm = Instant::now();
     let (_, opened) = fixture
         .manager
-        .lookup_audio("track1")
+        .lookup_audio("legacy")
         .await
         .unwrap()
         .unwrap();
@@ -1224,7 +1360,7 @@ async fn representative_audio_seek_artwork_workload() {
     for index in 0..16 {
         let (_, opened) = fixture
             .manager
-            .lookup_audio("track1")
+            .lookup_audio("legacy")
             .await
             .unwrap()
             .unwrap();

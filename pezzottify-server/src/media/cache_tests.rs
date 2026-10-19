@@ -249,10 +249,10 @@ async fn disabled_cache_leaves_authoritative_reads_unchanged() {
 }
 
 #[tokio::test]
-async fn legacy_and_unmanaged_audio_bypass_the_cache() {
+async fn legacy_audio_uses_the_cache_lookup() {
     let fixture = CacheFixture::new(true);
-    assert!(CacheKey::audio("legacy", "audio/legacy.mp3").is_none());
-    assert!(CacheKey::audio("track1", "audio/.managed/track1.not-a-uuid.mp3").is_none());
+    assert!(CacheKey::audio("legacy", "audio/legacy.mp3").is_some());
+    assert!(CacheKey::audio("track1", "audio/.managed/track1.not-a-uuid.mp3").is_some());
     let (_, opened) = fixture
         .manager
         .lookup_audio("legacy")
@@ -270,7 +270,7 @@ async fn legacy_and_unmanaged_audio_bypass_the_cache() {
         .await,
         AUDIO
     );
-    assert_eq!(fixture.cache.lookups(), 0);
+    assert_eq!(fixture.cache.lookups(), 1);
 }
 
 #[tokio::test]
