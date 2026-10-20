@@ -12,6 +12,30 @@ plugins {
     id("com.lelloman.paravoid.hilt")
 }
 
+// Load local.properties for OIDC, server and update settings
+val localProperties = Properties().apply {
+    val localPropsFile = rootProject.file("local.properties")
+    if (localPropsFile.exists()) {
+        localPropsFile.inputStream().use { load(it) }
+    }
+}
+
+// Optional external server/OIDC settings for isolated worktrees; never copied into Git.
+val connectionProperties = Properties().apply {
+    providers.gradleProperty("connectionPropertiesFile").orNull?.let { path ->
+        rootProject.file(path).inputStream().use { load(it) }
+    }
+}
+
+// Deployment settings: -PconnectionPropertiesFile wins over local.properties.
+fun deploymentProperty(name: String, default: String = ""): String =
+    connectionProperties.getProperty(name, localProperties.getProperty(name, default))
+
+fun isHttpsUrl(value: String): Boolean = runCatching {
+    val uri = URI(value)
+    uri.scheme == "https" && !uri.host.isNullOrBlank() && uri.userInfo == null
+}.getOrDefault(false)
+
 // Complete packaging and its disposable delivery acceptance are explicit opt-ins.
 val paravoidComplete = providers.gradleProperty("paravoidComplete").map(String::toBooleanStrict).orElse(false).get()
 val paravoidAcceptance = providers.gradleProperty("paravoidAcceptance").map(String::toBooleanStrict).orElse(false).get()
@@ -24,6 +48,26 @@ require(!providers.gradleProperty("paravoidAcceptanceGeneration").isPresent || p
     "paravoidAcceptanceGeneration requires paravoidAcceptance=true"
 }
 val paravoidAcceptanceGeneration = providers.gradleProperty("paravoidAcceptanceGeneration").orElse("none").get()
+
+// Production updates come from the deployment's update server, never from a built-in host.
+// An optional trigger app (package plus signing-certificate SHA-256) may hint the shell to
+// check for updates.
+val paravoidUpdateBaseUrl = deploymentProperty("paravoid.updateBaseUrl")
+val paravoidTriggerPackage = deploymentProperty("paravoid.updateTriggerPackage")
+val paravoidTriggerCertificate = deploymentProperty("paravoid.updateTriggerCertificate")
+if (paravoidProduction) {
+    require(isHttpsUrl(paravoidUpdateBaseUrl) && paravoidUpdateBaseUrl.endsWith("/")) {
+        "Paravoid production requires an HTTPS paravoid.updateBaseUrl ending in / in local.properties or -PconnectionPropertiesFile"
+    }
+    require(
+        (paravoidTriggerPackage.isBlank() && paravoidTriggerCertificate.isBlank()) || (
+            paravoidTriggerPackage.matches(Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+")) &&
+                paravoidTriggerCertificate.matches(Regex("[a-fA-F0-9]{64}"))
+            )
+    ) {
+        "paravoid.updateTriggerPackage and a 64-hex paravoid.updateTriggerCertificate must be set together"
+    }
+}
 
 if (paravoidComplete) {
     paravoid {
@@ -48,21 +92,20 @@ if (paravoidComplete) {
         )
         updates {
             enabled.set(paravoidAcceptance || paravoidProduction)
-            baseUrl.set(if (paravoidProduction) "https://store.lelloman.com/api/paravoid/" else "http://127.0.0.1:19165/")
+            baseUrl.set(if (paravoidProduction) paravoidUpdateBaseUrl else "http://127.0.0.1:19165/")
             authentication.set(if (paravoidProduction) "apkKey" else "public")
             if (paravoidProduction) {
-                // Store hints drive prompt updates; polling covers missed hints.
+                // Trigger hints drive prompt updates; polling covers missed hints.
                 schedule {
                     checks.set(true)
                     downloads.set(true)
                     intervalSeconds.set(48L * 3600)
                     flexSeconds.set(6L * 3600)
                 }
-                localTriggers {
-                    trustedCallers.put(
-                        "com.lelloman.store",
-                        listOf("5d35a11c5b882924343a01dfc1836e7a78573a93e50af161d5769128994f9350"),
-                    )
+                if (paravoidTriggerPackage.isNotBlank()) {
+                    localTriggers {
+                        trustedCallers.put(paravoidTriggerPackage, listOf(paravoidTriggerCertificate.lowercase()))
+                    }
                 }
             }
             debugHttpAllowed.set(paravoidAcceptance)
@@ -79,21 +122,6 @@ if (paravoidComplete) {
 // The payload R8 rules include AGP's extracted proguard-android-optimize.txt.
 tasks.matching { it.name.startsWith("package") && it.name.endsWith("ParavoidApplication") }
     .configureEach { dependsOn("extractProguardFiles") }
-
-// Load local.properties for OIDC config
-val localProperties = Properties().apply {
-    val localPropsFile = rootProject.file("local.properties")
-    if (localPropsFile.exists()) {
-        localPropsFile.inputStream().use { load(it) }
-    }
-}
-
-// Optional external server/OIDC settings for isolated worktrees; never copied into Git.
-val connectionProperties = Properties().apply {
-    providers.gradleProperty("connectionPropertiesFile").orNull?.let { path ->
-        rootProject.file(path).inputStream().use { load(it) }
-    }
-}
 
 // Load signing.properties for release signing config
 val signingProperties = Properties().apply {
@@ -337,10 +365,6 @@ android.defaultConfig {
     // Server config from local.properties
     val defaultBaseUrl = connectionProperties.getProperty("server.baseUrl", localProperties.getProperty("server.baseUrl", "http://10.0.2.2:3001"))
     if (paravoidProduction) {
-        fun isHttpsUrl(value: String): Boolean = runCatching {
-            val uri = URI(value)
-            uri.scheme == "https" && !uri.host.isNullOrBlank() && uri.userInfo == null
-        }.getOrDefault(false)
         require(isHttpsUrl(oidcIssuerUrl) && oidcClientId.isNotBlank()) {
             "Paravoid production requires an HTTPS oidc.issuerUrl and non-empty oidc.clientId in local.properties or -PconnectionPropertiesFile"
         }

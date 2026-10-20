@@ -263,7 +263,7 @@ class UnifiedPushRegistrationTest {
 
     private companion object {
         const val NTFY = "io.heckel.ntfy"
-        const val STORE = "com.lelloman.store"
+        const val STORE = "com.example.distributor"
         const val VAPID = "BAx"
     }
 }

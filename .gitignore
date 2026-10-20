@@ -9,8 +9,8 @@ __pycache__/
 # Android build artifacts
 android/**/build/
 
-# Local Android release publisher wrapper
-scripts/publish-android-to-lellostore.sh
+# Local, deployment-specific helper scripts and publisher settings
+scripts/local/
 
 # used by bruno
 api_test/

@@ -174,7 +174,7 @@ multi-instance invalidation service. Normal APK declarations are unchanged.
 
 The production trust policy must name `com.lelloman.pezzottify.android`.
 The production variant uses the existing APK release keystore, an app-specific
-persistent RSA payload key, and the Store's public head/grant trust keys.
+persistent RSA payload key, and the update server's public head/grant trust keys.
 The initial local identity lives in ignored `android/.paravoid-signing/`;
 back up `release.pk8` securely and retain `trust.json` for future releases.
 Never regenerate this identity for an update or substitute disposable fixture keys.
@@ -191,22 +191,41 @@ python3 check-paravoid-complete.py \
   --application-id com.lelloman.pezzottify.android
 ```
 
-This non-debuggable, unshrunk release embeds its signed VPK and enables HTTPS
-updates at `https://store.lelloman.com/api/paravoid/` with APK-key authentication,
-crash recovery and an App updates button in Settings. There is no separate
-update launcher. LelloStore (`com.lelloman.store`) is the sole trusted local
-update-hint caller, pinned to its release signing certificate. Store hints queue
-the shell's own authenticated update check. Background checks and downloads are
-enabled, with checks every 48 hours (6-hour flex) as a fallback for missed hints;
-background downloads use unmetered networks. Acceptance markers remain disabled.
-Normal production variants retain their existing shrinking configuration.
+The production build reads its update server from deployment settings, never from
+a built-in host. Set these in `local.properties` (or the file passed with
+`-PconnectionPropertiesFile`):
 
-Use the authoritative LelloStore publisher on the generated `shell.apk`, with
-`upload --distribution-mode paravoid --dry-run --json` before authentication.
-Upload as a draft, inspect the validated installer and distribution, then use the
-separate `publish` command with its current expected revision. Preserve the
-`baseline-candidate/` after the shell is accepted; compatible future VPK builds
-must use that baseline and an increasing payload version.
+```properties
+# HTTPS base URL of the Paravoid update API, ending in /
+paravoid.updateBaseUrl=https://updates.example.com/api/paravoid/
+# Optional: an installed app allowed to hint the shell to check for updates,
+# pinned to its signing-certificate SHA-256 (64 hex characters). Set both or neither.
+paravoid.updateTriggerPackage=com.example.store
+paravoid.updateTriggerCertificate=<sha256-hex>
+```
+
+This non-debuggable, unshrunk release embeds its signed VPK and enables HTTPS
+updates at `paravoid.updateBaseUrl` with APK-key authentication, crash recovery and
+an App updates button in Settings. There is no separate update launcher. The
+configured trigger app, if any, is the sole trusted local update-hint caller,
+pinned to its signing certificate. Its hints queue the shell's own authenticated
+update check. Background checks and downloads are enabled, with checks every 48
+hours (6-hour flex) as a fallback for missed hints; background downloads use
+unmetered networks. Acceptance markers remain disabled. Normal production variants
+retain their existing shrinking configuration.
+
+The publish scripts hand the generated artifacts to the update server's publisher,
+a command named by `PARAVOID_PUBLISHER` that implements `upload`, `upload-vpk`,
+`upload-status`, `distribution` and `publish-vpk`. The publisher's own settings
+(server URL, OIDC issuer, client ID, token) come from its environment. Keep them,
+with `PARAVOID_PUBLISHER`, in the untracked `scripts/local/paravoid-publish.env`,
+which both scripts source when it exists.
+
+Run the publisher's `upload --distribution-mode paravoid --dry-run --json` on the
+generated `shell.apk` before authentication. Upload as a draft, inspect the validated
+installer and distribution, then use the separate `publish` command with its current
+expected revision. Preserve the `baseline-candidate/` after the shell is accepted;
+compatible future VPK builds must use that baseline and an increasing payload version.
 
 `bash ../scripts/publish-paravoid-vpk.sh <shell-version-code>` publishes a payload-only
 update for an already published shell: it builds against that shell's saved baseline
