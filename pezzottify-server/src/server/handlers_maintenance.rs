@@ -59,15 +59,9 @@ async fn admin_set_maintenance(
         estimated_end,
     };
     let result = maintenance
-        .persist_and_replace(async move {
-            database
-                .server
-                .run(DbPriority::Interactive, move |store| {
-                    next.persist(store)?;
-                    Ok(next)
-                })
-                .await
-                .map_err(anyhow::Error::from)
+        .persist_and_replace(database.server.clone(), move |store| {
+            next.persist(store)?;
+            Ok(next)
         })
         .await;
 
