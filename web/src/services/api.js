@@ -62,11 +62,11 @@ export function setupAxiosInterceptors() {
       const base = new URL(config.baseURL || "/", window.location.origin);
       if (new URL(config.url || "/", base).origin === window.location.origin) {
         if (config.powerPassive || (!config.powerForeground && isPassiveRequest())) {
-          config.headers["X-Homelab-Wake"] = "passive";
+          config.headers["X-Wake-Mode"] = "passive";
         } else {
           await ensureReady();
           if (config.signal?.aborted) throw new axios.CanceledError();
-          delete config.headers["X-Homelab-Wake"];
+          delete config.headers["X-Wake-Mode"];
         }
       }
       const method = (config.method || "get").toLowerCase();

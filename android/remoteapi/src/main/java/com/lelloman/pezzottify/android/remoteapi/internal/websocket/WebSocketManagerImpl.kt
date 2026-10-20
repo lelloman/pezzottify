@@ -130,7 +130,7 @@ internal class WebSocketManagerImpl(
 
         val request = Request.Builder()
             .url(wsUrl)
-            .header("X-Homelab-Wake", "passive")
+            .header("X-Wake-Mode", "passive")
             .header("Authorization", bearerAuthorization(authToken))
             .build()
 

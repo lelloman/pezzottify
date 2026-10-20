@@ -48,6 +48,17 @@ pub fn readiness_routes() -> anyhow::Result<Router> {
     ))
 }
 
+/// Set to `passive` (by a wake gateway in front of the server, from the clients'
+/// `X-Wake-Mode: passive`) for requests that must not count as user activity.
+const ACTIVITY_HEADER: &str = "X-Client-Activity";
+
+fn is_passive(headers: &HeaderMap) -> bool {
+    headers
+        .get(ACTIVITY_HEADER)
+        .and_then(|value| value.to_str().ok())
+        == Some("passive")
+}
+
 pub async fn activity(request: Request, next: Next) -> Response {
     use simple_server::web::response::IntoResponse;
     if !crate::power::enabled()
@@ -56,11 +67,7 @@ pub async fn activity(request: Request, next: Next) -> Response {
     {
         return next.run(request).await;
     }
-    let passive = request
-        .headers()
-        .get("X-Homelab-Activity")
-        .and_then(|value| value.to_str().ok())
-        == Some("passive");
+    let passive = is_passive(request.headers());
     let guard = match crate::power::acquire(!passive).await {
         Ok(guard) => guard,
         Err(_) => {
@@ -83,4 +90,19 @@ pub async fn activity(request: Request, next: Next) -> Response {
         chunk
     });
     Response::from_parts(parts, Body::from_stream(stream))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_a_passive_activity_header_marks_the_request_passive() {
+        let mut headers = HeaderMap::new();
+        assert!(!is_passive(&headers));
+        headers.insert("x-client-activity", "active".parse().unwrap());
+        assert!(!is_passive(&headers));
+        headers.insert("x-client-activity", "passive".parse().unwrap());
+        assert!(is_passive(&headers));
+    }
 }

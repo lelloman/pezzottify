@@ -164,7 +164,7 @@ internal class RemoteApiClientImpl(
     private fun makeRetrofit(baseUrl: String, passive: Boolean = false): RetrofitApiClient {
         val okHttpBuilder = okHttpClientFactory.createBuilder(baseUrl)
         if (passive) okHttpBuilder.interceptors().add(0, Interceptor { chain ->
-            chain.proceed(chain.request().newBuilder().header("X-Homelab-Wake", "passive").build())
+            chain.proceed(chain.request().newBuilder().header("X-Wake-Mode", "passive").build())
         })
         // Radio computation may take longer than OkHttp's default read timeout.
         // The player controller bounds the entire operation to 60 seconds.

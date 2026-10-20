@@ -39,7 +39,7 @@ class WakeGateInterceptorTest {
             server.enqueue(json("""{"code":"SERVER_SLEEPING"}""", 503))
             val client = OkHttpClientFactory().createBuilder(server.url("/").toString()).build()
             val request = Request.Builder().url(server.url("/v1/sync/state"))
-                .header("X-Homelab-Wake", "passive").build()
+                .header("X-Wake-Mode", "passive").build()
             client.newCall(request).execute().use { assertThat(it.code).isEqualTo(503) }
             assertThat(server.takeRequest().path).isEqualTo("/v1/sync/state")
             assertThat(server.requestCount).isEqualTo(1)

@@ -35,11 +35,11 @@ let authenticatedRequest;
 export async function authenticatedFetch(url, options) {
   const headers = new Headers(options?.headers);
   if (options?.powerPassive || (!options?.powerForeground && isPassiveRequest())) {
-    headers.set("X-Homelab-Wake", "passive");
+    headers.set("X-Wake-Mode", "passive");
   } else {
     await ensureReady();
     options?.signal?.throwIfAborted();
-    headers.delete("X-Homelab-Wake");
+    headers.delete("X-Wake-Mode");
   }
   if (!authenticatedRequest) {
     const oidc = await import("./oidc.js");

@@ -18,7 +18,7 @@ import okhttp3.Response
 internal class WakeGateInterceptor(private val origin: HttpUrl) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
-        if (request.header("X-Homelab-Wake") != "passive" && request.url.queryParameter("wake") != "passive"
+        if (request.header("X-Wake-Mode") != "passive" && request.url.queryParameter("wake") != "passive"
             && request.url.host == origin.host && request.url.port == origin.port
             && request.url.scheme == origin.scheme) {
             awaitReady(origin)

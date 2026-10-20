@@ -20,7 +20,7 @@ use super::filesystem_work::FilesystemWorkPool;
 /// Metric name prefix for all Pezzottify metrics
 const PREFIX: &str = "pezzottify";
 
-/// Service name for homelab storage metrics
+/// Service label for the shared storage metrics
 const SERVICE_NAME: &str = "pezzottify";
 pub const UNMATCHED_ROUTE_LABEL: &str = "<unmatched>";
 
@@ -384,11 +384,11 @@ lazy_static! {
         &["job_id"]
     ).expect("Failed to create background_job_circuit_trips_total metric");
 
-    // Homelab Storage Metrics (standardized format for monitoring)
-    pub static ref HOMELAB_STORAGE_BYTES: GaugeVec = GaugeVec::new(
-        Opts::new("homelab_storage_bytes", "Storage usage in bytes"),
+    // Storage Metrics (service-labelled format shared with other services)
+    pub static ref STORAGE_BYTES: GaugeVec = GaugeVec::new(
+        Opts::new("storage_bytes", "Storage usage in bytes"),
         &["service", "path"]
-    ).expect("Failed to create homelab_storage_bytes metric");
+    ).expect("Failed to create storage_bytes metric");
 }
 
 /// Initialize all metrics and register them with the Prometheus registry
@@ -451,7 +451,7 @@ pub fn init_metrics() {
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_QUEUE_WAIT_SECONDS.clone()));
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_CIRCUIT_OPEN.clone()));
     let _ = REGISTRY.register(Box::new(BACKGROUND_JOB_CIRCUIT_TRIPS_TOTAL.clone()));
-    let _ = REGISTRY.register(Box::new(HOMELAB_STORAGE_BYTES.clone()));
+    let _ = REGISTRY.register(Box::new(STORAGE_BYTES.clone()));
 
     tracing::info!("Metrics system initialized successfully");
 }
@@ -937,7 +937,7 @@ pub(super) async fn metrics_handler(
 }
 
 // =============================================================================
-// Storage Metrics (Homelab Standard)
+// Storage Metrics (shared service-labelled format)
 // =============================================================================
 
 /// Storage metrics breakdown for the service
@@ -999,43 +999,43 @@ pub fn calculate_storage_metrics(db_dir: &Path, media_path: &Path) -> StorageMet
     }
 }
 
-/// Update the homelab storage metrics with current values
+/// Update the storage metrics with current values
 pub fn update_storage_metrics(db_dir: &Path, media_path: &Path) {
     let metrics = calculate_storage_metrics(db_dir, media_path);
 
     // Root total
-    HOMELAB_STORAGE_BYTES
+    STORAGE_BYTES
         .with_label_values(&[SERVICE_NAME, "/"])
         .set(metrics.total as f64);
 
     // Database breakdown
-    HOMELAB_STORAGE_BYTES
+    STORAGE_BYTES
         .with_label_values(&[SERVICE_NAME, "/db"])
         .set(metrics.db_total as f64);
-    HOMELAB_STORAGE_BYTES
+    STORAGE_BYTES
         .with_label_values(&[SERVICE_NAME, "/db/catalog"])
         .set(metrics.db_catalog as f64);
-    HOMELAB_STORAGE_BYTES
+    STORAGE_BYTES
         .with_label_values(&[SERVICE_NAME, "/db/user"])
         .set(metrics.db_user as f64);
-    HOMELAB_STORAGE_BYTES
+    STORAGE_BYTES
         .with_label_values(&[SERVICE_NAME, "/db/server"])
         .set(metrics.db_server as f64);
-    HOMELAB_STORAGE_BYTES
+    STORAGE_BYTES
         .with_label_values(&[SERVICE_NAME, "/db/download_queue"])
         .set(metrics.db_download_queue as f64);
-    HOMELAB_STORAGE_BYTES
+    STORAGE_BYTES
         .with_label_values(&[SERVICE_NAME, "/db/search"])
         .set(metrics.db_search as f64);
 
     // Catalog/media breakdown
-    HOMELAB_STORAGE_BYTES
+    STORAGE_BYTES
         .with_label_values(&[SERVICE_NAME, "/catalog"])
         .set(metrics.catalog_total as f64);
-    HOMELAB_STORAGE_BYTES
+    STORAGE_BYTES
         .with_label_values(&[SERVICE_NAME, "/catalog/audio"])
         .set(metrics.catalog_audio as f64);
-    HOMELAB_STORAGE_BYTES
+    STORAGE_BYTES
         .with_label_values(&[SERVICE_NAME, "/catalog/images"])
         .set(metrics.catalog_images as f64);
 
@@ -1544,7 +1544,7 @@ mod tests {
         let metrics = REGISTRY.gather();
         let storage_metrics = metrics
             .iter()
-            .find(|m| m.get_name() == "homelab_storage_bytes");
+            .find(|m| m.get_name() == "storage_bytes");
         assert!(storage_metrics.is_some(), "Storage metrics should exist");
     }
 }
