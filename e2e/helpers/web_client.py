@@ -120,12 +120,12 @@ class WebClient:
         )
 
     def login_oidc(self) -> None:
-        """Login via the OIDC button, filling the LelloAuth form."""
+        """Login via the OIDC button, filling the provider's login form."""
         self.page.goto("/login")
         self.page.locator("button.oidc-button").first.click()
-        # LelloAuth form - wait for redirect to OIDC provider
+        # Wait for the redirect to the OIDC provider
         self.page.wait_for_url(lambda url: "mock-oidc" in str(url), timeout=10000)
-        # Fill OIDC login form (LelloAuth test UI)
+        # Fill the OIDC provider's test login form
         self.page.locator('input[name="username"], input[type="text"]').first.fill(
             "testuser"
         )

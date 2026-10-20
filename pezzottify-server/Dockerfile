@@ -6,6 +6,7 @@ FROM node:20-alpine AS web-builder
 # OIDC configuration (required for SSO login)
 ARG VITE_OIDC_AUTHORITY
 ARG VITE_OIDC_CLIENT_ID
+ARG VITE_OIDC_PROVIDER_NAME
 
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
@@ -16,6 +17,7 @@ COPY web/ .
 # Pass build args as environment variables for Vite build
 ENV VITE_OIDC_AUTHORITY=${VITE_OIDC_AUTHORITY}
 ENV VITE_OIDC_CLIENT_ID=${VITE_OIDC_CLIENT_ID}
+ENV VITE_OIDC_PROVIDER_NAME=${VITE_OIDC_PROVIDER_NAME}
 
 RUN npm run build
 

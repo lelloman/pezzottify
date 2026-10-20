@@ -206,7 +206,7 @@ The Android project uses a multi-module Gradle setup with modules: `app`, `ui`, 
 **Authentication flow (OIDC):**
 Both web and Android use client-side OIDC authentication:
 1. Client initiates OIDC flow with authorization code + PKCE
-2. User authenticates with OIDC provider (e.g., LelloAuth)
+2. User authenticates with the OIDC provider
 3. Client receives authorization code, exchanges for tokens (ID token + refresh token)
 4. Client stores tokens locally (localStorage for web, encrypted prefs for Android)
 5. Client sends ID token in `Authorization` header (or cookie for WebSocket)

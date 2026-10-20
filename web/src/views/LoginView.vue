@@ -12,6 +12,9 @@ const username = ref("");
 const password = ref("");
 const error = ref("");
 const showPasswordForm = ref(true);
+// Optional display name of the deployment's OIDC provider, e.g. "Example ID".
+const oidcProviderName = (import.meta.env.VITE_OIDC_PROVIDER_NAME || "").trim();
+const oidcButtonLabel = oidcProviderName ? `Sign in with ${oidcProviderName}` : "Sign in";
 
 function handleOidcLogin() {
   isLoading.value = true;
@@ -120,7 +123,7 @@ async function handlePasswordLogin() {
           :disabled="isLoading"
           @click="handleOidcLogin"
         >
-          <span v-if="!isLoading">Sign in with LelloAuth</span>
+          <span v-if="!isLoading">{{ oidcButtonLabel }}</span>
           <span v-else>Redirecting...</span>
         </button>
       </div>

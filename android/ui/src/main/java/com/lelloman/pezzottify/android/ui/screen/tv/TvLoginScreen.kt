@@ -235,7 +235,7 @@ private fun TvLoginScreenPreview() {
         Surface(color = Color(0xFF101318)) {
             TvLoginContent(
                 state = LoginScreenState(
-                    host = "https://pezzottify.lelloman.com",
+                    host = "https://music.example.com",
                     email = "demo-user",
                     password = "",
                     isLoading = false,

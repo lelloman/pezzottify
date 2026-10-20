@@ -242,7 +242,7 @@ pub struct OidcConfig {
     pub client_id: String,
     /// OAuth2 client secret
     pub client_secret: String,
-    /// Redirect URI for the callback, e.g., "https://pezzottify.lelloman.com/v1/auth/callback"
+    /// Redirect URI for the callback, e.g., "https://music.example.com/v1/auth/callback"
     pub redirect_uri: String,
     /// OAuth2 scopes to request (defaults to ["openid", "profile", "email"])
     #[serde(default = "default_scopes")]

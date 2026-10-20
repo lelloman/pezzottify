@@ -1,8 +1,9 @@
 import { fileURLToPath, URL } from 'node:url'
 import { readFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
+import process from 'node:process'
 
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueJsx from '@vitejs/plugin-vue-jsx'
 import vueDevTools from 'vite-plugin-vue-devtools'
@@ -30,8 +31,18 @@ const baseVersion = getBaseVersion()
 const commitCount = getCommitCount()
 const appVersion = `${baseVersion}.${commitCount}`
 
+// The remote server to proxy /v1 to, e.g. https://music.example.com
+// (PEZZOTTIFY_REMOTE_URL in the environment or an untracked .env.local).
+function getRemoteUrl(mode) {
+  const url = loadEnv(mode, process.cwd(), '').PEZZOTTIFY_REMOTE_URL
+  if (!url) {
+    throw new Error('Set PEZZOTTIFY_REMOTE_URL to the Pezzottify server to proxy to')
+  }
+  return url
+}
+
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
   },
@@ -48,7 +59,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/v1': {
-        target: 'https://pezzottify.lelloman.com',
+        target: getRemoteUrl(mode),
         changeOrigin: true,
         secure: true,
         ws: true,
@@ -56,4 +67,4 @@ export default defineConfig({
       }
     }
   }
-})
+}))

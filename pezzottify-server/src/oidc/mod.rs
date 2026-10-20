@@ -526,7 +526,7 @@ pub struct IdTokenClaims {
     pub preferred_username: Option<String>,
     /// Token expiration timestamp (Unix seconds)
     pub expiration: i64,
-    /// Device ID (custom claim from LelloAuth for multi-device tracking)
+    /// Device ID (custom claim from the OIDC provider for multi-device tracking)
     pub device_id: Option<String>,
     /// Device type (web, android, ios, desktop)
     pub device_type: Option<String>,
