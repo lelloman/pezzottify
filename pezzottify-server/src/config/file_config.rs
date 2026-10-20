@@ -236,7 +236,7 @@ pub struct StreamingSearchConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct OidcConfig {
-    /// OIDC provider URL (issuer), e.g., "https://auth.lelloman.com"
+    /// OIDC provider URL (issuer), e.g., "https://auth.example.com"
     pub provider_url: String,
     /// OAuth2 client ID
     pub client_id: String,

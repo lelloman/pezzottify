@@ -79,8 +79,9 @@ this explicitly configured scheme and the provider registration.
 
 OIDC issuer/client settings still come from local.properties. Without those
 settings and a test account, startup/callback routing is not proof of login.
-Authenticator integration remains disabled by default; its package/signature
-registration is a separate validation gate.
+The optional trusted authorization broker (README, "Trusted authorization
+broker") stays off unless local.properties configures it; its registration with
+the identity provider is a separate validation gate.
 
 ## Packaging scope
 

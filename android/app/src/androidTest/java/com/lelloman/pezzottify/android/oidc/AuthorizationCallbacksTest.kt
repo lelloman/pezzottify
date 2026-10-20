@@ -46,9 +46,13 @@ class AuthorizationCallbacksTest {
         assertTrue(runCatching { AuthorizationCallbacks.validate(substituted, request) }.isFailure)
     }
 
-    @Test fun disabledOrMissingAuthenticatorUsesBrowserFallback() {
+    @Test fun unconfiguredDisabledOrMissingBrokerUsesBrowserFallback() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        assertNull(AuthenticatorLauncher(context, false, "com.lelloman.authenticator", "ab".repeat(32)).launch(request(), "https://auth.example.test"))
-        assertNull(AuthenticatorLauncher(context, true, "com.example.missing.authenticator", "ab".repeat(32)).launch(request(), "https://auth.example.test"))
+        // An unconfigured build carries empty broker values and must never launch anything but the browser.
+        assertNull(AuthorizationBrokerLauncher(context, false, "", "").launch(request(), "https://auth.example.test"))
+        assertNull(AuthorizationBrokerLauncher(context, true, "", "").launch(request(), "https://auth.example.test"))
+        assertNull(AuthorizationBrokerLauncher(context, true, "com.example.broker", "").launch(request(), "https://auth.example.test"))
+        assertNull(AuthorizationBrokerLauncher(context, false, "com.example.broker", "ab".repeat(32)).launch(request(), "https://auth.example.test"))
+        assertNull(AuthorizationBrokerLauncher(context, true, "com.example.missing.broker", "ab".repeat(32)).launch(request(), "https://auth.example.test"))
     }
 }

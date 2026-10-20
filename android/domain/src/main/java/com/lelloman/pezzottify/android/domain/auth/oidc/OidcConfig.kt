@@ -4,7 +4,7 @@ package com.lelloman.pezzottify.android.domain.auth.oidc
  * Configuration for OIDC authentication.
  */
 data class OidcConfig(
-    /** The OIDC issuer URL (e.g., https://auth.lelloman.com) */
+    /** The OIDC issuer URL (e.g., https://auth.example.com) */
     val issuerUrl: String,
     /** The client ID registered with the OIDC provider */
     val clientId: String,

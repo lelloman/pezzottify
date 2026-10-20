@@ -10,8 +10,14 @@ import net.openid.appauth.AuthorizationManagementActivity
 import net.openid.appauth.AuthorizationRequest
 import java.security.MessageDigest
 
-/** A broker is an authorization UI. AppAuth still owns the request, callback and token exchange. */
-internal class AuthenticatorLauncher(
+/**
+ * Launches the OIDC authorization request in a trusted authorization broker: an installed app,
+ * named only by deployment configuration, that is the verified App Link handler for the issuer
+ * host and whose signing certificate matches the pinned fingerprint. The broker is an
+ * authorization UI; AppAuth still owns the request, callback and token exchange. Returns null
+ * whenever any check fails so the caller falls back to the browser.
+ */
+internal class AuthorizationBrokerLauncher(
     private val context: Context,
     private val enabled: Boolean,
     private val packageName: String,
@@ -19,7 +25,7 @@ internal class AuthenticatorLauncher(
 ) {
     @Suppress("DEPRECATION")
     fun launch(request: AuthorizationRequest, issuer: String): Intent? = runCatching {
-        if (!enabled || Build.VERSION.SDK_INT < 30 || !certificate.matches(Regex("[a-fA-F0-9]{64}"))) return null
+        if (!enabled || packageName.isEmpty() || Build.VERSION.SDK_INT < 30 || !certificate.matches(Regex("[a-fA-F0-9]{64}"))) return null
         val endpoint = request.configuration.authorizationEndpoint
         val origin = android.net.Uri.parse(issuer)
         require(origin.scheme == "https" && origin.host != null && origin.userInfo == null && origin.query == null && origin.fragment == null && origin.path.isNullOrEmpty())

@@ -85,8 +85,8 @@ class AppAuthOidcManager @Inject constructor(
         pendingAuthRequest = authRequest
 
 
-        return AuthenticatorLauncher(context, BuildConfig.AUTHENTICATOR_ENABLED && !BuildConfig.IS_TV,
-            BuildConfig.AUTHENTICATOR_PACKAGE, BuildConfig.AUTHENTICATOR_CERTIFICATE).launch(authRequest, oidcConfig.issuerUrl)
+        return AuthorizationBrokerLauncher(context, BuildConfig.OIDC_BROKER_ENABLED && !BuildConfig.IS_TV,
+            BuildConfig.OIDC_BROKER_PACKAGE, BuildConfig.OIDC_BROKER_CERTIFICATE).launch(authRequest, oidcConfig.issuerUrl)
             ?: authService.getAuthorizationRequestIntent(authRequest)
     }
 

@@ -222,6 +222,35 @@ Debug APKs are written to `app/build/outputs/apk/normalPhone/debug/app-normal-ph
 and `player-app/build/outputs/apk/debug/player-app-debug.apk`. Both application
 modules use the repository version and optional `signing.properties` release key.
 
+### Sign-in configuration
+
+OIDC settings live in the untracked `local.properties` (or a file passed with
+`-PconnectionPropertiesFile`, which takes precedence): `oidc.issuerUrl` and
+`oidc.clientId`. The redirect scheme is the application ID.
+
+#### Trusted authorization broker
+
+On phones the app can hand the standard authorization request to a trusted
+broker instead of a browser: an installed app that is the verified App Link
+handler for the issuer host (Android 12+ checks the domain verification state;
+Android 11 requires the user's chosen handler) and whose signing certificate
+matches a pinned SHA-256 fingerprint. AppAuth still owns the request, PKCE,
+state, callback validation and token exchange; the broker only shows the
+request. Anything that does not verify falls back to the browser, and TV builds
+never use a broker.
+
+The feature is off and names no package unless configured:
+
+```properties
+oidc.brokerEnabled=true
+oidc.brokerPackage=com.example.broker
+oidc.brokerCertificate=<64 hex SHA-256 of the broker's signing certificate>
+```
+
+`oidc.brokerEnabled` requires an HTTPS `oidc.issuerUrl`. Package visibility
+for the broker is declared by intent on the issuer host, so unconfigured
+builds query an unresolvable host and see no broker.
+
 
 ### Equalizer
 

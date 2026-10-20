@@ -172,11 +172,6 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Release remains browser-only until the authenticator release gates pass.
-        buildConfigField("boolean", "AUTHENTICATOR_ENABLED", "false")
-        buildConfigField("String", "AUTHENTICATOR_PACKAGE", "\"com.lelloman.authenticator\"")
-        buildConfigField("String", "AUTHENTICATOR_CERTIFICATE", "\"\"")
-
         // AppAuth redirect scheme for OIDC callback
         manifestPlaceholders["appAuthRedirectScheme"] = "com.lelloman.pezzottify.android"
         buildConfigField("String", "OIDC_REDIRECT_SCHEME", "\"com.lelloman.pezzottify.android\"")
@@ -225,12 +220,6 @@ android {
 
     buildTypes {
         debug {
-            val enabled = buildProperty("authenticator.enabled", "false").toBooleanStrict()
-            val certificate = buildProperty("authenticator.certificate", "")
-            require(!enabled || certificate.matches(Regex("[a-fA-F0-9]{64}")))
-            buildConfigField("boolean", "AUTHENTICATOR_ENABLED", enabled.toString())
-            buildConfigField("String", "AUTHENTICATOR_PACKAGE", buildProperty("authenticator.package", "com.lelloman.authenticator").asBuildConfigString())
-            buildConfigField("String", "AUTHENTICATOR_CERTIFICATE", certificate.asBuildConfigString())
         }
         release {
             buildConfigField("boolean", "PARAVOID_ACCEPTANCE_ENABLED", "false")
@@ -320,6 +309,30 @@ android.defaultConfig {
     }
     buildConfigField("String", "OIDC_ISSUER_URL", "\"$oidcIssuerUrl\"")
     buildConfigField("String", "OIDC_CLIENT_ID", "\"$oidcClientId\"")
+
+    // Trusted authorization broker: an optional installed app that is the verified App Link
+    // handler for the issuer host and may show the authorization request instead of a browser.
+    // Deployment-specific and off unless local.properties (or -PconnectionPropertiesFile)
+    // provides it; see README "Trusted authorization broker".
+    fun brokerProperty(name: String, default: String): String =
+        connectionProperties.getProperty(name, localProperties.getProperty(name, default))
+    val brokerEnabled = brokerProperty("oidc.brokerEnabled", "false").toBooleanStrict()
+    val brokerPackage = brokerProperty("oidc.brokerPackage", "")
+    val brokerCertificate = brokerProperty("oidc.brokerCertificate", "")
+    val brokerIssuerHost = runCatching { URI(oidcIssuerUrl) }.getOrNull()
+        ?.takeIf { it.scheme == "https" && it.userInfo == null && !it.host.isNullOrBlank() }?.host
+    require(!brokerEnabled || (
+        brokerPackage.matches(Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+")) &&
+            brokerCertificate.matches(Regex("[a-fA-F0-9]{64}")) && brokerIssuerHost != null
+    )) {
+        "oidc.brokerEnabled requires oidc.brokerPackage, a 64-hex oidc.brokerCertificate and an HTTPS oidc.issuerUrl"
+    }
+    buildConfigField("boolean", "OIDC_BROKER_ENABLED", brokerEnabled.toString())
+    buildConfigField("String", "OIDC_BROKER_PACKAGE", brokerPackage.asBuildConfigString())
+    buildConfigField("String", "OIDC_BROKER_CERTIFICATE", brokerCertificate.asBuildConfigString())
+    // Package visibility for the broker is granted by intent, never by name; unconfigured builds
+    // query an unresolvable host and therefore see no broker.
+    manifestPlaceholders["oidcBrokerQueryHost"] = if (brokerEnabled) checkNotNull(brokerIssuerHost) else "unconfigured.invalid"
 
     // Server config from local.properties
     val defaultBaseUrl = connectionProperties.getProperty("server.baseUrl", localProperties.getProperty("server.baseUrl", "http://10.0.2.2:3001"))

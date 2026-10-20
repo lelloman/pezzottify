@@ -7,9 +7,15 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Visibility of the optional trusted authorization broker: the app that handles the
+         issuer host's authorization links. The host comes from local.properties and is
+         unresolvable when no broker is configured. -->
     <queries>
-        <package android:name="com.lelloman.authenticator" />
-        <package android:name="com.lelloman.authenticator.debug" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" android:host="${oidcBrokerQueryHost}" />
+        </intent>
     </queries>
     <application
         android:name=".PezzottifyApplication"
