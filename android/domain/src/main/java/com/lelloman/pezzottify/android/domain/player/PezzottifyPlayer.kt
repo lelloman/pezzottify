@@ -20,6 +20,15 @@ interface PezzottifyPlayer : ControlsAndStatePlayer, AppInitializer{
     fun retryRadioContinuation()
     fun dismissRadioContinuationError()
 
+    /**
+     * Playback that has been requested but is not playable yet (e.g. a radio being created).
+     * Null when nothing is pending. Cleared on commit, cancel, stop, clearSession, and when
+     * any other playback is loaded.
+     */
+    val pendingPlayback: StateFlow<PendingPlayback?>
+    fun cancelPendingPlayback()
+    fun retryPendingPlayback()
+
     /** Replaces the smart-continuation gravity of the current non-radio playlist. */
     fun setGravity(gravity: Gravity)
 

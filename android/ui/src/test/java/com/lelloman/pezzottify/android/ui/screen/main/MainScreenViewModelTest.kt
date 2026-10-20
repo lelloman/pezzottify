@@ -4,6 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import com.lelloman.pezzottify.android.logger.Logger
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.ui.content.ArtistInfo
+import com.lelloman.pezzottify.android.ui.screen.player.PendingPlaybackUi
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -282,9 +283,62 @@ class MainScreenViewModelTest {
         assertThat(viewModel.state.value.bottomPlayer.nextTrackArtists).isEmpty()
     }
 
+    @Test
+    fun `pending playback maps to a visible bottom player carrying pending info`() = runTest {
+        createViewModel()
+        advanceUntilIdle()
+
+        val pending = PendingPlaybackUi(label = "Artist", status = PendingPlaybackUi.Status.Creating)
+        fakeInteractor.playbackStateFlow.value = MainScreenViewModel.Interactor.PlaybackState.Pending(pending)
+        advanceUntilIdle()
+
+        val bottomPlayer = viewModel.state.value.bottomPlayer
+        assertThat(bottomPlayer.isVisible).isTrue()
+        assertThat(bottomPlayer.isLoading).isFalse()
+        assertThat(bottomPlayer.pending).isEqualTo(pending)
+        assertThat(bottomPlayer.trackId).isEmpty()
+
+        val failed = pending.copy(status = PendingPlaybackUi.Status.TimedOut)
+        fakeInteractor.playbackStateFlow.value = MainScreenViewModel.Interactor.PlaybackState.Pending(failed)
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.bottomPlayer.pending).isEqualTo(failed)
+
+        fakeInteractor.playbackStateFlow.value = MainScreenViewModel.Interactor.PlaybackState.Idle
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.bottomPlayer.isVisible).isFalse()
+        assertThat(viewModel.state.value.bottomPlayer.pending).isNull()
+    }
+
+    @Test
+    fun `pending and continuation actions are forwarded to interactor`() = runTest {
+        createViewModel()
+        advanceUntilIdle()
+
+        fakeInteractor.radioContinuationErrorFlow.value = true
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.radioContinuationError).isTrue()
+
+        viewModel.cancelPendingPlayback()
+        viewModel.retryPendingPlayback()
+        viewModel.retryRadioContinuation()
+        viewModel.dismissRadioContinuationError()
+
+        assertThat(fakeInteractor.calls).containsExactly(
+            "cancelPending", "retryPending", "retryContinuation", "dismissContinuation",
+        ).inOrder()
+    }
+
     private class FakeInteractor : MainScreenViewModel.Interactor {
         val playbackStateFlow = MutableStateFlow<MainScreenViewModel.Interactor.PlaybackState?>(null)
         val notificationUnreadCountFlow = MutableStateFlow(0)
+        val radioContinuationErrorFlow = MutableStateFlow(false)
+        val calls = mutableListOf<String>()
+
+        override fun getRadioContinuationError(): Flow<Boolean> = radioContinuationErrorFlow
+        override fun cancelPendingPlayback() { calls += "cancelPending" }
+        override fun retryPendingPlayback() { calls += "retryPending" }
+        override fun retryRadioContinuation() { calls += "retryContinuation" }
+        override fun dismissRadioContinuationError() { calls += "dismissContinuation" }
 
         var playPauseCalled = false
         var skipToNextCalled = false

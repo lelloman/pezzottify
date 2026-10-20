@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Laptop
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -34,6 +35,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -52,6 +54,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -362,19 +368,13 @@ private fun MainScreenContent(state: MainScreenState, actions: MainScreenActions
                     )
                 }
             }
-            if (!isOverlayScreen) {
-                com.lelloman.pezzottify.android.ui.screen.player.RadioCreationNotice(
-                    status = state.radioCreationStatus,
-                    onRetry = actions::retryRadioCreation,
-                    onDismiss = actions::dismissRadioCreation,
-                )
-            }
             if (state.bottomPlayer.isVisible && !isOverlayScreen) {
                 BottomPlayer(
                     state = state.bottomPlayer,
                     actions = actions,
                     remoteDeviceName = state.remoteDeviceName,
                     hasOtherDeviceConnected = state.hasOtherDeviceConnected,
+                    radioContinuationError = state.radioContinuationError,
                     onClickPlayer = { navController.toPlayer() },
                 )
             }
@@ -417,53 +417,9 @@ private fun BottomPlayer(
     actions: MainScreenActions,
     remoteDeviceName: String? = null,
     hasOtherDeviceConnected: Boolean = false,
+    radioContinuationError: Boolean = false,
     onClickPlayer: () -> Unit,
 ) {
-    // Build the list of tracks for the pager: [previous?, current, next?]
-    val hasPrevious = state.previousTrackName != null
-    val hasNext = state.nextTrackName != null
-
-    val pagerTracks = remember(
-        state.trackName,
-        state.artists,
-        state.previousTrackName,
-        state.previousTrackArtists,
-        state.nextTrackName,
-        state.nextTrackArtists
-    ) {
-        buildList {
-            if (state.previousTrackName != null) {
-                add(PagerTrackInfo(state.previousTrackName, state.previousTrackArtists))
-            }
-            add(PagerTrackInfo(state.trackName, state.artists))
-            if (state.nextTrackName != null) {
-                add(PagerTrackInfo(state.nextTrackName, state.nextTrackArtists))
-            }
-        }
-    }
-
-    // Current track is at index 0 if no previous, or index 1 if there's a previous track
-    val currentPageIndex = if (hasPrevious) 1 else 0
-
-    // Use trackId + hasPrevious as key to recreate pager when track or structure changes
-    val pagerState = key(state.trackId, hasPrevious) {
-        rememberPagerState(
-            initialPage = currentPageIndex,
-            pageCount = { pagerTracks.size }
-        )
-    }
-
-    // Handle swipe gestures - trigger skip when user settles on a different page
-    LaunchedEffect(pagerState, currentPageIndex) {
-        snapshotFlow { pagerState.settledPage }
-            .collectLatest { settledPage ->
-                when {
-                    settledPage < currentPageIndex -> actions.clickOnSkipToPrevious()
-                    settledPage > currentPageIndex -> actions.clickOnSkipToNext()
-                }
-            }
-    }
-
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -512,63 +468,186 @@ private fun BottomPlayer(
                     )
                 }
             }
+            val pending = state.pending
+            if (pending != null) {
+                PendingBottomPlayerRow(pending = pending, actions = actions)
+            } else {
+                if (radioContinuationError) {
+                    com.lelloman.pezzottify.android.ui.screen.player.RadioContinuationErrorHint(
+                        onRetry = actions::retryRadioContinuation,
+                        onDismiss = actions::dismissRadioContinuationError,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 12.dp),
+                    )
+                }
+                TrackBottomPlayerRow(state = state, actions = actions, onClickPlayer = onClickPlayer)
+            }
+        }
+    }
+}
+
+/** Bottom player row for a pending playback: not clickable, no pager, no progress. */
+@Composable
+private fun PendingBottomPlayerRow(
+    pending: com.lelloman.pezzottify.android.ui.screen.player.PendingPlaybackUi,
+    actions: MainScreenActions,
+) {
+    Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .height(56.dp)
+                .fillMaxWidth()
+                .semantics { liveRegion = LiveRegionMode.Polite },
+        ) {
+            NullablePezzottifyImage(
+                url = null,
+                shape = PezzottifyImageShape.MiniPlayer,
+                modifier = Modifier.clip(RoundedCornerShape(4.dp))
+            )
+            Text(
+                text = com.lelloman.pezzottify.android.ui.screen.player.pendingPlaybackText(pending),
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (pending.isCreating) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp),
+            )
+            if (pending.isCreating) {
+                TextButton(onClick = actions::cancelPendingPlayback) {
+                    Text(stringResource(R.string.radio_creation_cancel))
+                }
+                Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                }
+            } else {
+                TextButton(onClick = actions::retryPendingPlayback) {
+                    Text(stringResource(R.string.radio_creation_retry))
+                }
+                TextButton(onClick = actions::cancelPendingPlayback) {
+                    Text(stringResource(R.string.radio_creation_dismiss))
+                }
+            }
+        }
+        Spacer(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(2.dp)
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+        )
+    }
+}
+
+@Composable
+private fun TrackBottomPlayerRow(
+    state: MainScreenState.BottomPlayer,
+    actions: MainScreenActions,
+    onClickPlayer: () -> Unit,
+) {
+    // Build the list of tracks for the pager: [previous?, current, next?]
+    val hasPrevious = state.previousTrackName != null
+
+    val pagerTracks = remember(
+        state.trackName,
+        state.artists,
+        state.previousTrackName,
+        state.previousTrackArtists,
+        state.nextTrackName,
+        state.nextTrackArtists
+    ) {
+        buildList {
+            if (state.previousTrackName != null) {
+                add(PagerTrackInfo(state.previousTrackName, state.previousTrackArtists))
+            }
+            add(PagerTrackInfo(state.trackName, state.artists))
+            if (state.nextTrackName != null) {
+                add(PagerTrackInfo(state.nextTrackName, state.nextTrackArtists))
+            }
+        }
+    }
+
+    // Current track is at index 0 if no previous, or index 1 if there's a previous track
+    val currentPageIndex = if (hasPrevious) 1 else 0
+
+    // Use trackId + hasPrevious as key to recreate pager when track or structure changes
+    val pagerState = key(state.trackId, hasPrevious) {
+        rememberPagerState(
+            initialPage = currentPageIndex,
+            pageCount = { pagerTracks.size }
+        )
+    }
+
+    // Handle swipe gestures - trigger skip when user settles on a different page
+    LaunchedEffect(pagerState, currentPageIndex) {
+        snapshotFlow { pagerState.settledPage }
+            .collectLatest { settledPage ->
+                when {
+                    settledPage < currentPageIndex -> actions.clickOnSkipToPrevious()
+                    settledPage > currentPageIndex -> actions.clickOnSkipToNext()
+                }
+            }
+    }
+
+    Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .height(56.dp)
+                .fillMaxWidth()
+        ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .height(56.dp)
-                    .fillMaxWidth()
+                    .weight(1f)
+                    .clickable(onClick = onClickPlayer)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
+                NullablePezzottifyImage(
+                    url = state.albumImageUrl,
+                    shape = PezzottifyImageShape.MiniPlayer,
+                    modifier = Modifier.clip(RoundedCornerShape(4.dp))
+                )
+
+                HorizontalPager(
+                    state = pagerState,
                     modifier = Modifier
                         .weight(1f)
-                        .clickable(onClick = onClickPlayer)
-                ) {
-                    NullablePezzottifyImage(
-                        url = state.albumImageUrl,
-                        shape = PezzottifyImageShape.MiniPlayer,
-                        modifier = Modifier.clip(RoundedCornerShape(4.dp))
-                    )
-
-                    HorizontalPager(
-                        state = pagerState,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) { page ->
-                        val trackInfo = pagerTracks.getOrNull(page)
-                        if (trackInfo != null) {
-                            TrackInfoPage(
-                                trackName = trackInfo.trackName,
-                                artists = trackInfo.artists,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) { page ->
+                    val trackInfo = pagerTracks.getOrNull(page)
+                    if (trackInfo != null) {
+                        TrackInfoPage(
+                            trackName = trackInfo.trackName,
+                            artists = trackInfo.artists,
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
-                }
-
-                IconButton(onClick = actions::clickOnPlayPause) {
-                    Icon(
-                        modifier = Modifier.size(48.dp),
-                        painter = painterResource(if (state.isPlaying) R.drawable.baseline_pause_24 else R.drawable.baseline_play_arrow_24),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurface,
-                    )
                 }
             }
 
-            LinearProgressIndicator(
-                progress = { state.trackPercent / 100f },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(2.dp),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                gapSize = 0.dp,
-                drawStopIndicator = {},
-            )
+            IconButton(onClick = actions::clickOnPlayPause) {
+                Icon(
+                    modifier = Modifier.size(48.dp),
+                    painter = painterResource(if (state.isPlaying) R.drawable.baseline_pause_24 else R.drawable.baseline_play_arrow_24),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+            }
         }
+
+        LinearProgressIndicator(
+            progress = { state.trackPercent / 100f },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(2.dp),
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            gapSize = 0.dp,
+            drawStopIndicator = {},
+        )
     }
 }
 
@@ -592,6 +671,26 @@ private fun PreviewBottomPlayer() {
             nextTrackArtists = listOf(ArtistInfo("3", "Next Artist")),
             previousTrackName = "Previous Track Name",
             previousTrackArtists = listOf(ArtistInfo("4", "Previous Artist")),
+        ),
+        actions = object : MainScreenActions {
+            override fun clickOnPlayPause() = Unit
+            override fun clickOnSkipToNext() = Unit
+            override fun clickOnSkipToPrevious() = Unit
+        },
+        onClickPlayer = {}
+    )
+}
+
+@Preview
+@Composable
+private fun PreviewBottomPlayerPending() {
+    BottomPlayer(
+        state = MainScreenState.BottomPlayer(
+            isVisible = true,
+            pending = com.lelloman.pezzottify.android.ui.screen.player.PendingPlaybackUi(
+                label = "Artist Name",
+                status = com.lelloman.pezzottify.android.ui.screen.player.PendingPlaybackUi.Status.Creating,
+            ),
         ),
         actions = object : MainScreenActions {
             override fun clickOnPlayPause() = Unit

@@ -324,9 +324,33 @@ class PlayerScreenViewModelTest {
         playerError = null,
     )
 
+    @Test
+    fun `pending playback and continuation error are exposed in state`() = runTest {
+        createViewModel()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.pendingPlayback).isNull()
+
+        val pending = PendingPlaybackUi(label = "Artist", status = PendingPlaybackUi.Status.Error)
+        fakeInteractor.pendingPlaybackFlow.value = pending
+        fakeInteractor.radioContinuationErrorFlow.value = true
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.pendingPlayback).isEqualTo(pending)
+        assertThat(viewModel.state.value.radioContinuationError).isTrue()
+
+        fakeInteractor.pendingPlaybackFlow.value = null
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.pendingPlayback).isNull()
+    }
+
     private class FakeInteractor : PlayerScreenViewModel.Interactor {
         val playbackStateFlow = MutableStateFlow<PlayerScreenViewModel.Interactor.PlaybackState?>(null)
         val smartContinuationEnabledFlow = MutableStateFlow(false)
+        val pendingPlaybackFlow = MutableStateFlow<PendingPlaybackUi?>(null)
+        val radioContinuationErrorFlow = MutableStateFlow(false)
+
+        override fun getPendingPlayback(): Flow<PendingPlaybackUi?> = pendingPlaybackFlow
+        override fun getRadioContinuationError(): Flow<Boolean> = radioContinuationErrorFlow
 
         var togglePlayPauseCalled = false
         var skipToNextCalled = false

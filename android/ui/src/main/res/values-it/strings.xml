@@ -543,6 +543,7 @@
     <string name="radio_continuation_error">Impossibile aggiungere altri brani alla radio. Riprova.</string>
     <string name="listen_to_radio">Ascolta la radio</string>
     <string name="radio_creating">Creazione della radio…</string>
+    <string name="radio_creating_with_label">Creazione radio · %1$s</string>
     <string name="radio_creation_timeout">La creazione della radio ha impiegato troppo tempo. Riprova.</string>
     <string name="radio_creation_error">Impossibile creare la radio. Riprova.</string>
     <string name="radio_creation_empty">Nessun brano riproducibile trovato per questa radio.</string>

@@ -29,7 +29,7 @@ class TrackScreenViewModel @AssistedInject constructor(
     @Assisted private val navController: NavController,
 ) : ViewModel(), TrackScreenActions {
 
-    val workVersionsStatus get() = interactor.workVersionsStatus
+    val workVersionsPending get() = interactor.workVersionsPending
     private var hasLoggedView = false
 
     val state = contentResolver.resolveTrack(trackId)
@@ -111,7 +111,7 @@ class TrackScreenViewModel @AssistedInject constructor(
 
     interface Interactor {
         fun playWorkVersions(workId: String, trackId: String, title: String)
-        val workVersionsStatus: kotlinx.coroutines.flow.StateFlow<com.lelloman.pezzottify.android.domain.player.RadioCreationStatus>
+        val workVersionsPending: kotlinx.coroutines.flow.StateFlow<com.lelloman.pezzottify.android.domain.player.PendingPlayback?>
         fun playTrack(albumId: String, trackId: String)
         fun playSingleTrack(trackId: String)
         fun addToQueue(trackId: String)

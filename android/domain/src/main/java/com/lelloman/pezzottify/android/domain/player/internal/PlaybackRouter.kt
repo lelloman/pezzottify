@@ -318,6 +318,11 @@ class PlaybackRouter @Inject constructor(
         }
     }
 
+    override val pendingPlayback: StateFlow<com.lelloman.pezzottify.android.domain.player.PendingPlayback?> =
+        radioCreation.pending
+    override fun cancelPendingPlayback() = radioCreation.cancel()
+    override fun retryPendingPlayback() = radioCreation.retry()
+
     override fun retryRadioContinuation() { if (!isRemote) localPlayer.retryRadioContinuation() }
     override fun dismissRadioContinuationError() { localPlayer.dismissRadioContinuationError() }
 

@@ -118,7 +118,7 @@ internal fun PlayerScreenContent(
     lyrics: PlayerLyricsState,
 ) {
     var showLyrics by rememberSaveable { mutableStateOf(false) }
-    if (showLyrics) {
+    if (showLyrics && state.pendingPlayback == null) {
         LyricsPlayerScreen(state, lyrics, actions, onBack = { showLyrics = false })
         return
     }
@@ -169,9 +169,6 @@ internal fun PlayerScreenContent(
                     alpha = backgroundAlpha
                 },
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-            bottomBar = {
-                RadioCreationNotice(state.radioCreationStatus, actions::retryRadioCreation, actions::dismissRadioCreation)
-            },
             topBar = {
                 TopAppBar(
                     // Keep dismiss gestures on the header so lyric scrolling does not close the player.
@@ -261,7 +258,15 @@ internal fun PlayerScreenContent(
                 )
             }
         ) { innerPadding ->
-        if (state.isLoading) {
+        val pendingPlayback = state.pendingPlayback
+        if (pendingPlayback != null) {
+            PendingPlaybackContent(
+                pending = pendingPlayback,
+                onCancel = actions::cancelPendingPlayback,
+                onRetry = actions::retryPendingPlayback,
+                modifier = Modifier.padding(innerPadding),
+            )
+        } else if (state.isLoading) {
             LoadingScreen()
         } else {
             Column(
@@ -296,6 +301,13 @@ internal fun PlayerScreenContent(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 state.radioLabel?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
+                if (state.radioContinuationError) {
+                    RadioContinuationErrorHint(
+                        onRetry = actions::retryRadioContinuation,
+                        onDismiss = actions::dismissRadioContinuationError,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
 
                 // Track info
                 ScrollingTextRow(

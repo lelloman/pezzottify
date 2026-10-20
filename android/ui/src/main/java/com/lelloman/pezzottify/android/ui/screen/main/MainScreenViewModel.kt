@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.ui.content.ArtistInfo
+import com.lelloman.pezzottify.android.ui.screen.player.PendingPlaybackUi
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,8 +25,8 @@ class MainScreenViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            interactor.getRadioCreationStatus().collect { status ->
-                mutableState.value = mutableState.value.copy(radioCreationStatus = status)
+            interactor.getRadioContinuationError().collect { hasError ->
+                mutableState.value = mutableState.value.copy(radioContinuationError = hasError)
             }
         }
         viewModelScope.launch {
@@ -33,6 +34,10 @@ class MainScreenViewModel @Inject constructor(
                 .collect { playbackState ->
                     val newBottomPlayerState = when (playbackState) {
                         is Interactor.PlaybackState.Idle, null -> MainScreenState.BottomPlayer()
+                        is Interactor.PlaybackState.Pending -> MainScreenState.BottomPlayer(
+                            isVisible = true,
+                            pending = playbackState.pending,
+                        )
                         is Interactor.PlaybackState.Loading -> {
                             // Show bottom player with loading state while metadata is being fetched
                             MainScreenState.BottomPlayer(
@@ -84,17 +89,21 @@ class MainScreenViewModel @Inject constructor(
     }
 
     override fun clickOnPlayPause() = interactor.clickOnPlayPause()
-    override fun retryRadioCreation() = interactor.retryRadioCreation()
-    override fun dismissRadioCreation() = interactor.dismissRadioCreation()
+    override fun cancelPendingPlayback() = interactor.cancelPendingPlayback()
+    override fun retryPendingPlayback() = interactor.retryPendingPlayback()
+    override fun retryRadioContinuation() = interactor.retryRadioContinuation()
+    override fun dismissRadioContinuationError() = interactor.dismissRadioContinuationError()
 
     override fun clickOnSkipToNext() = interactor.clickOnSkipToNext()
 
     override fun clickOnSkipToPrevious() = interactor.clickOnSkipToPrevious()
 
     interface Interactor {
-        fun getRadioCreationStatus(): Flow<com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi> = kotlinx.coroutines.flow.flowOf(com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi.Idle)
-        fun retryRadioCreation() {}
-        fun dismissRadioCreation() {}
+        fun getRadioContinuationError(): Flow<Boolean> = kotlinx.coroutines.flow.flowOf(false)
+        fun cancelPendingPlayback() {}
+        fun retryPendingPlayback() {}
+        fun retryRadioContinuation() {}
+        fun dismissRadioContinuationError() {}
 
         fun getPlaybackState(): Flow<PlaybackState?>
 
@@ -114,6 +123,9 @@ class MainScreenViewModel @Inject constructor(
             data object Idle : PlaybackState
 
             data object Loading : PlaybackState
+
+            /** Playback requested but not playable yet; wins over Idle/Loading/Loaded. */
+            data class Pending(val pending: PendingPlaybackUi) : PlaybackState
 
             data class Loaded(
                 val isPlaying: Boolean,

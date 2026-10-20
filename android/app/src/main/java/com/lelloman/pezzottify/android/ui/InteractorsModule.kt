@@ -181,14 +181,18 @@ private fun startBasicRadio(
     entityType: String,
     entityId: String,
 ) {
-    controller.start {
-        when (val response = api.getRadioTrackIds(entityType, entityId, 50)) {
+    val count = 50
+    controller.start(
+        // Label starts blank (rendered as plain "Creating radio") and is resolved concurrently.
+        context = buildBasicRadioContext(entityType, entityId, "", count),
+        resolveLabel = { resolveRadioSeedLabel(statics, entityType, entityId) },
+    ) {
+        when (val response = api.getRadioTrackIds(entityType, entityId, count)) {
             is RemoteApiResponse.Error -> error("Radio request failed")
             is RemoteApiResponse.Success -> {
                 if (response.data.isEmpty()) null else {
-                    val label = resolveRadioSeedLabel(statics, entityType, entityId)
-                    val commit: () -> Unit = {
-                        player.loadRadio(response.data, buildBasicRadioContext(entityType, entityId, label, 50))
+                    val commit: com.lelloman.pezzottify.android.domain.player.RadioCommit = { context ->
+                        player.loadRadio(response.data, context.withSeedLabelFallback())
                     }
                     commit
                 }
@@ -196,6 +200,27 @@ private fun startBasicRadio(
         }
     }
 }
+
+private fun com.lelloman.pezzottify.android.domain.player.PendingPlayback.toUi() =
+    com.lelloman.pezzottify.android.ui.screen.player.PendingPlaybackUi(
+        label = context.seedLabel,
+        status = when (val status = status) {
+            com.lelloman.pezzottify.android.domain.player.PendingPlayback.Status.Creating ->
+                com.lelloman.pezzottify.android.ui.screen.player.PendingPlaybackUi.Status.Creating
+            is com.lelloman.pezzottify.android.domain.player.PendingPlayback.Status.Failed -> when (status.reason) {
+                com.lelloman.pezzottify.android.domain.player.PendingPlayback.FailureReason.Error ->
+                    com.lelloman.pezzottify.android.ui.screen.player.PendingPlaybackUi.Status.Error
+                com.lelloman.pezzottify.android.domain.player.PendingPlayback.FailureReason.TimedOut ->
+                    com.lelloman.pezzottify.android.ui.screen.player.PendingPlaybackUi.Status.TimedOut
+                com.lelloman.pezzottify.android.domain.player.PendingPlayback.FailureReason.Empty ->
+                    com.lelloman.pezzottify.android.ui.screen.player.PendingPlaybackUi.Status.Empty
+            }
+        },
+    )
+
+/** Seed label used if label resolution failed before commit. */
+private fun DomainPlaybackPlaylistContext.Radio.withSeedLabelFallback() =
+    if (seedLabel.isBlank()) copy(seedLabel = seedEntityId) else this
 
 private fun buildBasicRadioContext(
     entityType: String,
@@ -1268,19 +1293,22 @@ class InteractorsModule {
         }
 
         override suspend fun playGreatestHits(artistId: String) {
-            radioCreation.start {
+            radioCreation.start(
+                context = DomainPlaybackPlaylistContext.Radio(
+                    source = "greatest_hits", seedEntityType = "artist", seedEntityId = artistId,
+                    seedLabel = "", count = 0,
+                ),
+                resolveLabel = { resolveRadioSeedLabel(staticsStore, "artist", artistId) },
+            ) {
                 when (val response = remoteApiClient.getArtistGreatestHits(artistId)) {
                     is RemoteApiResponse.Error -> error("Greatest hits request failed")
                     is RemoteApiResponse.Success -> if (response.data.isEmpty()) null else {
                         val snapshot = response.data
                         val tracks = snapshot.take(10)
-                        val label = resolveRadioSeedLabel(staticsStore, "artist", artistId)
-                        val context = DomainPlaybackPlaylistContext.Radio(
-                            source = "greatest_hits", seedEntityType = "artist", seedEntityId = artistId,
-                            seedLabel = label, count = snapshot.size,
-                        )
                         val continuation = com.lelloman.pezzottify.android.domain.player.RadioContinuation.create(tracks, snapshot)
-                        val commit: () -> Unit = { player.loadRadio(tracks, context, continuation) }
+                        val commit: com.lelloman.pezzottify.android.domain.player.RadioCommit = { context ->
+                            player.loadRadio(tracks, context.withSeedLabelFallback().copy(count = snapshot.size), continuation)
+                        }
                         commit
                     }
                 }
@@ -1353,7 +1381,7 @@ class InteractorsModule {
         toggleLikeUseCase: ToggleLikeUseCase,
     ): TrackScreenViewModel.Interactor = object : TrackScreenViewModel.Interactor {
         override fun playWorkVersions(workId: String, trackId: String, title: String) = playWorkVersions(workId, trackId, title)
-        override val workVersionsStatus get() = playWorkVersions.status
+        override val workVersionsPending get() = playWorkVersions.pendingPlayback
         override fun playSingleTrack(trackId: String) = player.loadSingleTrack(trackId)
 
         override fun addToQueue(trackId: String) = player.addTracksToPlaylist(listOf(trackId))
@@ -1387,7 +1415,6 @@ class InteractorsModule {
 
     @Provides
     fun provideMainScreenInteractor(
-        radioCreation: com.lelloman.pezzottify.android.domain.player.RadioCreationController,
         loggerFactory: LoggerFactory,
         player: PezzottifyPlayer,
         notificationRepository: NotificationRepository,
@@ -1396,18 +1423,11 @@ class InteractorsModule {
         playbackSessionHandler: PlaybackSessionHandler,
     ): MainScreenViewModel.Interactor =
         object : MainScreenViewModel.Interactor {
-            override fun getRadioCreationStatus() = radioCreation.status.combine(player.radioContinuationError) { status, continuationError ->
-                if (status == com.lelloman.pezzottify.android.domain.player.RadioCreationStatus.Idle && continuationError)
-                    com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi.ContinuationError
-                else com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi.valueOf(status.name)
-            }
-            override fun retryRadioCreation() {
-                if (player.radioContinuationError.value) player.retryRadioContinuation() else radioCreation.retry()
-            }
-            override fun dismissRadioCreation() {
-                player.dismissRadioContinuationError()
-                radioCreation.cancel()
-            }
+            override fun getRadioContinuationError(): Flow<Boolean> = player.radioContinuationError
+            override fun cancelPendingPlayback() = player.cancelPendingPlayback()
+            override fun retryPendingPlayback() = player.retryPendingPlayback()
+            override fun retryRadioContinuation() = player.retryRadioContinuation()
+            override fun dismissRadioContinuationError() = player.dismissRadioContinuationError()
 
             val logger = loggerFactory.getLogger(MainScreenViewModel.Interactor::class)
 
@@ -1434,9 +1454,12 @@ class InteractorsModule {
             override fun getPlaybackState(): Flow<MainScreenViewModel.Interactor.PlaybackState?> =
                 playbackMetadataProvider.queueState
                     .combine(player.isPlaying) { queueState, isPlaying -> queueState to isPlaying }
-                    .combine(player.currentTrackPercent) { (queueState, isPlaying), trackPercent ->
+                    .combine(player.pendingPlayback) { (queueState, isPlaying), pending -> Triple(queueState, isPlaying, pending) }
+                    .combine(player.currentTrackPercent) { (queueState, isPlaying, pending), trackPercent ->
                         val currentTrack = queueState?.currentTrack
                         when {
+                            // A pending playback is rendered as the current item until it commits or is dismissed.
+                            pending != null -> MainScreenViewModel.Interactor.PlaybackState.Pending(pending.toUi())
                             currentTrack != null -> {
                                 val currentIndex = queueState.currentIndex
                                 val nextTrack = queueState.tracks.getOrNull(currentIndex + 1)
@@ -1579,7 +1602,6 @@ class InteractorsModule {
     @Provides
     fun providePlayerScreenInteractor(
         @dagger.hilt.android.qualifiers.ApplicationContext context: android.content.Context,
-        radioCreation: com.lelloman.pezzottify.android.domain.player.RadioCreationController,
         player: PezzottifyPlayer,
         playbackMetadataProvider: com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider,
         playbackModeManager: com.lelloman.pezzottify.android.domain.player.PlaybackModeManager,
@@ -1592,18 +1614,13 @@ class InteractorsModule {
             override fun getHasDestination(): Flow<Boolean> =
                 playbackGravity.state.map { it.gravity?.destination != null }.distinctUntilChanged()
 
-            override fun getRadioCreationStatus() = radioCreation.status.combine(player.radioContinuationError) { status, continuationError ->
-                if (status == com.lelloman.pezzottify.android.domain.player.RadioCreationStatus.Idle && continuationError)
-                    com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi.ContinuationError
-                else com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi.valueOf(status.name)
-            }
-            override fun retryRadioCreation() {
-                if (player.radioContinuationError.value) player.retryRadioContinuation() else radioCreation.retry()
-            }
-            override fun dismissRadioCreation() {
-                player.dismissRadioContinuationError()
-                radioCreation.cancel()
-            }
+            override fun getPendingPlayback(): Flow<com.lelloman.pezzottify.android.ui.screen.player.PendingPlaybackUi?> =
+                player.pendingPlayback.map { it?.toUi() }
+            override fun getRadioContinuationError(): Flow<Boolean> = player.radioContinuationError
+            override fun cancelPendingPlayback() = player.cancelPendingPlayback()
+            override fun retryPendingPlayback() = player.retryPendingPlayback()
+            override fun retryRadioContinuation() = player.retryRadioContinuation()
+            override fun dismissRadioContinuationError() = player.dismissRadioContinuationError()
             override fun getPlaybackState(): Flow<PlayerScreenViewModel.Interactor.PlaybackState?> =
                 playbackMetadataProvider.queueState
                     .combine(player.isPlaying) { queueState, isPlaying -> queueState to isPlaying }

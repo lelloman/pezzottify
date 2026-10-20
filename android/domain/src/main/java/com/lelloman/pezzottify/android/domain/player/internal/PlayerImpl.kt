@@ -57,6 +57,12 @@ class PlayerImpl(
     private var radioGeneration = 0L
     private val mutableRadioContinuationError = MutableStateFlow(false)
     override val radioContinuationError = mutableRadioContinuationError.asStateFlow()
+
+    // Pending playback is owned by RadioCreationController and exposed through PlaybackRouter.
+    override val pendingPlayback: StateFlow<com.lelloman.pezzottify.android.domain.player.PendingPlayback?> =
+        MutableStateFlow(null)
+    override fun cancelPendingPlayback() = Unit
+    override fun retryPendingPlayback() = Unit
     private var radioErrorSession: String? = null
     private var restorationAttempted = false
     private var restorationInProgress = false

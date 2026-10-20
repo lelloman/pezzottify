@@ -9,7 +9,9 @@ enum class RepeatModeUi {
 }
 
 data class PlayerScreenState(
-    val radioCreationStatus: RadioCreationStatusUi = RadioCreationStatusUi.Idle,
+    /** Non-null while playback is pending (e.g. a radio being created); replaces the track content. */
+    val pendingPlayback: PendingPlaybackUi? = null,
+    val radioContinuationError: Boolean = false,
     val isLoading: Boolean = true,
     val trackId: String = "",
     val trackName: String = "",

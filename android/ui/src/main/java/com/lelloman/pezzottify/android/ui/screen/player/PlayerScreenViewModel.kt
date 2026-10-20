@@ -25,8 +25,13 @@ class PlayerScreenViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            interactor.getRadioCreationStatus().collect { status ->
-                mutableState.value = mutableState.value.copy(radioCreationStatus = status)
+            interactor.getPendingPlayback().collect { pending ->
+                mutableState.value = mutableState.value.copy(pendingPlayback = pending)
+            }
+        }
+        viewModelScope.launch {
+            interactor.getRadioContinuationError().collect { hasError ->
+                mutableState.value = mutableState.value.copy(radioContinuationError = hasError)
             }
         }
         var lastErrorMessage: String? = null
@@ -137,15 +142,20 @@ class PlayerScreenViewModel @Inject constructor(
     }
 
     override fun retry() = interactor.retry()
-    override fun retryRadioCreation() = interactor.retryRadioCreation()
-    override fun dismissRadioCreation() = interactor.dismissRadioCreation()
+    override fun cancelPendingPlayback() = interactor.cancelPendingPlayback()
+    override fun retryPendingPlayback() = interactor.retryPendingPlayback()
+    override fun retryRadioContinuation() = interactor.retryRadioContinuation()
+    override fun dismissRadioContinuationError() = interactor.dismissRadioContinuationError()
 
     override fun exitRemoteMode() = interactor.exitRemoteMode()
 
     interface Interactor {
-        fun getRadioCreationStatus(): Flow<RadioCreationStatusUi> = kotlinx.coroutines.flow.flowOf(RadioCreationStatusUi.Idle)
-        fun retryRadioCreation() {}
-        fun dismissRadioCreation() {}
+        fun getPendingPlayback(): Flow<PendingPlaybackUi?> = kotlinx.coroutines.flow.flowOf(null)
+        fun getRadioContinuationError(): Flow<Boolean> = kotlinx.coroutines.flow.flowOf(false)
+        fun cancelPendingPlayback() {}
+        fun retryPendingPlayback() {}
+        fun retryRadioContinuation() {}
+        fun dismissRadioContinuationError() {}
         fun getPlaybackState(): Flow<PlaybackState?>
         fun getRemoteDeviceName(): Flow<String?>
         fun getHasOtherDeviceConnected(): Flow<Boolean>

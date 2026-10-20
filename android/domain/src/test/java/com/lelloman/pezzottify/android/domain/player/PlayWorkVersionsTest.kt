@@ -39,9 +39,16 @@ class PlayWorkVersionsTest {
         coEvery { api.getWork("work", 100, 100, "all") } returns RemoteApiResponse.Success(WorkPage(work, nextOffset = 200, hasMore = true))
         coEvery { api.getWork("work", 100, 200, "all") } returns RemoteApiResponse.Success(WorkPage(work, tracks = listOf(track("two"), track("one"), track("missing", TrackAvailability.Unavailable)), nextOffset = 203, hasMore = false))
         play("work", "two", "Composition")
+        val pending = controller.pending.value
+        assertThat(pending?.status).isEqualTo(PendingPlayback.Status.Creating)
+        assertThat(pending?.context?.source).isEqualTo("work_versions")
+        assertThat(pending?.context?.seedEntityId).isEqualTo("two")
+        assertThat(pending?.context?.seedLabel).isEqualTo("Composition")
         advanceUntilIdle()
+        assertThat(controller.pending.value).isNull()
         verify(exactly = 1) { player.loadRadio(listOf("two", "one"), match {
-            it.source == "work_versions" && it.seedEntityType == "track" && it.seedEntityId == "two" && it.settings?.get("work_id")?.jsonPrimitive?.content == "work"
+            it.source == "work_versions" && it.seedEntityType == "track" && it.seedEntityId == "two" &&
+                it.seedLabel == "Composition" && it.count == 2 && it.settings?.get("work_id")?.jsonPrimitive?.content == "work"
         }, match { it.status == "exhausted" && it.orderedTrackIds == listOf("two", "one") }) }
     }
 
@@ -56,7 +63,7 @@ class PlayWorkVersionsTest {
         coEvery { api.getWork(any(), any(), any(), any()) } returns RemoteApiResponse.Success(WorkPage(work, tracks = listOf(track("one")), nextOffset = 0, hasMore = true))
         play("work", "one", "Composition")
         advanceUntilIdle()
-        assertThat(controller.status.value).isEqualTo(RadioCreationStatus.Error)
+        assertThat(controller.pending.value?.status).isEqualTo(PendingPlayback.Status.Failed(PendingPlayback.FailureReason.Error))
         verify { player wasNot Called }
     }
 
@@ -64,11 +71,11 @@ class PlayWorkVersionsTest {
         coEvery { api.getWork(any(), any(), any(), any()) } returns RemoteApiResponse.Success(WorkPage(work, nextOffset = 0, hasMore = false))
         play("work", "one", "Composition")
         advanceUntilIdle()
-        assertThat(controller.status.value).isEqualTo(RadioCreationStatus.Empty)
+        assertThat(controller.pending.value?.status).isEqualTo(PendingPlayback.Status.Failed(PendingPlayback.FailureReason.Empty))
         coEvery { api.getWork(any(), any(), any(), any()) } returns RemoteApiResponse.Error.Network
         play("work", "one", "Composition")
         advanceUntilIdle()
-        assertThat(controller.status.value).isEqualTo(RadioCreationStatus.Error)
+        assertThat(controller.pending.value?.status).isEqualTo(PendingPlayback.Status.Failed(PendingPlayback.FailureReason.Error))
         verify { player wasNot Called }
     }
 

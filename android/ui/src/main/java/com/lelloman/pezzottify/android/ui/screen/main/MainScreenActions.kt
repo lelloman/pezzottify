@@ -1,8 +1,10 @@
 package com.lelloman.pezzottify.android.ui.screen.main
 
 interface MainScreenActions {
-    fun retryRadioCreation() {}
-    fun dismissRadioCreation() {}
+    fun cancelPendingPlayback() {}
+    fun retryPendingPlayback() {}
+    fun retryRadioContinuation() {}
+    fun dismissRadioContinuationError() {}
 
     fun clickOnPlayPause()
     

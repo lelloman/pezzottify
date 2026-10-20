@@ -72,7 +72,7 @@ fun TrackScreen(trackId: String, navController: NavController) {
     )
     TrackScreenContent(
         state = viewModel.state.collectAsState().value,
-        creatingVersions = viewModel.workVersionsStatus.collectAsState().value == com.lelloman.pezzottify.android.domain.player.RadioCreationStatus.Creating,
+        creatingVersions = viewModel.workVersionsPending.collectAsState().value?.isCreating == true,
         contentResolver = viewModel.contentResolver,
         actions = viewModel,
         onAlbumClick = viewModel::clickOnAlbum,

@@ -1,13 +1,14 @@
 package com.lelloman.pezzottify.android.ui.screen.main
 
 import com.lelloman.pezzottify.android.ui.content.ArtistInfo
+import com.lelloman.pezzottify.android.ui.screen.player.PendingPlaybackUi
 
 data class MainScreenState(
-    val radioCreationStatus: com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi = com.lelloman.pezzottify.android.ui.screen.player.RadioCreationStatusUi.Idle,
     val bottomPlayer: BottomPlayer = BottomPlayer(),
     val notificationUnreadCount: Int = 0,
     val remoteDeviceName: String? = null,
     val hasOtherDeviceConnected: Boolean = false,
+    val radioContinuationError: Boolean = false,
 ) {
 
     data class BottomPlayer(
@@ -24,5 +25,7 @@ data class MainScreenState(
         val nextTrackArtists: List<ArtistInfo> = emptyList(),
         val previousTrackName: String? = null,
         val previousTrackArtists: List<ArtistInfo> = emptyList(),
+        /** Non-null while playback is pending (e.g. a radio being created); wins over the track fields. */
+        val pending: PendingPlaybackUi? = null,
     )
 }

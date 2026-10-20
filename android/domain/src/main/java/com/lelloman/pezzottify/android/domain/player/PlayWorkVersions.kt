@@ -13,10 +13,15 @@ class PlayWorkVersions @Inject constructor(
     private val creation: RadioCreationController,
     private val player: PezzottifyPlayer,
 ) {
-    val status get() = creation.status
+    val pendingPlayback get() = creation.pending
 
     operator fun invoke(workId: String, trackId: String, title: String) {
-        creation.start {
+        val context = PlaybackPlaylistContext.Radio(
+            source = "work_versions", seedEntityType = "track", seedEntityId = trackId,
+            seedLabel = title, count = 0,
+            settings = buildJsonObject { put("work_id", workId) },
+        )
+        creation.start(context) {
             val ids = linkedSetOf<String>()
             var offset = 0
             do {
@@ -28,13 +33,10 @@ class PlayWorkVersions @Inject constructor(
             } while (page.hasMore)
             if (ids.isEmpty()) null else {
                 val tracks = if (trackId in ids) listOf(trackId) + ids.filter { it != trackId } else ids.toList()
-                val context = PlaybackPlaylistContext.Radio(
-                    source = "work_versions", seedEntityType = "track", seedEntityId = trackId,
-                    seedLabel = title, count = tracks.size,
-                    settings = buildJsonObject { put("work_id", workId) },
-                )
                 val continuation = RadioContinuation.create(tracks, tracks)
-                val commit: () -> Unit = { player.loadRadio(tracks, context, continuation) }
+                val commit: RadioCommit = { finalContext ->
+                    player.loadRadio(tracks, finalContext.copy(count = tracks.size), continuation)
+                }
                 commit
             }
         }
