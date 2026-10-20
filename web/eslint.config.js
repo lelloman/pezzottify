@@ -17,6 +17,15 @@ export default [
   ...pluginVue.configs['flat/essential'],
   skipFormatting,
   {
+    name: 'app/node-test-globals',
+    files: ['**/*.test.js'],
+    languageOptions: {
+      globals: {
+        setImmediate: 'readonly',
+      },
+    },
+  },
+  {
     rules: {
       'vue/multi-word-component-names': 'off',
     },
