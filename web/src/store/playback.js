@@ -63,13 +63,17 @@ export const usePlaybackStore = defineStore("playback", () => {
   const playlistsHistory = ref(null);
   const currentPlaylistIndex = ref(null);
   const smartContinuationInFlightSignature = ref(null);
-  const radioCreationState = ref({ status: "idle" });
+  // Playback being prepared (e.g. a radio being created). `null` when idle,
+  // otherwise `{ status: "creating" | "error", message?, context }` where
+  // context is `{ source, entityType, entityId, label, count, settings }`.
+  // Not persisted: a reload drops it.
+  const pendingPlayback = ref(null);
   const radioContinuationError = ref(false);
   let radioRequest = null;
   let waitingForRadio = null;
   const radioCreation = createRadioCreation({
     onState: (state) => {
-      radioCreationState.value = state;
+      pendingPlayback.value = state;
     },
   });
 
@@ -881,84 +885,106 @@ export const usePlaybackStore = defineStore("playback", () => {
     }
   };
 
+  // Starts a radio whose context is known up front. The seed label resolves
+  // concurrently with the track fetch so the pending row can show it early.
+  const startRadioCreation = (seed, fetchTracks) =>
+    radioCreation.start(
+      { label: null, count: null, settings: null, ...seed },
+      async (signal, { context, updateContext }) => {
+        const labelPromise = context.label
+          ? Promise.resolve(context.label)
+          : resolveRadioSeedLabel(context.entityType, context.entityId).then(
+              (label) => {
+                updateContext({ label });
+                return label;
+              },
+            );
+        const {
+          trackIds,
+          count = context.count,
+          continuation,
+        } = await fetchTracks(signal);
+        const label = await labelPromise;
+        const radioContext = buildRadioContext({ ...context, label, count });
+        return {
+          trackIds,
+          context: continuation
+            ? { ...radioContext, continuation }
+            : radioContext,
+        };
+      },
+      commitRadio,
+    );
+
   const setWorkVersions = (workId, trackId, label) =>
-    radioCreation.start(async (signal) => {
-      const tracks = await remoteStore.fetchWorkVersions(workId, signal);
-      const playableIds = [
-        ...new Set(
-          tracks
-            .filter(
-              (track) =>
-                userStore.isProxyModeEnabled ||
-                !track.availability ||
-                track.availability === "available",
-            )
-            .map((track) => track.id),
-        ),
-      ];
-      const trackIds = playableIds.includes(trackId)
-        ? [trackId, ...playableIds.filter((id) => id !== trackId)]
-        : playableIds;
-      return {
-        trackIds,
-        context: {
-          ...buildRadioContext({
-            source: "work_versions",
-            entityType: "track",
-            entityId: trackId,
-            label,
-            count: trackIds.length,
-            settings: { work_id: workId },
-          }),
+    startRadioCreation(
+      {
+        source: "work_versions",
+        entityType: "track",
+        entityId: trackId,
+        label,
+        settings: { work_id: workId },
+      },
+      async (signal) => {
+        const tracks = await remoteStore.fetchWorkVersions(workId, signal);
+        const playableIds = [
+          ...new Set(
+            tracks
+              .filter(
+                (track) =>
+                  userStore.isProxyModeEnabled ||
+                  !track.availability ||
+                  track.availability === "available",
+              )
+              .map((track) => track.id),
+          ),
+        ];
+        const trackIds = playableIds.includes(trackId)
+          ? [trackId, ...playableIds.filter((id) => id !== trackId)]
+          : playableIds;
+        return {
+          trackIds,
+          count: trackIds.length,
           continuation: createRadioContinuation(trackIds, trackIds),
-        },
-      };
-    }, commitRadio);
+        };
+      },
+    );
 
   const setArtistGreatestHits = (artistId) =>
-    radioCreation.start(async (signal) => {
-      const snapshot = await remoteStore.fetchArtistGreatestHits(
-        artistId,
-        signal,
-      );
-      const trackIds = snapshot.slice(0, 10);
-      const label = await resolveRadioSeedLabel("artist", artistId);
-      return {
-        trackIds,
-        context: {
-          ...buildRadioContext({
-            source: "greatest_hits",
-            entityType: "artist",
-            entityId: artistId,
-            label,
-            count: snapshot.length,
-          }),
+    startRadioCreation(
+      { source: "greatest_hits", entityType: "artist", entityId: artistId },
+      async (signal) => {
+        const snapshot = await remoteStore.fetchArtistGreatestHits(
+          artistId,
+          signal,
+        );
+        const trackIds = snapshot.slice(0, 10);
+        return {
+          trackIds,
+          count: snapshot.length,
           continuation: createRadioContinuation(trackIds, snapshot),
-        },
-      };
-    }, commitRadio);
+        };
+      },
+    );
 
   const setRadioFromItem = (entityType, entityId, count = 50) =>
-    radioCreation.start(async (signal) => {
-      const trackIds = await remoteStore.fetchRadioTrackIds(
+    startRadioCreation(
+      {
+        source: "basic",
         entityType,
         entityId,
         count,
-        signal,
-      );
-      const label = await resolveRadioSeedLabel(entityType, entityId);
-      return {
-        trackIds,
-        context: buildRadioContext({
-          source: "basic",
+        settings: { count },
+      },
+      async (signal) => ({
+        trackIds: await remoteStore.fetchRadioTrackIds(
           entityType,
           entityId,
-          label,
           count,
-          settings: { count },
-        }),
-      };
-    }, commitRadio);
+          signal,
+        ),
+      }),
+    );
 
   const setAdvancedRadioFromItem = async (
     entityType,
@@ -972,21 +998,19 @@ export const usePlaybackStore = defineStore("playback", () => {
         entity_id: entityId,
       },
     };
-    return radioCreation.start(async (signal) => {
-      const trackIds = await remoteStore.buildRadioTrackIds(request, signal);
-      const label = await resolveRadioSeedLabel(entityType, entityId);
-      return {
-        trackIds,
-        context: buildRadioContext({
-          source: "custom",
-          entityType,
-          entityId,
-          label,
-          count: request.count || trackIds.length,
-          settings: request,
-        }),
-      };
-    }, commitRadio);
+    return startRadioCreation(
+      {
+        source: "custom",
+        entityType,
+        entityId,
+        count: request.count || null,
+        settings: request,
+      },
+      async (signal) => {
+        const trackIds = await remoteStore.buildRadioTrackIds(request, signal);
+        return { trackIds, count: request.count || trackIds.length };
+      },
+    );
   };
 
   const setGenreRadio = (
@@ -1010,19 +1034,18 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const createGenreRadio = (genreName, count = 50) =>
-    radioCreation.start(
+    startRadioCreation(
+      {
+        source: "genre",
+        entityType: "genre",
+        entityId: genreName,
+        label: genreName,
+        count,
+        settings: { genre: genreName, count },
+      },
       async (signal) => ({
         trackIds: await remoteStore.fetchGenreRadio(genreName, count, signal),
-        context: buildRadioContext({
-          source: "genre",
-          entityType: "genre",
-          entityId: genreName,
-          label: genreName,
-          count,
-          settings: { genre: genreName, count },
-        }),
       }),
-      commitRadio,
     );
 
   // ============================================
@@ -1547,12 +1570,12 @@ export const usePlaybackStore = defineStore("playback", () => {
   return {
     // Core state
     mode,
-    radioCreationState,
+    pendingPlayback,
     radioContinuationError,
     retryRadioContinuation,
     setArtistGreatestHits,
-    cancelRadioCreation: radioCreation.cancel,
-    retryRadioCreation: radioCreation.retry,
+    cancelPendingPlayback: radioCreation.cancel,
+    retryPendingPlayback: radioCreation.retry,
     currentTrackId,
     currentTrackIndex,
     currentPlaylist,

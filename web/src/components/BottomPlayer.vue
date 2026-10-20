@@ -1,60 +1,60 @@
 <template>
   <footer
-    v-if="
-      hasPlayback ||
-      playback.radioCreationState.status !== 'idle' ||
-      playback.radioContinuationError
-    "
+    v-if="hasPlayback || pending"
     class="footerPlayer"
     :class="{
-      hasRadioCreation:
-        playback.radioCreationState.status !== 'idle' ||
-        playback.radioContinuationError,
+      isPending: Boolean(pending),
+      hasContinuationHint: !pending && playback.radioContinuationError,
     }"
   >
-    <div
-      v-if="playback.radioCreationState.status !== 'idle'"
-      class="radioCreationStatus"
-      role="status"
-      aria-live="polite"
-      :aria-busy="playback.radioCreationState.status === 'creating'"
-    >
-      <i
-        v-if="playback.radioCreationState.status === 'creating'"
-        class="radioSpinner"
-        aria-hidden="true"
-      />
-      <span>{{
-        playback.radioCreationState.status === "creating"
-          ? "Creating radio…"
-          : playback.radioCreationState.message
-      }}</span>
-      <button
-        v-if="playback.radioCreationState.status === 'error'"
-        @click="playback.retryRadioCreation"
+    <template v-if="pending">
+      <div
+        class="trackInfoRow pendingInfoRow"
+        role="status"
+        aria-live="polite"
+        :aria-busy="pendingCreating"
       >
-        Retry
-      </button>
-      <button @click="playback.cancelRadioCreation">
-        {{
-          playback.radioCreationState.status === "creating"
-            ? "Cancel"
-            : "Dismiss"
-        }}
-      </button>
-    </div>
-    <div
-      v-if="
-        playback.radioContinuationError &&
-        playback.radioCreationState.status === 'idle'
-      "
-      class="radioCreationStatus"
-      role="status"
-    >
-      <span>Could not add more radio tracks.</span>
-      <button @click="playback.retryRadioContinuation">Retry</button>
-    </div>
-    <template v-if="hasPlayback">
+        <div
+          class="trackImage pendingArt"
+          :class="{ pendingArtError: !pendingCreating }"
+          aria-hidden="true"
+        >
+          <RadioIcon />
+        </div>
+        <div class="trackNamesColumn">
+          <span class="trackName pendingTitle">{{ pendingTitle }}</span>
+          <span class="artistName pendingDetail">{{ pendingDetail }}</span>
+        </div>
+      </div>
+      <div class="playerControlsColumn">
+        <div class="pendingControlsRow">
+          <span
+            v-if="pendingCreating"
+            class="pendingPrimary"
+            title="Creating radio"
+            aria-hidden="true"
+          >
+            <i class="radioSpinner" />
+          </span>
+          <button
+            v-else
+            type="button"
+            class="pendingTextButton pendingTextButtonPrimary"
+            @click="playback.retryPendingPlayback"
+          >
+            Retry
+          </button>
+          <button
+            type="button"
+            class="pendingTextButton"
+            @click="playback.cancelPendingPlayback"
+          >
+            {{ pendingCreating ? "Cancel" : "Dismiss" }}
+          </button>
+        </div>
+      </div>
+    </template>
+    <template v-else>
       <div class="trackInfoRow">
         <MultiSourceImage
           :urls="imageUrls"
@@ -71,11 +71,22 @@
           />
           <LoadClickableArtistsNames
             v-if="artists.length > 0"
+            class="artistLine"
             :artistsIds="artists"
           />
-          <span v-else-if="artistName" class="artistName">{{
+          <span v-else-if="artistName" class="artistName artistLine">{{
             artistName
           }}</span>
+          <p
+            v-if="playback.radioContinuationError"
+            class="continuationHint"
+            role="status"
+          >
+            <span>Could not add more radio tracks.</span>
+            <button type="button" @click="playback.retryRadioContinuation">
+              Retry
+            </button>
+          </p>
         </div>
       </div>
       <div class="playerControlsColumn">
@@ -238,6 +249,7 @@ import { useStaticsStore } from "@/store/statics";
 import DeviceSelector from "./DeviceSelector.vue";
 import AiContinuationIcon from "./icons/AiContinuationIcon.vue";
 import SteeringWheelIcon from "./icons/SteeringWheelIcon.vue";
+import RadioIcon from "./icons/RadioIcon.vue";
 import { useUserStore } from "@/store/user";
 
 const ControlIconButton = {
@@ -271,6 +283,35 @@ const userStore = useUserStore();
 const hasPlayback = computed(() => {
   return playback.currentTrackId;
 });
+
+// Playback being prepared (e.g. a radio being created) is the current item:
+// it replaces the track display until it commits, fails or is dismissed.
+const pending = computed(() => playback.pendingPlayback);
+const pendingCreating = computed(() => pending.value?.status === "creating");
+const FALLBACK_SEED_LABELS = {
+  track: "this track",
+  album: "this album",
+  artist: "this artist",
+  genre: "this genre",
+};
+const pendingLabel = computed(() => {
+  const context = pending.value?.context;
+  return (
+    context?.label ||
+    FALLBACK_SEED_LABELS[context?.entityType] ||
+    "your selection"
+  );
+});
+const pendingTitle = computed(() =>
+  pendingCreating.value
+    ? `Creating radio · ${pendingLabel.value}`
+    : `Couldn't create radio · ${pendingLabel.value}`,
+);
+const pendingDetail = computed(() =>
+  pendingCreating.value
+    ? "Finding tracks…"
+    : pending.value?.message || "Something went wrong.",
+);
 
 // Progress dragging state
 const draggingTrackPercent = ref(null);
@@ -523,21 +564,6 @@ watch(
   color: var(--spotify-green);
 }
 
-.radioCreationStatus {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 20px;
-  background: var(--surface-elevated, #252525);
-  color: var(--text-bright, white);
-}
-.radioCreationStatus span {
-  flex: 1;
-}
-.radioCreationStatus button {
-  cursor: pointer;
-}
 .radioSpinner {
   width: 16px;
   height: 16px;
@@ -557,9 +583,111 @@ watch(
     animation: none;
   }
 }
-.footerPlayer.hasRadioCreation {
-  height: auto;
-  min-height: var(--player-height-desktop);
+
+/* ============================================
+   Pending item (e.g. radio being created)
+   ============================================ */
+
+.trackImage.pendingArt {
+  display: grid;
+  place-items: center;
+  cursor: default;
+  background: var(--surface-raised);
+  color: var(--text-subdued);
+}
+.trackImage.pendingArt:hover,
+.trackImage.pendingArt:active {
+  transform: none;
+  box-shadow: none;
+}
+.trackImage.pendingArt svg {
+  width: 28px;
+  height: 28px;
+}
+.trackImage.pendingArtError {
+  color: var(--text-subtle);
+}
+.pendingTitle,
+.pendingDetail {
+  display: block;
+  margin: 0;
+}
+.pendingControlsRow {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+.pendingPrimary {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  margin: 0 8px;
+  color: var(--text-base);
+}
+.pendingTextButton {
+  flex-shrink: 0;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--surface-border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-base);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+}
+.pendingTextButtonPrimary {
+  border-color: transparent;
+  background: #fff;
+  color: #000;
+}
+@media (hover: hover) {
+  .pendingTextButton:hover {
+    border-color: var(--text-subdued);
+  }
+  .pendingTextButtonPrimary:hover {
+    border-color: transparent;
+    transform: scale(1.04);
+  }
+}
+.pendingTextButton:focus-visible {
+  outline: 2px solid var(--spotify-green);
+  outline-offset: 2px;
+}
+
+/* Quiet inline hint when a radio cannot be extended. */
+.continuationHint {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-subdued);
+  white-space: nowrap;
+}
+.continuationHint span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.continuationHint button {
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-base);
+  font: inherit;
+  font-weight: var(--font-semibold);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.continuationHint button:focus-visible {
+  outline: 2px solid var(--spotify-green);
+  outline-offset: 2px;
 }
 
 /* ============================================
@@ -769,12 +897,6 @@ watch(
    ============================================ */
 
 @media (max-width: 767px) {
-  .footerPlayer.hasRadioCreation {
-    grid-template-rows: 4px 1fr auto auto;
-  }
-  .hasRadioCreation .radioCreationStatus {
-    grid-row: 4;
-  }
   .footerPlayer {
     height: var(--player-height-mobile);
     grid-template-columns: minmax(0, 1fr) auto;
@@ -817,6 +939,34 @@ watch(
 
   .playerControlsButtonsRow {
     gap: 3px;
+  }
+
+  .pendingControlsRow {
+    grid-column: 2;
+    grid-row: 2;
+    gap: 6px;
+  }
+
+  .pendingPrimary {
+    margin: 0 4px;
+  }
+
+  .pendingTextButton {
+    padding: 0 12px;
+  }
+
+  /* Pending item has no progress or extra controls: center the row. */
+  .footerPlayer.isPending {
+    grid-template-rows: 1fr;
+  }
+  .footerPlayer.isPending .trackInfoRow,
+  .footerPlayer.isPending .pendingControlsRow {
+    grid-row: 1;
+  }
+
+  /* No room for a third line: the hint takes the artist line's place. */
+  .hasContinuationHint .artistLine {
+    display: none;
   }
 
   /* Hide skip and seek buttons on mobile */

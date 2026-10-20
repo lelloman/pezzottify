@@ -1,23 +1,49 @@
 // One request owns the pending player state. Superseded responses never commit.
+//
+// The pending state is `null` when idle, otherwise
+// `{ status: "creating" | "error", message?, context }`, where `context`
+// describes what is being created (known before the request starts) and can be
+// refined while the request runs (e.g. once the seed label resolves).
 export function createRadioCreation({ onState, timeoutMs = 60000 }) {
-  let active = null;
+  let active = null; // controller of the in-flight request
+  let owner = null; // controller of the attempt that owns the pending state
+  let pending = null;
   let retryRequest = null;
+
+  const emit = (next) => {
+    pending = next;
+    onState(next);
+  };
+
   const cancel = () => {
     active?.abort();
     active = null;
+    owner = null;
     retryRequest = null;
-    onState({ status: "idle" });
+    emit(null);
   };
-  const start = async (request, commit) => {
+
+  const start = async (context, request, commit) => {
     cancel();
-    retryRequest = () => start(request, commit);
     const controller = new AbortController();
     active = controller;
-    onState({ status: "creating" });
+    owner = controller;
+    let latestContext = { ...context };
+    retryRequest = () => start(latestContext, request, commit);
+    const updateContext = (patch) => {
+      if (owner !== controller || !pending) return;
+      latestContext = { ...latestContext, ...patch };
+      emit({ ...pending, context: latestContext });
+    };
+    const fail = (message) => {
+      if (owner !== controller) return;
+      emit({ status: "error", message, context: latestContext });
+    };
+    emit({ status: "creating", context: latestContext });
     let timer;
     try {
       const result = await Promise.race([
-        request(controller.signal),
+        request(controller.signal, { context: latestContext, updateContext }),
         new Promise((_, reject) => {
           controller.signal.addEventListener(
             "abort",
@@ -29,27 +55,24 @@ export function createRadioCreation({ onState, timeoutMs = 60000 }) {
       ]);
       if (active !== controller) return [];
       if (!result.trackIds.length) {
-        onState({
-          status: "error",
-          message:
-            "No playable tracks found for this radio. Try another seed or adjust the filters.",
-        });
+        fail(
+          "No playable tracks found for this radio. Try another seed or adjust the filters.",
+        );
         return [];
       }
       active = null;
-      onState({ status: "idle" });
+      owner = null;
+      emit(null);
       commit(result);
       retryRequest = null;
       return result.trackIds;
     } catch (error) {
       if (active !== controller) return [];
-      onState({
-        status: "error",
-        message:
-          error.message === "timeout" || error.code === "ECONNABORTED"
-            ? "Radio creation timed out. Please try again."
-            : "Could not create radio. Please try again.",
-      });
+      fail(
+        error.message === "timeout" || error.code === "ECONNABORTED"
+          ? "Radio creation timed out. Please try again."
+          : "Could not create radio. Please try again.",
+      );
       return [];
     } finally {
       clearTimeout(timer);
@@ -57,5 +80,6 @@ export function createRadioCreation({ onState, timeoutMs = 60000 }) {
       controller.abort();
     }
   };
+
   return { start, cancel, retry: () => retryRequest?.() };
 }

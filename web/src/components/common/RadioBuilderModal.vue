@@ -243,7 +243,7 @@ const criterionLabel = (namespace) =>
   criteriaByNamespace.value.get(namespace)?.label || namespace;
 
 const handleClose = () => {
-  if (isSubmitting.value) playback.cancelRadioCreation();
+  if (isSubmitting.value) playback.cancelPendingPlayback();
   emit("close");
 };
 
@@ -339,7 +339,7 @@ const handleSubmit = async () => {
   isSubmitting.value = false;
   if (!trackIds.length)
     validationError.value =
-      playback.radioCreationState.message || "Radio creation cancelled.";
+      playback.pendingPlayback?.message || "Radio creation cancelled.";
   if (trackIds.length > 0) {
     handleClose();
   }

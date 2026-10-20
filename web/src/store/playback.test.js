@@ -302,7 +302,9 @@ test("all versions respects proxy playback and preserves the queue on an empty r
   assert.deepEqual(store.currentPlaylist.tracksIds, ["remote"]);
   user.isProxyModeEnabled = false;
   await store.setWorkVersions("work", "remote", "Composition");
-  assert.equal(store.radioCreationState.status, "error");
+  assert.equal(store.pendingPlayback.status, "error");
+  assert.match(store.pendingPlayback.message, /No playable tracks/);
+  assert.equal(store.pendingPlayback.context.entityId, "remote");
   assert.deepEqual(store.currentPlaylist.tracksIds, ["remote"]);
   store.stop();
 });
@@ -519,4 +521,136 @@ test("destination mixes combine catalog items and concepts", async () => {
   );
   assert.equal(store.currentGravity.steps_total, 6);
   store.stop();
+});
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+test("pending playback carries context from the start and clears on commit", async () => {
+  const { store, remote } = harness();
+  const tracks = deferred();
+  remote.fetchRadioTrackIds = () => tracks.promise;
+  const started = store.setRadioFromItem("artist", "artist-1", 20);
+  assert.equal(store.pendingPlayback.status, "creating");
+  assert.deepEqual(
+    { ...store.pendingPlayback.context, label: null },
+    {
+      source: "basic",
+      entityType: "artist",
+      entityId: "artist-1",
+      label: null,
+      count: 20,
+      settings: { count: 20 },
+    },
+  );
+  assert.equal(store.currentTrackId, null);
+  tracks.resolve(ids(3));
+  assert.deepEqual(await started, ids(3));
+  assert.equal(store.pendingPlayback, null);
+  assert.equal(store.currentTrackId, "track-0");
+  assert.equal(store.currentPlaylist.context.seed.label, "Artist");
+  assert.equal(store.currentPlaylist.context.seed.entity_id, "artist-1");
+  store.stop();
+});
+
+test("the seed label resolves while the track fetch is still pending", async () => {
+  const { store, remote } = harness();
+  const tracks = deferred();
+  remote.fetchRadioTrackIds = () => tracks.promise;
+  const started = store.setRadioFromItem("artist", "artist-1");
+  assert.equal(store.pendingPlayback.context.label, null);
+  await flush();
+  assert.equal(store.pendingPlayback.status, "creating");
+  assert.equal(store.pendingPlayback.context.label, "Artist");
+  tracks.resolve(ids(2));
+  await started;
+  assert.equal(store.pendingPlayback, null);
+  store.stop();
+});
+
+test("an empty radio leaves pending playback in error with a message", async () => {
+  const { store, remote } = harness();
+  remote.fetchGenreRadio = async () => [];
+  assert.deepEqual(await store.createGenreRadio("Jazz"), []);
+  assert.equal(store.pendingPlayback.status, "error");
+  assert.match(store.pendingPlayback.message, /No playable tracks/);
+  assert.equal(store.pendingPlayback.context.label, "Jazz");
+  assert.equal(store.currentTrackId, null);
+  store.cancelPendingPlayback();
+  assert.equal(store.pendingPlayback, null);
+});
+
+test("retrying pending playback commits on success", async () => {
+  const { store, remote } = harness();
+  let attempts = 0;
+  remote.fetchGenreRadio = async () => (attempts++ ? ids(2) : []);
+  await store.createGenreRadio("Jazz");
+  assert.equal(store.pendingPlayback.status, "error");
+  await store.retryPendingPlayback();
+  assert.equal(store.pendingPlayback, null);
+  assert.deepEqual(store.currentPlaylist.tracksIds.slice(0, 2), ids(2));
+  assert.equal(store.currentPlaylist.context.seed.label, "Jazz");
+  store.stop();
+});
+
+test("cancel, stop and other playback clear pending playback and drop the result", async () => {
+  for (const interrupt of [
+    (store) => store.cancelPendingPlayback(),
+    (store) => store.stop(),
+    (store) => store.setPlaylistFromTrackIds(["other"], 0, true),
+    (store) => store.setTrack({ id: "other" }),
+    (store) => store.setAlbumId("album"),
+  ]) {
+    const { store, remote } = harness();
+    const tracks = deferred();
+    remote.fetchRadioTrackIds = () => tracks.promise;
+    const started = store.setRadioFromItem("artist", "artist-1");
+    assert.equal(store.pendingPlayback.status, "creating");
+    interrupt(store);
+    assert.equal(store.pendingPlayback, null);
+    tracks.resolve(ids(3));
+    assert.deepEqual(await started, []);
+    await flush();
+    assert.equal(store.pendingPlayback, null);
+    assert.ok(!store.currentPlaylist?.tracksIds.includes("track-0"));
+    store.stop();
+  }
+});
+
+test("stop dismisses a pending playback error", async () => {
+  const { store, remote } = harness();
+  remote.fetchGenreRadio = async () => {
+    throw new Error("network");
+  };
+  await store.createGenreRadio("Jazz");
+  assert.equal(store.pendingPlayback.status, "error");
+  assert.match(store.pendingPlayback.message, /Could not create radio/);
+  store.stop();
+  assert.equal(store.pendingPlayback, null);
+});
+
+test("remote mode shows pending playback here and commits to the target device", async () => {
+  const { store, remote } = harness();
+  const commands = [];
+  store.setSessionStore({
+    sendCommand: (name, payload) => commands.push({ name, payload }),
+  });
+  store.enterRemoteMode();
+  const tracks = deferred();
+  remote.fetchRadioTrackIds = () => tracks.promise;
+  const started = store.setRadioFromItem("artist", "artist-1");
+  assert.equal(store.pendingPlayback.status, "creating");
+  tracks.resolve(ids(2));
+  await started;
+  assert.equal(store.pendingPlayback, null);
+  assert.equal(commands.length, 1);
+  assert.equal(commands[0].name, "loadTrackIds");
+  assert.deepEqual(commands[0].payload.trackIds, ids(2));
+  assert.equal(commands[0].payload.context.seed.label, "Artist");
+  store.exitRemoteMode();
 });

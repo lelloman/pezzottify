@@ -22,7 +22,7 @@
         :saved="isArtistLiked"
         @play="playback.setArtistGreatestHits(artistId)"
         @save="handleClickOnFavoriteIcon"
-        :disabled="playback.radioCreationState.status === 'creating'"
+        :disabled="playback.pendingPlayback?.status === 'creating'"
       >
         <template #more>
           <button type="button" @click="handleClickOnArtistRadio">
