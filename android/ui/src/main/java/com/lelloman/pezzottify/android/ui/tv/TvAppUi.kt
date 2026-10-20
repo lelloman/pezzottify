@@ -10,10 +10,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.lelloman.pezzottify.android.ui.MaintenanceEffect
 import com.lelloman.pezzottify.android.ui.SessionExpiredViewModel
+import com.lelloman.pezzottify.android.ui.screen.maintenance.MaintenanceScreen
 import com.lelloman.pezzottify.android.ui.screen.tv.TvLoginScreen
 import com.lelloman.pezzottify.android.ui.screen.tv.TvNowPlayingScreen
 import com.lelloman.pezzottify.android.ui.screen.tv.TvSettingsScreen
@@ -44,6 +47,12 @@ fun TvAppUi(
                     .background(androidx.compose.material3.MaterialTheme.colorScheme.background)
             )
             TvSessionExpiredEffect(navController)
+            MaintenanceEffect(
+                isOnMaintenanceScreen = {
+                    navController.currentDestination?.hasRoute<TvScreen.Maintenance>() == true
+                },
+                onMaintenance = navController::toTvMaintenance,
+            )
 
             NavHost(
                 modifier = Modifier.fillMaxSize(),
@@ -55,6 +64,19 @@ fun TvAppUi(
                 }
                 composable<TvScreen.Login> {
                     TvLoginScreen(navController)
+                }
+                composable<TvScreen.Maintenance> {
+                    MaintenanceScreen(
+                        navController = navController,
+                        onMaintenanceEnded = { loggedIn ->
+                            if (loggedIn) {
+                                navController.fromTvMaintenanceToNowPlaying()
+                            } else {
+                                navController.fromTvMaintenanceToLogin()
+                            }
+                        },
+                        onLoggedOut = { navController.fromTvMaintenanceToLogin() },
+                    )
                 }
                 composable<TvScreen.NowPlaying> {
                     TvNowPlayingScreen(

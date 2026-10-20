@@ -17,6 +17,23 @@ fun NavController.fromSplashToLogin() = navigate(Login) {
     popUpTo(Splash, inclusive())
 }
 
+fun NavController.fromSplashToMaintenance() = navigate(Screen.Maintenance) {
+    popUpTo(Splash, inclusive())
+}
+
+fun NavController.fromMaintenanceToMain() = navigate(Main.Home) {
+    popUpTo(Screen.Maintenance, inclusive())
+}
+
+fun NavController.fromMaintenanceToLogin() = navigate(Login) {
+    popUpTo(Screen.Maintenance, inclusive())
+}
+
+fun NavController.toMaintenance() = navigate(Screen.Maintenance) {
+    popUpTo(graph.id) { inclusive = true }
+    launchSingleTop = true
+}
+
 fun NavController.fromLoginToMain() = navigate(Main.Home) {
     popUpTo(Login, inclusive())
 }
@@ -59,6 +76,9 @@ sealed interface Screen {
 
     @Serializable
     data object About : Screen
+
+    @Serializable
+    data object Maintenance : Screen
 
     sealed interface Main : Screen {
 

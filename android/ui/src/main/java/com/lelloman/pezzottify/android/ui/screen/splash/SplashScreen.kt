@@ -5,6 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.lelloman.pezzottify.android.ui.fromSplashToLogin
+import com.lelloman.pezzottify.android.ui.fromSplashToMaintenance
 import com.lelloman.pezzottify.android.ui.fromSplashToMain
 
 @Composable
@@ -16,6 +17,7 @@ fun SplashScreen(navController: NavController) {
             when (it) {
                 SplashViewModel.Destination.Main -> navController.fromSplashToMain()
                 SplashViewModel.Destination.Login -> navController.fromSplashToLogin()
+                SplashViewModel.Destination.Maintenance -> navController.fromSplashToMaintenance()
             }
         }
     }

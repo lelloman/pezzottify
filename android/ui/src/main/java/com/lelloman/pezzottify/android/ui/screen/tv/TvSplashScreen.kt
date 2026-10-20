@@ -6,6 +6,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.lelloman.pezzottify.android.ui.screen.splash.SplashViewModel
 import com.lelloman.pezzottify.android.ui.tv.fromTvSplashToLogin
+import com.lelloman.pezzottify.android.ui.tv.fromTvSplashToMaintenance
 import com.lelloman.pezzottify.android.ui.tv.fromTvSplashToNowPlaying
 
 @Composable
@@ -17,6 +18,7 @@ fun TvSplashScreen(navController: NavController) {
             when (destination) {
                 SplashViewModel.Destination.Main -> navController.fromTvSplashToNowPlaying()
                 SplashViewModel.Destination.Login -> navController.fromTvSplashToLogin()
+                SplashViewModel.Destination.Maintenance -> navController.fromTvSplashToMaintenance()
             }
         }
     }

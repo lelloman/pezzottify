@@ -66,6 +66,7 @@ import BatchManager from "@/components/admin/BatchManager.vue";
 import BugReports from "@/components/admin/BugReports.vue";
 import IngestionManager from "@/components/admin/IngestionManager.vue";
 import PushNotifications from "@/components/admin/PushNotifications.vue";
+import MaintenanceControl from "@/components/admin/MaintenanceControl.vue";
 import { wsConnectionStatus, wsServerVersion } from "@/services/websocket";
 
 const route = useRoute();
@@ -128,6 +129,14 @@ const allSections = [
     permission: "ServerAdmin",
     component: ServerControl,
     route: "/admin/server",
+  },
+  {
+    id: "maintenance",
+    group: "Operations",
+    label: "Maintenance",
+    permission: "ServerAdmin",
+    component: MaintenanceControl,
+    route: "/admin/maintenance",
   },
   {
     id: "downloads",

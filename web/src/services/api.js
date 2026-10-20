@@ -3,6 +3,7 @@ import * as oidc from "./oidc";
 import { getCsrfToken } from "./csrf";
 import { authorizationHeaderValue } from "./authorization";
 import { ensureReady, isPassiveRequest } from "./power";
+import { notifyMaintenance } from "./maintenanceEvents";
 
 let isRefreshing = false;
 let failedQueue = [];
@@ -98,6 +99,14 @@ export function setupAxiosInterceptors() {
     (response) => response,
     async (error) => {
       const originalRequest = error.config;
+
+      if (
+        error.response?.status === 503 &&
+        error.response?.headers?.["x-maintenance-mode"] === "1"
+      ) {
+        notifyMaintenance(error.response.data);
+        return Promise.reject(error);
+      }
 
       // Skip if not a 401, or if it's an auth endpoint, or if we already retried
       if (

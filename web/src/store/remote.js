@@ -732,6 +732,29 @@ export const useRemoteStore = defineStore("remote", () => {
     }
   };
 
+  const fetchMaintenance = async () => {
+    try {
+      const response = await axios.get("/v1/admin/maintenance");
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch maintenance mode:", error);
+      return null;
+    }
+  };
+
+  const updateMaintenance = async (config) => {
+    try {
+      const response = await axios.put("/v1/admin/maintenance", config);
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error("Failed to update maintenance mode:", error);
+      return {
+        error:
+          error.response?.data?.error || "Failed to update maintenance mode",
+      };
+    }
+  };
+
   const fetchStorageReport = async () => {
     try {
       const response = await axios.get("/v1/admin/storage");
@@ -1519,6 +1542,8 @@ export const useRemoteStore = defineStore("remote", () => {
     fetchOnlineUsers,
     // Admin API - Server Control
     rebootServer,
+    fetchMaintenance,
+    updateMaintenance,
     fetchStorageReport,
     fetchBackgroundJobs,
     fetchAudioEmbeddingCoverage,

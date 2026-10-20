@@ -9,6 +9,7 @@ mod http_layers;
 mod ingestion_routes;
 pub mod lifecycle;
 mod lyrics;
+mod maintenance;
 mod media_cache_report;
 pub mod metrics;
 mod password_work;

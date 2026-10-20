@@ -202,6 +202,13 @@ internal class RemoteApiClientImpl(
             .returnFromRetrofitResponse()
     }
 
+    override suspend fun getServerStatus(): RemoteApiResponse<com.lelloman.pezzottify.android.domain.remoteapi.response.ServerStatus> =
+        catchingNetworkError {
+            getRetrofit()
+                .getServerStatus()
+                .returnFromRetrofitResponse()
+        }
+
     override suspend fun logout(): RemoteApiResponse<Unit> = catchingNetworkError {
         getRetrofit()
             .logout(authToken = authToken)

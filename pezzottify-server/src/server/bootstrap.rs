@@ -91,6 +91,9 @@ async fn make_app_with_executor(
     );
     state.oidc_client = oidc_client;
     state.runtime_tasks = runtime_tasks.clone();
+    state.maintenance = crate::server::maintenance::MaintenanceHandle::new(
+        crate::server::maintenance::MaintenanceState::load(state.server_store.as_ref()),
+    );
 
     // Spawn orphaned session checker task
     {

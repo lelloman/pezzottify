@@ -281,6 +281,10 @@ pub(super) fn admin_routes(state: &ServerState, limits: &RouteLimits) -> Router 
         .route("/backup/prepare", post(admin_prepare_backup))
         .route("/storage", get(admin_get_storage_report))
         .route("/media-cache", get(admin_get_media_cache_report))
+        .route(
+            "/maintenance",
+            get(admin_get_maintenance).put(admin_set_maintenance),
+        )
         .route("/jobs", get(admin_list_jobs))
         .route("/jobs/audit", get(admin_get_job_audit_log))
         .route("/jobs/controls", get(admin_get_job_controls))
@@ -472,6 +476,10 @@ pub(super) fn assemble_app(
         .route("/mcp", get(crate::mcp::handler::mcp_handler))
         .with_state(state.clone());
 
+    let status_routes = Router::new()
+        .route("/status", get(server_status))
+        .with_state(state.clone());
+
     let api_routes = Router::new()
         .merge(super::super::report_routes::routes(state.clone()))
         .nest("/v1/auth", auth_routes)
@@ -487,6 +495,7 @@ pub(super) fn assemble_app(
                 .layer(user_limit(WRITE_PER_MINUTE).layer())
                 .with_state(state.clone()),
         )
+        .nest("/v1", status_routes)
         .nest("/v1", ws_routes)
         .nest("/v1", mcp_routes);
 
@@ -507,6 +516,10 @@ pub(super) fn assemble_app(
     app = app.layer(middleware::from_fn_with_state(
         super::super::report_admission::Admission::new(state.clone()),
         super::super::report_admission::gate,
+    ));
+    app = app.layer(middleware::from_fn_with_state(
+        state.clone(),
+        maintenance_gate,
     ));
     app = app.layer(middleware::from_fn_with_state(state.clone(), log_requests));
     app.layer(middleware::from_fn(http_api_no_store))

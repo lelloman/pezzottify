@@ -34,6 +34,10 @@
     <string name="login">Accedi</string>
     <string name="logout">Log out</string>
     <string name="logging_out">Log out in corso…</string>
+    <string name="maintenance_title">Torniamo subito</string>
+    <string name="maintenance_default_message">Pezzottify è in manutenzione. Riprova tra poco.</string>
+    <string name="maintenance_expected_back">Ritorno previsto: %1$s</string>
+    <string name="maintenance_status_unavailable">Impossibile leggere lo stato della manutenzione.</string>
     <!-- COMMON -->
 
     <!-- ABOUT SCREEN -->

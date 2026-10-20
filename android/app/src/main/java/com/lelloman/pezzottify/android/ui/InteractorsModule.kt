@@ -12,6 +12,7 @@ import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogout
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformOidcLogin
 import com.lelloman.pezzottify.android.domain.config.BuildInfo
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
+import com.lelloman.pezzottify.android.domain.maintenance.MaintenanceEventBus
 import com.lelloman.pezzottify.android.domain.device.DeviceInfoProvider
 import com.lelloman.pezzottify.android.domain.impression.RecordImpressionUseCase
 import com.lelloman.pezzottify.android.domain.notifications.NotificationRepository
@@ -22,6 +23,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.ResolvedSearchResult
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchSection
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ServerStatus
 import com.lelloman.pezzottify.android.domain.remoteapi.response.toDomain
 import com.lelloman.pezzottify.android.domain.settings.BackgroundSyncInterval
 import com.lelloman.pezzottify.android.domain.settings.UserSettingsStore
@@ -118,6 +120,8 @@ import com.lelloman.pezzottify.android.ui.screen.main.whatsnew.WhatsNewScreenVie
 import com.lelloman.pezzottify.android.ui.screen.player.PlayerScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.player.RepeatModeUi
 import com.lelloman.pezzottify.android.ui.screen.queue.QueueScreenViewModel
+import com.lelloman.pezzottify.android.ui.MaintenanceEventViewModel
+import com.lelloman.pezzottify.android.ui.screen.maintenance.MaintenanceViewModel
 import com.lelloman.pezzottify.android.ui.screen.splash.SplashViewModel
 import dagger.Module
 import dagger.Provides
@@ -243,10 +247,39 @@ private fun buildBasicRadioContext(
 class InteractorsModule {
 
     @Provides
-    fun provideSplashInteractor(isLoggedIn: IsLoggedIn): SplashViewModel.Interactor =
+    fun provideSplashInteractor(
+        isLoggedIn: IsLoggedIn,
+        remoteApiClient: RemoteApiClient,
+    ): SplashViewModel.Interactor =
         object : SplashViewModel.Interactor {
             override suspend fun isLoggedIn() = isLoggedIn()
+
+            override suspend fun serverStatus(): ServerStatus? =
+                (remoteApiClient.getServerStatus() as? RemoteApiResponse.Success)?.data
         }
+
+    @Provides
+    fun provideMaintenanceInteractor(
+        remoteApiClient: RemoteApiClient,
+        isLoggedIn: IsLoggedIn,
+        performLogout: com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogout,
+    ): MaintenanceViewModel.Interactor = object : MaintenanceViewModel.Interactor {
+        override suspend fun fetchStatus(): ServerStatus? =
+            (remoteApiClient.getServerStatus() as? RemoteApiResponse.Success)?.data
+
+        override suspend fun isLoggedIn(): Boolean = isLoggedIn()
+
+        override suspend fun logout() {
+            performLogout()
+        }
+    }
+
+    @Provides
+    fun provideMaintenanceEventInteractor(
+        maintenanceEventBus: MaintenanceEventBus,
+    ): MaintenanceEventViewModel.Interactor = object : MaintenanceEventViewModel.Interactor {
+        override fun events(): Flow<Unit> = maintenanceEventBus.events
+    }
 
     @Provides
     fun provideSessionExpiredInteractor(

@@ -73,6 +73,7 @@ use super::authorization::{
     require_own_playlists, require_report_bug, require_request_content, require_server_admin,
     require_view_analytics,
 };
+use super::maintenance::{MaintenanceHandle, MaintenanceState, MAINTENANCE_HEADER};
 
 pub(super) const MAX_DEVICES_PER_USER: usize = 6;
 
@@ -119,6 +120,7 @@ fn format_uptime(duration: Duration) -> String {
 }
 
 include!("handlers_sync.rs");
+include!("handlers_maintenance.rs");
 include!("handlers_catalog.rs");
 include!("handlers_library.rs");
 include!("handlers_account.rs");

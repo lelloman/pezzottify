@@ -1,5 +1,5 @@
 <script setup>
-import { RouterView } from "vue-router";
+import { RouterView, useRoute } from "vue-router";
 import { usePlaybackStore } from "./store/playback";
 import { useAuthStore } from "./store/auth";
 import { useIngestionStore } from "./store/ingestion";
@@ -7,11 +7,33 @@ import { onMounted, onUnmounted, computed, watch } from "vue";
 import ChatButton from "./components/chat/ChatButton.vue";
 import ChatPanel from "./components/chat/ChatPanel.vue";
 import IngestionMonitorModal from "./components/ingestion/IngestionMonitorModal.vue";
+import MaintenanceView from "./views/MaintenanceView.vue";
+import { useMaintenanceStore } from "./store/maintenance";
+import { onMaintenance } from "./services/maintenanceEvents";
 
 
 const playback = usePlaybackStore();
 const authStore = useAuthStore();
 const ingestionStore = useIngestionStore();
+const maintenance = useMaintenanceStore();
+const route = useRoute();
+
+const isMaintenanceBypassRoute = computed(() => {
+  const path = route.path;
+  return (
+    path.startsWith("/admin") ||
+    path === "/login" ||
+    path === "/auth/callback" ||
+    path === "/logout"
+  );
+});
+
+const showMaintenance = computed(
+  () => maintenance.enabled && !isMaintenanceBypassRoute.value,
+);
+
+let maintenanceTimer = null;
+let stopMaintenanceEvents = null;
 
 // Only show chat when authenticated
 const showChat = computed(() => authStore.sessionChecked && authStore.user);
@@ -43,23 +65,33 @@ function retrySession() {
 }
 onMounted(() => {
   window.addEventListener("keydown", handleKeyDown);
+  maintenance.fetchStatus();
+  maintenanceTimer = window.setInterval(() => maintenance.fetchStatus(), 60000);
+  stopMaintenanceEvents = onMaintenance((state) => maintenance.apply(state));
 });
 onUnmounted(() => {
   window.removeEventListener("keydown", handleKeyDown);
+  window.clearInterval(maintenanceTimer);
+  stopMaintenanceEvents?.();
 });
 </script>
 
 <template>
-  <div v-if="authStore.sessionError" role="alert" class="sessionError">
+  <div
+    v-if="authStore.sessionError && !showMaintenance"
+    role="alert"
+    class="sessionError"
+  >
     <p>Couldn't check your session. Please try again.</p>
     <button @click="retrySession">Retry</button>
   </div>
-  <RouterView id="el_routo" />
-  <template v-if="showChat">
+  <RouterView v-if="!showMaintenance" id="el_routo" />
+  <MaintenanceView v-else />
+  <template v-if="showChat && !showMaintenance">
     <ChatButton />
     <ChatPanel />
   </template>
-  <IngestionMonitorModal />
+  <IngestionMonitorModal v-if="!showMaintenance" />
 </template>
 
 <style scoped>

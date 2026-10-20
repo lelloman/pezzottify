@@ -5,11 +5,13 @@ import com.lelloman.pezzottify.android.domain.auth.AuthStore
 import com.lelloman.pezzottify.android.domain.auth.SessionExpiredHandler
 import com.lelloman.pezzottify.android.domain.auth.TokenRefresher
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
+import com.lelloman.pezzottify.android.domain.maintenance.MaintenanceEventBus
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiClient
 import com.lelloman.pezzottify.android.domain.remoteapi.RemoteApiCredentialsProvider
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.remoteapi.internal.HttpLoggingInterceptor
+import com.lelloman.pezzottify.android.remoteapi.internal.MaintenanceInterceptor
 import com.lelloman.pezzottify.android.remoteapi.internal.OkHttpClientFactory
 import com.lelloman.pezzottify.android.remoteapi.internal.RemoteApiClientImpl
 import com.lelloman.pezzottify.android.remoteapi.internal.SessionExpiredInterceptor
@@ -67,6 +69,7 @@ class RemoteApiModule {
         okHttpClientFactory: OkHttpClientFactory,
         sessionExpiredHandler: SessionExpiredHandler,
         tokenRefresher: TokenRefresher,
+        maintenanceEventBus: MaintenanceEventBus,
         loggerFactory: LoggerFactory,
         applicationScope: CoroutineScope,
     ): RemoteApiClient {
@@ -86,6 +89,7 @@ class RemoteApiModule {
             },
             interceptors = listOf(
                 SessionExpiredInterceptor(sessionExpiredHandler, tokenRefresher, sessionLogger),
+                MaintenanceInterceptor(maintenanceEventBus),
                 HttpLoggingInterceptor(httpLogger),
             ),
             logger = apiLogger,

@@ -14,6 +14,23 @@ fun NavController.fromTvSplashToNowPlaying() = navigate(TvScreen.NowPlaying) {
     popUpTo(TvScreen.Splash, inclusive())
 }
 
+fun NavController.fromTvSplashToMaintenance() = navigate(TvScreen.Maintenance) {
+    popUpTo(TvScreen.Splash, inclusive())
+}
+
+fun NavController.fromTvMaintenanceToLogin() = navigate(TvScreen.Login) {
+    popUpTo(TvScreen.Maintenance, inclusive())
+}
+
+fun NavController.fromTvMaintenanceToNowPlaying() = navigate(TvScreen.NowPlaying) {
+    popUpTo(TvScreen.Maintenance, inclusive())
+}
+
+fun NavController.toTvMaintenance() = navigate(TvScreen.Maintenance) {
+    popUpTo(graph.id) { inclusive = true }
+    launchSingleTop = true
+}
+
 fun NavController.fromTvLoginToNowPlaying() = navigate(TvScreen.NowPlaying) {
     popUpTo(TvScreen.Login, inclusive())
 }
@@ -37,6 +54,9 @@ sealed interface TvScreen {
 
     @Serializable
     data object Login : TvScreen
+
+    @Serializable
+    data object Maintenance : TvScreen
 
     @Serializable
     data object NowPlaying : TvScreen

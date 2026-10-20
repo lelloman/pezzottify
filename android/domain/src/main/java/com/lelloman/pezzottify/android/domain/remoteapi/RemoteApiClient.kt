@@ -23,6 +23,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.RemoteApiRespon
 import com.lelloman.pezzottify.android.domain.remoteapi.response.RequestAlbumResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchSection
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ServerStatus
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonDeltaResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonVersionResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SyncEventsResponse
@@ -55,6 +56,9 @@ interface RemoteApiClient {
     ): RemoteApiResponse<LoginSuccessResponse>
 
     suspend fun logout(): RemoteApiResponse<Unit>
+
+    /** Public maintenance status, available without authentication. */
+    suspend fun getServerStatus(): RemoteApiResponse<ServerStatus>
 
     suspend fun getArtist(artistId: String): RemoteApiResponse<ArtistResponse>
 

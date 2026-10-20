@@ -33,6 +33,7 @@ import com.lelloman.pezzottify.android.domain.remoteapi.response.ImageResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.LoginSuccessResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.PopularContentResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SearchResponse
+import com.lelloman.pezzottify.android.domain.remoteapi.response.ServerStatus
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonDeltaResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.SkeletonVersionResponse
 import com.lelloman.pezzottify.android.domain.remoteapi.response.FullSkeletonResponse
@@ -63,6 +64,9 @@ internal interface RetrofitApiClient {
 
     @POST("/v1/auth/logout")
     suspend fun logout(@Header("Authorization") authToken: String): Response<Unit>
+
+    @GET("/v1/status")
+    suspend fun getServerStatus(): Response<ServerStatus>
 
     @GET("/v1/content/artist/{artistId}")
     suspend fun getArtist(

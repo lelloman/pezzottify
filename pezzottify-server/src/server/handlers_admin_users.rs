@@ -1156,6 +1156,7 @@ impl ServerState {
             filesystem_work,
             playback_session_manager,
             db_registry,
+            maintenance: MaintenanceHandle::default(),
         }
     }
 }

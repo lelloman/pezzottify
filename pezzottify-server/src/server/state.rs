@@ -16,6 +16,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use super::filesystem_work::FilesystemWorkPool;
+use super::maintenance::MaintenanceHandle;
 use super::password_work::PasswordWorkPool;
 use super::websocket::{ConnectionManager, PlaybackSessionManager};
 use super::ServerConfig;
@@ -153,6 +154,8 @@ pub struct ServerState {
     pub playback_session_manager: GuardedPlaybackSessionManager,
     /// Database registry for backup checkpoint operations
     pub db_registry: GuardedDbRegistry,
+    /// Server-wide maintenance mode flag, persisted in `server_state`.
+    pub maintenance: MaintenanceHandle,
 }
 
 impl FromState<ServerState> for super::lifecycle::RuntimeTasks {
@@ -283,5 +286,11 @@ impl FromState<ServerState> for GuardedDbRegistry {
 impl FromState<ServerState> for OptionalEnrichmentStore {
     fn from_state(input: &ServerState) -> Self {
         input.enrichment_store.clone()
+    }
+}
+
+impl FromState<ServerState> for MaintenanceHandle {
+    fn from_state(input: &ServerState) -> Self {
+        input.maintenance.clone()
     }
 }

@@ -116,6 +116,11 @@ const router = createRouter({
           meta: { requiresAuth: true, section: "analytics" },
         },
         {
+          path: "maintenance",
+          name: "admin-maintenance",
+          meta: { requiresAuth: true, section: "maintenance" },
+        },
+        {
           path: "server",
           name: "admin-server",
           meta: { requiresAuth: true, section: "server" },

@@ -34,6 +34,10 @@
     <string name="login">Login</string>
     <string name="logout">Logout</string>
     <string name="logging_out">Logging out…</string>
+    <string name="maintenance_title">We\'ll be right back</string>
+    <string name="maintenance_default_message">Pezzottify is currently undergoing maintenance. Please try again soon.</string>
+    <string name="maintenance_expected_back">Expected back: %1$s</string>
+    <string name="maintenance_status_unavailable">Couldn\'t read the maintenance status.</string>
     <string name="loading">Loading…</string>
     <!-- COMMON -->
 

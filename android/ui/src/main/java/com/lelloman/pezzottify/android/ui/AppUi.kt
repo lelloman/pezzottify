@@ -6,11 +6,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.lelloman.pezzottify.android.ui.screen.about.AboutScreen
 import com.lelloman.pezzottify.android.ui.screen.login.LoginScreen
+import com.lelloman.pezzottify.android.ui.screen.maintenance.MaintenanceScreen
 import com.lelloman.pezzottify.android.ui.screen.main.MainScreen
 import com.lelloman.pezzottify.android.ui.screen.splash.SplashScreen
 import com.lelloman.pezzottify.android.ui.theme.AppFontFamily
@@ -35,6 +37,12 @@ fun AppUi(
         Box(modifier = Modifier.fillMaxSize()) {
             // Handle session expiration globally
             SessionExpiredEffect(navController)
+            MaintenanceEffect(
+                isOnMaintenanceScreen = {
+                    navController.currentDestination?.hasRoute<Screen.Maintenance>() == true
+                },
+                onMaintenance = navController::toMaintenance,
+            )
 
             NavHost(
                 modifier = Modifier.fillMaxSize(),
@@ -49,6 +57,9 @@ fun AppUi(
                 }
                 composable<Screen.About> {
                     AboutScreen(navController)
+                }
+                composable<Screen.Maintenance> {
+                    MaintenanceScreen(navController)
                 }
                 composable<Screen.Main.Home> {
                     MainScreen(rootNavController = navController)
