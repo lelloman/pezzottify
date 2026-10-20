@@ -1,12 +1,12 @@
 name: Publish image
 
-# Builds the deployable image on every push to dev (the deployed branch) and
+# Builds the deployable image on every push to master (the deployed branch) and
 # pushes it to the homelab registry as :<short-sha> and :latest, with the same
 # build arguments and labels as homelab's build-and-deploy.sh. Deploying stays a manual step on
 # boxo; nothing here touches the server.
 on:
   push:
-    branches: [dev]
+    branches: [master]
 
 env:
   REGISTRY: registry.homelab:5000
@@ -54,7 +54,7 @@ jobs:
           docker build -f pezzottify-server/Dockerfile \
             -t "$REGISTRY/$IMAGE:$rev" -t "$REGISTRY/$IMAGE:latest" \
             --label "org.opencontainers.image.revision=$rev" \
-            --label "org.opencontainers.image.ref.name=dev" \
+            --label "org.opencontainers.image.ref.name=master" \
             --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --build-arg "GIT_HASH=$rev" \
             --build-arg GIT_DIRTY=0 \
@@ -67,13 +67,13 @@ jobs:
         run: |
           set -eu
           docker push -q "$REGISTRY/$IMAGE:$REV"
-          # Move latest only if this commit is still the tip of dev, so a
+          # Move latest only if this commit is still the tip of master, so a
           # slower older run cannot roll latest back.
-          git fetch -q origin dev
+          git fetch -q origin master
           if [ "$(git rev-parse FETCH_HEAD)" = "$(git rev-parse HEAD)" ]; then
             docker push -q "$REGISTRY/$IMAGE:latest"
           else
-            echo "dev has moved on; leaving latest alone"
+            echo "master has moved on; leaving latest alone"
           fi
           digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$REGISTRY/$IMAGE:$REV")
           echo "Published $digest"
