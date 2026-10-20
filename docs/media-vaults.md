@@ -1,6 +1,6 @@
 # Media vault and adapter contracts
 
-Ticket: [LLPR/PEZZOTTIFY-7](https://crumbles.lelloman.com/w/LLPR/PEZZOTTIFY/7).
+Issue: PEZZOTTIFY-7.
 Approved refinement: comment 178. This follows the read and write inventories in
 [media-read-audit.md](media-read-audit.md) and [media-write-audit.md](media-write-audit.md).
 

@@ -267,16 +267,15 @@ storage; partial JSON is not accepted just because it happens to parse.
 
 On 2026-09-13, the baseline synthetic Yesterday request exhausted 1,500 tokens
 and returned non-JSON reasoning. The same request with thinking disabled returned
-complete JSON in 9.6 seconds directly on halo1 and 9.7 seconds through SimpleAI.
+complete JSON in 9.6 seconds directly on the model host and 9.7 seconds through SimpleAI.
 These are response-format checks, **not identity-quality passes**: the returned
 creator credits still failed the reviewed expectation. The full 16-case follow-up
 was blocked before inference by Wikidata `maxlag` responses. Do not bypass source
 backoff or treat that run as a model-quality result.
 
-Halo1 and halo2 received the opt-in config on that date, with backups alongside
-`/home/lelloman/config.toml` named `config.toml.before-work-reasoning-*`.
-Those earlier Halo capability changes remain opt-in and do not alter defaults.
-RTX was offline and its live configuration remains unverified. Pezzottify's
+The model hosts received the opt-in config on that date, with backups of their
+previous configuration kept alongside it. Those earlier host capability changes remain opt-in and do not alter defaults.
+One further host was offline and its live configuration remains unverified. Pezzottify's
 binary and production reasoning settings still require rollout;
 temporary evaluation settings do not change production enrichment.
 

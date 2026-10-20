@@ -12,7 +12,7 @@ npm run dev:mock
 - Screen index and scenarios: http://127.0.0.1:5174/__mock
 - Request coverage: http://127.0.0.1:5174/__mock/status
 
-No Rust server, database, homelab, credentials, or identity provider is needed.
+No Rust server, database, deployment, credentials, or identity provider is needed.
 The mock runs inside Vite's development server. `/v1` is handled locally, with
 no fallback proxy. Normal `npm run dev` still proxies to localhost:3001, and
 `npm run build` does not load the mock plugin or its identity adapter.

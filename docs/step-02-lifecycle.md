@@ -40,7 +40,7 @@ expiry exit nonzero. On failure, explicit process exit prevents Tokio teardown
 from waiting indefinitely for a timed-out blocking job. Development and E2E
 Compose services allow 35 seconds before forced termination, leaving room for
 the application budget. External deployment managers should allow the same;
-the homelab deployment configuration is outside this repository.
+deployment configuration is outside this repository.
 
 ## Boundaries
 

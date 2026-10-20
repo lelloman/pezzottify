@@ -4,7 +4,7 @@ Story #7 adds [explicit vaults, adapters and dependent-copy validity](media-vaul
 Story #8 adds [optional read interception and cache validity](media-cache.md); with no
 cache configured the boundaries below are unchanged.
 
-Ticket: [LLPR/PEZZOTTIFY-5](https://crumbles.lelloman.com/w/LLPR/PEZZOTTIFY/5)
+Issue: PEZZOTTIFY-5
 
 Audit date: 2026-09-05. Original source baseline: `8a3b57c9834080cf48e53e205f4aaeec8fb083c6`.
 

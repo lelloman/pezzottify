@@ -1,6 +1,6 @@
 # Feedback reports v1
 
-Implementation contract for [LLPR/PEZZOTTIFY-15](https://crumbles.lelloman.com/w/LLPR/PEZZOTTIFY/15).
+Implementation contract for issue PEZZOTTIFY-15.
 This document specifies target behavior; a checked-in contract does not imply that
 every endpoint or client is already implemented. Delivery evidence belongs on the tickets.
 

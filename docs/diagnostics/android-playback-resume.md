@@ -1,6 +1,6 @@
 # Android idle playback resume
 
-Tracking bug: [LLPR/PEZZOTTIFY-14](https://crumbles.lelloman.com/w/LLPR/PEZZOTTIFY/14).
+Tracking issue: PEZZOTTIFY-14.
 Targeted diagnostic: `android/player/src/main/java/com/lelloman/pezzottify/android/player/PlaybackDiagnostics.kt`.
 Every record includes `ticket=LLPR/PEZZOTTIFY-14`, under the `PlaybackDiagnostics` tag.
 

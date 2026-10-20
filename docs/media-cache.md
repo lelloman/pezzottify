@@ -1,6 +1,6 @@
 # Media read interception and cache validity
 
-Ticket: [LLPR/PEZZOTTIFY-8](https://crumbles.lelloman.com/w/LLPR/PEZZOTTIFY/8).
+Issue: PEZZOTTIFY-8.
 This builds on the read/write audits and the vault contracts in
 [media-read-audit.md](media-read-audit.md), [media-write-audit.md](media-write-audit.md)
 and [media-vaults.md](media-vaults.md). Production cache directories and population

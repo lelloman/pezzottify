@@ -1066,7 +1066,7 @@ All custom metrics use the `pezzottify_` prefix for easy filtering. Important me
 | `pezzottify_downloader_requests_total` | Counter | Downloader requests by operation and status |
 | `pezzottify_downloader_errors_total` | Counter | Downloader errors by operation and type |
 
-The production monitoring stack, including Prometheus, Grafana, Alertmanager, and notification wiring, is maintained in the [homelab](https://github.com/lelloman/homelab) deployment repository.
+Deployment-specific monitoring (Prometheus, Grafana, Alertmanager and notification wiring) is not part of this repository.
 
 HTTP metric cardinality is intentionally bounded: route labels come only from Axum's registered
 route templates plus one `<unmatched>` fallback, query strings and path parameters are excluded,

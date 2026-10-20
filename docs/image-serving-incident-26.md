@@ -1,6 +1,6 @@
-# Image burst admission: LLPR/PEZZOTTIFY-26
+# Image burst admission: PEZZOTTIFY-26
 
-Ticket: [LLPR/PEZZOTTIFY-26](https://crumbles.lelloman.com/w/LLPR/PEZZOTTIFY/26)
+Issue: PEZZOTTIFY-26
 
 ## Production evidence (29 September 2026)
 
@@ -9,7 +9,7 @@ Read-only investigation verified the running container image
 Its OCI revision is `be54a330`, built 18 September. Its image-serving code and
 filesystem pool match the pre-fix checkout: four workers, one-second admission
 timeout, 60-second execution timeout. These limits are compiled defaults, with no
-TOML overrides. The media volume is `/mnt/external/homelab/pezzottify-catalog`,
+TOML overrides. The media volume is a bind-mounted catalog directory,
 on ext4 `/dev/sdb1`, a rotational External USB 3.0 disk.
 
 Prometheus queries at `1790665200` (07:00 UTC), over the preceding 15 minutes:

@@ -8,7 +8,7 @@ import com.lelloman.pezzottify.android.logger.LoggerFactory
 import java.util.UUID
 
 /**
- * Targeted diagnostic for https://crumbles.lelloman.com/w/LLPR/PEZZOTTIFY/14.
+ * Targeted diagnostic for issue PEZZOTTIFY-14 (playback resume).
  * Collection/interpretation: docs/diagnostics/android-playback-resume.md.
  * State transitions only: never log media metadata, URIs, exception messages or tokens.
  */

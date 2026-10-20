@@ -2,13 +2,12 @@
 
 `pezzottify-player.svg` is the canonical transparent mark on a 100 × 100 canvas.
 It combines two rounded audio-level bars and a play triangle. The three flat
-fills use LelloDesign's Android family: light `#b9ffd2`, medium `#3ddc84`, and
+fills use the project's Android color family: light `#b9ffd2`, medium `#3ddc84`, and
 strong `#006c45`. Keep the geometry, spacing, and colors together when exporting.
 
 The PNG is a preview on a white tile with a 22% corner radius; the tile is not
-part of the canonical artwork. The design follows `lellodesign/icons/guidelines.md`
-and was reviewed alongside its ScT, Talìa, and Crumbles examples at 16, 24, 32,
-48, 100, and 192 pixels.
+part of the canonical artwork. The mark was reviewed at 16, 24, 32, 48, 100, and
+192 pixels.
 
 Android resources live in `android/player-app/src/main/res`:
 

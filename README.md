@@ -64,8 +64,6 @@ docker build -f pezzottify-server/Dockerfile .
 
 The server listens on `http://localhost:3001` by default. If the frontend is served by the server build, open that URL in a browser; otherwise run the web dev server from `web/`.
 
-Production deployment details live in the [homelab](https://github.com/lelloman/homelab) repository.
-
 ## Architecture
 
 ```text
@@ -204,7 +202,7 @@ End-to-end server tests live in [pezzottify-server/tests](pezzottify-server/test
 
 The server exports Prometheus metrics on the configured metrics port, default `9091`. Metrics cover request counts and latency, auth attempts, rate limiting, database queries, active sessions, memory, downloader activity, listening events, and errors.
 
-The full production monitoring stack with Prometheus, Grafana, and Alertmanager is maintained in the [homelab](https://github.com/lelloman/homelab) deployment repository.
+Point any Prometheus-compatible stack (Prometheus, Grafana, Alertmanager) at it; deployment-specific monitoring configuration is not part of this repository.
 
 ## License
 
