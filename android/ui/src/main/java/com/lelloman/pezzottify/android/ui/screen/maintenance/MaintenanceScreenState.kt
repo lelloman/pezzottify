@@ -11,5 +11,4 @@ data class MaintenanceScreenState(
 
 sealed interface MaintenanceScreenEvent {
     data class MaintenanceEnded(val isLoggedIn: Boolean) : MaintenanceScreenEvent
-    data object LoggedOut : MaintenanceScreenEvent
 }

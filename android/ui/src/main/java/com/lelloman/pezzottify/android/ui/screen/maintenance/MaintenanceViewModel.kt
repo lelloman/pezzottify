@@ -53,7 +53,11 @@ class MaintenanceViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(isLoggingOut = true) }
             interactor.logout()
-            _events.emit(MaintenanceScreenEvent.LoggedOut)
+            _state.update { it.copy(isLoggingOut = false, isLoggedIn = false) }
+            // Stay on the blocking screen until a status probe confirms maintenance
+            // ended; the auth routes remain reachable, so navigating to login here
+            // would let the user sign back in during maintenance.
+            refresh()
         }
     }
 

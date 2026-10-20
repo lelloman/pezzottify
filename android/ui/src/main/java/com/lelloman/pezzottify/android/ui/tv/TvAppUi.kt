@@ -75,7 +75,6 @@ fun TvAppUi(
                                 navController.fromTvMaintenanceToLogin()
                             }
                         },
-                        onLoggedOut = { navController.fromTvMaintenanceToLogin() },
                     )
                 }
                 composable<TvScreen.NowPlaying> {

@@ -10,6 +10,10 @@ import IngestionMonitorModal from "./components/ingestion/IngestionMonitorModal.
 import MaintenanceView from "./views/MaintenanceView.vue";
 import { useMaintenanceStore } from "./store/maintenance";
 import { onMaintenance } from "./services/maintenanceEvents";
+import {
+  handlePlaybackShortcut,
+  pausePlaybackDuringMaintenance,
+} from "./utils/playbackShortcuts";
 
 
 const playback = usePlaybackStore();
@@ -52,17 +56,16 @@ watch(
 );
 
 function handleKeyDown(event) {
-  const isEditable =
-    event.target.tagName === "INPUT" ||
-    event.target.tagName === "TEXTAREA" ||
-    event.target.isContentEditable;
-  if (!isEditable && event.key === " ") {
-    playback.playPause();
-  }
+  handlePlaybackShortcut(event, {
+    isMaintenanceActive: () => showMaintenance.value,
+    playback,
+  });
 }
 function retrySession() {
   window.location.reload();
 }
+pausePlaybackDuringMaintenance(showMaintenance, playback);
+
 onMounted(() => {
   window.addEventListener("keydown", handleKeyDown);
   maintenance.fetchStatus();

@@ -21,7 +21,7 @@ struct MaintenanceUpdateRequest {
 async fn admin_set_maintenance(
     Extract(session): Extract<Session>,
     State(maintenance): State<MaintenanceHandle>,
-    State(server_store): State<GuardedServerStore>,
+    State(database): State<DatabaseHandles>,
     Json(request): Json<MaintenanceUpdateRequest>,
 ) -> Response {
     let message = request
@@ -58,13 +58,27 @@ async fn admin_set_maintenance(
         message,
         estimated_end,
     };
-    info!(
-        "User {} set maintenance mode enabled={}",
-        session.user_id, next.enabled
-    );
+    let result = maintenance
+        .persist_and_replace(async move {
+            database
+                .server
+                .run(DbPriority::Interactive, move |store| {
+                    next.persist(store)?;
+                    Ok(next)
+                })
+                .await
+                .map_err(anyhow::Error::from)
+        })
+        .await;
 
-    match maintenance.persist_and_replace(server_store.as_ref(), next) {
-        Ok(state) => (StatusCode::OK, Json(state)).into_response(),
+    match result {
+        Ok(state) => {
+            info!(
+                "User {} set maintenance mode enabled={}",
+                session.user_id, state.enabled
+            );
+            (StatusCode::OK, Json(state)).into_response()
+        }
         Err(error) => {
             error!(%error, "Failed to persist maintenance mode");
             (

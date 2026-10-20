@@ -36,7 +36,6 @@ import java.util.TimeZone
 fun MaintenanceScreen(
     navController: NavController,
     onMaintenanceEnded: ((Boolean) -> Unit)? = null,
-    onLoggedOut: (() -> Unit)? = null,
 ) {
     val viewModel = hiltViewModel<MaintenanceViewModel>()
     val state by viewModel.state.collectAsState()
@@ -51,9 +50,6 @@ fun MaintenanceScreen(
                         navController.fromMaintenanceToLogin()
                     }
                 }
-
-                MaintenanceScreenEvent.LoggedOut ->
-                    onLoggedOut?.invoke() ?: navController.fromMaintenanceToLogin()
             }
         }
     }

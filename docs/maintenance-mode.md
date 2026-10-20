@@ -46,8 +46,11 @@ admin can turn the flag off from `/admin/maintenance`.
   `/login`, `/auth/callback` and `/admin/*`). It polls `/v1/status` and also
   reacts to the `503` marker from any failed request.
 - Android checks `/v1/status` at startup and switches to a full-screen
-  maintenance screen that only offers logout. A `503` marker from any API call
-  likewise replaces the normal shell mid-session. TV uses the same screen.
+  maintenance screen. A `503` marker from any API call likewise replaces the
+  normal shell mid-session. TV uses the same screen. Logout clears the
+  credentials but keeps the blocking screen and hides the logout action;
+  navigation to login or the main UI resumes only after a status probe reports
+  that maintenance has ended.
 
 ## Server swaps
 
