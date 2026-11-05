@@ -28,6 +28,7 @@ import com.lelloman.pezzottify.android.localdata.internal.notifications.Notifica
 import com.lelloman.pezzottify.android.localdata.internal.notifications.NotificationLocalStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.player.PlaybackStateStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.config.ConfigStoreImpl
+import com.lelloman.pezzottify.android.localdata.internal.security.KeystoreFallback
 import com.lelloman.pezzottify.android.localdata.internal.settings.UserSettingsStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.skeleton.SkeletonStoreImpl
 import com.lelloman.pezzottify.android.localdata.internal.sync.SyncStateStoreImpl
@@ -56,11 +57,19 @@ class LocalDataModule {
 
     @Provides
     @Singleton
-    fun provideAuthStore(
+    internal fun provideAuthStore(
         @ApplicationContext context: Context,
         coroutineScope: CoroutineScope,
         loggerFactory: LoggerFactory,
-    ): AuthStore = AuthStoreImpl(context, coroutineScope, loggerFactory)
+        keystoreFallback: KeystoreFallback,
+    ): AuthStore = AuthStoreImpl(context, coroutineScope, loggerFactory, keystoreFallback = keystoreFallback)
+
+    @Provides
+    @Singleton
+    internal fun provideKeystoreFallback(
+        @ApplicationContext context: Context,
+        loggerFactory: LoggerFactory,
+    ): KeystoreFallback = KeystoreFallback.forApp(context, loggerFactory)
 
     @Provides
     @Singleton

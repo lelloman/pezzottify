@@ -97,7 +97,7 @@ The project follows Clean Architecture principles with a multi-module Gradle set
 **localdata**
 - Implements persistence interfaces from domain
 - Uses Room Database for caching catalog data and user content
-- Encrypted SharedPreferences for sensitive data (authentication tokens, config)
+- Encrypted SharedPreferences for sensitive data (authentication tokens), with a plain fallback on devices whose Keystore is broken (see below)
 - Store implementations:
   - `AuthStoreImpl`: Authentication credentials and session state
   - `StaticsStoreImpl`: Catalog data caching
@@ -113,6 +113,18 @@ The project follows Clean Architecture principles with a multi-module Gradle set
   - `StaticsDb`: Caches artists, albums, tracks, and discographies
   - `UserLocalDataDb`: Stores recently viewed content and search history
   - `UserContentDb`: Stores liked content, listening events, and sync metadata
+
+**Devices with a broken Android Keystore.** Some cheap TV boxes (e.g. a Tanix X4, Android 11,
+Amlogic S905X4) have a keymaster that cannot generate or use AES keys, which used to crash the
+app at startup (in `Application.onCreate`, creating the auth store). The auth store's encrypted
+preferences therefore go through `KeystoreFallback` (`localdata/.../internal/security/`): when a
+Keystore operation fails, a probe generates and uses a dedicated AES-GCM key; if that fails too,
+`noBackupFilesDir/keystore-unusable` is written and, for the rest of the install, the app never
+touches the Keystore and keeps the auth session unencrypted in app-private storage instead: in
+the `AuthStore_plain` preferences (`SecurePreferencesFactory`, instead of the encrypted
+`AuthStore`). One warning (tag `KeystoreFallback`) is logged. On such devices secrets are
+protected only by the Android app sandbox, as in most apps; this is accepted for these boxes.
+Where the Keystore works nothing changes and no data is moved or lost.
 
 **player**
 - Implements platform-specific audio playback via `PlatformPlayer` interface

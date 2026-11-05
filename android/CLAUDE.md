@@ -149,7 +149,7 @@ The project uses a multi-module architecture with clear separation of concerns:
 - **Databases**:
   - `StaticsDb`: Caches artists, albums, tracks, discographies (Room)
   - `UserDataDb`: Stores recently viewed content (Room)
-- **Encrypted Storage**: Sensitive data (auth tokens, config) in EncryptedSharedPreferences
+- **Encrypted Storage**: Sensitive data (auth tokens) in EncryptedSharedPreferences; on a device whose Android Keystore is broken, `KeystoreFallback` + `SecurePreferencesFactory` switch to plain app-private preferences for good (see README, "Devices with a broken Android Keystore")
 - **Fetch State Tracking**: Manages data freshness to avoid redundant network calls
 - Implements domain interfaces:
   - `StaticsStore`: Catalog data persistence

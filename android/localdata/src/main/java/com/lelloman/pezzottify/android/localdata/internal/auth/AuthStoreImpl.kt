@@ -2,10 +2,10 @@ package com.lelloman.pezzottify.android.localdata.internal.auth
 
 import android.content.Context
 import android.content.SharedPreferences
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import com.lelloman.pezzottify.android.domain.auth.AuthState
 import com.lelloman.pezzottify.android.domain.auth.AuthStore
+import com.lelloman.pezzottify.android.localdata.internal.security.KeystoreFallback
+import com.lelloman.pezzottify.android.localdata.internal.security.SecurePreferencesFactory
 import com.lelloman.pezzottify.android.logger.Logger
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineDispatcher
@@ -27,13 +27,23 @@ internal class AuthStoreImpl(
     private val coroutineScope: CoroutineScope,
     loggerFactory: LoggerFactory,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    keystoreFallback: KeystoreFallback = KeystoreFallback.forApp(context, loggerFactory),
 ) : AuthStore {
 
     private val logger: Logger = loggerFactory.getLogger(AuthStoreImpl::class)
 
     private var initialized = false
 
-    private val sharedPrefs: SharedPreferences = createEncryptedSharedPreferences(context, logger)
+    // Keystore-encrypted, or plain app-private where the Keystore is unusable (see KeystoreFallback).
+    private val sharedPrefs: SharedPreferences = SecurePreferencesFactory(
+        context = context,
+        keystore = keystoreFallback,
+        logger = logger,
+        createEncrypted = { name ->
+            SecurePreferencesFactory.encryptedPreferences(context, name, MASTER_KEY_ALIAS)
+        },
+        recoverEncrypted = { name -> clearCorruptedKeyAndPrefs(context, name, logger) },
+    ).create(SHARED_PREF_FILE_NAME)
 
     private val mutableAuthStateFlow =
         MutableStateFlow<AuthState>(
@@ -109,31 +119,9 @@ internal class AuthStoreImpl(
         private const val KEY_LAST_USED_HANDLE = "LastUsedHandle"
         private const val MASTER_KEY_ALIAS = "AuthStoreMasterKeyAlias"
 
-        private fun createEncryptedSharedPreferences(context: Context, logger: Logger): SharedPreferences {
-            return try {
-                createEncryptedPrefsInternal(context)
-            } catch (e: Exception) {
-                logger.warn("Failed to create encrypted prefs, clearing corrupted key", e)
-                clearCorruptedKeyAndPrefs(context, logger)
-                createEncryptedPrefsInternal(context)
-            }
-        }
-
-        private fun createEncryptedPrefsInternal(context: Context): SharedPreferences {
-            val masterKey = MasterKey.Builder(context, MASTER_KEY_ALIAS)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build()
-
-            return EncryptedSharedPreferences.create(
-                context,
-                SHARED_PREF_FILE_NAME,
-                masterKey,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-            )
-        }
-
-        private fun clearCorruptedKeyAndPrefs(context: Context, logger: Logger) {
+        // Only called once the Keystore probe passed: the encrypted file and its master key are out
+        // of sync (e.g. after a reinstall restored the file), so both are dropped and recreated.
+        private fun clearCorruptedKeyAndPrefs(context: Context, name: String, logger: Logger) {
             try {
                 val keyStore = KeyStore.getInstance("AndroidKeyStore")
                 keyStore.load(null)
@@ -147,7 +135,7 @@ internal class AuthStoreImpl(
 
             val sharedPrefsDir = File(context.filesDir.parent, "shared_prefs")
             val filesToDelete = listOf(
-                "$SHARED_PREF_FILE_NAME.xml",
+                "$name.xml",
                 "__androidx_security_crypto_encrypted_prefs__.xml"
             )
 
