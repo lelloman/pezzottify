@@ -11,32 +11,22 @@ import com.lelloman.pezzottify.android.domain.player.TrackMetadata
 import com.lelloman.pezzottify.android.domain.playbacksession.PlaybackSessionHandler
 import com.lelloman.pezzottify.android.domain.playbacksession.RemotePlaybackState
 import com.lelloman.pezzottify.android.domain.playbacksession.RemoteTrackInfo
-import com.lelloman.pezzottify.android.domain.statics.Album
-import com.lelloman.pezzottify.android.domain.statics.Artist
-import com.lelloman.pezzottify.android.domain.statics.StaticsItem
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
-import com.lelloman.pezzottify.android.domain.statics.Track
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.filterIsInstance
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * Provides playback metadata for the currently controlled remote device.
@@ -73,6 +63,11 @@ class RemotePlaybackMetadataProvider internal constructor(
     private var currentRemoteDeviceId: Int? = null
     private var metadataLoadJob: Job? = null
 
+    @Volatile
+    private var latestRemoteState: RemotePlaybackState? = null
+
+    private val queueMetadataResolver = QueueMetadataResolver(staticsProvider, configStore)
+
     init {
         scope.launch {
             playbackModeManager.mode.flatMapLatest { mode ->
@@ -89,6 +84,7 @@ class RemotePlaybackMetadataProvider internal constructor(
                     is PlaybackMode.Local -> flowOf(RemoteQueueSnapshot(null, null, null, null))
                 }
             }.collect { (deviceId, remoteState, queueTrackIds, queueContext) ->
+                latestRemoteState = remoteState
                 if (deviceId != currentRemoteDeviceId) {
                     currentRemoteDeviceId = deviceId
                     currentQueueTrackIds = null
@@ -185,109 +181,34 @@ class RemotePlaybackMetadataProvider internal constructor(
     ) {
         logger.debug("Resolving metadata for ${trackIds.size} queue tracks")
 
-        val baseUrl = configStore.baseUrl.value.trimEnd('/')
-
-        // Fetch all tracks in parallel
-        val trackResults = trackIds.map { trackId ->
-            scope.async { trackId to fetchTrack(trackId) }
-        }.awaitAll()
-
-        val trackDataMap = mutableMapOf<String, Track>()
-        val albumIds = mutableSetOf<String>()
-        val artistIds = mutableSetOf<String>()
-        for ((trackId, track) in trackResults) {
-            if (track != null) {
-                trackDataMap[trackId] = track
-                albumIds.add(track.albumId)
-                artistIds.addAll(track.artistsIds)
+        // Re-emitted as tracks/albums/artists load, so items that miss the first pass
+        // (cold cache) are patched in later instead of staying placeholders.
+        queueMetadataResolver.observe(trackIds).collect { resolved ->
+            // The remote state keeps moving while metadata resolves; use the latest one.
+            val latestState = latestRemoteState ?: state
+            val currentTrackInfo = latestState.currentTrack
+            val tracksMetadata = resolved.tracks.mapIndexed { index, metadata ->
+                val trackId = trackIds[index]
+                when {
+                    metadata != null -> metadata
+                    // Use the current track info from state as fallback
+                    currentTrackInfo != null && currentTrackInfo.id == trackId ->
+                        trackInfoToMetadata(currentTrackInfo)
+                    else -> QueueMetadataResolver.placeholder(trackId)
+                }
             }
-        }
 
-        // Fetch all albums and artists in parallel
-        val albumDeferred = albumIds.map { albumId ->
-            scope.async { albumId to fetchAlbum(albumId) }
-        }
-        val artistDeferred = artistIds.map { artistId ->
-            scope.async { artistId to fetchArtist(artistId) }
-        }
+            _queueState.value = PlaybackQueueState(
+                tracks = tracksMetadata,
+                currentIndex = latestState.queuePosition,
+                loadingState = QueueLoadingState.LOADED,
+                context = context,
+            )
 
-        val albumDataMap = albumDeferred.awaitAll()
-            .mapNotNull { (id, data) -> data?.let { id to data } }
-            .toMap()
-        val artistDataMap = artistDeferred.awaitAll()
-            .mapNotNull { (id, data) -> data?.let { id to data } }
-            .toMap()
-
-        // Build metadata for each track, falling back to current track info for unresolved tracks
-        val currentTrackInfo = state.currentTrack
-        val tracksMetadata = trackIds.map { trackId ->
-            val track = trackDataMap[trackId]
-            if (track != null) {
-                val album = albumDataMap[track.albumId]
-                val artistNames = track.artistsIds.mapNotNull { artistDataMap[it]?.name }
-                TrackMetadata(
-                    trackId = trackId,
-                    trackName = track.name,
-                    artistNames = artistNames,
-                    primaryArtistId = track.artistsIds.firstOrNull() ?: "",
-                    albumId = track.albumId,
-                    albumName = album?.name ?: "",
-                    artworkUrl = album?.displayImageId?.let { "$baseUrl/v1/content/image/$it" },
-                    imageId = album?.displayImageId,
-                    durationSeconds = track.durationSeconds,
-                    availability = track.availability,
-                )
-            } else if (currentTrackInfo != null && currentTrackInfo.id == trackId) {
-                // Use the current track info from state as fallback
-                trackInfoToMetadata(currentTrackInfo)
-            } else {
-                // Minimal fallback for completely unresolved tracks
-                TrackMetadata(
-                    trackId = trackId,
-                    trackName = trackId,
-                    artistNames = emptyList(),
-                    albumId = "",
-                    albumName = "",
-                    artworkUrl = null,
-                    durationSeconds = 0,
-                )
-            }
-        }
-
-        _queueState.value = PlaybackQueueState(
-            tracks = tracksMetadata,
-            currentIndex = state.queuePosition,
-            loadingState = QueueLoadingState.LOADED,
-            context = context,
-        )
-
-        logger.info("Resolved metadata for ${tracksMetadata.size} queue tracks, currentIndex=${state.queuePosition}")
-    }
-
-    private suspend fun fetchTrack(trackId: String): Track? {
-        return withTimeoutOrNull(2.seconds) {
-            staticsProvider.provideTrack(trackId)
-                .filterIsInstance<StaticsItem.Loaded<Track>>()
-                .first()
-                .data
-        }
-    }
-
-    private suspend fun fetchAlbum(albumId: String): Album? {
-        return withTimeoutOrNull(2.seconds) {
-            staticsProvider.provideAlbum(albumId)
-                .filterIsInstance<StaticsItem.Loaded<Album>>()
-                .first()
-                .data
-        }
-    }
-
-    private suspend fun fetchArtist(artistId: String): Artist? {
-        return withTimeoutOrNull(2.seconds) {
-            staticsProvider.provideArtist(artistId)
-                .filterIsInstance<StaticsItem.Loaded<Artist>>()
-                .first()
-                .data
+            logger.info(
+                "Resolved metadata for ${resolved.tracks.count { it != null }}/${trackIds.size} " +
+                    "queue tracks, currentIndex=${latestState.queuePosition}"
+            )
         }
     }
 

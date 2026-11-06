@@ -6,39 +6,29 @@ import com.lelloman.pezzottify.android.domain.player.PlaybackQueueState
 import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.player.PlatformPlayer
 import com.lelloman.pezzottify.android.domain.player.QueueLoadingState
-import com.lelloman.pezzottify.android.domain.player.TrackMetadata
-import com.lelloman.pezzottify.android.domain.statics.Album
-import com.lelloman.pezzottify.android.domain.statics.Artist
-import com.lelloman.pezzottify.android.domain.statics.StaticsItem
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
-import com.lelloman.pezzottify.android.domain.statics.Track
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.filterIsInstance
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
-import kotlin.time.Duration.Companion.seconds
 
-class PlaybackMetadataProviderImpl(
+class PlaybackMetadataProviderImpl internal constructor(
     private val player: PezzottifyPlayer,
     private val platformPlayer: PlatformPlayer,
     private val staticsProvider: StaticsProvider,
     private val configStore: ConfigStore,
     loggerFactory: LoggerFactory,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
+    private val queueMetadataResolver: QueueMetadataResolver =
+        QueueMetadataResolver(staticsProvider, configStore),
 ) : PlaybackMetadataProvider {
 
     private val logger by loggerFactory
-
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private val mutableQueueState = MutableStateFlow<PlaybackQueueState?>(null)
     override val queueState: StateFlow<PlaybackQueueState?> = mutableQueueState.asStateFlow()
@@ -75,7 +65,9 @@ class PlaybackMetadataProviderImpl(
                 metadataLoadJob?.cancel()
 
                 // Emit loading state immediately so the UI can show the bottom player
-                // with a loading indicator while metadata is being fetched
+                // with a loading indicator while metadata is being fetched. The resolver
+                // keeps observing items that are not loaded yet and the queue state is
+                // re-emitted as they arrive, so a slow cold-cache fetch heals itself.
                 val currentIndex = platformPlayer.currentTrackIndex.value ?: 0
                 mutableQueueState.value = PlaybackQueueState(
                     tracks = emptyList(),
@@ -104,109 +96,24 @@ class PlaybackMetadataProviderImpl(
 
     private suspend fun loadMetadataForTracks(tracksIds: List<String>) {
         logger.debug("Loading metadata for ${tracksIds.size} tracks")
-
-        // Fetch all tracks in parallel
-        val trackResults = tracksIds.map { trackId ->
-            scope.async { trackId to fetchTrack(trackId) }
-        }.awaitAll()
-
-        val trackDataMap = mutableMapOf<String, Track>()
-        val albumIds = mutableSetOf<String>()
-        val artistIds = mutableSetOf<String>()
-        for ((trackId, track) in trackResults) {
-            if (track != null) {
-                trackDataMap[trackId] = track
-                albumIds.add(track.albumId)
-                artistIds.addAll(track.artistsIds)
+        queueMetadataResolver.observe(tracksIds).collect { resolved ->
+            val tracksMetadata = resolved.tracks.mapIndexed { index, metadata ->
+                metadata ?: QueueMetadataResolver.placeholder(tracksIds[index])
             }
-        }
-
-        // Fetch all albums and artists in parallel
-        val albumDeferred = albumIds.map { albumId ->
-            scope.async { albumId to fetchAlbum(albumId) }
-        }
-        val artistDeferred = artistIds.map { artistId ->
-            scope.async { artistId to fetchArtist(artistId) }
-        }
-
-        val albumDataMap = albumDeferred.awaitAll()
-            .mapNotNull { (id, data) -> data?.let { id to data } }
-            .toMap()
-        val artistDataMap = artistDeferred.awaitAll()
-            .mapNotNull { (id, data) -> data?.let { id to data } }
-            .toMap()
-
-        // Build metadata for each track
-        val baseUrl = configStore.baseUrl.value.trimEnd('/')
-        val tracksMetadata = tracksIds.map { trackId ->
-            val track = trackDataMap[trackId]
-            if (track != null) {
-                val album = albumDataMap[track.albumId]
-                val artistNames = track.artistsIds.mapNotNull { artistDataMap[it]?.name }
-
-                val artworkUrl = album?.displayImageId?.let { imageId ->
-                    "$baseUrl/v1/content/image/$imageId"
-                }
-
-                TrackMetadata(
-                    trackId = trackId,
-                    trackName = track.name,
-                    artistNames = artistNames,
-                    primaryArtistId = track.artistsIds.firstOrNull() ?: "",
-                    albumId = track.albumId,
-                    albumName = album?.name ?: "",
-                    artworkUrl = artworkUrl,
-                    imageId = album?.displayImageId,
-                    durationSeconds = track.durationSeconds,
-                    availability = track.availability,
-                )
+            val updatedIndex = platformPlayer.currentTrackIndex.value
+                ?: mutableQueueState.value?.currentIndex
+                ?: 0
+            mutableQueueState.value = PlaybackQueueState(
+                tracks = tracksMetadata,
+                currentIndex = updatedIndex,
+                loadingState = QueueLoadingState.LOADED,
+            )
+            val resolvedCount = resolved.tracks.count { it != null }
+            if (resolved.isComplete) {
+                logger.info("Loaded metadata for ${tracksIds.size} tracks, currentIndex=$updatedIndex")
             } else {
-                TrackMetadata(
-                    trackId = trackId,
-                    trackName = trackId,
-                    artistNames = emptyList(),
-                    albumId = "",
-                    albumName = "",
-                    artworkUrl = null,
-                    durationSeconds = 0,
-                )
+                logger.info("Partial metadata for $resolvedCount/${tracksIds.size} tracks, waiting for the rest")
             }
-        }
-
-        val updatedIndex = platformPlayer.currentTrackIndex.value ?: 0
-        mutableQueueState.value = PlaybackQueueState(
-            tracks = tracksMetadata,
-            currentIndex = updatedIndex,
-            loadingState = QueueLoadingState.LOADED,
-        )
-
-        logger.info("Loaded metadata for ${tracksMetadata.size}/${tracksIds.size} tracks, currentIndex=$updatedIndex")
-    }
-
-    private suspend fun fetchTrack(trackId: String): Track? {
-        return withTimeoutOrNull(2.seconds) {
-            staticsProvider.provideTrack(trackId)
-                .filterIsInstance<StaticsItem.Loaded<Track>>()
-                .first()
-                .data
-        }
-    }
-
-    private suspend fun fetchAlbum(albumId: String): Album? {
-        return withTimeoutOrNull(2.seconds) {
-            staticsProvider.provideAlbum(albumId)
-                .filterIsInstance<StaticsItem.Loaded<Album>>()
-                .first()
-                .data
-        }
-    }
-
-    private suspend fun fetchArtist(artistId: String): Artist? {
-        return withTimeoutOrNull(2.seconds) {
-            staticsProvider.provideArtist(artistId)
-                .filterIsInstance<StaticsItem.Loaded<Artist>>()
-                .first()
-                .data
         }
     }
 }
