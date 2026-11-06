@@ -35,6 +35,7 @@ Start with the component docs when working in a specific area:
 - [Android README](android/README.md)
 - [Metadata Enrichment v1](docs/metadata-enrichment-v1.md)
 - [Catalog Operations](docs/catalog-operations.md)
+- [Multi-Device Playback](docs/multi-device-playback.md)
 
 ## Quick Start
 

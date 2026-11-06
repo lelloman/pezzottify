@@ -122,6 +122,7 @@ The Android project uses a multi-module Gradle setup with modules: `app`, `ui`, 
   - `stream_track.rs`: Audio streaming with range request support
   - `search.rs`: Search API routes
   - `websocket/`: WebSocket support for real-time updates
+    - `playback_session.rs`: per-device playback state relay and remote commands (see `docs/multi-device-playback.md`)
   - `http_layers/`: Middleware for logging, caching, slowdown
 - `search/`: Search functionality
   - `Fts5LevenshteinSearchVault`: SQLite FTS5 with trigram tokenizer and Levenshtein typo correction
@@ -173,11 +174,12 @@ The Android project uses a multi-module Gradle setup with modules: `app`, `ui`, 
   - `PUT|DELETE /playlist/{id}`, `PUT /playlist/{id}/add|remove`
   - `GET|PUT /settings`
   - `POST /listening`, `GET /listening/summary|history|events`
+  - `GET /devices`, `PUT /devices/{device_id}/share_policy`: registered devices and per-device sharing
 - `/v1/admin/*`: Administration (requires admin permissions)
   - User management: `GET|POST /users`, `DELETE /users/{handle}`, roles/permissions
   - Jobs: `GET /jobs`, `GET|POST /jobs/{id}`, `GET /jobs/{id}/history`
   - Changelog: `POST /changelog/batch`, `GET /changelog/batches`, etc.
-  - Analytics: `GET /bandwidth/*`, `GET /listening/*`, `GET /online-users`
+  - Analytics: `GET /bandwidth/*`, `GET /listening/*`, `GET /online-users`, `GET /playback/sessions`
   - Catalog CRUD: `POST|PUT|DELETE /artist|album|track|image`
   - Server control: `POST /reboot`
 - `/v1/sync/*`: Multi-device sync
@@ -197,7 +199,8 @@ The Android project uses a multi-module Gradle setup with modules: `app`, `ui`, 
     - `GET /admin/audit`: Query audit log
     - `GET /admin/audit/item/{id}`: Audit for queue item
     - `GET /admin/audit/user/{user_id}`: Audit for user
-- `/v1/ws`: WebSocket for real-time updates
+- `/v1/ws`: WebSocket for real-time updates and multi-device playback (`playback.*` messages)
+  - Wire contract, device identity, commands and per-platform behaviour: `docs/multi-device-playback.md`
 - `/v1/mcp`: WebSocket for MCP (Model Context Protocol) - LLM tool access
   - Tools: `catalog.search`, `catalog.get`, `catalog.mutate`, `users.query`, `users.mutate`, `analytics.query`, `downloads.query`, `downloads.action`, `server.query`, `jobs.query`, `jobs.action`, `debug.sql`, `debug.inspect`
   - Resources: `logs://`, `jobs://`, `config://`, `changelog://`
