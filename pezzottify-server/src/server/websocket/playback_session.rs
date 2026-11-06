@@ -31,6 +31,9 @@ pub struct PlaybackSessionManager {
     sessions: Arc<RwLock<HashMap<usize, UserPlaybackSession>>>,
     /// Device metadata indexed by (user_id, device_id).
     devices: RwLock<HashMap<(usize, usize), DeviceMetadata>>,
+    /// Share policies by device id, loaded lazily and invalidated when the
+    /// owner changes them. Relaying a state update must not hit the database.
+    share_policies: RwLock<HashMap<usize, DeviceSharePolicy>>,
     connection_manager: Arc<ConnectionManager>,
     user_manager: DbHandle<UserManager>,
 }
@@ -41,6 +44,9 @@ struct DeviceMetadata {
     name: String,
     device_type: DeviceType,
     connected_at: u64,
+    /// Owner handle resolved once at hello time so device lists never hit
+    /// the database per device.
+    owner_handle: String,
 }
 
 /// Per-device playback state stored on the server.
@@ -72,6 +78,8 @@ pub enum PlaybackError {
     Forbidden,
     /// Device not found.
     DeviceNotFound,
+    /// Command name is not part of the contract.
+    UnknownCommand(String),
 }
 
 impl std::fmt::Display for PlaybackError {
@@ -84,6 +92,7 @@ impl std::fmt::Display for PlaybackError {
             PlaybackError::CommandFailed(msg) => write!(f, "Command failed: {}", msg),
             PlaybackError::Forbidden => write!(f, "Forbidden"),
             PlaybackError::DeviceNotFound => write!(f, "Device not found"),
+            PlaybackError::UnknownCommand(cmd) => write!(f, "Unknown command: {}", cmd),
         }
     }
 }
@@ -98,11 +107,18 @@ impl From<PlaybackError> for PlaybackErrorPayload {
             PlaybackError::CommandFailed(_) => "command_failed",
             PlaybackError::Forbidden => "forbidden",
             PlaybackError::DeviceNotFound => "device_not_found",
+            PlaybackError::UnknownCommand(_) => "unknown_command",
+        };
+        let context = match &e {
+            PlaybackError::UnknownCommand(cmd) => Some(ErrorContext {
+                command: Some(cmd.clone()),
+            }),
+            _ => None,
         };
         PlaybackErrorPayload {
             code: code.to_string(),
             message: e.to_string(),
-            context: None,
+            context,
         }
     }
 }
@@ -124,9 +140,38 @@ impl PlaybackSessionManager {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             devices: RwLock::new(HashMap::new()),
+            share_policies: RwLock::new(HashMap::new()),
             connection_manager,
             user_manager,
         }
+    }
+
+    /// Drop the cached share policy of a device so the next check reloads it.
+    /// Call after the owner changes the policy.
+    pub async fn invalidate_share_policy(&self, device_id: usize) {
+        self.share_policies.write().await.remove(&device_id);
+    }
+
+    /// Share policy of a device, from the cache or loaded once from the
+    /// database. Falls back to the default (deny everyone) on error.
+    async fn get_share_policy(&self, device_id: usize) -> DeviceSharePolicy {
+        if let Some(policy) = self.share_policies.read().await.get(&device_id) {
+            return policy.clone();
+        }
+        let policy = self
+            .user_manager
+            .run(DbPriority::Interactive, move |manager| {
+                Ok(manager
+                    .get_device_share_policy(device_id)
+                    .unwrap_or_default())
+            })
+            .await
+            .unwrap_or_default();
+        self.share_policies
+            .write()
+            .await
+            .insert(device_id, policy.clone());
+        policy
     }
 
     async fn get_owner_handle(&self, user_id: usize) -> Option<String> {
@@ -170,19 +215,7 @@ impl PlaybackSessionManager {
             return true;
         }
 
-        let access = self
-            .user_manager
-            .run(DbPriority::Interactive, move |manager| {
-                let policy = manager
-                    .get_device_share_policy(device_id)
-                    .unwrap_or_default();
-                let roles = manager.get_user_roles(user_id).unwrap_or_default();
-                Ok((policy, roles))
-            })
-            .await;
-        let Ok((policy, roles)) = access else {
-            return false;
-        };
+        let policy = self.get_share_policy(device_id).await;
         match policy.mode {
             DeviceShareMode::AllowEveryone => true,
             DeviceShareMode::DenyEveryone => false,
@@ -193,6 +226,17 @@ impl PlaybackSessionManager {
                 if policy.allow_users.contains(&user_id) {
                     return true;
                 }
+                if policy.allow_roles.is_empty() {
+                    return false;
+                }
+                // Only the role rule needs the database.
+                let roles = self
+                    .user_manager
+                    .run(DbPriority::Interactive, move |manager| {
+                        Ok(manager.get_user_roles(user_id).unwrap_or_default())
+                    })
+                    .await
+                    .unwrap_or_default();
                 roles.iter().any(|role| policy.allow_roles.contains(role))
             }
         }
@@ -285,34 +329,22 @@ impl PlaybackSessionManager {
         }
     }
 
+    /// Push a fresh, per-recipient device list to the owner and to every
+    /// connected user after a share policy change. Every connected user is
+    /// notified, not only those who can see the device now, so users who
+    /// just lost visibility drop it from their list.
     pub async fn broadcast_device_list_refresh(&self, device_id: usize) {
         let owner_user_id = match self.get_device_owner_id(device_id).await {
             Some(id) => id,
             None => return,
         };
 
-        // Always notify the owner
-        let owner_devices = self.build_device_list(owner_user_id).await;
-        let owner_msg = ServerMessage::new(
-            msg_types::PLAYBACK_DEVICE_LIST_CHANGED,
-            DeviceListChangedPayload {
-                devices: owner_devices,
-                change: DeviceChange {
-                    change_type: "policy_changed".to_string(),
-                    device_id,
-                },
-            },
-        );
-        let _ = self
-            .connection_manager
-            .broadcast_to_user(owner_user_id, owner_msg)
-            .await;
+        let mut recipients = self.connection_manager.get_connected_user_ids().await;
+        if !recipients.contains(&owner_user_id) {
+            recipients.push(owner_user_id);
+        }
 
-        // Notify only users who currently have visibility to this device
-        let visible_users = self
-            .get_allowed_external_users(owner_user_id, device_id)
-            .await;
-        for user_id in visible_users {
+        for user_id in recipients {
             let devices = self.build_device_list(user_id).await;
             let msg = ServerMessage::new(
                 msg_types::PLAYBACK_DEVICE_LIST_CHANGED,
@@ -349,6 +381,11 @@ impl PlaybackSessionManager {
             .unwrap()
             .as_millis() as u64;
 
+        let owner_handle = self
+            .get_owner_handle(user_id)
+            .await
+            .unwrap_or_else(|| "Unknown".to_string());
+
         // Store device metadata
         {
             let mut devices = self.devices.write().await;
@@ -358,6 +395,7 @@ impl PlaybackSessionManager {
                     name: device_name.clone(),
                     device_type,
                     connected_at: now,
+                    owner_handle,
                 },
             );
         }
@@ -410,45 +448,31 @@ impl PlaybackSessionManager {
             device_ids.push((owner_user_id, id));
         }
 
-        let mut resolved_devices = Vec::with_capacity(device_ids.len());
-        for (owner_user_id, id) in device_ids {
-            let owner_handle = self
-                .get_owner_handle(owner_user_id)
-                .await
-                .unwrap_or_else(|| "Unknown".to_string());
-            resolved_devices.push((owner_user_id, id, owner_handle));
-        }
-
         let devices = self.devices.read().await;
         let sessions = self.sessions.read().await;
-        info!(
+        debug!(
             "[playback] build_device_list: user={} devices_map_len={}",
             user_id,
             devices.len()
         );
 
-        resolved_devices
+        device_ids
             .into_iter()
-            .filter_map(|(owner_user_id, id, owner_handle)| {
-                let meta = devices.get(&(owner_user_id, id));
-                let meta =
-                    meta.map(|meta| (meta.name.clone(), meta.device_type, meta.connected_at));
-
-                meta.map(|(name, device_type, connected_at)| {
-                    let is_playing = sessions
-                        .get(&owner_user_id)
-                        .map(|s| s.device_states.contains_key(&id))
-                        .unwrap_or(false);
-                    ConnectedDevice {
-                        id,
-                        name,
-                        device_type,
-                        is_playing,
-                        connected_at,
-                        owner_user_id,
-                        owner_handle,
-                        is_shared: owner_user_id != user_id,
-                    }
+            .filter_map(|(owner_user_id, id)| {
+                let meta = devices.get(&(owner_user_id, id))?;
+                let session_state = sessions
+                    .get(&owner_user_id)
+                    .and_then(|s| s.device_states.get(&id));
+                Some(ConnectedDevice {
+                    id,
+                    name: meta.name.clone(),
+                    device_type: meta.device_type,
+                    is_playing: session_state.map(|ds| ds.state.is_playing).unwrap_or(false),
+                    has_session: session_state.is_some(),
+                    connected_at: meta.connected_at,
+                    owner_user_id,
+                    owner_handle: meta.owner_handle.clone(),
+                    is_shared: owner_user_id != user_id,
                 })
             })
             .collect()
@@ -517,6 +541,7 @@ impl PlaybackSessionManager {
 
         let state_stopped = state.current_track.is_none() && !state.is_playing;
         let mut was_new = false;
+        let mut playing_flipped = false;
         {
             let mut sessions = self.sessions.write().await;
             let session = sessions.entry(user_id).or_default();
@@ -536,6 +561,7 @@ impl PlaybackSessionManager {
                             queue_context: None,
                             last_update: Instant::now(),
                         });
+                playing_flipped = !was_new && entry.state.is_playing != state.is_playing;
                 entry.state = state.clone();
                 entry.last_update = Instant::now();
             }
@@ -569,9 +595,13 @@ impl PlaybackSessionManager {
         self.broadcast_to_authorized_users(user_id, device_id, device_id, relay_msg)
             .await;
 
-        // If this is the first state from this device, broadcast device list changed
+        // The device list carries is_playing, so peers need a fresh list when
+        // a device first reports or flips between playing and paused.
         if was_new {
             self.broadcast_device_list_change(user_id, device_id, "started_playing", device_id)
+                .await;
+        } else if playing_flipped {
+            self.broadcast_device_list_change(user_id, device_id, "playback_changed", device_id)
                 .await;
         }
 
@@ -657,6 +687,10 @@ impl PlaybackSessionManager {
             "[playback] handle_command: user={} from={} target={} command={:?}",
             user_id, from_device_id, target_device_id, command
         );
+
+        if !is_known_command(command) {
+            return Err(PlaybackError::UnknownCommand(command.to_string()));
+        }
 
         let owner_user_id = self
             .get_device_owner_id(target_device_id)
@@ -836,6 +870,8 @@ impl PlaybackSessionManager {
                 },
             );
             self.broadcast_to_authorized_users(user_id, device_id, device_id, stopped_msg)
+                .await;
+            self.broadcast_device_list_change(user_id, device_id, "stale", device_id)
                 .await;
         }
     }
@@ -1167,7 +1203,7 @@ mod tests {
     async fn any_device_can_send_state() {
         let (conn_manager, manager) = setup().await;
 
-        let _rx = conn_manager.register(1, 100, "web".to_string()).await;
+        let (_rx, _) = conn_manager.register(1, 100, "web".to_string()).await;
         let _ = manager
             .handle_hello(1, 100, "Chrome".to_string(), DeviceType::Web)
             .await;
@@ -1195,8 +1231,8 @@ mod tests {
     async fn multiple_devices_independent_state() {
         let (conn_manager, manager) = setup().await;
 
-        let _rx1 = conn_manager.register(1, 100, "web".to_string()).await;
-        let _rx2 = conn_manager.register(1, 200, "android".to_string()).await;
+        let (_rx1, _) = conn_manager.register(1, 100, "web".to_string()).await;
+        let (_rx2, _) = conn_manager.register(1, 200, "android".to_string()).await;
 
         let _ = manager
             .handle_hello(1, 100, "Chrome".to_string(), DeviceType::Web)
@@ -1241,7 +1277,7 @@ mod tests {
     async fn welcome_includes_active_device_states() {
         let (conn_manager, manager) = setup().await;
 
-        let _rx1 = conn_manager.register(1, 100, "web".to_string()).await;
+        let (_rx1, _) = conn_manager.register(1, 100, "web".to_string()).await;
         let _ = manager
             .handle_hello(1, 100, "Chrome".to_string(), DeviceType::Web)
             .await;
@@ -1251,7 +1287,7 @@ mod tests {
         manager.handle_state_update(1, 100, state).await.unwrap();
 
         // Device 200 connects and gets welcome
-        let _rx2 = conn_manager.register(1, 200, "android".to_string()).await;
+        let (_rx2, _) = conn_manager.register(1, 200, "android".to_string()).await;
         let welcome = manager
             .handle_hello(1, 200, "Phone".to_string(), DeviceType::Android)
             .await;
@@ -1274,7 +1310,7 @@ mod tests {
     async fn device_state_removed_on_disconnect() {
         let (conn_manager, manager) = setup().await;
 
-        let _rx = conn_manager.register(1, 100, "web".to_string()).await;
+        let (_rx, _) = conn_manager.register(1, 100, "web".to_string()).await;
         let _ = manager
             .handle_hello(1, 100, "Chrome".to_string(), DeviceType::Web)
             .await;
@@ -1302,7 +1338,7 @@ mod tests {
     async fn device_stopped_via_empty_state() {
         let (conn_manager, manager) = setup().await;
 
-        let _rx = conn_manager.register(1, 100, "web".to_string()).await;
+        let (_rx, _) = conn_manager.register(1, 100, "web".to_string()).await;
         let _ = manager
             .handle_hello(1, 100, "Chrome".to_string(), DeviceType::Web)
             .await;
@@ -1325,7 +1361,7 @@ mod tests {
     async fn queue_update_rejects_oversized_queue() {
         let (conn_manager, manager) = setup().await;
 
-        let _rx = conn_manager.register(1, 100, "web".to_string()).await;
+        let (_rx, _) = conn_manager.register(1, 100, "web".to_string()).await;
         let _ = manager
             .handle_hello(1, 100, "Chrome".to_string(), DeviceType::Web)
             .await;
@@ -1351,8 +1387,8 @@ mod tests {
         let (conn_manager, manager) = setup().await;
 
         // Register two devices
-        let _rx_sender = conn_manager.register(1, 100, "web".to_string()).await;
-        let mut rx_target = conn_manager.register(1, 200, "android".to_string()).await;
+        let (_rx_sender, _) = conn_manager.register(1, 100, "web".to_string()).await;
+        let (mut rx_target, _) = conn_manager.register(1, 200, "android".to_string()).await;
 
         let _ = manager
             .handle_hello(1, 100, "Chrome".to_string(), DeviceType::Web)
@@ -1382,7 +1418,7 @@ mod tests {
     async fn command_returns_device_not_found_for_unknown_target() {
         let (conn_manager, manager) = setup().await;
 
-        let _rx = conn_manager.register(1, 100, "web".to_string()).await;
+        let (_rx, _) = conn_manager.register(1, 100, "web".to_string()).await;
         let _ = manager
             .handle_hello(1, 100, "Chrome".to_string(), DeviceType::Web)
             .await;
@@ -1398,8 +1434,8 @@ mod tests {
     async fn command_forwards_payload_to_target() {
         let (conn_manager, manager) = setup().await;
 
-        let _rx_sender = conn_manager.register(1, 100, "web".to_string()).await;
-        let mut rx_target = conn_manager.register(1, 200, "android".to_string()).await;
+        let (_rx_sender, _) = conn_manager.register(1, 100, "web".to_string()).await;
+        let (mut rx_target, _) = conn_manager.register(1, 200, "android".to_string()).await;
 
         let _ = manager
             .handle_hello(1, 100, "Chrome".to_string(), DeviceType::Web)
@@ -1424,10 +1460,179 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn command_rejects_unknown_command_name() {
+        let (conn_manager, manager) = setup().await;
+
+        let (_rx_sender, _) = conn_manager.register(1, 100, "web".to_string()).await;
+        let (mut rx_target, _) = conn_manager.register(1, 200, "android".to_string()).await;
+        let _ = manager
+            .handle_hello(1, 100, "Chrome".to_string(), DeviceType::Web)
+            .await;
+        let _ = manager
+            .handle_hello(1, 200, "Phone".to_string(), DeviceType::Android)
+            .await;
+        drain_messages(&mut rx_target).await;
+
+        let result = manager
+            .handle_command(1, 100, 200, "selfDestruct", serde_json::Value::Null)
+            .await;
+        assert_eq!(
+            result,
+            Err(PlaybackError::UnknownCommand("selfDestruct".to_string()))
+        );
+        assert!(rx_target.try_recv().is_err(), "target must not receive it");
+
+        let payload: PlaybackErrorPayload = result.unwrap_err().into();
+        assert_eq!(payload.code, "unknown_command");
+        assert_eq!(
+            payload.context.and_then(|c| c.command),
+            Some("selfDestruct".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn device_list_reports_real_is_playing_and_has_session() {
+        let (conn_manager, manager) = setup().await;
+
+        let (_rx1, _) = conn_manager.register(1, 100, "web".to_string()).await;
+        let (mut rx2, _) = conn_manager.register(1, 200, "android".to_string()).await;
+        let _ = manager
+            .handle_hello(1, 100, "Chrome".to_string(), DeviceType::Web)
+            .await;
+        let _ = manager
+            .handle_hello(1, 200, "Phone".to_string(), DeviceType::Android)
+            .await;
+
+        let before = manager.build_device_list(1).await;
+        let web = before.iter().find(|d| d.id == 100).unwrap();
+        assert!(!web.has_session);
+        assert!(!web.is_playing);
+
+        manager
+            .handle_state_update(1, 100, make_state("Song", true))
+            .await
+            .unwrap();
+        let playing = manager.build_device_list(1).await;
+        let web = playing.iter().find(|d| d.id == 100).unwrap();
+        assert!(web.has_session);
+        assert!(web.is_playing);
+        drain_messages(&mut rx2).await;
+
+        // Pausing flips is_playing and pushes a playback_changed list.
+        manager
+            .handle_state_update(1, 100, make_state("Song", false))
+            .await
+            .unwrap();
+        let paused = manager.build_device_list(1).await;
+        let web = paused.iter().find(|d| d.id == 100).unwrap();
+        assert!(web.has_session);
+        assert!(!web.is_playing);
+
+        let mut saw_playback_changed = false;
+        while let Ok(msg) = rx2.try_recv() {
+            if msg.msg_type == msg_types::PLAYBACK_DEVICE_LIST_CHANGED
+                && msg.payload["change"]["type"] == "playback_changed"
+            {
+                saw_playback_changed = true;
+                let devices = msg.payload["devices"].as_array().unwrap();
+                let web = devices.iter().find(|d| d["id"] == 100).unwrap();
+                assert_eq!(web["is_playing"], false);
+                assert_eq!(web["has_session"], true);
+            }
+        }
+        assert!(saw_playback_changed);
+
+        // A second paused state without a flip must not push another list.
+        manager
+            .handle_state_update(1, 100, make_state("Song", false))
+            .await
+            .unwrap();
+        while let Ok(msg) = rx2.try_recv() {
+            assert_ne!(msg.msg_type, msg_types::PLAYBACK_DEVICE_LIST_CHANGED);
+        }
+    }
+
+    #[tokio::test]
+    async fn superseded_registration_cleanup_keeps_new_connection_state() {
+        let (conn_manager, manager) = setup().await;
+
+        // First connection of device 100, then a reconnect that replaces it.
+        let (_old_rx, old_generation) = conn_manager.register(1, 100, "web".to_string()).await;
+        let (mut new_rx, new_generation) = conn_manager.register(1, 100, "web".to_string()).await;
+        let _ = manager
+            .handle_hello(1, 100, "Chrome".to_string(), DeviceType::Web)
+            .await;
+        manager
+            .handle_state_update(1, 100, make_state("Song", true))
+            .await
+            .unwrap();
+
+        // This mirrors the handler: the old socket's cleanup runs only when
+        // its registration is still current.
+        assert!(!conn_manager.is_current(1, 100, old_generation).await);
+        assert!(conn_manager.is_current(1, 100, new_generation).await);
+
+        // State and metadata are intact and the new socket is still reachable.
+        assert!(manager.get_device_name(1, 100).await.is_some());
+        let sessions = manager.sessions.read().await;
+        assert!(sessions.get(&1).unwrap().device_states.contains_key(&100));
+        drop(sessions);
+        conn_manager
+            .send_to_device(1, 100, ServerMessage::empty("ping-new"))
+            .await
+            .unwrap();
+        drain_messages(&mut new_rx).await;
+    }
+
+    #[tokio::test]
+    async fn policy_cache_is_used_and_invalidated() {
+        let (_temp, _conn, manager, user_manager) = setup_with_user_manager().await;
+
+        let owner_id = user_manager.add_user("owner").unwrap();
+        let other_id = user_manager.add_user("other").unwrap();
+        let device_id = user_manager
+            .register_or_update_device(&crate::user::device::DeviceRegistration {
+                device_uuid: "device-uuid-cache".to_string(),
+                device_type: crate::user::device::DeviceType::Web,
+                device_name: Some("Owner Device".to_string()),
+                os_info: None,
+            })
+            .unwrap();
+        user_manager
+            .associate_device_with_user(device_id, owner_id)
+            .unwrap();
+
+        // Default policy denies and gets cached.
+        assert!(
+            !manager
+                .is_user_allowed_for_device(owner_id, device_id, other_id)
+                .await
+        );
+        assert!(manager.share_policies.read().await.contains_key(&device_id));
+
+        // A database change alone is not seen until invalidated.
+        user_manager
+            .set_device_share_policy(device_id, &DeviceSharePolicy::allow_everyone())
+            .unwrap();
+        assert!(
+            !manager
+                .is_user_allowed_for_device(owner_id, device_id, other_id)
+                .await
+        );
+
+        manager.invalidate_share_policy(device_id).await;
+        assert!(
+            manager
+                .is_user_allowed_for_device(owner_id, device_id, other_id)
+                .await
+        );
+    }
+
+    #[tokio::test]
     async fn stale_device_cleanup() {
         let (conn_manager, manager) = setup().await;
 
-        let _rx = conn_manager.register(1, 100, "web".to_string()).await;
+        let (_rx, _) = conn_manager.register(1, 100, "web".to_string()).await;
         let _ = manager
             .handle_hello(1, 100, "Chrome".to_string(), DeviceType::Web)
             .await;
@@ -1444,12 +1649,39 @@ mod tests {
             ds.last_update = Instant::now() - STALE_DEVICE_TIMEOUT - Duration::from_secs(1);
         }
 
+        let (mut rx_peer, _) = conn_manager.register(1, 200, "android".to_string()).await;
+        let _ = manager
+            .handle_hello(1, 200, "Phone".to_string(), DeviceType::Android)
+            .await;
+        drain_messages(&mut rx_peer).await;
+
         // Run cleanup
         manager.check_stale_devices().await;
 
         // State should be removed
-        let sessions = manager.sessions.read().await;
-        let session = sessions.get(&1).unwrap();
-        assert!(!session.device_states.contains_key(&100));
+        {
+            let sessions = manager.sessions.read().await;
+            let session = sessions.get(&1).unwrap();
+            assert!(!session.device_states.contains_key(&100));
+        }
+
+        // Peer gets device_stopped(stale) followed by a stale device list.
+        let mut types = Vec::new();
+        while let Ok(msg) = rx_peer.try_recv() {
+            if msg.msg_type == msg_types::PLAYBACK_DEVICE_STOPPED {
+                assert_eq!(msg.payload["reason"], "stale");
+            }
+            if msg.msg_type == msg_types::PLAYBACK_DEVICE_LIST_CHANGED {
+                assert_eq!(msg.payload["change"]["type"], "stale");
+            }
+            types.push(msg.msg_type);
+        }
+        assert_eq!(
+            types,
+            vec![
+                msg_types::PLAYBACK_DEVICE_STOPPED.to_string(),
+                msg_types::PLAYBACK_DEVICE_LIST_CHANGED.to_string()
+            ]
+        );
     }
 }

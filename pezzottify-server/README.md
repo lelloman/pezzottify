@@ -485,7 +485,7 @@ Static content (catalog data, images, audio) is cached using HTTP `Cache-Control
   "user_handle": "username",
   "password": "password",
   "device_uuid": "unique-device-identifier",
-  "device_type": "web|android|ios",
+  "device_type": "web|android|android_tv|ios",
   "device_name": "Chrome Browser", // optional
   "os_info": "Windows 11" // optional
 }
@@ -494,11 +494,13 @@ Static content (catalog data, images, audio) is cached using HTTP `Cache-Control
 **Device fields:**
 
 - `device_uuid`: Unique identifier for the device (8-64 characters). Should be generated once and persisted on the client.
-- `device_type`: One of `web`, `android`, or `unknown`
+- `device_type`: One of `web`, `android`, `android_tv`, or `ios`. Anything else is stored as `unknown`.
 - `device_name`: Human-readable device name (max 100 characters)
 - `os_info`: Operating system information (max 200 characters)
 
 Devices are tracked per-user with a limit of 50 devices. Oldest devices are automatically pruned when the limit is exceeded.
+
+The same identity is used for multi-device playback over the WebSocket. Users can list their devices with `GET /v1/user/devices` and share one with other users through `PUT /v1/user/devices/{device_id}/share_policy`. See [docs/multi-device-playback.md](../docs/multi-device-playback.md) for the full contract.
 
 ### Catalog Content (`/v1/content`)
 
@@ -639,6 +641,7 @@ Requires `ViewAnalytics` permission.
 | GET    | `/listening/track/{track_id}`            | Get track listening stats      |
 | GET    | `/listening/users/{user_handle}/summary` | Get user's listening summary   |
 | GET    | `/online-users`                          | Get currently connected users  |
+| GET    | `/playback/sessions`                     | Active playback sessions: per user, each device's state |
 
 #### Background Jobs
 
@@ -686,6 +689,15 @@ Requires `EditCatalog` permission.
 | Method | Endpoint | Description                                |
 | ------ | -------- | ------------------------------------------ |
 | GET    | `/ws`    | WebSocket connection for real-time updates |
+
+The connection requires a session with a registered device. It carries sync
+events (likes, playlists, settings), catalog notifications and the
+`playback.*` family used for multi-device playback: each device announces
+itself with `playback.hello`, reports `playback.state` and
+`playback.queue_update`, receives relays of other devices' state, and can
+control another device with `playback.command`. The wire contract, the command
+list and the per-platform behaviour are in
+[docs/multi-device-playback.md](../docs/multi-device-playback.md).
 
 ## Download Manager
 

@@ -531,6 +531,9 @@ async fn put_device_share_policy(
     }
 
     playback_session_manager
+        .invalidate_share_policy(device_id)
+        .await;
+    playback_session_manager
         .broadcast_device_list_refresh(device_id)
         .await;
 

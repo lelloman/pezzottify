@@ -74,11 +74,47 @@ pub struct ConnectedDevice {
     pub id: usize,
     pub name: String,
     pub device_type: DeviceType,
+    /// Last reported `PlaybackState::is_playing`. False when the device has
+    /// no session entry.
     pub is_playing: bool,
+    /// Whether the device has reported a state and has not stopped since.
+    #[serde(default)]
+    pub has_session: bool,
     pub connected_at: u64,
     pub owner_user_id: usize,
     pub owner_handle: String,
     pub is_shared: bool,
+}
+
+/// Commands a device may forward to another device through
+/// `playback.command`. Anything else is rejected with error code
+/// `unknown_command`. Keep in sync with `docs/multi-device-playback.md`.
+pub const KNOWN_COMMANDS: &[&str] = &[
+    "play",
+    "pause",
+    "next",
+    "prev",
+    "seek",
+    "setVolume",
+    "setMuted",
+    "loadAlbum",
+    "loadPlaylist",
+    "loadSingleTrack",
+    "loadTrackIds",
+    "addAlbumToQueue",
+    "addPlaylistToQueue",
+    "addTracksToQueue",
+    "skipToTrack",
+    "removeTrack",
+    "moveTrack",
+    "setGravity",
+    "setShuffle",
+    "setRepeat",
+];
+
+/// Whether `command` is one of [`KNOWN_COMMANDS`].
+pub fn is_known_command(command: &str) -> bool {
+    KNOWN_COMMANDS.contains(&command)
 }
 
 // ============================================================================
@@ -290,6 +326,7 @@ mod tests {
                 name: "Chrome on Windows".to_string(),
                 device_type: DeviceType::Web,
                 is_playing: false,
+                has_session: false,
                 connected_at: 1234567890,
                 owner_user_id: 1,
                 owner_handle: "owner".to_string(),
@@ -300,6 +337,24 @@ mod tests {
         let json = serde_json::to_string(&payload).unwrap();
         assert!(json.contains("\"device_id\":42"));
         assert!(json.contains("\"active_devices\":[]"));
+    }
+
+    #[test]
+    fn known_commands_match_contract() {
+        for command in [
+            "play",
+            "pause",
+            "seek",
+            "loadPlaylist",
+            "setGravity",
+            "setShuffle",
+            "setRepeat",
+        ] {
+            assert!(is_known_command(command), "{command} should be known");
+        }
+        assert!(!is_known_command("stop"));
+        assert!(!is_known_command("PLAY"));
+        assert!(!is_known_command(""));
     }
 
     #[test]

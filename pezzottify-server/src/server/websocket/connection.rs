@@ -4,6 +4,7 @@
 //! Provides methods to send messages to specific devices or broadcast to users.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use tokio::sync::{mpsc, RwLock};
 
@@ -14,6 +15,10 @@ struct ConnectionEntry {
     sender: mpsc::Sender<ServerMessage>,
     #[allow(dead_code)] // Will be used for filtering by device type
     device_type: String,
+    /// Registration generation. A reconnect for the same device replaces the
+    /// entry with a higher generation; cleanup of the superseded connection
+    /// must not touch the new entry.
+    generation: u64,
 }
 
 /// Error type for send operations.
@@ -33,6 +38,8 @@ pub enum SendError {
 pub struct ConnectionManager {
     /// user_id -> (device_id -> connection entry)
     connections: RwLock<HashMap<usize, HashMap<usize, ConnectionEntry>>>,
+    /// Monotonic counter handed out on every registration.
+    next_generation: AtomicU64,
 }
 
 impl Default for ConnectionManager {
@@ -46,23 +53,27 @@ impl ConnectionManager {
     pub fn new() -> Self {
         Self {
             connections: RwLock::new(HashMap::new()),
+            next_generation: AtomicU64::new(1),
         }
     }
 
     /// Register a new connection.
     ///
-    /// Returns a receiver for outgoing messages. The caller should forward
-    /// messages from this receiver to the WebSocket.
+    /// Returns a receiver for outgoing messages and the registration
+    /// generation. The caller should forward messages from this receiver to
+    /// the WebSocket and pass the generation back to [`Self::unregister`].
     ///
     /// If a connection already exists for this device, the old connection
-    /// is replaced (drop-and-replace behavior).
+    /// is replaced (drop-and-replace behavior). The superseded connection's
+    /// cleanup is a no-op because its generation no longer matches.
     pub async fn register(
         &self,
         user_id: usize,
         device_id: usize,
         device_type: String,
-    ) -> mpsc::Receiver<ServerMessage> {
+    ) -> (mpsc::Receiver<ServerMessage>, u64) {
         let (tx, rx) = mpsc::channel(32);
+        let generation = self.next_generation.fetch_add(1, Ordering::Relaxed);
 
         let mut conns = self.connections.write().await;
         let user_conns = conns.entry(user_id).or_default();
@@ -73,23 +84,47 @@ impl ConnectionManager {
             ConnectionEntry {
                 sender: tx,
                 device_type,
+                generation,
             },
         );
 
-        rx
+        (rx, generation)
     }
 
     /// Unregister a connection (called on disconnect).
     ///
-    /// Removes the connection entry and cleans up empty user maps.
-    pub async fn unregister(&self, user_id: usize, device_id: usize) {
+    /// Removes the connection entry only if it still belongs to the given
+    /// registration generation, and cleans up empty user maps. Returns `true`
+    /// when an entry was removed, `false` when the registration had already
+    /// been superseded by a newer connection for the same device.
+    pub async fn unregister(&self, user_id: usize, device_id: usize, generation: u64) -> bool {
         let mut conns = self.connections.write().await;
-        if let Some(user_conns) = conns.get_mut(&user_id) {
-            user_conns.remove(&device_id);
-            if user_conns.is_empty() {
-                conns.remove(&user_id);
-            }
+        let Some(user_conns) = conns.get_mut(&user_id) else {
+            return false;
+        };
+        let matches = user_conns
+            .get(&device_id)
+            .map(|entry| entry.generation == generation)
+            .unwrap_or(false);
+        if !matches {
+            return false;
         }
+        user_conns.remove(&device_id);
+        if user_conns.is_empty() {
+            conns.remove(&user_id);
+        }
+        true
+    }
+
+    /// Whether the given registration generation is still the live connection
+    /// for this device.
+    pub async fn is_current(&self, user_id: usize, device_id: usize, generation: u64) -> bool {
+        let conns = self.connections.read().await;
+        conns
+            .get(&user_id)
+            .and_then(|user_conns| user_conns.get(&device_id))
+            .map(|entry| entry.generation == generation)
+            .unwrap_or(false)
     }
 
     /// Send a message to a specific device.
@@ -242,7 +277,7 @@ mod tests {
     #[tokio::test]
     async fn register_creates_valid_receiver() {
         let manager = ConnectionManager::new();
-        let mut rx = manager.register(1, 100, "web".to_string()).await;
+        let (mut rx, _) = manager.register(1, 100, "web".to_string()).await;
 
         // Should be able to receive messages
         let msg = ServerMessage::empty("test");
@@ -255,19 +290,47 @@ mod tests {
     #[tokio::test]
     async fn unregister_removes_connection() {
         let manager = ConnectionManager::new();
-        let _rx = manager.register(1, 100, "web".to_string()).await;
+        let (_rx, generation) = manager.register(1, 100, "web".to_string()).await;
 
         assert!(manager.is_device_connected(1, 100).await);
 
-        manager.unregister(1, 100).await;
+        assert!(manager.unregister(1, 100, generation).await);
 
+        assert!(!manager.is_device_connected(1, 100).await);
+    }
+
+    #[tokio::test]
+    async fn unregister_with_stale_generation_keeps_new_connection() {
+        let manager = ConnectionManager::new();
+        let (old_rx, old_generation) = manager.register(1, 100, "web".to_string()).await;
+        let (mut new_rx, new_generation) = manager.register(1, 100, "web".to_string()).await;
+        assert!(new_generation > old_generation);
+
+        // Old sender was dropped by the replacement.
+        drop(old_rx);
+
+        // Cleanup of the superseded connection must be a no-op.
+        assert!(!manager.is_current(1, 100, old_generation).await);
+        assert!(!manager.unregister(1, 100, old_generation).await);
+        assert!(manager.is_device_connected(1, 100).await);
+        assert!(manager.is_current(1, 100, new_generation).await);
+
+        // The new connection still receives messages.
+        manager
+            .send_to_device(1, 100, ServerMessage::empty("still-here"))
+            .await
+            .unwrap();
+        assert_eq!(new_rx.recv().await.unwrap().msg_type, "still-here");
+
+        // And its own cleanup works.
+        assert!(manager.unregister(1, 100, new_generation).await);
         assert!(!manager.is_device_connected(1, 100).await);
     }
 
     #[tokio::test]
     async fn send_to_device_delivers_message() {
         let manager = ConnectionManager::new();
-        let mut rx = manager.register(1, 100, "web".to_string()).await;
+        let (mut rx, _) = manager.register(1, 100, "web".to_string()).await;
 
         let msg = ServerMessage::new("greeting", serde_json::json!({"text": "hello"}));
         manager.send_to_device(1, 100, msg).await.unwrap();
@@ -290,8 +353,8 @@ mod tests {
     #[tokio::test]
     async fn send_to_other_devices_excludes_source() {
         let manager = ConnectionManager::new();
-        let mut rx1 = manager.register(1, 100, "web".to_string()).await;
-        let mut rx2 = manager.register(1, 200, "android".to_string()).await;
+        let (mut rx1, _) = manager.register(1, 100, "web".to_string()).await;
+        let (mut rx2, _) = manager.register(1, 200, "android".to_string()).await;
 
         let msg = ServerMessage::empty("sync");
         let failed = manager.send_to_other_devices(1, 100, msg).await;
@@ -309,8 +372,8 @@ mod tests {
     #[tokio::test]
     async fn send_to_other_devices_returns_failed() {
         let manager = ConnectionManager::new();
-        let _rx1 = manager.register(1, 100, "web".to_string()).await;
-        let rx2 = manager.register(1, 200, "android".to_string()).await;
+        let (_rx1, _) = manager.register(1, 100, "web".to_string()).await;
+        let (rx2, _) = manager.register(1, 200, "android".to_string()).await;
 
         // Drop rx2 to simulate disconnection
         drop(rx2);
@@ -325,8 +388,8 @@ mod tests {
     #[tokio::test]
     async fn broadcast_to_user_sends_to_all() {
         let manager = ConnectionManager::new();
-        let mut rx1 = manager.register(1, 100, "web".to_string()).await;
-        let mut rx2 = manager.register(1, 200, "android".to_string()).await;
+        let (mut rx1, _) = manager.register(1, 100, "web".to_string()).await;
+        let (mut rx2, _) = manager.register(1, 200, "android".to_string()).await;
 
         let msg = ServerMessage::empty("notification");
         let failed = manager.broadcast_to_user(1, msg).await;
@@ -343,9 +406,9 @@ mod tests {
     #[tokio::test]
     async fn get_connected_devices_returns_correct_list() {
         let manager = ConnectionManager::new();
-        let _rx1 = manager.register(1, 100, "web".to_string()).await;
-        let _rx2 = manager.register(1, 200, "android".to_string()).await;
-        let _rx3 = manager.register(2, 300, "web".to_string()).await;
+        let (_rx1, _) = manager.register(1, 100, "web".to_string()).await;
+        let (_rx2, _) = manager.register(1, 200, "android".to_string()).await;
+        let (_rx3, _) = manager.register(2, 300, "web".to_string()).await;
 
         let mut devices = manager.get_connected_devices(1).await;
         devices.sort();
@@ -359,7 +422,7 @@ mod tests {
     #[tokio::test]
     async fn is_device_connected_returns_correct_boolean() {
         let manager = ConnectionManager::new();
-        let _rx = manager.register(1, 100, "web".to_string()).await;
+        let (_rx, _) = manager.register(1, 100, "web".to_string()).await;
 
         assert!(manager.is_device_connected(1, 100).await);
         assert!(!manager.is_device_connected(1, 200).await);
@@ -369,10 +432,10 @@ mod tests {
     #[tokio::test]
     async fn drop_and_replace_replaces_old_connection() {
         let manager = ConnectionManager::new();
-        let mut rx1 = manager.register(1, 100, "web".to_string()).await;
+        let (mut rx1, _) = manager.register(1, 100, "web".to_string()).await;
 
         // Register same device again
-        let mut rx2 = manager.register(1, 100, "web".to_string()).await;
+        let (mut rx2, _) = manager.register(1, 100, "web".to_string()).await;
 
         // Send message
         let msg = ServerMessage::empty("test");
@@ -392,13 +455,13 @@ mod tests {
 
         assert_eq!(manager.connection_count(1).await, 0);
 
-        let _rx1 = manager.register(1, 100, "web".to_string()).await;
+        let (_rx1, generation) = manager.register(1, 100, "web".to_string()).await;
         assert_eq!(manager.connection_count(1).await, 1);
 
-        let _rx2 = manager.register(1, 200, "android".to_string()).await;
+        let (_rx2, _) = manager.register(1, 200, "android".to_string()).await;
         assert_eq!(manager.connection_count(1).await, 2);
 
-        manager.unregister(1, 100).await;
+        manager.unregister(1, 100, generation).await;
         assert_eq!(manager.connection_count(1).await, 1);
     }
 
@@ -408,9 +471,9 @@ mod tests {
 
         assert_eq!(manager.total_connections().await, 0);
 
-        let _rx1 = manager.register(1, 100, "web".to_string()).await;
-        let _rx2 = manager.register(1, 200, "android".to_string()).await;
-        let _rx3 = manager.register(2, 300, "web".to_string()).await;
+        let (_rx1, _) = manager.register(1, 100, "web".to_string()).await;
+        let (_rx2, _) = manager.register(1, 200, "android".to_string()).await;
+        let (_rx3, _) = manager.register(2, 300, "web".to_string()).await;
 
         assert_eq!(manager.total_connections().await, 3);
     }
@@ -418,9 +481,9 @@ mod tests {
     #[tokio::test]
     async fn unregister_cleans_up_empty_user_map() {
         let manager = ConnectionManager::new();
-        let _rx = manager.register(1, 100, "web".to_string()).await;
+        let (_rx, generation) = manager.register(1, 100, "web".to_string()).await;
 
-        manager.unregister(1, 100).await;
+        manager.unregister(1, 100, generation).await;
 
         // Verify internal state is cleaned up
         let conns = manager.connections.read().await;

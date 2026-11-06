@@ -9,7 +9,12 @@ use serde::{Deserialize, Serialize};
 /// Server -> Client message envelope.
 ///
 /// All messages from server to client use this format. The `msg_type` field
-/// is used for routing (e.g., "connected", "sync.liked_changed", "playback.pause").
+/// is used for routing. Message types are the constants in [`msg_types`]:
+/// system messages (`connected`, `pong`, `error`), `sync`, catalog and
+/// ingestion notifications, and the `playback.*` family (`playback.welcome`,
+/// `playback.device_state`, `playback.device_queue`, `playback.device_stopped`,
+/// `playback.device_list_changed`, `playback.queue_sync`, `playback.command`,
+/// `playback.error`). See `docs/multi-device-playback.md` for the contract.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ServerMessage {
     /// Message type identifier (e.g., "sync", "playback", "notification")
@@ -139,7 +144,8 @@ pub mod msg_types {
     pub const PLAYBACK_QUEUE_SYNC: &str = "playback.queue_sync";
     /// Request full queue sync.
     pub const PLAYBACK_REQUEST_QUEUE: &str = "playback.request_queue";
-    /// Remote command (stub, not yet implemented).
+    /// Remote command: client -> server with `target_device_id`, forwarded
+    /// server -> target device without it.
     pub const PLAYBACK_COMMAND: &str = "playback.command";
     /// Device list changed notification.
     pub const PLAYBACK_DEVICE_LIST_CHANGED: &str = "playback.device_list_changed";

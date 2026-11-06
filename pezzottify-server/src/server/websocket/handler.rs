@@ -102,8 +102,10 @@ async fn handle_socket(
         user_id, device_id, device_type_str
     );
 
-    // Register connection and get receiver for outgoing messages
-    let outgoing_rx = state
+    // Register connection and get receiver for outgoing messages. The
+    // generation lets the cleanup below tell whether this registration is
+    // still the live one or has been replaced by a reconnect.
+    let (outgoing_rx, generation) = state
         .connection_manager
         .register(user_id, device_id, device_type_str.clone())
         .await;
@@ -150,6 +152,21 @@ async fn handle_socket(
     }
     let _ = outgoing_handle.await;
 
+    // A reconnect for the same device replaces this registration. In that
+    // case the device is still online on the new socket, so this cleanup must
+    // not tear down its playback state or its connection entry.
+    if !state
+        .connection_manager
+        .is_current(user_id, device_id, generation)
+        .await
+    {
+        debug!(
+            "WebSocket cleanup skipped for user {} device {}: registration superseded",
+            user_id, device_id
+        );
+        return;
+    }
+
     // Notify playback session manager of disconnect
     state
         .playback_session_manager
@@ -158,7 +175,7 @@ async fn handle_socket(
 
     state
         .connection_manager
-        .unregister(user_id, device_id)
+        .unregister(user_id, device_id, generation)
         .await;
 }
 
