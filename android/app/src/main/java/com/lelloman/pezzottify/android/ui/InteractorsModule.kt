@@ -10,6 +10,9 @@ import com.lelloman.pezzottify.android.domain.auth.usecase.IsLoggedIn
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogin
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformLogout
 import com.lelloman.pezzottify.android.domain.auth.usecase.PerformOidcLogin
+import com.lelloman.pezzottify.android.domain.auth.usecase.PerformDeviceFlowLogin
+import com.lelloman.pezzottify.android.domain.auth.oidc.DeviceFlowAuthManager
+import com.lelloman.pezzottify.android.ui.screen.login.DeviceFlowLoginController
 import com.lelloman.pezzottify.android.domain.config.BuildInfo
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.maintenance.MaintenanceEventBus
@@ -297,7 +300,9 @@ class InteractorsModule {
     fun provideLoginInteractor(
         performLogin: PerformLogin,
         performOidcLogin: PerformOidcLogin,
+        performDeviceFlowLogin: PerformDeviceFlowLogin,
         oidcAuthManager: OidcAuthManager,
+        deviceFlowAuthManager: DeviceFlowAuthManager,
         oidcCallbackHandler: OidcCallbackHandler,
         deviceInfoProvider: DeviceInfoProvider,
         configStore: ConfigStore,
@@ -308,11 +313,15 @@ class InteractorsModule {
         override fun getInitialEmail(): String =
             authStore.getLastUsedHandle() ?: ""
 
+        override fun isHostConfigurable(): Boolean = BuildConfig.SERVER_CONFIGURABLE
+
         override val isLoggedIn: kotlinx.coroutines.flow.Flow<Boolean> =
             authStore.getAuthState().map { it is AuthState.LoggedIn }
 
         override suspend fun setHost(host: String): LoginViewModel.Interactor.SetHostResult =
-            when (configStore.setBaseUrl(host)) {
+            // A pinned build has no host to set; ConfigStore keeps the build-time server.
+            if (!BuildConfig.SERVER_CONFIGURABLE) LoginViewModel.Interactor.SetHostResult.Success
+            else when (configStore.setBaseUrl(host)) {
                 ConfigStore.SetBaseUrlResult.Success -> LoginViewModel.Interactor.SetHostResult.Success
                 ConfigStore.SetBaseUrlResult.InvalidUrl -> LoginViewModel.Interactor.SetHostResult.InvalidUrl
             }
@@ -373,6 +382,46 @@ class InteractorsModule {
                     LoginViewModel.Interactor.OidcLoginResult.Error(loginResult.message)
             }
         }
+
+        override suspend fun startDeviceFlow(): DeviceFlowLoginController.StartResult =
+            when (val result = deviceFlowAuthManager.start(deviceInfoProvider.getDeviceInfo())) {
+                is DeviceFlowAuthManager.StartResult.Success -> {
+                    val authorization = result.authorization
+                    DeviceFlowLoginController.StartResult.Success(
+                        DeviceFlowLoginController.DeviceCode(
+                            deviceCode = authorization.deviceCode,
+                            userCode = authorization.userCode,
+                            verificationUri = authorization.verificationUri,
+                            qrContent = authorization.qrCodeUrl
+                                ?: authorization.verificationUriComplete
+                                ?: authorization.verificationUri,
+                            expiresInMs = authorization.expiresInMs,
+                            intervalMs = authorization.intervalMs,
+                        )
+                    )
+                }
+
+                is DeviceFlowAuthManager.StartResult.Error ->
+                    DeviceFlowLoginController.StartResult.Error(result.message)
+            }
+
+        override suspend fun pollDeviceFlow(deviceCode: String): DeviceFlowLoginController.PollResult =
+            when (val result = deviceFlowAuthManager.poll(deviceCode)) {
+                DeviceFlowAuthManager.PollResult.Pending -> DeviceFlowLoginController.PollResult.Pending
+                DeviceFlowAuthManager.PollResult.SlowDown -> DeviceFlowLoginController.PollResult.SlowDown
+                DeviceFlowAuthManager.PollResult.Denied -> DeviceFlowLoginController.PollResult.Denied
+                DeviceFlowAuthManager.PollResult.Expired -> DeviceFlowLoginController.PollResult.Expired
+                is DeviceFlowAuthManager.PollResult.Error ->
+                    DeviceFlowLoginController.PollResult.Error(result.message)
+
+                is DeviceFlowAuthManager.PollResult.Approved ->
+                    when (val login = performDeviceFlowLogin(result)) {
+                        PerformOidcLogin.LoginResult.Success -> DeviceFlowLoginController.PollResult.Approved
+                        PerformOidcLogin.LoginResult.Cancelled -> DeviceFlowLoginController.PollResult.Denied
+                        is PerformOidcLogin.LoginResult.Error ->
+                            DeviceFlowLoginController.PollResult.Error(login.message)
+                    }
+            }
     }
 
     @Provides

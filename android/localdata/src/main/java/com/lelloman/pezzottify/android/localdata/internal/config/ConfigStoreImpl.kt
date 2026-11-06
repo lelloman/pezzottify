@@ -4,6 +4,7 @@ import android.content.Context
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.config.ConfigStore.SetBaseUrlResult
 import com.lelloman.pezzottify.android.localdata.DefaultHostUrl
+import com.lelloman.pezzottify.android.localdata.ServerConfigurable
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,17 +16,22 @@ import java.net.URI
 internal class ConfigStoreImpl(
     context: Context,
     @DefaultHostUrl private val defaultHostUrl: String,
+    @ServerConfigurable private val serverConfigurable: Boolean = true,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ConfigStore {
 
     private val prefs = context.getSharedPreferences(SHARED_PREF_FILE_NAME, Context.MODE_PRIVATE)
 
     private val mutableHostUrl by lazy {
-        MutableStateFlow(prefs.getString(KEY_HOST_URL, defaultHostUrl).orEmpty())
+        // A pinned build always talks to its server, whatever an older build saved.
+        val saved = if (serverConfigurable) prefs.getString(KEY_HOST_URL, defaultHostUrl) else null
+        MutableStateFlow((saved ?: defaultHostUrl).orEmpty())
     }
     override val baseUrl: StateFlow<String> = mutableHostUrl.asStateFlow()
 
     override suspend fun setBaseUrl(baseUrl: String): SetBaseUrlResult {
+        // Pinned: nothing to change, and nothing for callers to report.
+        if (!serverConfigurable) return SetBaseUrlResult.Success
         if (!isValidHttpUrl(baseUrl)) {
             return SetBaseUrlResult.InvalidUrl
         }

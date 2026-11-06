@@ -59,6 +59,8 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.coil)
     implementation(libs.coil.network)
+    // QR code generation only (TV "Sign in from your phone")
+    implementation(libs.zxing.core)
     implementation(project(":domain"))
     implementation(project(":logger"))
     implementation(libs.simple.android.assistant.compose)

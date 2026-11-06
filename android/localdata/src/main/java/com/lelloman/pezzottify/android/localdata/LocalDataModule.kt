@@ -75,10 +75,12 @@ class LocalDataModule {
     @Singleton
     fun provideConfigStore(
         @ApplicationContext context: Context,
-        @DefaultHostUrl defaultHostUrl: String
+        @DefaultHostUrl defaultHostUrl: String,
+        @ServerConfigurable serverConfigurable: Boolean,
     ): ConfigStore = ConfigStoreImpl(
         context = context,
         defaultHostUrl = defaultHostUrl,
+        serverConfigurable = serverConfigurable,
     )
 
     @Provides

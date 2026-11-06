@@ -21,7 +21,6 @@ import net.openid.appauth.AuthorizationServiceConfiguration
 import net.openid.appauth.GrantTypeValues
 import net.openid.appauth.ResponseTypeValues
 import net.openid.appauth.TokenRequest
-import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
@@ -31,7 +30,7 @@ class AppAuthOidcManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val oidcConfig: OidcConfig,
     loggerFactory: LoggerFactory,
-) : OidcAuthManager {
+) : OidcAuthManager, DeviceFlowEndpointsProvider {
 
     private val logger: Logger by loggerFactory
     private val authService: AuthorizationService by lazy { AuthorizationService(context) }
@@ -252,29 +251,18 @@ class AppAuthOidcManager @Inject constructor(
         }
     }
 
-    /**
-     * Extract user handle from ID token JWT.
-     * Tries preferred_username, then email, then subject.
-     */
-    private fun extractUserHandle(idToken: String): String {
-        return try {
-            val parts = idToken.split(".")
-            if (parts.size != 3) return "user"
-
-            val payload = String(
-                android.util.Base64.decode(parts[1], android.util.Base64.URL_SAFE)
-            )
-            val json = JSONObject(payload)
-
-            json.optString("preferred_username").takeIf { it.isNotBlank() }
-                ?: json.optString("email").takeIf { it.isNotBlank() }
-                ?: json.optString("sub").takeIf { it.isNotBlank() }
-                ?: "user"
-        } catch (e: Exception) {
-            logger.warn("OIDC operation failed")
-            "user"
-        }
+    override suspend fun deviceFlowEndpoints(): DeviceFlowEndpointsProvider.Endpoints? {
+        val config = getServiceConfiguration() ?: return null
+        val deviceEndpoint = config.discoveryDoc?.docJson
+            ?.optString("device_authorization_endpoint")
+            ?.takeIf { it.isNotBlank() }
+        return DeviceFlowEndpointsProvider.Endpoints(
+            deviceAuthorizationEndpoint = deviceEndpoint,
+            tokenEndpoint = config.tokenEndpoint.toString(),
+        )
     }
+
+    private fun extractUserHandle(idToken: String): String = userHandleFromIdToken(idToken)
 
     companion object {
         private const val KEY_PENDING_REQUEST = "pending_auth_request"

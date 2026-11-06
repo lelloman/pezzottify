@@ -240,6 +240,13 @@ OIDC settings live in the untracked `local.properties` (or a file passed with
 `-PconnectionPropertiesFile`, which takes precedence): `oidc.issuerUrl` and
 `oidc.clientId`. The redirect scheme is the application ID.
 
+The same files may set `server.baseUrl`. Without it the app starts on the
+emulator default (`http://10.0.2.2:3001`) and the login screens show an
+editable server field. Setting it pins the server: the login flow (phone, TV
+password form and "Sign in from your phone") shows no server field, the app
+ignores any host saved by an earlier build, and release builds refuse a
+non-HTTPS value.
+
 #### Trusted authorization broker
 
 On phones the app can hand the standard authorization request to a trusted
@@ -263,6 +270,22 @@ oidc.brokerCertificate=<64 hex SHA-256 of the broker's signing certificate>
 for the broker is declared by intent on the issuer host, so unconfigured
 builds query an unresolvable host and see no broker.
 
+
+#### Sign in from your phone (TV)
+
+TV builds open on a "Sign in from your phone" card instead of a browser:
+the OAuth 2.0 device authorization grant (RFC 8628) against the same issuer
+and client id. The card shows the server URL (editable unless `server.baseUrl` pins it;
+applying a different valid host requests a new code), a QR code of `verification_uri_complete`
+(or LelloAuth's `qr_code_url` when present), the verification address and
+the user code. Approving the code on a phone yields the same ID and refresh
+tokens as the browser flow, so the session is stored and renewed exactly the
+same way. The TV polls the token endpoint at the advertised `interval`, adds
+5 seconds on `slow_down`, stops at `expires_in` or on `access_denied`, and
+only polls while the card is on screen; an expired or declined code offers
+"Get a new code". "Use password instead" shows the original
+server/email/password form. The issuer must advertise
+`device_authorization_endpoint` and allow the device grant for the client.
 
 ### Equalizer
 

@@ -704,4 +704,20 @@
     <string name="player_open_lyrics">Open lyrics player</string>
     <string name="player_back_to_player">Back to player</string>
     <string name="player_lyrics_unavailable">No lyrics available for this track.</string>
+    <string name="device_flow_title">Sign in from your phone</string>
+    <string name="device_flow_instructions">Scan the QR code, or open this address on your phone:</string>
+    <string name="device_flow_enter_code">and enter this code:</string>
+    <string name="device_flow_loading">Getting a code…</string>
+    <string name="device_flow_waiting">Waiting for approval…</string>
+    <string name="device_flow_expires_in">Code expires in %1$s</string>
+    <string name="device_flow_signing_in">Signing in…</string>
+    <string name="device_flow_expired">Code expired</string>
+    <string name="device_flow_expired_message">This code is no longer valid. Get a new one to try again.</string>
+    <string name="device_flow_denied">Sign-in declined</string>
+    <string name="device_flow_denied_message">The request was declined on the other device. Get a new code to try again.</string>
+    <string name="device_flow_error">Couldn\'t get a sign-in code</string>
+    <string name="device_flow_new_code">Get a new code</string>
+    <string name="device_flow_use_password">Use password instead</string>
+    <string name="device_flow_qr_description">QR code to sign in from your phone</string>
+    <string name="device_flow_apply_host">Apply</string>
 </resources>

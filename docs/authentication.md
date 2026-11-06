@@ -45,6 +45,12 @@ An explicit `invalid_grant` rejection (or a rejected session with no refresh cre
 signing in again. Startup network and server failures leave the session check retryable and show
 a retry message instead of treating the user as signed out.
 
+Android TV signs in with the OAuth 2.0 device authorization grant (RFC 8628): the TV shows a
+code and a QR code, the user approves it on a phone, and the TV polls the provider's token
+endpoint. It uses the same client id, so the resulting ID token is accepted as a bearer token
+and renewed exactly like an authorization-code session. The server is not involved in the
+exchange.
+
 ## Legacy authentication migration
 
 The password endpoint remains available by default for existing clients. Set

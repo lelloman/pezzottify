@@ -6,8 +6,11 @@ oidc.issuerUrl=https://your-oidc-provider.com
 oidc.clientId=your-client-id
 
 # Server Configuration
-# Default base URL for the catalog server (defaults to http://10.0.2.2:3001 for emulator)
-# server.baseUrl=http://10.0.2.2:3001
+# Without server.baseUrl the app starts on the emulator default (http://10.0.2.2:3001)
+# and the login screens let the user change the server.
+# Setting it pins the server: no server field is shown, previously saved hosts are
+# ignored, and release builds require an HTTPS URL.
+# server.baseUrl=https://music.example.com
 
 # Assistant provider policy
 # Builds are locked to SimpleAI by default. "user" explicitly enables runtime

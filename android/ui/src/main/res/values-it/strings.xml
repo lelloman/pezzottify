@@ -704,4 +704,20 @@
     <string name="player_open_lyrics">Apri il lettore dei testi</string>
     <string name="player_back_to_player">Torna al lettore</string>
     <string name="player_lyrics_unavailable">Nessun testo disponibile per questo brano.</string>
+    <string name="device_flow_title">Accedi dal telefono</string>
+    <string name="device_flow_instructions">Inquadra il codice QR, oppure apri questo indirizzo sul telefono:</string>
+    <string name="device_flow_enter_code">e inserisci questo codice:</string>
+    <string name="device_flow_loading">Richiesta del codice…</string>
+    <string name="device_flow_waiting">In attesa di conferma…</string>
+    <string name="device_flow_expires_in">Il codice scade tra %1$s</string>
+    <string name="device_flow_signing_in">Accesso in corso…</string>
+    <string name="device_flow_expired">Codice scaduto</string>
+    <string name="device_flow_expired_message">Questo codice non è più valido. Richiedine uno nuovo per riprovare.</string>
+    <string name="device_flow_denied">Accesso rifiutato</string>
+    <string name="device_flow_denied_message">La richiesta è stata rifiutata sull\'altro dispositivo. Richiedi un nuovo codice per riprovare.</string>
+    <string name="device_flow_error">Impossibile ottenere un codice di accesso</string>
+    <string name="device_flow_new_code">Richiedi un nuovo codice</string>
+    <string name="device_flow_use_password">Usa la password</string>
+    <string name="device_flow_qr_description">Codice QR per accedere dal telefono</string>
+    <string name="device_flow_apply_host">Applica</string>
 </resources>

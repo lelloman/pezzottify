@@ -22,10 +22,35 @@ class LoginViewModel @Inject constructor(
         MutableStateFlow(
             LoginScreenState(
                 host = interactor.getInitialHost(),
+                isHostConfigurable = interactor.isHostConfigurable(),
                 email = interactor.getInitialEmail(),
             )
         )
     val state = mutableState.asStateFlow()
+
+    /** Host the current device-flow code was requested for. */
+    private var deviceFlowHost: String? = null
+
+    /** "Sign in from your phone" (TV); idle unless a screen starts it. */
+    private val deviceFlow = DeviceFlowLoginController(
+        scope = viewModelScope,
+        gateway = object : DeviceFlowLoginController.Gateway {
+            override suspend fun start(): DeviceFlowLoginController.StartResult {
+                // The device flow signs in to the host in the field, like the other flows.
+                val host = mutableState.value.host
+                if (interactor.setHost(host) is Interactor.SetHostResult.InvalidUrl) {
+                    mutableState.value = mutableState.value.copy(hostErrorRes = R.string.invalid_url)
+                    return DeviceFlowLoginController.StartResult.InvalidHost
+                }
+                deviceFlowHost = host
+                return interactor.startDeviceFlow()
+            }
+
+            override suspend fun poll(deviceCode: String) = interactor.pollDeviceFlow(deviceCode)
+        },
+        clock = System::currentTimeMillis,
+    )
+    val deviceFlowState = deviceFlow.state
 
     private val mutableEvents = MutableSharedFlow<LoginScreenEvents>()
     val events = mutableEvents.asSharedFlow()
@@ -127,6 +152,38 @@ class LoginViewModel @Inject constructor(
         }
     }
 
+    /** Starts the device flow, or resumes polling a code that is still valid. */
+    fun startDeviceFlow() = deviceFlow.start()
+
+    /** Stops polling (screen hidden or password form shown). */
+    fun stopDeviceFlow() = deviceFlow.stop()
+
+    /** Requests a fresh code after expiry, denial or an error. */
+    fun restartDeviceFlow() = deviceFlow.restart()
+
+    /**
+     * Applies the host typed on the device-flow screen. An invalid host shows the host error
+     * and leaves the current code alone; a valid, different host gets a new code (the approval
+     * of the old one would sign in to the old host).
+     */
+    fun applyDeviceFlowHost() {
+        viewModelScope.launch {
+            val host = mutableState.value.host
+            if (interactor.setHost(host) is Interactor.SetHostResult.InvalidUrl) {
+                mutableState.value = mutableState.value.copy(hostErrorRes = R.string.invalid_url)
+                return@launch
+            }
+            val flowIsHealthy = when (deviceFlow.state.value) {
+                // Already signed in: navigation is on its way.
+                DeviceFlowState.Approved -> return@launch
+                DeviceFlowState.Idle, DeviceFlowState.Loading, is DeviceFlowState.Waiting -> true
+                else -> false
+            }
+            if (host == deviceFlowHost && flowIsHealthy) return@launch
+            deviceFlow.restart()
+        }
+    }
+
     private suspend fun handleOidcCallback(callbackIntent: Intent) {
         // Process callbacks for error handling only
         // Navigation is handled by auth state observer
@@ -150,6 +207,9 @@ class LoginViewModel @Inject constructor(
 
         fun getInitialEmail(): String
 
+        /** False when the build pins the server; [setHost] then always succeeds without changes. */
+        fun isHostConfigurable(): Boolean
+
         val isLoggedIn: kotlinx.coroutines.flow.Flow<Boolean>
 
         suspend fun setHost(host: String): SetHostResult
@@ -161,6 +221,12 @@ class LoginViewModel @Inject constructor(
         suspend fun createOidcAuthIntent(): OidcIntentResult
 
         suspend fun handleOidcCallback(intent: Intent): OidcLoginResult
+
+        /** Requests a device-flow code from the issuer (the host is already set). */
+        suspend fun startDeviceFlow(): DeviceFlowLoginController.StartResult
+
+        /** Polls once; on approval stores the session before returning. */
+        suspend fun pollDeviceFlow(deviceCode: String): DeviceFlowLoginController.PollResult
 
         sealed interface SetHostResult {
             data object Success : SetHostResult

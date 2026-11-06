@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -206,6 +207,129 @@ class LoginViewModelTest {
         assertThat(viewModel.state.value.isLoading).isTrue()
     }
 
+    @Test
+    fun `device flow is idle until a screen starts it`() = runTest {
+        advanceUntilIdle()
+
+        assertThat(viewModel.deviceFlowState.value).isEqualTo(DeviceFlowState.Idle)
+        assertThat(fakeInteractor.deviceFlowStartCount).isEqualTo(0)
+    }
+
+    @Test
+    fun `startDeviceFlow sets the current host before requesting a code`() = runTest {
+        viewModel.updateHost("https://tv-host.com")
+
+        viewModel.startDeviceFlow()
+        advanceUntilIdle()
+
+        assertThat(fakeInteractor.deviceFlowStartCount).isEqualTo(1)
+        assertThat(fakeInteractor.hostWhenDeviceFlowStarted).isEqualTo("https://tv-host.com")
+        assertThat(viewModel.deviceFlowState.value)
+            .isEqualTo(DeviceFlowState.Error("Not implemented in test"))
+    }
+
+    @Test
+    fun `startDeviceFlow with invalid host shows an invalid host error without requesting a code`() = runTest {
+        fakeInteractor.setHostResult = LoginViewModel.Interactor.SetHostResult.InvalidUrl
+
+        viewModel.startDeviceFlow()
+        advanceUntilIdle()
+
+        assertThat(fakeInteractor.deviceFlowStartCount).isEqualTo(0)
+        assertThat(viewModel.state.value.hostErrorRes).isEqualTo(R.string.invalid_url)
+        assertThat(viewModel.deviceFlowState.value)
+            .isEqualTo(DeviceFlowState.Error(message = null, invalidHost = true))
+    }
+
+    @Test
+    fun `applying a different host restarts the device flow with a new code for that host`() = runTest {
+        fakeInteractor.deviceFlowSucceeds = true
+        viewModel.updateHost("https://old-host.com")
+        viewModel.startDeviceFlow()
+        runCurrent()
+        assertThat((viewModel.deviceFlowState.value as DeviceFlowState.Waiting).userCode).isEqualTo("CODE-1")
+
+        viewModel.updateHost("https://new-host.com")
+        viewModel.applyDeviceFlowHost()
+        runCurrent()
+
+        assertThat(fakeInteractor.deviceFlowStartCount).isEqualTo(2)
+        assertThat(fakeInteractor.hostWhenDeviceFlowStarted).isEqualTo("https://new-host.com")
+        assertThat((viewModel.deviceFlowState.value as DeviceFlowState.Waiting).userCode).isEqualTo("CODE-2")
+        viewModel.stopDeviceFlow()
+    }
+
+    @Test
+    fun `applying the same host keeps the current code`() = runTest {
+        fakeInteractor.deviceFlowSucceeds = true
+        viewModel.updateHost("https://host.com")
+        viewModel.startDeviceFlow()
+        runCurrent()
+
+        viewModel.applyDeviceFlowHost()
+        runCurrent()
+
+        assertThat(fakeInteractor.deviceFlowStartCount).isEqualTo(1)
+        assertThat((viewModel.deviceFlowState.value as DeviceFlowState.Waiting).userCode).isEqualTo("CODE-1")
+        viewModel.stopDeviceFlow()
+    }
+
+    @Test
+    fun `applying an invalid host shows the host error and keeps the current code`() = runTest {
+        fakeInteractor.deviceFlowSucceeds = true
+        viewModel.updateHost("https://host.com")
+        viewModel.startDeviceFlow()
+        runCurrent()
+
+        fakeInteractor.setHostResult = LoginViewModel.Interactor.SetHostResult.InvalidUrl
+        viewModel.updateHost("not a url")
+        viewModel.applyDeviceFlowHost()
+        runCurrent()
+
+        assertThat(viewModel.state.value.hostErrorRes).isEqualTo(R.string.invalid_url)
+        assertThat(fakeInteractor.deviceFlowStartCount).isEqualTo(1)
+        assertThat((viewModel.deviceFlowState.value as DeviceFlowState.Waiting).userCode).isEqualTo("CODE-1")
+        viewModel.stopDeviceFlow()
+    }
+
+    @Test
+    fun `applying a host after a failed start retries the device flow`() = runTest {
+        viewModel.updateHost("https://host.com")
+        viewModel.startDeviceFlow()
+        runCurrent()
+        assertThat(viewModel.deviceFlowState.value).isInstanceOf(DeviceFlowState.Error::class.java)
+
+        fakeInteractor.deviceFlowSucceeds = true
+        viewModel.applyDeviceFlowHost()
+        runCurrent()
+
+        assertThat(fakeInteractor.deviceFlowStartCount).isEqualTo(2)
+        assertThat(viewModel.deviceFlowState.value).isInstanceOf(DeviceFlowState.Waiting::class.java)
+        viewModel.stopDeviceFlow()
+    }
+
+    @Test
+    fun `host is configurable when the interactor allows it`() {
+        assertThat(viewModel.state.value.isHostConfigurable).isTrue()
+    }
+
+    @Test
+    fun `a pinned server is reported to the screen and the device flow uses the pinned host`() = runTest {
+        fakeInteractor.setInitialHost("https://pinned.example.com")
+        fakeInteractor.hostConfigurable = false
+        fakeInteractor.deviceFlowSucceeds = true
+        viewModel = LoginViewModel(fakeInteractor)
+
+        viewModel.startDeviceFlow()
+        runCurrent()
+
+        assertThat(viewModel.state.value.isHostConfigurable).isFalse()
+        assertThat(viewModel.state.value.host).isEqualTo("https://pinned.example.com")
+        assertThat(fakeInteractor.hostWhenDeviceFlowStarted).isEqualTo("https://pinned.example.com")
+        assertThat(viewModel.deviceFlowState.value).isInstanceOf(DeviceFlowState.Waiting::class.java)
+        viewModel.stopDeviceFlow()
+    }
+
     private class FakeInteractor : LoginViewModel.Interactor {
         private var _initialHost = ""
         private var _initialEmail = ""
@@ -229,6 +353,10 @@ class LoginViewModelTest {
         override fun getInitialHost(): String = _initialHost
 
         override fun getInitialEmail(): String = _initialEmail
+
+        var hostConfigurable = true
+
+        override fun isHostConfigurable(): Boolean = hostConfigurable
 
         private val _isLoggedIn = MutableStateFlow(false)
         override val isLoggedIn: kotlinx.coroutines.flow.Flow<Boolean> = _isLoggedIn
@@ -273,5 +401,29 @@ class LoginViewModelTest {
         override suspend fun handleOidcCallback(intent: Intent): LoginViewModel.Interactor.OidcLoginResult {
             return LoginViewModel.Interactor.OidcLoginResult.Error("Not implemented in test")
         }
+
+        var deviceFlowStartCount = 0
+        var hostWhenDeviceFlowStarted: String? = null
+
+        var deviceFlowSucceeds = false
+
+        override suspend fun startDeviceFlow(): DeviceFlowLoginController.StartResult {
+            deviceFlowStartCount++
+            hostWhenDeviceFlowStarted = lastSetHost
+            if (!deviceFlowSucceeds) return DeviceFlowLoginController.StartResult.Error("Not implemented in test")
+            return DeviceFlowLoginController.StartResult.Success(
+                DeviceFlowLoginController.DeviceCode(
+                    deviceCode = "device-code-$deviceFlowStartCount",
+                    userCode = "CODE-$deviceFlowStartCount",
+                    verificationUri = "https://auth.example.com/device",
+                    qrContent = "https://auth.example.com/device?user_code=CODE-$deviceFlowStartCount",
+                    expiresInMs = 600_000,
+                    intervalMs = 5_000,
+                )
+            )
+        }
+
+        override suspend fun pollDeviceFlow(deviceCode: String): DeviceFlowLoginController.PollResult =
+            DeviceFlowLoginController.PollResult.Pending
     }
 }

@@ -363,7 +363,11 @@ android.defaultConfig {
     manifestPlaceholders["oidcBrokerQueryHost"] = if (brokerEnabled) checkNotNull(brokerIssuerHost) else "unconfigured.invalid"
 
     // Server config from local.properties
-    val defaultBaseUrl = connectionProperties.getProperty("server.baseUrl", localProperties.getProperty("server.baseUrl", "http://10.0.2.2:3001"))
+    // An explicit server.baseUrl pins the server: the login flow hides the server field and the
+    // app ignores any previously saved host. Without it the emulator default stays editable.
+    val pinnedBaseUrl = deploymentProperty("server.baseUrl").trim()
+    val serverConfigurable = pinnedBaseUrl.isEmpty()
+    val defaultBaseUrl = pinnedBaseUrl.ifEmpty { "http://10.0.2.2:3001" }
     if (paravoidProduction) {
         require(isHttpsUrl(oidcIssuerUrl) && oidcClientId.isNotBlank()) {
             "Paravoid production requires an HTTPS oidc.issuerUrl and non-empty oidc.clientId in local.properties or -PconnectionPropertiesFile"
@@ -373,6 +377,18 @@ android.defaultConfig {
         }
     }
     buildConfigField("String", "DEFAULT_BASE_URL", "\"$defaultBaseUrl\"")
+    buildConfigField("boolean", "SERVER_CONFIGURABLE", serverConfigurable.toString())
+    // A pinned server cannot be changed on the device, so release builds must pin HTTPS.
+    if (!serverConfigurable && !isHttpsUrl(defaultBaseUrl)) {
+        val message = "server.baseUrl pins the server for release builds and must be an HTTPS URL " +
+            "(got \"$defaultBaseUrl\" from local.properties or -PconnectionPropertiesFile)"
+        tasks.configureEach {
+            // Every non-debug build type (release, releaseDebugSigned, paravoid*) has "Release" in its name.
+            if (name.startsWith("pre") && name.endsWith("Build") && name.contains("Release")) {
+                doFirst { throw GradleException(message) }
+            }
+        }
+    }
 
     // Assistant provider policy. "user" keeps provider selection in runtime settings;
     // a provider ID locks both the provider and its configuration at build time.

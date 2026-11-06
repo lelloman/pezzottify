@@ -142,19 +142,21 @@ internal fun LoginScreenInternal(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            OutlinedTextField(
-                enabled = !state.isLoading,
-                value = state.host,
-                onValueChange = actions::updateHost,
-                label = { Text(stringResource(R.string.server_url)) },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp),
-                isError = state.hostErrorRes != null,
-                supportingText = state.hostErrorRes?.let { { Text(stringResource(it)) } },
-                colors = textFieldColors,
-            )
+            if (state.isHostConfigurable) {
+                OutlinedTextField(
+                    enabled = !state.isLoading,
+                    value = state.host,
+                    onValueChange = actions::updateHost,
+                    label = { Text(stringResource(R.string.server_url)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    isError = state.hostErrorRes != null,
+                    supportingText = state.hostErrorRes?.let { { Text(stringResource(it)) } },
+                    colors = textFieldColors,
+                )
+            }
 
             OutlinedTextField(
                 enabled = !state.isLoading,
