@@ -5,6 +5,18 @@
       <p>See what’s playing and control your connected devices.</p>
     </header>
 
+    <div v-if="sessionStore.lastError" class="commandError" role="alert">
+      <span class="commandErrorText">{{ errorText }}</span>
+      <button
+        type="button"
+        class="commandErrorDismiss"
+        @click="sessionStore.clearError()"
+        title="Dismiss"
+      >
+        Dismiss
+      </button>
+    </div>
+
     <div v-if="allDevices.length === 0" class="emptyState">
       No devices connected.
     </div>
@@ -159,7 +171,7 @@
                   interpolatedRemotePositionSec(device.id, device.state),
                 )
               }}
-              / {{ formatMs(device.state.current_track.duration) }}</span
+              / {{ formatSec(device.state.current_track.duration) }}</span
             >
           </div>
           <div v-if="!device.state?.current_track" class="notPlaying">
@@ -282,7 +294,7 @@
             >{{
               formatSec(interpolatedRemotePositionSec(device.id, device.state))
             }}
-            / {{ formatMs(device.state.current_track.duration) }}</span
+            / {{ formatSec(device.state.current_track.duration) }}</span
           >
         </div>
         <div v-if="!device.state?.current_track" class="notPlaying">
@@ -532,38 +544,55 @@ watch(
 
 /**
  * Compute the interpolated position in seconds for a remote device.
- * Uses the last received state + elapsed time since the broadcast timestamp.
+ * Uses the last received state plus the time elapsed since this tab
+ * received it (local clock), never the sender's timestamp, because device
+ * clocks are not synchronized. Wire positions and durations are seconds.
  */
 function interpolatedRemotePositionSec(deviceId, state) {
   // Access tickCount to make this reactive on timer ticks
   void tickCount.value;
 
-  if (!state?.current_track?.duration || state.current_track.duration <= 0)
-    return 0;
+  const durationSec = state?.current_track?.duration || 0;
+  if (durationSec <= 0) return 0;
 
-  const basePosition = state.position || 0;
-  const durationSec = state.current_track.duration / 1000;
+  const basePosition = Math.max(0, state.position || 0);
+  const receivedAt = sessionStore.otherDeviceStates[deviceId]?.receivedAt;
 
-  if (!state.is_playing || !state.timestamp) {
+  if (!state.is_playing || !receivedAt) {
     return Math.min(basePosition, durationSec);
   }
 
-  // Interpolate: position + elapsed time since broadcast
-  const elapsedSec = (Date.now() - state.timestamp) / 1000;
-  return Math.min(basePosition + elapsedSec, durationSec);
+  const elapsedSec = Math.max(0, (Date.now() - receivedAt) / 1000);
+  return Math.max(0, Math.min(basePosition + elapsedSec, durationSec));
 }
 
 /**
  * Compute the interpolated progress (0-1) for a remote device.
  */
 function interpolatedRemoteProgress(deviceId, state) {
-  if (!state?.current_track?.duration || state.current_track.duration <= 0)
-    return 0;
-  const durationSec = state.current_track.duration / 1000;
+  const durationSec = state?.current_track?.duration || 0;
   if (durationSec <= 0) return 0;
   const posSec = interpolatedRemotePositionSec(deviceId, state);
   return Math.min(posSec / durationSec, 1);
 }
+
+const errorText = computed(() => {
+  const err = sessionStore.lastError;
+  if (!err) return "";
+  const what = err.command ? `"${err.command}" failed` : "Playback error";
+  switch (err.code) {
+    case "forbidden":
+      return `${what}: you are not allowed to control that device.`;
+    case "device_not_found":
+      return `${what}: that device is no longer connected.`;
+    case "unknown_command":
+      return `${what}: the server does not know this command.`;
+    case "no_target":
+      return "No device selected for this command.";
+    default:
+      return `${what}: ${err.message || err.code}`;
+  }
+});
 
 function formatSec(sec) {
   const s = Math.floor(sec || 0);
@@ -583,9 +612,9 @@ function sendCmd(command, deviceId) {
 }
 
 function onRemoteSeek(progress, deviceId, state) {
-  const durationMs = state?.current_track?.duration || 0;
-  if (durationMs <= 0) return;
-  const positionSec = progress * (durationMs / 1000);
+  const durationSec = state?.current_track?.duration || 0;
+  if (durationSec <= 0) return;
+  const positionSec = Math.max(0, Math.min(progress, 1)) * durationSec;
   sessionStore.sendCommand("seek", { position: positionSec }, deviceId);
 }
 
@@ -599,6 +628,7 @@ const allDevices = computed(() => {
     ...d,
     isThisDevice: d.id === myId,
     state: otherStates[d.id]?.state || null,
+    receivedAt: otherStates[d.id]?.receivedAt || null,
   }));
 });
 
@@ -811,6 +841,31 @@ const sharedDevices = computed(() =>
 .policyError {
   font-size: 13px;
   color: #f3727f;
+}
+.commandError {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid rgba(243, 114, 127, 0.4);
+  border-radius: 8px;
+  background: rgba(243, 114, 127, 0.1);
+  color: #f3727f;
+  font-size: 13px;
+}
+.commandErrorText {
+  flex: 1;
+  min-width: 0;
+}
+.commandErrorDismiss {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
 }
 .policyModeRow,
 .policyRoleRow {

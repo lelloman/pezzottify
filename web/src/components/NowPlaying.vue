@@ -108,7 +108,7 @@ watch(
 );
 const imageUrls = computed(() => {
   const track = playback.currentTrack;
-  const imageId = playback.mode === "remote" ? track?.imageId : track?.albumId;
+  const imageId = track?.imageId;
   return imageId ? [`/v1/content/image/${imageId}`] : [];
 });
 watch(imageUrls, () => {

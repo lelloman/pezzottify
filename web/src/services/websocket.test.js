@@ -31,7 +31,7 @@ globalThis.WebSocket = class {
     this.onmessage({ data: JSON.stringify({ type: "connected", payload: { device_id: 1 } }) });
   }
 };
-const { connect, disconnect, wsConnected } = await import("./websocket.js");
+const { connect, disconnect, wsConnected, setKeepAliveProvider } = await import("./websocket.js");
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 const reply = (state) => new Response(JSON.stringify({ state }), {
   headers: { "content-type": "application/json" },
@@ -208,4 +208,30 @@ test("hung availability check cannot block foreground recovery", async (t) => {
     assert.equal(wsConnected.value, true);
     assert.equal(sockets.at(-1), replacement);
   } finally { disconnect(); }
+});
+
+test("a playing hidden tab keeps its heartbeat and reconnects while hidden", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  globalThis.fetch = async () => reply("ready");
+  let alive = true;
+  setKeepAliveProvider(() => alive);
+  try {
+    connect(); const original = sockets.at(-1); original.confirm();
+    visibility(true);
+    // Hiding the tab probes immediately and keeps the heartbeat running.
+    assert.equal(original.sent.length, 1); original.pong();
+    t.mock.timers.tick(30000);
+    assert.equal(original.sent.length, 2);
+    assert.equal(original.sent.at(-1).type, "ping"); original.pong();
+    original.close(1006);
+    t.mock.timers.tick(30000); await flush();
+    const replacement = sockets.at(-1);
+    assert.notEqual(replacement, original);
+    replacement.confirm();
+    assert.equal(wsConnected.value, true);
+    alive = false;
+    const sentBefore = replacement.sent.length;
+    t.mock.timers.tick(3600000);
+    assert.equal(replacement.sent.length, sentBefore);
+  } finally { setKeepAliveProvider(null); disconnect(); document.hidden = false; }
 });

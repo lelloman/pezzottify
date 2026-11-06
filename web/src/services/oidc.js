@@ -178,8 +178,9 @@ function getDeviceInfo() {
 
 /**
  * Get or create a persistent device ID.
+ * Shared by the OIDC and password login paths and the playback session.
  */
-function getOrCreateDeviceId() {
+export function getOrCreateDeviceId() {
   const DEVICE_ID_KEY = "pezzottify_device_id";
   let deviceId = localStorage.getItem(DEVICE_ID_KEY);
   if (!deviceId) {
@@ -212,8 +213,9 @@ export function getLastUsername() {
 
 /**
  * Get a human-readable device name based on browser/platform info.
+ * Shared by the OIDC and password login paths and the playback session.
  */
-function getDeviceName() {
+export function getDeviceName() {
   const userAgent = navigator.userAgent;
   let browser = "Browser";
   let os = "Unknown";

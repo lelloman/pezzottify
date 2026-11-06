@@ -12,13 +12,14 @@ import { onServerReady, powerStatus } from "./power.js";
 const socket = shallowRef(null);
 const connected = ref(false);
 const connecting = ref(false);
-const deviceId = ref(null);
 const serverVersion = ref(null);
 
 // Message handlers by type prefix
 const handlers = new Map();
 
-// Retry and liveness work runs only while this tab is visible.
+// Retry and liveness work runs only while this tab is visible, unless the
+// keep-alive provider says the tab must stay reachable (it is playing or
+// reporting playback state).
 const RETRY_MS = 30000;
 const CONNECTION_TIMEOUT_MS = 10000;
 const PONG_TIMEOUT_MS = 10000;
@@ -31,8 +32,24 @@ let heartbeatTimeout = null;
 let pongTimeout = null;
 let connectionStartedAt = 0;
 
+let keepAliveProvider = null;
+
+/**
+ * Register a predicate that keeps liveness and reconnect work running while
+ * the tab is hidden. Pass null to clear it.
+ * @param {(() => boolean) | null} provider
+ */
+export function setKeepAliveProvider(provider) {
+  keepAliveProvider = typeof provider === "function" ? provider : null;
+}
+
+function keepAlive() {
+  try { return keepAliveProvider?.() === true; }
+  catch { return false; }
+}
+
 function foreground() {
-  return typeof document === "undefined" || !document.hidden;
+  return typeof document === "undefined" || !document.hidden || keepAlive();
 }
 
 function clearSocketTimers() {
@@ -56,7 +73,6 @@ function resetSocket(ws, delay = RETRY_MS) {
   socket.value = null;
   connected.value = false;
   connecting.value = false;
-  deviceId.value = null;
   serverVersion.value = null;
   try { ws.close(1000, "Connection recovery"); } catch { /* Already closed. */ }
   scheduleReconnect(delay);
@@ -302,7 +318,6 @@ function handleMessage(msg) {
   if (type === "connected") {
     connected.value = true;
     connecting.value = false;
-    deviceId.value = payload.device_id;
     serverVersion.value = payload.server_version;
     console.log(
       "[WS] Connected as device:",
@@ -339,7 +354,6 @@ function handleMessage(msg) {
 
 // Export reactive state as computed refs
 export const wsConnected = computed(() => connected.value);
-export const wsDeviceId = computed(() => deviceId.value);
 export const wsServerVersion = computed(() => serverVersion.value);
 
 /**
@@ -357,7 +371,6 @@ export function getConnectionState() {
   return {
     connected: connected.value,
     connecting: connecting.value,
-    deviceId: deviceId.value,
     serverVersion: serverVersion.value,
     socketState: socket.value?.readyState,
     handlersCount: handlers.size,

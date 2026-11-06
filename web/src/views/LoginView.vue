@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import { useAuthStore } from "@/store/auth.js";
 import { useRouter } from "vue-router";
+import { getOrCreateDeviceId, getDeviceName } from "@/services/oidc.js";
 import MusicNoteIcon from "@/components/icons/MusicNoteIcon.vue";
 
 const authStore = useAuthStore();
@@ -38,9 +39,9 @@ async function handlePasswordLogin() {
       body: JSON.stringify({
         user_handle: username.value,
         password: password.value,
-        device_uuid: crypto.randomUUID(),
+        device_uuid: getOrCreateDeviceId(),
         device_type: "web",
-        device_name: navigator.userAgent.substring(0, 50),
+        device_name: getDeviceName(),
       }),
     });
 

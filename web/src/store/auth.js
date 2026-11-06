@@ -77,13 +77,14 @@ export const useAuthStore = defineStore("auth", {
           playbackSessionStore.handleMessage(type, payload),
         );
 
-        ws.connect();
-
-        // Wire up playback session store <-> playback store
+        // Wire up playback session store <-> playback store before the
+        // socket opens, so commands arriving early are not dropped.
         const { usePlaybackStore } = await import("./playback");
         const playbackStore = usePlaybackStore();
         playbackSessionStore.setPlaybackStore(playbackStore);
         playbackStore.setSessionStore(playbackSessionStore);
+
+        ws.connect();
         playbackSessionStore.initialize();
 
         // Announce persisted playback state (e.g. after page refresh)

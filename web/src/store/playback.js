@@ -319,7 +319,9 @@ export const usePlaybackStore = defineStore("playback", () => {
   // Remote mode: Position interpolation
   // ============================================
 
-  let _remoteTimestamp = 0;
+  // Anchor is the local arrival time of the last remote state, never the
+  // sender's clock (device clocks are not synchronized).
+  let _remoteReceivedAt = 0;
   let _remotePosition = 0;
   let _remoteIsPlaying = false;
   let _interpolationFrame = null;
@@ -329,10 +331,10 @@ export const usePlaybackStore = defineStore("playback", () => {
     function tick() {
       if (mode.value !== "remote") return;
       if (_remoteIsPlaying) {
-        const elapsed = (Date.now() - _remoteTimestamp) / 1000;
+        const elapsed = Math.max(0, (Date.now() - _remoteReceivedAt) / 1000);
         const interpolated = _remotePosition + elapsed;
         const durSec = (currentTrack.value?.duration || 0) / 1000;
-        progressSec.value = Math.min(interpolated, durSec);
+        progressSec.value = Math.max(0, Math.min(interpolated, durSec));
         progressPercent.value = durSec > 0 ? progressSec.value / durSec : 0;
       }
       _interpolationFrame = requestAnimationFrame(tick);
@@ -351,7 +353,9 @@ export const usePlaybackStore = defineStore("playback", () => {
   // Remote mode: State application
   // ============================================
 
-  function applyRemoteState(state) {
+  // `receivedAt` is when this tab received the state (local clock).
+  // Wire durations and positions are seconds; the store keeps ms durations.
+  function applyRemoteState(state, receivedAt = Date.now()) {
     if (mode.value !== "remote") return;
 
     console.debug("[Playback] applyRemoteState", {
@@ -364,11 +368,11 @@ export const usePlaybackStore = defineStore("playback", () => {
     isPlaying.value = state.is_playing;
     volume.value = state.volume;
     muted.value = state.muted;
-    progressSec.value = state.position;
+    progressSec.value = Math.max(0, state.position || 0);
 
     // Update interpolation anchor
-    _remoteTimestamp = state.timestamp || Date.now();
-    _remotePosition = state.position;
+    _remoteReceivedAt = receivedAt || Date.now();
+    _remotePosition = Math.max(0, state.position || 0);
     _remoteIsPlaying = state.is_playing;
 
     if (state.current_track) {
@@ -379,19 +383,20 @@ export const usePlaybackStore = defineStore("playback", () => {
         artistName: state.current_track.artist_name,
         albumId: state.current_track.album_id,
         albumTitle: state.current_track.album_title,
-        duration: state.current_track.duration,
+        duration: (state.current_track.duration || 0) * 1000,
         trackNumber: state.current_track.track_number,
         imageId: state.current_track.image_id,
       };
       currentTrackId.value = state.current_track.id;
-      localDuration.value = state.current_track.duration;
+      localDuration.value = (state.current_track.duration || 0) * 1000;
     } else {
       currentTrack.value = null;
       currentTrackId.value = null;
     }
 
-    const durSec = (state.current_track?.duration || 0) / 1000;
-    progressPercent.value = durSec > 0 ? state.position / durSec : 0;
+    const durSec = state.current_track?.duration || 0;
+    progressPercent.value =
+      durSec > 0 ? Math.max(0, Math.min(progressSec.value / durSec, 1)) : 0;
   }
 
   function applyRemoteQueue(queue, context = null) {
@@ -420,12 +425,17 @@ export const usePlaybackStore = defineStore("playback", () => {
   // Remote mode: Enter / Exit
   // ============================================
 
-  function enterRemoteMode() {
+  // Remote mode is scaffolding for playback transfer; no UI enters it yet.
+  function enterRemoteMode(deviceId = null) {
     radioCreation.cancel();
     cancelRadioContinuation();
-    console.info("[Playback] enterRemoteMode");
+    console.info("[Playback] enterRemoteMode", { deviceId });
+    const session = getSessionStore();
+    if (mode.value === "local") session?.notifyStopped?.();
     localOutlet.stop();
+    isPlaying.value = false;
     mode.value = "remote";
+    if (session) session.controlledDeviceId = deviceId;
     startInterpolation();
   }
 
@@ -433,6 +443,17 @@ export const usePlaybackStore = defineStore("playback", () => {
     radioCreation.cancel();
     console.info("[Playback] exitRemoteMode");
     stopInterpolation();
+    const session = getSessionStore();
+    if (session) session.controlledDeviceId = null;
+    // Drop the remote device's state before restoring our own.
+    isPlaying.value = false;
+    currentTrack.value = null;
+    currentTrackId.value = null;
+    currentTrackIndex.value = null;
+    currentPlaylistIndex.value = null;
+    playlistsHistory.value = [];
+    progressSec.value = 0;
+    progressPercent.value = 0;
     mode.value = "local";
     loadPersistedState();
   }
@@ -452,7 +473,8 @@ export const usePlaybackStore = defineStore("playback", () => {
             artists_ids: [currentTrack.value.artistId],
             album_id: currentTrack.value.albumId,
             album_title: currentTrack.value.albumTitle,
-            duration: currentTrack.value.duration,
+            // Wire durations are seconds; the store keeps ms.
+            duration: (currentTrack.value.duration || 0) / 1000,
             track_number: currentTrack.value.trackNumber ?? null,
             image_id: currentTrack.value.imageId ?? null,
           }

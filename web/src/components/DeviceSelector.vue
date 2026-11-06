@@ -30,7 +30,7 @@
           v-for="device in devices"
           :key="device.id"
           class="deviceItem"
-          :class="{ activeDevice: device.is_playing }"
+          :class="{ activeDevice: isDevicePlaying(device) }"
         >
           <div class="deviceIcon">
             <svg
@@ -61,8 +61,13 @@
             <span v-if="device.id === myDeviceId" class="deviceBadge"
               >This device</span
             >
-            <span v-if="device.is_playing" class="deviceBadge playing"
+            <span v-if="isDevicePlaying(device)" class="deviceBadge playing"
               >Playing</span
+            >
+            <span
+              v-else-if="hasSession(device)"
+              class="deviceBadge"
+              >Paused</span
             >
             <span v-if="device.is_shared" class="deviceBadge shared">
               Shared by {{ device.owner_handle || "Unknown" }}
@@ -85,6 +90,19 @@ const selectorRef = ref(null);
 const devices = computed(() => sessionStore.devices);
 const myDeviceId = computed(() => sessionStore.myDeviceId);
 const otherDevicesCount = computed(() => sessionStore.otherDevicesCount);
+
+// Prefer the latest relayed state over the device list's snapshot, which only
+// refreshes when the server sends a device_list_changed.
+function isDevicePlaying(device) {
+  const relayed = sessionStore.otherDeviceStates[device.id]?.state;
+  if (relayed) return Boolean(relayed.is_playing);
+  return Boolean(device.is_playing);
+}
+
+function hasSession(device) {
+  if (sessionStore.otherDeviceStates[device.id]) return true;
+  return Boolean(device.has_session);
+}
 
 const buttonTitle = computed(() => {
   const count = devices.value.length;

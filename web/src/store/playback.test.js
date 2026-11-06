@@ -200,11 +200,20 @@ test("replaced or paused sessions reject delayed results without restarting audi
 test("remote playback transports the snapshot and never generates on the controller", async () => {
   const { store, calls } = harness();
   const commands = [];
-  store.setSessionStore({
+  let stops = 0;
+  const session = {
+    controlledDeviceId: null,
     sendCommand: (...args) => commands.push(args),
     notifyStateChanged() {},
-  });
-  store.enterRemoteMode();
+    notifyStopped() {
+      stops++;
+    },
+  };
+  store.setSessionStore(session);
+  store.enterRemoteMode(7);
+  assert.equal(session.controlledDeviceId, 7);
+  assert.equal(stops, 1);
+  assert.equal(store.mode, "remote");
   await store.setArtistGreatestHits("artist");
   assert.equal(commands[0][0], "loadTrackIds");
   const payload = commands[0][1];
@@ -218,6 +227,9 @@ test("remote playback transports the snapshot and never generates on the control
   assert.equal(calls.radio, 0);
   assert.equal(calls.smart, 0);
   store.exitRemoteMode();
+  assert.equal(session.controlledDeviceId, null);
+  assert.equal(store.mode, "local");
+  assert.equal(store.isPlaying, false);
   store.setSessionStore(null);
   store.stop();
 });
