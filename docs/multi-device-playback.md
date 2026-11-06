@@ -252,7 +252,6 @@ and `playback.queue_update` if the queue changed.
   controls that send commands. The bottom-bar device selector lists devices.
 - The WebSocket keeps pinging and reconnecting while the tab is hidden if the
   tab is playing or reporting, so a background tab stays reachable.
-- The remote-mode branch of the playback store is not wired to the UI.
 
 ### Android
 
@@ -271,8 +270,9 @@ and `playback.queue_update` if the queue changed.
   foreground or not. A paused device therefore stays reachable, and it drops
   off other devices' lists only once its session ends and the app is in the
   background.
-- Swiping the app away pauses and ends everything: local playback, or the target
-  in controller mode, following the rule that leaving controller mode pauses it.
+- Swiping the app away stops local playback. In controller mode it only ends
+  control: the target keeps playing, unlike leaving controller mode from the UI,
+  which pauses it.
 - The TV build is a target only. It has no Devices screen and shows a
   "waiting for playback" card with its device name and connection status.
 

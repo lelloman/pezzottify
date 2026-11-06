@@ -38,7 +38,6 @@ import com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider
 import com.lelloman.pezzottify.android.domain.player.PlaybackMode
 import com.lelloman.pezzottify.android.domain.player.PlaybackModeManager
 import com.lelloman.pezzottify.android.domain.player.TrackMetadata
-import com.lelloman.pezzottify.android.domain.playbacksession.PlaybackSessionHandler
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.remoteapi.internal.OkHttpClientFactory
 import com.lelloman.pezzottify.android.remoteapi.internal.SessionExpiredInterceptor
@@ -95,9 +94,6 @@ class PlaybackService : MediaSessionService() {
 
     @Inject
     lateinit var playbackModeManager: PlaybackModeManager
-
-    @Inject
-    lateinit var playbackSessionHandler: PlaybackSessionHandler
 
     @Inject
     lateinit var routedPlayer: PezzottifyPlayer
@@ -402,8 +398,9 @@ class PlaybackService : MediaSessionService() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         diagnostics.record("task_removed", player)
         super.onTaskRemoved(rootIntent)
-        // Same rule as leaving the controller from the UI: the remote device gets paused.
-        playbackSessionHandler.exitRemoteMode()
+        // Closing the app on this device must not stop music on the other one, so unlike
+        // leaving the controller from the UI, this does not pause the remote device.
+        playbackModeManager.exitRemoteMode()
         releaseRemoteSession()
         releasePlayerAndSession()
         playerServiceEventsEmitter.shutdown()

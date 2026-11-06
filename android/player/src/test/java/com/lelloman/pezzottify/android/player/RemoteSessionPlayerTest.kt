@@ -136,6 +136,18 @@ class RemoteSessionPlayerTest {
     }
 
     @Test
+    fun `releasing the session leaves the remote device playing`() {
+        player.update(snapshot(isPlaying = true))
+        idle()
+
+        player.release()
+        idle()
+
+        verify(exactly = 0) { controls.setIsPlaying(any()) }
+        verify(exactly = 0) { controls.stop() }
+    }
+
+    @Test
     fun `snapshots combine the queue with the routed player state`() = runBlocking {
         val metadata = TrackMetadata(
             trackId = "t",
