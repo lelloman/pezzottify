@@ -23,6 +23,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.json.JsonObject
 import kotlinx.coroutines.Dispatchers
@@ -218,6 +219,72 @@ class PlaybackSessionHandlerTest {
         assertThat(totalHelloCount).isEqualTo(2)
     }
 
+    private fun helloCount() = sentMessages.count { it.first == "playback.hello" }
+
+    private fun connectForHello() {
+        connectionStateFlow.value = ConnectionState.Connected(deviceId = 1, serverVersion = "1.0")
+        testDispatcher.scheduler.runCurrent()
+    }
+
+    @Test
+    fun `hello is retried until the attempt limit when no welcome arrives`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+        connectForHello()
+
+        testScheduler.advanceTimeBy(PlaybackSessionHandler.HELLO_RETRY_INTERVAL_MS + 1)
+        testScheduler.runCurrent()
+        assertThat(helloCount()).isEqualTo(2)
+
+        testScheduler.advanceTimeBy(PlaybackSessionHandler.HELLO_RETRY_INTERVAL_MS * 60)
+        testScheduler.runCurrent()
+        assertThat(helloCount()).isEqualTo(PlaybackSessionHandler.HELLO_MAX_ATTEMPTS)
+    }
+
+    @Test
+    fun `a welcome stops the hello retries`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+        connectForHello()
+
+        capturedMessageHandler.onMessage("playback.welcome", """{"device_id":1,"devices":[]}""")
+        testScheduler.advanceTimeBy(PlaybackSessionHandler.HELLO_RETRY_INTERVAL_MS * 5)
+        testScheduler.runCurrent()
+
+        assertThat(helloCount()).isEqualTo(1)
+    }
+
+    @Test
+    fun `an error before any welcome stops the hello retries`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+        connectForHello()
+
+        capturedMessageHandler.onMessage("playback.error", """{"code":"invalid_message","message":"no"}""")
+        testScheduler.advanceTimeBy(PlaybackSessionHandler.HELLO_RETRY_INTERVAL_MS * 5)
+        testScheduler.runCurrent()
+
+        assertThat(helloCount()).isEqualTo(1)
+    }
+
+    @Test
+    fun `disconnecting stops the hello retries`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+        connectForHello()
+
+        connectionStateFlow.value = ConnectionState.Disconnected
+        testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(PlaybackSessionHandler.HELLO_RETRY_INTERVAL_MS * 5)
+        testScheduler.runCurrent()
+
+        assertThat(helloCount()).isEqualTo(1)
+    }
+
     // ========== Broadcast State Tests ==========
 
     @Test
@@ -272,7 +339,9 @@ class PlaybackSessionHandlerTest {
         assertThat(currentTrack["artist_name"]).isEqualTo("Test Artist")
         assertThat(currentTrack["album_id"]).isEqualTo("album-1")
         assertThat(currentTrack["album_title"]).isEqualTo("Test Album")
-        assertThat(currentTrack["duration"]).isEqualTo(300_000L)
+        // Seconds on the wire (docs/multi-device-playback.md), never milliseconds.
+        assertThat(currentTrack["duration"]).isEqualTo(300.0)
+        assertThat(currentTrack["artists_ids"]).isEqualTo(listOf("artist-1"))
         assertThat(currentTrack["image_id"]).isEqualTo("image-1")
     }
 
@@ -815,7 +884,7 @@ class PlaybackSessionHandlerTest {
 
         capturedMessageHandler.onMessage(
             "playback.welcome",
-            """{"device_id":1,"devices":[{"id":1,"name":"Android","device_type":"android"},{"id":2,"name":"Web","device_type":"web"}],"session":{"active_devices":[{"device_id":2,"device_name":"Web","state":{"current_track":{"id":"t1","title":"Song","artist_name":"Artist","album_title":"Album","duration":180000,"image_id":"img1"},"position":45.0,"is_playing":true,"volume":0.8,"muted":false,"shuffle":false,"repeat":"off","timestamp":1000}}]}}"""
+            """{"device_id":1,"devices":[{"id":1,"name":"Android","device_type":"android"},{"id":2,"name":"Web","device_type":"web"}],"session":{"active_devices":[{"device_id":2,"device_name":"Web","state":{"current_track":{"id":"t1","title":"Song","artist_name":"Artist","album_title":"Album","duration":180.0,"image_id":"img1"},"position":45.0,"is_playing":true,"volume":0.8,"muted":false,"shuffle":false,"repeat":"off","timestamp":1000}}]}}"""
         )
 
         assertThat(handler.otherDeviceStates.value).hasSize(1)
@@ -859,7 +928,7 @@ class PlaybackSessionHandlerTest {
 
         capturedMessageHandler.onMessage(
             "playback.device_state",
-            """{"device_id":3,"device_name":"Phone","state":{"current_track":{"id":"t2","title":"Track 2","artist_name":"Art","duration":200000,"image_id":"i2"},"position":10.5,"is_playing":true,"volume":1.0,"muted":false,"shuffle":true,"repeat":"all","timestamp":2000}}"""
+            """{"device_id":3,"device_name":"Phone","state":{"current_track":{"id":"t2","title":"Track 2","artist_name":"Art","duration":200.0,"image_id":"i2"},"position":10.5,"is_playing":true,"volume":1.0,"muted":false,"shuffle":true,"repeat":"all","timestamp":2000}}"""
         )
 
         assertThat(handler.otherDeviceStates.value).hasSize(1)
@@ -999,6 +1068,230 @@ class PlaybackSessionHandlerTest {
         @Suppress("UNCHECKED_CAST")
         val cmdPayload = payload["payload"] as Map<String, Any?>
         assertThat(cmdPayload["position"]).isEqualTo(45.0)
+    }
+
+    // ========== Contract: units, guards, re-sends ==========
+
+    @Test
+    fun `stopped state sends position as a double`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+        connectionStateFlow.value = ConnectionState.Connected(deviceId = 1, serverVersion = "1.0")
+        testScheduler.runCurrent()
+        setUpActivePlayer()
+        testScheduler.runCurrent()
+        sentMessages.clear()
+
+        isActiveFlow.value = false
+        testScheduler.runCurrent()
+
+        @Suppress("UNCHECKED_CAST")
+        val payload = sentMessages.first { it.first == "playback.state" }.second as Map<String, Any?>
+        assertThat(payload["current_track"]).isNull()
+        assertThat(payload["position"]).isEqualTo(0.0)
+    }
+
+    @Test
+    fun `incoming command is ignored while controlling another device`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+        connectionStateFlow.value = ConnectionState.Connected(deviceId = 1, serverVersion = "1.0")
+        testScheduler.runCurrent()
+        playbackModeManager.enterRemoteMode(deviceId = 2, deviceName = "TV")
+        sentMessages.clear()
+
+        capturedMessageHandler.onMessage("playback.command", """{"command":"play","payload":{}}""")
+        testScheduler.runCurrent()
+
+        verify(exactly = 0) { player.setIsPlaying(any()) }
+        assertThat(sentMessages.filter { it.first == "playback.state" }).isEmpty()
+    }
+
+    @Test
+    fun `queue_update is sent when broadcasting starts even if the playlist was set earlier`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+        connectionStateFlow.value = ConnectionState.Connected(deviceId = 1, serverVersion = "1.0")
+        testScheduler.runCurrent()
+        sentMessages.clear()
+
+        // Same order as PlayerImpl.tryRestoreState: playlist first, active afterwards.
+        setUpActivePlayer()
+        testScheduler.runCurrent()
+
+        val queueMessage = sentMessages.find { it.first == "playback.queue_update" }
+        assertThat(queueMessage).isNotNull()
+        @Suppress("UNCHECKED_CAST")
+        val queue = (queueMessage!!.second as Map<String, Any?>)["queue"] as List<Map<String, Any?>>
+        assertThat(queue.map { it["id"] }).containsExactly("track-1")
+    }
+
+    @Test
+    fun `queue_update is re-sent after a reconnect`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+        connectionStateFlow.value = ConnectionState.Connected(deviceId = 1, serverVersion = "1.0")
+        testScheduler.runCurrent()
+        setUpActivePlayer()
+        testScheduler.runCurrent()
+
+        connectionStateFlow.value = ConnectionState.Disconnected
+        testScheduler.runCurrent()
+        sentMessages.clear()
+
+        connectionStateFlow.value = ConnectionState.Connected(deviceId = 1, serverVersion = "1.0")
+        testScheduler.runCurrent()
+
+        val types = sentMessages.map { it.first }
+        assertThat(types).contains("playback.hello")
+        assertThat(types).contains("playback.state")
+        assertThat(types).contains("playback.queue_update")
+    }
+
+    @Test
+    fun `welcome without device_id keeps the id from the connected message`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+        connectionStateFlow.value = ConnectionState.Connected(deviceId = 5, serverVersion = "1.0")
+        testScheduler.runCurrent()
+
+        capturedMessageHandler.onMessage("playback.welcome", """{"devices":[],"session":{"active_devices":[]}}""")
+
+        assertThat(handler.myDeviceId.value).isEqualTo(5)
+    }
+
+    @Test
+    fun `deviceListFresh is set by welcome and reset by disconnect`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+        connectionStateFlow.value = ConnectionState.Connected(deviceId = 1, serverVersion = "1.0")
+        testScheduler.runCurrent()
+        assertThat(handler.deviceListFresh.value).isFalse()
+
+        capturedMessageHandler.onMessage("playback.welcome", """{"device_id":1,"devices":[],"session":{"active_devices":[]}}""")
+        assertThat(handler.deviceListFresh.value).isTrue()
+
+        connectionStateFlow.value = ConnectionState.Disconnected
+        testScheduler.runCurrent()
+        assertThat(handler.deviceListFresh.value).isFalse()
+    }
+
+    @Test
+    fun `device list parses playing session and sharing flags`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+
+        capturedMessageHandler.onMessage(
+            "playback.device_list_changed",
+            """{"devices":[{"id":2,"name":"Kitchen","device_type":"android","is_playing":false,"has_session":true,"is_shared":true,"owner_handle":"alex"}],"change":{"type":"playback_changed","device_id":2}}"""
+        )
+
+        val device = handler.connectedDevices.value.single()
+        assertThat(device.isPlaying).isFalse()
+        assertThat(device.hasSession).isTrue()
+        assertThat(device.isShared).isTrue()
+        assertThat(device.ownerHandle).isEqualTo("alex")
+    }
+
+    @Test
+    fun `playback error is exposed with its code and command`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+        val received = mutableListOf<PlaybackSessionError>()
+        backgroundScope.launch { handler.errors.collect { received.add(it) } }
+        testScheduler.runCurrent()
+
+        capturedMessageHandler.onMessage(
+            "playback.error",
+            """{"code":"forbidden","message":"Forbidden","context":{"command":"play"}}"""
+        )
+        testScheduler.runCurrent()
+
+        assertThat(received).containsExactly(PlaybackSessionError("forbidden", "Forbidden", "play"))
+    }
+
+    @Test
+    fun `incoming track duration is parsed as seconds`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+
+        capturedMessageHandler.onMessage(
+            "playback.device_state",
+            """{"device_id":2,"device_name":"Web","state":{"current_track":{"id":"t1","title":"Long","artist_id":"a1","artists_ids":["a1","a2"],"album_id":"al1","duration":1234.5,"track_number":7},"position":10.0,"is_playing":true,"volume":1,"muted":false,"shuffle":false,"repeat":"off","timestamp":0}}"""
+        )
+
+        val track = handler.otherDeviceStates.value[2]!!.currentTrack!!
+        assertThat(track.durationMs).isEqualTo(1_234_500L)
+        assertThat(track.artistId).isEqualTo("a1")
+        assertThat(track.albumId).isEqualTo("al1")
+        assertThat(track.artistsIds).containsExactly("a1", "a2").inOrder()
+        assertThat(track.trackNumber).isEqualTo(7)
+    }
+
+    // ========== Remote mode entry / exit ==========
+
+    @Test
+    fun `enterRemoteMode refuses this device`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+        connectionStateFlow.value = ConnectionState.Connected(deviceId = 1, serverVersion = "1.0")
+        testScheduler.runCurrent()
+
+        handler.enterRemoteMode(deviceId = 1, deviceName = "Me")
+
+        assertThat(playbackModeManager.mode.value).isEqualTo(com.lelloman.pezzottify.android.domain.player.PlaybackMode.Local)
+    }
+
+    @Test
+    fun `enterRemoteMode pauses the previous remote and requests the new queue`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+        connectionStateFlow.value = ConnectionState.Connected(deviceId = 1, serverVersion = "1.0")
+        testScheduler.runCurrent()
+
+        handler.enterRemoteMode(deviceId = 2, deviceName = "TV")
+        sentMessages.clear()
+        handler.enterRemoteMode(deviceId = 3, deviceName = "Web")
+
+        @Suppress("UNCHECKED_CAST")
+        val pause = sentMessages.first { it.first == "playback.command" }.second as Map<String, Any?>
+        assertThat(pause["command"]).isEqualTo("pause")
+        assertThat(pause["target_device_id"]).isEqualTo(2)
+        @Suppress("UNCHECKED_CAST")
+        val request = sentMessages.first { it.first == "playback.request_queue" }.second as Map<String, Any?>
+        assertThat(request["target_device_id"]).isEqualTo(3)
+        assertThat(playbackModeManager.mode.value)
+            .isEqualTo(com.lelloman.pezzottify.android.domain.player.PlaybackMode.Remote(3, "Web"))
+    }
+
+    @Test
+    fun `exitRemoteMode pauses the remote and goes local`() = runTest {
+        handler = createHandler(backgroundScope)
+        handler.initialize()
+        testScheduler.runCurrent()
+        connectionStateFlow.value = ConnectionState.Connected(deviceId = 1, serverVersion = "1.0")
+        testScheduler.runCurrent()
+        handler.enterRemoteMode(deviceId = 2, deviceName = "TV")
+        sentMessages.clear()
+
+        handler.exitRemoteMode()
+
+        @Suppress("UNCHECKED_CAST")
+        val pause = sentMessages.first { it.first == "playback.command" }.second as Map<String, Any?>
+        assertThat(pause["command"]).isEqualTo("pause")
+        assertThat(pause["target_device_id"]).isEqualTo(2)
+        assertThat(playbackModeManager.mode.value).isEqualTo(com.lelloman.pezzottify.android.domain.player.PlaybackMode.Local)
     }
 
     companion object {

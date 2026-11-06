@@ -36,7 +36,7 @@ class WebSocketInitializerTest {
     private lateinit var authStateFlow: MutableStateFlow<AuthState>
     private lateinit var isInForegroundFlow: MutableStateFlow<Boolean>
     private lateinit var isNetworkAvailableFlow: MutableStateFlow<Boolean>
-    private lateinit var isPlayingFlow: MutableStateFlow<Boolean>
+    private lateinit var mediaSessionActiveFlow: MutableStateFlow<Boolean>
     private lateinit var isKeptAliveExternallyFlow: MutableStateFlow<Boolean>
     private lateinit var connectionStateFlow: MutableStateFlow<ConnectionState>
 
@@ -53,7 +53,7 @@ class WebSocketInitializerTest {
         authStateFlow = MutableStateFlow(AuthState.LoggedOut)
         isInForegroundFlow = MutableStateFlow(false)
         isNetworkAvailableFlow = MutableStateFlow(true)
-        isPlayingFlow = MutableStateFlow(false)
+        mediaSessionActiveFlow = MutableStateFlow(false)
         isKeptAliveExternallyFlow = MutableStateFlow(false)
         connectionStateFlow = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
 
@@ -61,7 +61,7 @@ class WebSocketInitializerTest {
         every { appLifecycleObserver.isInForeground } returns isInForegroundFlow
         every { appLifecycleObserver.isKeptAliveExternally } returns isKeptAliveExternallyFlow
         every { networkConnectivityObserver.isNetworkAvailable } returns isNetworkAvailableFlow
-        every { player.isPlaying } returns isPlayingFlow
+        every { player.isActive } returns mediaSessionActiveFlow
         every { webSocketManager.connectionState } returns connectionStateFlow
 
         coEvery { syncManager.catchUp() } returns true
@@ -77,6 +77,52 @@ class WebSocketInitializerTest {
         catalogSyncManager = catalogSyncManager,
         scope = scope,
     )
+
+    @Test
+    fun `socket stays connected in the background while a media session is active but paused`() = runTest {
+        val testDispatcher = StandardTestDispatcher(testScheduler)
+        val initializerScope = CoroutineScope(Job() + testDispatcher)
+
+        try {
+            authStateFlow.value = mockk<AuthState.LoggedIn>(relaxed = true)
+            isInForegroundFlow.value = false
+            mediaSessionActiveFlow.value = true
+
+            val webSocketInitializer = createWebSocketInitializer(initializerScope)
+            webSocketInitializer.initialize()
+            advanceUntilIdle()
+
+            coVerify(exactly = 1) { webSocketManager.connect() }
+            coVerify(exactly = 0) { webSocketManager.disconnect() }
+        } finally {
+            initializerScope.cancel()
+        }
+    }
+
+    @Test
+    fun `socket disconnects in the background once the media session ends`() = runTest {
+        val testDispatcher = StandardTestDispatcher(testScheduler)
+        val initializerScope = CoroutineScope(Job() + testDispatcher)
+
+        try {
+            authStateFlow.value = mockk<AuthState.LoggedIn>(relaxed = true)
+            isInForegroundFlow.value = false
+            mediaSessionActiveFlow.value = true
+            connectionStateFlow.value = ConnectionState.Connected(deviceId = 1, serverVersion = "1.0")
+
+            val webSocketInitializer = createWebSocketInitializer(initializerScope)
+            webSocketInitializer.initialize()
+            advanceUntilIdle()
+            coVerify(exactly = 0) { webSocketManager.disconnect() }
+
+            mediaSessionActiveFlow.value = false
+            advanceUntilIdle()
+
+            coVerify(exactly = 1) { webSocketManager.disconnect() }
+        } finally {
+            initializerScope.cancel()
+        }
+    }
 
     @Test
     fun `catchUp is called when WebSocket reconnects after being disconnected`() = runTest {
@@ -204,7 +250,7 @@ class WebSocketInitializerTest {
                 remoteUrl = "http://server",
             )
             isInForegroundFlow.value = false
-            isPlayingFlow.value = false
+            mediaSessionActiveFlow.value = false
             isKeptAliveExternallyFlow.value = true
             advanceUntilIdle()
 

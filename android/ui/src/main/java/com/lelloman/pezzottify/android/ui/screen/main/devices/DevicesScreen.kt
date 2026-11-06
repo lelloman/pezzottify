@@ -45,6 +45,8 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -76,8 +78,16 @@ fun DevicesScreen(
     val viewModel = hiltViewModel<DevicesScreenViewModel>()
     val state by viewModel.state.collectAsState()
     val sharePolicies by viewModel.sharePolicies.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(viewModel) {
+        viewModel.toastEvents.collect { message ->
+            snackbarHostState.showSnackbar(message)
+        }
+    }
 
     MainScreenScaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.devices)) },

@@ -78,6 +78,7 @@ import com.lelloman.pezzottify.android.ui.screen.main.content.track.TrackScreenV
 import com.lelloman.pezzottify.android.ui.screen.main.content.userplaylist.UiUserPlaylistDetails
 import com.lelloman.pezzottify.android.ui.screen.main.content.userplaylist.UserPlaylistScreenViewModel
 import com.lelloman.pezzottify.android.domain.playbacksession.PlaybackSessionHandler
+import com.lelloman.pezzottify.android.ui.screen.main.devices.playbackErrorMessage
 import com.lelloman.pezzottify.android.ui.screen.main.devices.DevicesScreenState
 import com.lelloman.pezzottify.android.ui.screen.main.devices.DevicesScreenViewModel
 import com.lelloman.pezzottify.android.ui.screen.main.devices.DeviceUiState
@@ -1782,10 +1783,8 @@ class InteractorsModule {
                         val currentTrack = data.queueState?.currentTrack
                         if (currentTrack != null || playerError != null) {
                             val currentIndex = data.queueState?.currentIndex ?: 0
-                            val tracksCount = data.queueState?.tracks?.size ?: 0
-                            val isRemote = playbackModeManager.mode.value is com.lelloman.pezzottify.android.domain.player.PlaybackMode.Remote
-                            val hasNext = isRemote || currentIndex < tracksCount - 1
-                            val hasPrevious = isRemote || currentIndex > 0
+                            val hasNext = data.queueState?.hasNext == true
+                            val hasPrevious = data.queueState?.hasPrevious == true
                             val repeatModeUi = when (data.repeatMode) {
                                 RepeatMode.OFF -> RepeatModeUi.OFF
                                 RepeatMode.ALL -> RepeatModeUi.ALL
@@ -1876,14 +1875,10 @@ class InteractorsModule {
                 updateSmartContinuationSetting(!userSettingsStore.isSmartContinuationEnabled.value)
             }
 
-            override fun exitRemoteMode() {
-                val currentRemote =
-                    playbackModeManager.mode.value as? com.lelloman.pezzottify.android.domain.player.PlaybackMode.Remote
-                if (currentRemote != null) {
-                    playbackSessionHandler.sendCommand("pause", emptyMap(), currentRemote.deviceId)
-                }
-                playbackModeManager.exitRemoteMode()
-            }
+            override fun exitRemoteMode() = playbackSessionHandler.exitRemoteMode()
+
+            override fun getPlaybackErrorMessages(): Flow<String> =
+                playbackSessionHandler.errors.map { playbackErrorMessage(context, it.code, it.message) }
         }
 
     @Provides
@@ -2530,6 +2525,7 @@ class InteractorsModule {
 
     @Provides
     fun provideDevicesScreenInteractor(
+        @dagger.hilt.android.qualifiers.ApplicationContext context: android.content.Context,
         playbackSessionHandler: PlaybackSessionHandler,
         playbackMetadataProvider: com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider,
         player: PezzottifyPlayer,
@@ -2606,27 +2602,13 @@ class InteractorsModule {
             playbackSessionHandler.sendCommand(command, payload, targetDeviceId)
         }
 
-        override fun enterRemoteMode(deviceId: Int, deviceName: String) {
-            if (playbackSessionHandler.myDeviceId.value == deviceId) {
-                return
-            }
-            val currentRemote =
-                playbackModeManager.mode.value as? com.lelloman.pezzottify.android.domain.player.PlaybackMode.Remote
-            if (currentRemote != null && currentRemote.deviceId != deviceId) {
-                playbackSessionHandler.sendCommand("pause", emptyMap(), currentRemote.deviceId)
-            }
-            playbackModeManager.enterRemoteMode(deviceId, deviceName)
-            playbackSessionHandler.requestQueue(deviceId)
-        }
+        override fun observePlaybackErrorMessages(): Flow<String> =
+            playbackSessionHandler.errors.map { playbackErrorMessage(context, it.code, it.message) }
 
-        override fun exitRemoteMode() {
-            val currentRemote =
-                playbackModeManager.mode.value as? com.lelloman.pezzottify.android.domain.player.PlaybackMode.Remote
-            if (currentRemote != null) {
-                playbackSessionHandler.sendCommand("pause", emptyMap(), currentRemote.deviceId)
-            }
-            playbackModeManager.exitRemoteMode()
-        }
+        override fun enterRemoteMode(deviceId: Int, deviceName: String) =
+            playbackSessionHandler.enterRemoteMode(deviceId, deviceName)
+
+        override fun exitRemoteMode() = playbackSessionHandler.exitRemoteMode()
 
         override suspend fun fetchOwnRegisteredDevices(): List<RegisteredDeviceInfo> {
             return when (val response = remoteApiClient.getDevices()) {

@@ -63,14 +63,14 @@ class WebSocketInitializer internal constructor(
                 authStore.getAuthState(),
                 appLifecycleObserver.isInForeground,
                 networkConnectivityObserver.isNetworkAvailable,
-                player.isPlaying,
+                player.isActive,
                 appLifecycleObserver.isKeptAliveExternally,
             ) { values ->
                 ConnectionDecision(
                     isAuthenticated = values[0] is AuthState.LoggedIn,
                     isInForeground = values[1] as Boolean,
                     isNetworkAvailable = values[2] as Boolean,
-                    isMusicPlaying = values[3] as Boolean,
+                    isMediaSessionActive = values[3] as Boolean,
                     isKeptAliveExternally = values[4] as Boolean,
                 )
             }
@@ -109,9 +109,15 @@ class WebSocketInitializer internal constructor(
     private fun handleConnectionDecision(decision: ConnectionDecision) {
         debounceJob?.cancel()
         debounceJob = scope.launch {
+            // Any media session, local or remote and playing or paused, is backed by the
+            // foreground service and must stay reachable, so the socket lives with it.
             val shouldConnect = decision.isAuthenticated &&
                 decision.isNetworkAvailable &&
-                (decision.isInForeground || decision.isMusicPlaying || decision.isKeptAliveExternally)
+                (
+                    decision.isInForeground ||
+                        decision.isMediaSessionActive ||
+                        decision.isKeptAliveExternally
+                    )
 
             // Use a longer debounce for disconnect to handle the keep-alive → foreground
             // transition on Android TV: when PezzotTV (launcher) goes to background and unbinds
@@ -136,7 +142,7 @@ class WebSocketInitializer internal constructor(
         val isAuthenticated: Boolean,
         val isInForeground: Boolean,
         val isNetworkAvailable: Boolean,
-        val isMusicPlaying: Boolean,
+        val isMediaSessionActive: Boolean,
         val isKeptAliveExternally: Boolean,
     )
 

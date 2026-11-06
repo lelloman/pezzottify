@@ -11,11 +11,11 @@ import com.lelloman.pezzottify.android.domain.player.VolumeState
 import com.lelloman.pezzottify.android.domain.playbacksession.PlaybackSessionHandler
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
@@ -30,7 +30,7 @@ import javax.inject.Singleton
  * Routes playback operations to either the local PlayerImpl or the RemotePlaybackController
  * based on the current PlaybackMode.
  */
-@OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class PlaybackRouter @Inject constructor(
     private val localPlayer: PlayerImpl,
@@ -38,6 +38,7 @@ class PlaybackRouter @Inject constructor(
     private val playbackModeManager: PlaybackModeManager,
     private val playbackSessionHandler: PlaybackSessionHandler,
     private val radioCreation: com.lelloman.pezzottify.android.domain.player.RadioCreationController,
+    private val scope: CoroutineScope,
     loggerFactory: LoggerFactory,
 ) : PezzottifyPlayer {
 
@@ -53,7 +54,7 @@ class PlaybackRouter @Inject constructor(
 
     override val isActive: StateFlow<Boolean> =
         MutableStateFlow(false).also { flow ->
-            GlobalScope.launch {
+            scope.launch {
                 playbackModeManager.mode.flatMapLatest { mode ->
                     when (mode) {
                         is PlaybackMode.Local -> localPlayer.isActive
@@ -65,7 +66,7 @@ class PlaybackRouter @Inject constructor(
 
     override val isPlaying: StateFlow<Boolean> =
         MutableStateFlow(false).also { flow ->
-            GlobalScope.launch {
+            scope.launch {
                 playbackModeManager.mode.flatMapLatest { mode ->
                     when (mode) {
                         is PlaybackMode.Local -> localPlayer.isPlaying
@@ -77,7 +78,7 @@ class PlaybackRouter @Inject constructor(
 
     override val volumeState: StateFlow<VolumeState> =
         MutableStateFlow(VolumeState(1f, false)).also { flow ->
-            GlobalScope.launch {
+            scope.launch {
                 playbackModeManager.mode.flatMapLatest { mode ->
                     when (mode) {
                         is PlaybackMode.Local -> localPlayer.volumeState
@@ -89,7 +90,7 @@ class PlaybackRouter @Inject constructor(
 
     override val currentTrackIndex: StateFlow<Int?> =
         MutableStateFlow<Int?>(null).also { flow ->
-            GlobalScope.launch {
+            scope.launch {
                 playbackModeManager.mode.flatMapLatest { mode ->
                     when (mode) {
                         is PlaybackMode.Local -> localPlayer.currentTrackIndex
@@ -101,7 +102,7 @@ class PlaybackRouter @Inject constructor(
 
     override val currentTrackPercent: StateFlow<Float?> =
         MutableStateFlow<Float?>(null).also { flow ->
-            GlobalScope.launch {
+            scope.launch {
                 playbackModeManager.mode.flatMapLatest { mode ->
                     when (mode) {
                         is PlaybackMode.Local -> localPlayer.currentTrackPercent
@@ -113,7 +114,7 @@ class PlaybackRouter @Inject constructor(
 
     override val currentTrackProgressSec: StateFlow<Int?> =
         MutableStateFlow<Int?>(null).also { flow ->
-            GlobalScope.launch {
+            scope.launch {
                 playbackModeManager.mode.flatMapLatest { mode ->
                     when (mode) {
                         is PlaybackMode.Local -> localPlayer.currentTrackProgressSec
@@ -125,7 +126,7 @@ class PlaybackRouter @Inject constructor(
 
     override val currentTrackDurationSeconds: StateFlow<Int?> =
         MutableStateFlow<Int?>(null).also { flow ->
-            GlobalScope.launch {
+            scope.launch {
                 playbackModeManager.mode.flatMapLatest { mode ->
                     when (mode) {
                         is PlaybackMode.Local -> localPlayer.currentTrackDurationSeconds
@@ -135,12 +136,21 @@ class PlaybackRouter @Inject constructor(
             }
         }
 
-    override val seekEvents: SharedFlow<ControlsAndStatePlayer.SeekEvent>
-        get() = if (isRemote) remoteController.seekEvents else localPlayer.seekEvents
+    override val seekEvents: SharedFlow<ControlsAndStatePlayer.SeekEvent> =
+        MutableSharedFlow<ControlsAndStatePlayer.SeekEvent>(extraBufferCapacity = 16).also { flow ->
+            scope.launch {
+                playbackModeManager.mode.flatMapLatest { mode ->
+                    when (mode) {
+                        is PlaybackMode.Local -> localPlayer.seekEvents
+                        is PlaybackMode.Remote -> remoteController.seekEvents
+                    }
+                }.collect { flow.emit(it) }
+            }
+        }.asSharedFlow()
 
     override val playerError: StateFlow<ControlsAndStatePlayer.PlayerError?> =
         MutableStateFlow<ControlsAndStatePlayer.PlayerError?>(null).also { flow ->
-            GlobalScope.launch {
+            scope.launch {
                 playbackModeManager.mode.flatMapLatest { mode ->
                     when (mode) {
                         is PlaybackMode.Local -> localPlayer.playerError
@@ -152,7 +162,7 @@ class PlaybackRouter @Inject constructor(
 
     override val shuffleEnabled: StateFlow<Boolean> =
         MutableStateFlow(false).also { flow ->
-            GlobalScope.launch {
+            scope.launch {
                 playbackModeManager.mode.flatMapLatest { mode ->
                     when (mode) {
                         is PlaybackMode.Local -> localPlayer.shuffleEnabled
@@ -164,7 +174,7 @@ class PlaybackRouter @Inject constructor(
 
     override val repeatMode: StateFlow<RepeatMode> =
         MutableStateFlow(RepeatMode.OFF).also { flow ->
-            GlobalScope.launch {
+            scope.launch {
                 playbackModeManager.mode.flatMapLatest { mode ->
                     when (mode) {
                         is PlaybackMode.Local -> localPlayer.repeatMode
@@ -176,7 +186,7 @@ class PlaybackRouter @Inject constructor(
 
     override val playbackPlaylist: StateFlow<PlaybackPlaylist?> =
         MutableStateFlow<PlaybackPlaylist?>(null).also { flow ->
-            GlobalScope.launch {
+            scope.launch {
                 playbackModeManager.mode.flatMapLatest { mode ->
                     when (mode) {
                         is PlaybackMode.Local -> localPlayer.playbackPlaylist
@@ -188,7 +198,7 @@ class PlaybackRouter @Inject constructor(
 
     override val canGoToPreviousPlaylist: StateFlow<Boolean> =
         MutableStateFlow(false).also { flow ->
-            GlobalScope.launch {
+            scope.launch {
                 playbackModeManager.mode.flatMapLatest { mode ->
                     when (mode) {
                         is PlaybackMode.Local -> localPlayer.canGoToPreviousPlaylist
@@ -200,7 +210,7 @@ class PlaybackRouter @Inject constructor(
 
     override val canGoToNextPlaylist: StateFlow<Boolean> =
         MutableStateFlow(false).also { flow ->
-            GlobalScope.launch {
+            scope.launch {
                 playbackModeManager.mode.flatMapLatest { mode ->
                     when (mode) {
                         is PlaybackMode.Local -> localPlayer.canGoToNextPlaylist
@@ -304,7 +314,7 @@ class PlaybackRouter @Inject constructor(
     }
 
     override val radioContinuationError: StateFlow<Boolean> = MutableStateFlow(false).also { flow ->
-        GlobalScope.launch {
+        scope.launch {
             playbackModeManager.mode.flatMapLatest { mode ->
                 if (mode is PlaybackMode.Local) localPlayer.radioContinuationError else kotlinx.coroutines.flow.flowOf(false)
             }.collect { flow.value = it }
@@ -368,9 +378,8 @@ class PlaybackRouter @Inject constructor(
 
     override fun clearSession() {
         radioCreation.cancel()
-        if (isRemote) {
-            playbackModeManager.exitRemoteMode()
-        }
+        // Same exit path as the UI: pause the remote before letting go of it.
+        playbackSessionHandler.exitRemoteMode()
         localPlayer.clearSession()
     }
 
@@ -386,11 +395,12 @@ class PlaybackRouter @Inject constructor(
         // returning to local mode starts with an idle player instead of stale state.
         // Must use Main dispatcher because clearSession() calls MediaController
         // which requires the main thread.
-        GlobalScope.launch(Dispatchers.Main) {
+        scope.launch(Dispatchers.Main) {
             playbackModeManager.mode.collect { mode ->
                 radioCreation.cancel()
                 if (mode is PlaybackMode.Remote) {
                     localPlayer.clearSession()
+                    localPlayer.ensureMediaServiceRunning()
                 }
             }
         }

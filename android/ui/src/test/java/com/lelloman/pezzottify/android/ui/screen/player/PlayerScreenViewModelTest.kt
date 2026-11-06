@@ -7,7 +7,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -343,7 +345,38 @@ class PlayerScreenViewModelTest {
         assertThat(viewModel.state.value.pendingPlayback).isNull()
     }
 
+    @Test
+    fun `playback errors reach the user while controlling another device`() = runTest {
+        fakeInteractor.remoteDeviceNameFlow.value = "TV"
+        createViewModel()
+        advanceUntilIdle()
+        val messages = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.toastEvents.collect { messages.add(it) } }
+        advanceUntilIdle()
+
+        fakeInteractor.playbackErrorsFlow.emit("That device is gone")
+        advanceUntilIdle()
+
+        assertThat(messages).containsExactly("That device is gone")
+    }
+
+    @Test
+    fun `playback errors stay silent during local playback`() = runTest {
+        createViewModel()
+        advanceUntilIdle()
+        val messages = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.toastEvents.collect { messages.add(it) } }
+        advanceUntilIdle()
+
+        fakeInteractor.playbackErrorsFlow.emit("That device is gone")
+        advanceUntilIdle()
+
+        assertThat(messages).isEmpty()
+    }
+
     private class FakeInteractor : PlayerScreenViewModel.Interactor {
+        val remoteDeviceNameFlow = MutableStateFlow<String?>(null)
+        val playbackErrorsFlow = kotlinx.coroutines.flow.MutableSharedFlow<String>()
         val playbackStateFlow = MutableStateFlow<PlayerScreenViewModel.Interactor.PlaybackState?>(null)
         val smartContinuationEnabledFlow = MutableStateFlow(false)
         val pendingPlaybackFlow = MutableStateFlow<PendingPlaybackUi?>(null)
@@ -412,7 +445,8 @@ class PlayerScreenViewModelTest {
             retryCalled = true
         }
 
-        override fun getRemoteDeviceName(): Flow<String?> = flowOf(null)
+        override fun getRemoteDeviceName(): Flow<String?> = remoteDeviceNameFlow
+        override fun getPlaybackErrorMessages(): Flow<String> = playbackErrorsFlow
 
         override fun getHasOtherDeviceConnected(): Flow<Boolean> = flowOf(false)
 

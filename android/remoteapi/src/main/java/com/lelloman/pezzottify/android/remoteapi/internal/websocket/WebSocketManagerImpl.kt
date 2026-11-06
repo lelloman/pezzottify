@@ -364,8 +364,21 @@ internal class WebSocketManagerImpl(
             }
         }
 
-        val deviceId = payload?.device_id ?: 0
-        val serverVersion = payload?.server_version ?: "unknown"
+        if (payload == null) {
+            // Without a device id this connection cannot take part in multi-device playback.
+            // Treat it like a failed handshake: drop the socket and let the backoff retry.
+            logger.error("Connected payload missing or malformed, dropping connection")
+            heartbeatJob?.cancel()
+            heartbeatJob = null
+            webSocket?.close(CLOSE_NORMAL, "Malformed connected payload")
+            webSocket = null
+            _connectionState.value = ConnectionState.Error("Malformed connected payload")
+            scheduleReconnect()
+            return
+        }
+
+        val deviceId = payload.device_id
+        val serverVersion = payload.server_version
         logger.info("WebSocket connected with device_id: $deviceId, server_version: $serverVersion")
 
         reconnectAttempt = 0

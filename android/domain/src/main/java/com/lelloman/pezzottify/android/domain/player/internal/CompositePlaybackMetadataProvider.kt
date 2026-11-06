@@ -5,9 +5,7 @@ import com.lelloman.pezzottify.android.domain.player.PlaybackMode
 import com.lelloman.pezzottify.android.domain.player.PlaybackModeManager
 import com.lelloman.pezzottify.android.domain.player.PlaybackQueueState
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,21 +17,14 @@ import javax.inject.Singleton
 /**
  * Switches between local and remote PlaybackMetadataProvider based on PlaybackModeManager.mode.
  */
-@OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
-class CompositePlaybackMetadataProvider internal constructor(
+class CompositePlaybackMetadataProvider @Inject constructor(
     private val localProvider: PlaybackMetadataProviderImpl,
     private val remoteProvider: RemotePlaybackMetadataProvider,
     private val playbackModeManager: PlaybackModeManager,
     private val scope: CoroutineScope,
 ) : PlaybackMetadataProvider {
-
-    @Inject
-    constructor(
-        localProvider: PlaybackMetadataProviderImpl,
-        remoteProvider: RemotePlaybackMetadataProvider,
-        playbackModeManager: PlaybackModeManager,
-    ) : this(localProvider, remoteProvider, playbackModeManager, GlobalScope)
 
     private val _queueState = MutableStateFlow<PlaybackQueueState?>(null)
     override val queueState: StateFlow<PlaybackQueueState?> = _queueState.asStateFlow()

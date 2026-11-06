@@ -72,6 +72,7 @@ class PlayerModule {
         playbackModeManager: PlaybackModeManager,
         playbackSessionHandler: PlaybackSessionHandler,
         radioCreation: RadioCreationController,
+        scope: CoroutineScope,
         loggerFactory: LoggerFactory,
     ): PezzottifyPlayer = PlaybackRouter(
         localPlayer = playerImpl,
@@ -79,6 +80,7 @@ class PlayerModule {
         playbackModeManager = playbackModeManager,
         playbackSessionHandler = playbackSessionHandler,
         radioCreation = radioCreation,
+        scope = scope,
         loggerFactory = loggerFactory,
     )
 
@@ -88,9 +90,11 @@ class PlayerModule {
         localProvider: PlaybackMetadataProviderImpl,
         remoteProvider: RemotePlaybackMetadataProvider,
         playbackModeManager: PlaybackModeManager,
+        scope: CoroutineScope,
     ): PlaybackMetadataProvider = CompositePlaybackMetadataProvider(
         localProvider = localProvider,
         remoteProvider = remoteProvider,
         playbackModeManager = playbackModeManager,
+        scope = scope,
     )
 }

@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.media.AudioManager
+import android.os.Looper
 import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
@@ -32,8 +33,12 @@ import com.lelloman.pezzottify.android.domain.auth.bearerAuthorization
 import com.lelloman.pezzottify.android.domain.config.ConfigStore
 import com.lelloman.pezzottify.android.domain.equalizer.EqualizerStore
 import com.lelloman.pezzottify.android.player.equalizer.EqualizerRenderersFactory
+import com.lelloman.pezzottify.android.domain.player.PezzottifyPlayer
 import com.lelloman.pezzottify.android.domain.player.PlaybackMetadataProvider
+import com.lelloman.pezzottify.android.domain.player.PlaybackMode
+import com.lelloman.pezzottify.android.domain.player.PlaybackModeManager
 import com.lelloman.pezzottify.android.domain.player.TrackMetadata
+import com.lelloman.pezzottify.android.domain.playbacksession.PlaybackSessionHandler
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import com.lelloman.pezzottify.android.remoteapi.internal.OkHttpClientFactory
 import com.lelloman.pezzottify.android.remoteapi.internal.SessionExpiredInterceptor
@@ -47,6 +52,14 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * The one foreground service behind every media control on this device.
+ *
+ * It hosts the local session (ExoPlayer) and, while controlling another device, a second session
+ * whose player mirrors that device. The remote session is separate rather than swapped into the
+ * local one because [ExoPlatformPlayer] stays connected to the local session, and would otherwise
+ * read the remote device's state as local playback.
+ */
 @AndroidEntryPoint
 class PlaybackService : MediaSessionService() {
 
@@ -79,6 +92,15 @@ class PlaybackService : MediaSessionService() {
 
     @Inject
     lateinit var imageLoader: ImageLoader
+
+    @Inject
+    lateinit var playbackModeManager: PlaybackModeManager
+
+    @Inject
+    lateinit var playbackSessionHandler: PlaybackSessionHandler
+
+    @Inject
+    lateinit var routedPlayer: PezzottifyPlayer
 
     @Inject
     lateinit var loggerFactory: LoggerFactory
@@ -140,8 +162,9 @@ class PlaybackService : MediaSessionService() {
 
     private var player: ExoPlayer? = null
 
-    // Track whether we have content loaded - used to keep foreground service alive
-    private var hasContent = false
+    private var remoteSession: MediaSession? = null
+    private var remotePlayer: RemoteSessionPlayer? = null
+    private var remoteSnapshotsJob: Job? = null
 
     private val becomingNoisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -186,6 +209,47 @@ class PlaybackService : MediaSessionService() {
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
         startObservingMetadata()
+        startObservingPlaybackMode()
+    }
+
+    private fun startObservingPlaybackMode() {
+        serviceScope.launch {
+            playbackModeManager.mode.collect { mode ->
+                when (mode) {
+                    is PlaybackMode.Remote -> startRemoteSession(mode.deviceName)
+                    is PlaybackMode.Local -> releaseRemoteSession()
+                }
+            }
+        }
+    }
+
+    @OptIn(UnstableApi::class)
+    private fun startRemoteSession(deviceName: String) {
+        releaseRemoteSession()
+        val remote = RemoteSessionPlayer(Looper.getMainLooper(), routedPlayer, deviceName)
+        currentArtworkTrackId?.let { trackId ->
+            currentArtworkBytes?.let { remote.setArtwork(trackId, it) }
+        }
+        val session = MediaSession.Builder(this, remote).setId(REMOTE_SESSION_ID).build()
+        remotePlayer = remote
+        remoteSession = session
+        addSession(session)
+        remoteSnapshotsJob = serviceScope.launch {
+            remoteSessionSnapshots(deviceName, routedPlayer, playbackMetadataProvider.queueState)
+                .collect { remote.update(it) }
+        }
+    }
+
+    private fun releaseRemoteSession() {
+        remoteSnapshotsJob?.cancel()
+        remoteSnapshotsJob = null
+        remoteSession?.let {
+            removeSession(it)
+            it.release()
+        }
+        remoteSession = null
+        remotePlayer?.release()
+        remotePlayer = null
     }
 
     private fun startObservingMetadata() {
@@ -216,6 +280,7 @@ class PlaybackService : MediaSessionService() {
         val cachedBytes = currentArtworkBytes
         if (artworkUrl != null && artworkUrl == currentArtworkUrl && cachedBytes != null) {
             metadataBuilder.setArtworkData(cachedBytes, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+            remotePlayer?.setArtwork(track.trackId, cachedBytes)
         }
 
         // Update the current MediaItem with new metadata
@@ -278,6 +343,7 @@ class PlaybackService : MediaSessionService() {
         serviceScope.launch(Dispatchers.Main) {
             val artworkBytes = bitmapToByteArray(artwork)
             currentArtworkBytes = artworkBytes
+            remotePlayer?.setArtwork(track.trackId, artworkBytes)
 
             val metadata = MediaMetadata.Builder()
                 .setTitle(track.trackName)
@@ -327,6 +393,7 @@ class PlaybackService : MediaSessionService() {
         playerServiceEventsEmitter.shutdown()
         serviceScope.cancel()
         unregisterReceiver(becomingNoisyReceiver)
+        releaseRemoteSession()
         releasePlayerAndSession()
         super.onDestroy()
     }
@@ -335,36 +402,32 @@ class PlaybackService : MediaSessionService() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         diagnostics.record("task_removed", player)
         super.onTaskRemoved(rootIntent)
+        // Same rule as leaving the controller from the UI: the remote device gets paused.
+        playbackSessionHandler.exitRemoteMode()
+        releaseRemoteSession()
         releasePlayerAndSession()
         playerServiceEventsEmitter.shutdown()
         pauseAllPlayersAndStopSelf()
     }
 
+    /** Our own controller only ever drives local playback; see the class comment. */
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
-        mediaSession
+        if (controllerInfo.packageName == packageName) mediaSession else remoteSession ?: mediaSession
 
     /**
-     * Override notification handling to keep the foreground service alive when paused.
+     * Keeps the service in the foreground for as long as a session has content, paused or not.
      *
-     * By default, MediaSessionService stops the foreground service when playback pauses,
-     * which can lead to the service being killed by the system. This override ensures
-     * the service stays in the foreground as long as there's content loaded.
+     * By default, MediaSessionService leaves the foreground when playback pauses, and the system
+     * may then kill the process along with the session and the WebSocket keeping it reachable.
+     * This covers the remote session too: it always has at least a placeholder item.
      */
     @OptIn(UnstableApi::class)
     override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
-        val exoPlayer = player ?: return
+        val hasContent = session.player.mediaItemCount > 0
+        super.onUpdateNotification(session, startInForegroundRequired || hasContent)
+    }
 
-        // Update hasContent based on whether there are media items loaded
-        hasContent = exoPlayer.mediaItemCount > 0
-
-        if (!hasContent) {
-            // No content - let Media3 handle default behavior (will stop foreground)
-            super.onUpdateNotification(session, startInForegroundRequired)
-            return
-        }
-
-        // We have content - always keep the service in foreground
-        // This prevents Android from killing the service while paused
-        super.onUpdateNotification(session, true)
+    private companion object {
+        const val REMOTE_SESSION_ID = "remote-control"
     }
 }

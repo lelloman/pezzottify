@@ -1,5 +1,6 @@
 package com.lelloman.pezzottify.android.domain.player.internal
 
+import com.lelloman.pezzottify.android.domain.app.TimeProvider
 import com.lelloman.pezzottify.android.domain.player.ControlsAndStatePlayer
 import com.lelloman.pezzottify.android.domain.player.PlaybackModeManager
 import com.lelloman.pezzottify.android.domain.player.PlaybackMode
@@ -9,8 +10,6 @@ import com.lelloman.pezzottify.android.domain.playbacksession.PlaybackSessionHan
 import com.lelloman.pezzottify.android.domain.playbacksession.RemotePlaybackState
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -29,21 +28,14 @@ import javax.inject.Singleton
  * Implements ControlsAndStatePlayer by deriving state from a remote device's
  * playback state (via PlaybackSessionHandler) and sending commands via WebSocket.
  */
-@OptIn(DelicateCoroutinesApi::class)
 @Singleton
-class RemotePlaybackController internal constructor(
+class RemotePlaybackController @Inject constructor(
     private val playbackSessionHandler: PlaybackSessionHandler,
     private val playbackModeManager: PlaybackModeManager,
     private val scope: CoroutineScope,
+    private val timeProvider: TimeProvider,
     loggerFactory: LoggerFactory,
 ) : ControlsAndStatePlayer {
-
-    @Inject
-    constructor(
-        playbackSessionHandler: PlaybackSessionHandler,
-        playbackModeManager: PlaybackModeManager,
-        loggerFactory: LoggerFactory,
-    ) : this(playbackSessionHandler, playbackModeManager, GlobalScope, loggerFactory)
 
     private val logger = loggerFactory.getLogger(RemotePlaybackController::class)
 
@@ -104,14 +96,16 @@ class RemotePlaybackController internal constructor(
             combine(
                 playbackSessionHandler.otherDeviceStates,
                 playbackSessionHandler.connectedDevices,
-            ) { states, devices ->
-                val remoteState = states[deviceId]
-                val isStillConnected = devices.any { it.id == deviceId }
-                remoteState to isStillConnected
-            }.collect { (remoteState, isStillConnected) ->
+                playbackSessionHandler.deviceListFresh,
+            ) { states, devices, listFresh ->
+                Triple(states[deviceId], devices.any { it.id == deviceId }, listFresh)
+            }.collect { (remoteState, isStillConnected, listFresh) ->
                 when {
                     remoteState != null -> updateFromRemoteState(remoteState)
                     isStillConnected -> clearRemotePlaybackState()
+                    // Our own socket dropped: the list is empty because we are offline, not
+                    // because the target left. Keep controlling and wait for the next welcome.
+                    !listFresh -> logger.info("Offline while controlling device $deviceId, keeping remote mode")
                     else -> {
                         logger.info("Remote device $deviceId disconnected, exiting remote mode")
                         playbackModeManager.exitRemoteMode()
@@ -134,8 +128,12 @@ class RemotePlaybackController internal constructor(
         stateCollectionJob = null
         interpolationJob?.cancel()
         interpolationJob = null
+        lastRemoteState = null
         _isActive.value = false
         _isPlaying.value = false
+        _volumeState.value = VolumeState(1f, false)
+        _shuffleEnabled.value = false
+        _repeatMode.value = RepeatMode.OFF
         _currentTrackIndex.value = null
         _currentTrackPercent.value = null
         _currentTrackProgressSec.value = null
@@ -153,12 +151,14 @@ class RemotePlaybackController internal constructor(
         _playerError.value = null
     }
 
+    // Written by the collector, read by the interpolation tick.
+    @Volatile
     private var lastRemoteState: RemotePlaybackState? = null
-    private var lastStateReceivedAt: Long = 0L
 
     private fun updateFromRemoteState(state: RemotePlaybackState) {
-        lastRemoteState = state
-        lastStateReceivedAt = System.currentTimeMillis()
+        // Anchor interpolation on when the state arrived, not on when this collector ran:
+        // the combined flow re-emits the same state on every device-list change.
+        lastRemoteState = if (state.receivedAt > 0L) state else state.copy(receivedAt = timeProvider.nowUtcMs())
 
         _isPlaying.value = state.isPlaying
         _volumeState.value = VolumeState(state.volume, state.muted)
@@ -181,7 +181,7 @@ class RemotePlaybackController internal constructor(
         val state = lastRemoteState ?: return
         if (!state.isPlaying) return
 
-        val elapsed = (System.currentTimeMillis() - lastStateReceivedAt) / 1000.0
+        val elapsed = ((timeProvider.nowUtcMs() - state.receivedAt) / 1000.0).coerceAtLeast(0.0)
         val interpolatedPosition = state.position + elapsed
         val durationMs = state.currentTrack?.durationMs ?: 0L
         updateProgress(interpolatedPosition.coerceAtMost(durationMs / 1000.0), durationMs)

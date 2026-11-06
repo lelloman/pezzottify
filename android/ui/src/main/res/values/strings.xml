@@ -720,4 +720,8 @@
     <string name="device_flow_use_password">Use password instead</string>
     <string name="device_flow_qr_description">QR code to sign in from your phone</string>
     <string name="device_flow_apply_host">Apply</string>
+    <string name="playback_error_forbidden">You are not allowed to control that device</string>
+    <string name="playback_error_device_not_found">That device is no longer connected</string>
+    <string name="playback_error_unknown_command">The server rejected the playback command</string>
+    <string name="playback_error_generic">Playback command failed</string>
 </resources>

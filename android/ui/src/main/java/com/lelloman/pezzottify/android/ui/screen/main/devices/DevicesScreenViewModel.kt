@@ -6,10 +6,13 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -73,6 +76,10 @@ class DevicesScreenViewModel @Inject constructor(
 
     private val ownRegisteredDevices = MutableStateFlow<List<RegisteredDeviceInfo>>(emptyList())
 
+    private val mutableToastEvents = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    /** User-facing messages for `playback.error` replies (forbidden, device gone, ...). */
+    val toastEvents: Flow<String> = mutableToastEvents.asSharedFlow()
+
     private var lastBaseState = DevicesScreenState()
     private var interpolationJob: Job? = null
 
@@ -99,6 +106,11 @@ class DevicesScreenViewModel @Inject constructor(
         viewModelScope.launch {
             interactor.observeRemoteControlDeviceId().collect { deviceId ->
                 mutableState.value = mutableState.value.copy(remoteControlDeviceId = deviceId)
+            }
+        }
+        viewModelScope.launch {
+            interactor.observePlaybackErrorMessages().collect { message ->
+                mutableToastEvents.tryEmit(message)
             }
         }
     }
@@ -241,6 +253,8 @@ class DevicesScreenViewModel @Inject constructor(
     interface Interactor {
         fun observeDevicesScreenState(): Flow<DevicesScreenState>
         fun observeRemoteControlDeviceId(): Flow<Int?>
+        /** Localized messages for `playback.error` replies from the server. */
+        fun observePlaybackErrorMessages(): Flow<String> = emptyFlow()
         fun sendCommand(command: String, payload: Map<String, Any?>, targetDeviceId: Int)
         fun enterRemoteMode(deviceId: Int, deviceName: String)
         fun exitRemoteMode()

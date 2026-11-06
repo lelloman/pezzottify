@@ -24,4 +24,10 @@ interface PlatformPlayer : ControlsAndStatePlayer {
      */
     fun clearSession()
 
+    /**
+     * Makes sure the media service is running even with nothing loaded locally. Controlling
+     * another device needs it: the service hosts that session and its foreground notification.
+     */
+    fun ensureServiceRunning()
+
 }

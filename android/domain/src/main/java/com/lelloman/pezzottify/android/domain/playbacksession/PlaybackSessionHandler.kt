@@ -16,13 +16,14 @@ import com.lelloman.pezzottify.android.domain.websocket.MessageHandler
 import com.lelloman.pezzottify.android.domain.websocket.WebSocketManager
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
@@ -32,8 +33,12 @@ import com.lelloman.pezzottify.android.domain.player.Gravity
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -42,9 +47,14 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@OptIn(DelicateCoroutinesApi::class)
+/**
+ * Client side of the multi-device playback protocol (docs/multi-device-playback.md).
+ *
+ * Reports this device's playback state and queue to the server, keeps the state of the
+ * other visible devices, and executes commands forwarded to this device.
+ */
 @Singleton
-class PlaybackSessionHandler internal constructor(
+class PlaybackSessionHandler @Inject constructor(
     private val webSocketManager: WebSocketManager,
     private val player: PlayerImpl,
     private val playbackMetadataProvider: PlaybackMetadataProviderImpl,
@@ -55,31 +65,14 @@ class PlaybackSessionHandler internal constructor(
     loggerFactory: LoggerFactory,
 ) : AppInitializer {
 
-    @Inject
-    constructor(
-        webSocketManager: WebSocketManager,
-        player: PlayerImpl,
-        playbackMetadataProvider: PlaybackMetadataProviderImpl,
-        deviceInfoProvider: DeviceInfoProvider,
-        timeProvider: TimeProvider,
-        playbackModeManager: PlaybackModeManager,
-        loggerFactory: LoggerFactory,
-    ) : this(
-        webSocketManager,
-        player,
-        playbackMetadataProvider,
-        deviceInfoProvider,
-        timeProvider,
-        playbackModeManager,
-        GlobalScope,
-        loggerFactory,
-    )
-
     private val logger = loggerFactory.getLogger(PlaybackSessionHandler::class)
     private val json = Json { ignoreUnknownKeys = true }
 
+    // Touched from the Main dispatcher (commands) and the injected scope (flows).
+    @Volatile
     private var isBroadcasting = false
     private val queueVersion = AtomicInteger(0)
+    @Volatile
     private var broadcastJob: Job? = null
 
     private val _myDeviceId = MutableStateFlow<Int?>(null)
@@ -87,6 +80,21 @@ class PlaybackSessionHandler internal constructor(
 
     private val _connectedDevices = MutableStateFlow<List<ConnectedDevice>>(emptyList())
     val connectedDevices: StateFlow<List<ConnectedDevice>> = _connectedDevices.asStateFlow()
+
+    /**
+     * True once a `playback.welcome` arrived on the current connection, so [connectedDevices]
+     * reflects what the server currently sees. Reset on every disconnect: an empty list while
+     * this is false only means "we are offline", not "the devices are gone".
+     */
+    private val _deviceListFresh = MutableStateFlow(false)
+    val deviceListFresh: StateFlow<Boolean> = _deviceListFresh.asStateFlow()
+
+    @Volatile
+    private var helloRetryJob: Job? = null
+
+    private val _errors = MutableSharedFlow<PlaybackSessionError>(extraBufferCapacity = 8)
+    /** `playback.error` replies from the server (forbidden, device not found, unknown command...). */
+    val errors: SharedFlow<PlaybackSessionError> = _errors.asSharedFlow()
 
     private val _otherDeviceStates = MutableStateFlow<Map<Int, RemotePlaybackState>>(emptyMap())
     val otherDeviceStates: StateFlow<Map<Int, RemotePlaybackState>> = _otherDeviceStates.asStateFlow()
@@ -119,10 +127,13 @@ class PlaybackSessionHandler internal constructor(
                         // Fallback self identity even if playback.welcome is delayed/missed.
                         _myDeviceId.value = state.deviceId
                         sendHello()
+                        startHelloRetries()
                     }
                     is ConnectionState.Disconnected,
                     is ConnectionState.Error -> {
+                        helloRetryJob?.cancel()
                         stopBroadcasting()
+                        _deviceListFresh.value = false
                         _myDeviceId.value = null
                         _connectedDevices.value = emptyList()
                         _otherDeviceStates.value = emptyMap()
@@ -178,6 +189,27 @@ class PlaybackSessionHandler internal constructor(
     }
 
     private fun sendHello() {
+        sendHelloMessage()
+        if (player.isActive.value) {
+            startBroadcasting()
+            broadcastState()
+        }
+    }
+
+    /** Hello can be lost around a reconnect, and nothing else would ever trigger a welcome. */
+    private fun startHelloRetries() {
+        helloRetryJob?.cancel()
+        helloRetryJob = scope.launch {
+            repeat(HELLO_MAX_ATTEMPTS - 1) {
+                delay(HELLO_RETRY_INTERVAL_MS)
+                sendHelloMessage()
+            }
+            delay(HELLO_RETRY_INTERVAL_MS)
+            logger.warn("No playback welcome after $HELLO_MAX_ATTEMPTS hello attempts")
+        }
+    }
+
+    private fun sendHelloMessage() {
         val deviceInfo = deviceInfoProvider.getDeviceInfo()
         webSocketManager.send(
             "$PREFIX.hello",
@@ -187,10 +219,6 @@ class PlaybackSessionHandler internal constructor(
             )
         )
         logger.debug("Sent playback hello")
-        if (player.isActive.value) {
-            startBroadcasting()
-            broadcastState()
-        }
     }
 
     private fun startBroadcasting() {
@@ -205,6 +233,10 @@ class PlaybackSessionHandler internal constructor(
             }
         }
         logger.debug("Started periodic broadcasting")
+        // Peers must never see a state without its queue: the playlist collector only
+        // forwards changes while broadcasting, so the queue loaded before this point
+        // (state restore, reconnect) has to be sent explicitly.
+        player.playbackPlaylist.value?.let { broadcastQueue(it) }
     }
 
     private fun stopBroadcasting() {
@@ -227,10 +259,12 @@ class PlaybackSessionHandler internal constructor(
             "title" to currentTrack.trackName,
             "artist_id" to currentTrack.primaryArtistId,
             "artist_name" to (currentTrack.artistNames.firstOrNull() ?: ""),
-            "artists_ids" to listOf(currentTrack.primaryArtistId),
+            "artists_ids" to currentTrack.artistIds.ifEmpty { listOf(currentTrack.primaryArtistId) },
             "album_id" to currentTrack.albumId,
             "album_title" to currentTrack.albumName,
-            "duration" to (currentTrack.durationSeconds * 1000).toLong(),
+            // Seconds on the wire, like every other platform.
+            "duration" to currentTrack.durationSeconds.toDouble(),
+            // The Android catalog model has no track number yet.
             "track_number" to null,
             "image_id" to currentTrack.imageId,
         )
@@ -300,7 +334,7 @@ class PlaybackSessionHandler internal constructor(
             "current_track" to null,
             "queue_position" to 0,
             "queue_version" to queueVersion.get().toLong(),
-            "position" to 0,
+            "position" to 0.0,
             "is_playing" to false,
             "volume" to 1.0,
             "muted" to false,
@@ -356,6 +390,7 @@ class PlaybackSessionHandler internal constructor(
 
             "$PREFIX.error" -> {
                 logger.error("Received playback error: $payload")
+                if (payload != null) handleError(payload)
             }
 
             else -> {
@@ -365,21 +400,18 @@ class PlaybackSessionHandler internal constructor(
     }
 
     private fun handleWelcome(payloadString: String) {
+        helloRetryJob?.cancel()
         try {
             val payloadJson = json.parseToJsonElement(payloadString).jsonObject
 
-            _myDeviceId.value = payloadJson["device_id"]?.jsonPrimitive?.int
+            // The `connected` message already told us who we are; a welcome without
+            // device_id must not erase that.
+            payloadJson["device_id"]?.jsonPrimitive?.intOrNull?.let { _myDeviceId.value = it }
 
             val devicesArray = payloadJson["devices"]?.jsonArray
             if (devicesArray != null) {
-                _connectedDevices.value = devicesArray.map { element ->
-                    val obj = element.jsonObject
-                    ConnectedDevice(
-                        id = obj["id"]?.jsonPrimitive?.int ?: 0,
-                        name = obj["name"]?.jsonPrimitive?.content ?: "",
-                        deviceType = obj["device_type"]?.jsonPrimitive?.content ?: "unknown",
-                    )
-                }
+                _connectedDevices.value = devicesArray.map { element -> element.jsonObject.toConnectedDevice() }
+                _deviceListFresh.value = true
             }
 
             val activeDevices = payloadJson["session"]?.jsonObject?.get("active_devices")?.jsonArray
@@ -562,16 +594,37 @@ class PlaybackSessionHandler internal constructor(
         try {
             val payloadJson = json.parseToJsonElement(payloadString).jsonObject
             val devicesArray = payloadJson["devices"]?.jsonArray ?: return
-            _connectedDevices.value = devicesArray.map { element ->
-                val obj = element.jsonObject
-                ConnectedDevice(
-                    id = obj["id"]?.jsonPrimitive?.int ?: 0,
-                    name = obj["name"]?.jsonPrimitive?.content ?: "",
-                    deviceType = obj["device_type"]?.jsonPrimitive?.content ?: "unknown",
-                )
-            }
+            _connectedDevices.value = devicesArray.map { element -> element.jsonObject.toConnectedDevice() }
+            _deviceListFresh.value = true
         } catch (e: Exception) {
             logger.error("Failed to parse device list changed", e)
+        }
+    }
+
+    private fun JsonObject.toConnectedDevice() = ConnectedDevice(
+        id = this["id"]?.jsonPrimitive?.intOrNull ?: 0,
+        name = this["name"]?.jsonPrimitive?.content ?: "",
+        deviceType = this["device_type"]?.jsonPrimitive?.content ?: "unknown",
+        isPlaying = this["is_playing"]?.jsonPrimitive?.booleanOrNull ?: false,
+        hasSession = this["has_session"]?.jsonPrimitive?.booleanOrNull
+            ?: (this["is_playing"]?.jsonPrimitive?.booleanOrNull ?: false),
+        isShared = this["is_shared"]?.jsonPrimitive?.booleanOrNull ?: false,
+        ownerHandle = this["owner_handle"]?.jsonPrimitive?.contentOrNull,
+    )
+
+    private fun handleError(payloadString: String) {
+        try {
+            val payloadJson = json.parseToJsonElement(payloadString).jsonObject
+            val error = PlaybackSessionError(
+                code = payloadJson["code"]?.jsonPrimitive?.contentOrNull ?: "unknown",
+                message = payloadJson["message"]?.jsonPrimitive?.contentOrNull ?: "",
+                command = (payloadJson["context"] as? JsonObject)?.get("command")?.jsonPrimitive?.contentOrNull,
+            )
+            // An error before any welcome means hello itself was refused; repeating won't help.
+            if (!_deviceListFresh.value) helloRetryJob?.cancel()
+            _errors.tryEmit(error)
+        } catch (e: Exception) {
+            logger.error("Failed to parse playback error", e)
         }
     }
 
@@ -582,13 +635,17 @@ class PlaybackSessionHandler internal constructor(
                 RemoteTrackInfo(
                     id = currentTrackObj["id"]?.jsonPrimitive?.content ?: return null,
                     title = currentTrackObj["title"]?.jsonPrimitive?.content ?: "",
-                    artistName = currentTrackObj["artist_name"]?.jsonPrimitive?.content,
-                    albumTitle = currentTrackObj["album_title"]?.jsonPrimitive?.content,
-                    durationMs = currentTrackObj["duration"]?.jsonPrimitive?.double?.let { dur ->
-                        // Web sends seconds (e.g. 133.8), Android sends ms (e.g. 133800)
-                        if (dur > 1000) dur.toLong() else (dur * 1000).toLong()
-                    } ?: 0L,
-                    imageId = currentTrackObj["image_id"]?.jsonPrimitive?.content,
+                    artistName = currentTrackObj["artist_name"]?.jsonPrimitive?.contentOrNull,
+                    albumTitle = currentTrackObj["album_title"]?.jsonPrimitive?.contentOrNull,
+                    // `duration` is seconds on the wire (docs/multi-device-playback.md).
+                    durationMs = currentTrackObj["duration"]?.jsonPrimitive?.doubleOrNull
+                        ?.let { seconds -> (seconds * 1000).toLong() } ?: 0L,
+                    imageId = currentTrackObj["image_id"]?.jsonPrimitive?.contentOrNull,
+                    artistId = currentTrackObj["artist_id"]?.jsonPrimitive?.contentOrNull,
+                    albumId = currentTrackObj["album_id"]?.jsonPrimitive?.contentOrNull,
+                    artistsIds = currentTrackObj["artists_ids"]?.jsonArray
+                        ?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList(),
+                    trackNumber = currentTrackObj["track_number"]?.jsonPrimitive?.intOrNull,
                 )
             } else null
 
@@ -617,6 +674,13 @@ class PlaybackSessionHandler internal constructor(
                 return
             }
             val commandPayload = payloadJson["payload"]
+
+            if (playbackModeManager.mode.value is PlaybackMode.Remote) {
+                // A controller is not reporting any state, so executing here would start
+                // audio that no device can see. See docs/multi-device-playback.md.
+                logger.warn("Ignoring command '$command' while controlling another device")
+                return
+            }
 
             logger.info("Received command: $command")
 
@@ -851,8 +915,37 @@ class PlaybackSessionHandler internal constructor(
         logger.debug("Requested queue for device $targetDeviceId")
     }
 
+    /**
+     * Start controlling [deviceId]. Pauses the device that was controlled before, if any,
+     * and asks the new target for its queue. Ignored when the target is this device.
+     */
+    fun enterRemoteMode(deviceId: Int, deviceName: String) {
+        if (_myDeviceId.value == deviceId) {
+            logger.warn("Refusing to control this device remotely")
+            return
+        }
+        val current = playbackModeManager.mode.value as? PlaybackMode.Remote
+        if (current != null && current.deviceId != deviceId) {
+            sendCommand("pause", emptyMap(), current.deviceId)
+        }
+        playbackModeManager.enterRemoteMode(deviceId, deviceName)
+        requestQueue(deviceId)
+    }
+
+    /**
+     * Stop controlling the current remote device. The remote is paused so leaving the
+     * controller does not leave music playing unattended. No-op when already local.
+     */
+    fun exitRemoteMode() {
+        val current = playbackModeManager.mode.value as? PlaybackMode.Remote ?: return
+        sendCommand("pause", emptyMap(), current.deviceId)
+        playbackModeManager.exitRemoteMode()
+    }
+
     companion object {
         private const val PREFIX = "playback"
         internal const val BROADCAST_INTERVAL_MS = 5_000L
+        internal const val HELLO_RETRY_INTERVAL_MS = 2_000L
+        internal const val HELLO_MAX_ATTEMPTS = 10
     }
 }

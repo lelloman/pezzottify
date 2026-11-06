@@ -8,6 +8,8 @@ data class TrackMetadata(
     val artistNames: List<String>,
     /** Primary artist ID for remote playback sync */
     val primaryArtistId: String = "",
+    /** Every artist ID of the track, primary first, for remote playback sync */
+    val artistIds: List<String> = emptyList(),
     val albumId: String,
     val albumName: String,
     val artworkUrl: String?,
@@ -33,4 +35,11 @@ data class PlaybackQueueState(
 
     val isLoading: Boolean
         get() = loadingState == QueueLoadingState.LOADING
+
+    /** Applies to local and remote queues alike; a remote queue stays false until it arrives. */
+    val hasNext: Boolean
+        get() = currentIndex < tracks.lastIndex
+
+    val hasPrevious: Boolean
+        get() = currentIndex > 0 && tracks.isNotEmpty()
 }

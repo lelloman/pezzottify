@@ -14,9 +14,7 @@ import com.lelloman.pezzottify.android.domain.playbacksession.RemoteTrackInfo
 import com.lelloman.pezzottify.android.domain.statics.StaticsProvider
 import com.lelloman.pezzottify.android.logger.LoggerFactory
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,9 +31,9 @@ import javax.inject.Singleton
  * Derives track metadata from the remote device's state broadcasts and queue data.
  * Resolves track IDs from queue to full TrackMetadata via StaticsProvider.
  */
-@OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
-class RemotePlaybackMetadataProvider internal constructor(
+class RemotePlaybackMetadataProvider @Inject constructor(
     private val playbackSessionHandler: PlaybackSessionHandler,
     private val playbackModeManager: PlaybackModeManager,
     private val configStore: ConfigStore,
@@ -43,15 +41,6 @@ class RemotePlaybackMetadataProvider internal constructor(
     private val scope: CoroutineScope,
     loggerFactory: LoggerFactory,
 ) : PlaybackMetadataProvider {
-
-    @Inject
-    constructor(
-        playbackSessionHandler: PlaybackSessionHandler,
-        playbackModeManager: PlaybackModeManager,
-        configStore: ConfigStore,
-        staticsProvider: StaticsProvider,
-        loggerFactory: LoggerFactory,
-    ) : this(playbackSessionHandler, playbackModeManager, configStore, staticsProvider, GlobalScope, loggerFactory)
 
     private val logger = loggerFactory.getLogger(RemotePlaybackMetadataProvider::class)
 
@@ -166,7 +155,9 @@ class RemotePlaybackMetadataProvider internal constructor(
             trackId = track.id,
             trackName = track.title,
             artistNames = listOfNotNull(track.artistName),
-            albumId = "",
+            primaryArtistId = track.artistId ?: track.artistsIds.firstOrNull() ?: "",
+            artistIds = track.artistsIds.ifEmpty { listOfNotNull(track.artistId) },
+            albumId = track.albumId ?: "",
             albumName = track.albumTitle ?: "",
             artworkUrl = track.imageId?.let { "$baseUrl/v1/content/image/$it" },
             imageId = track.imageId,

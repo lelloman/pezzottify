@@ -43,6 +43,15 @@ class PlayerScreenViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            interactor.getPlaybackErrorMessages().collect { message ->
+                // Only relevant while this screen is driving another device.
+                if (mutableState.value.remoteDeviceName != null) {
+                    mutableToastEvents.tryEmit(message)
+                }
+            }
+        }
+
+        viewModelScope.launch {
             interactor.getHasOtherDeviceConnected().collect { hasOtherDeviceConnected ->
                 mutableState.value = mutableState.value.copy(hasOtherDeviceConnected = hasOtherDeviceConnected)
             }
@@ -158,6 +167,8 @@ class PlayerScreenViewModel @Inject constructor(
         fun dismissRadioContinuationError() {}
         fun getPlaybackState(): Flow<PlaybackState?>
         fun getRemoteDeviceName(): Flow<String?>
+        /** Localized messages for `playback.error` replies while controlling a remote device. */
+        fun getPlaybackErrorMessages(): Flow<String> = kotlinx.coroutines.flow.emptyFlow()
         fun getHasOtherDeviceConnected(): Flow<Boolean>
         fun getSmartContinuationEnabled(): Flow<Boolean>
         fun getHasDestination(): Flow<Boolean> = kotlinx.coroutines.flow.flowOf(false)

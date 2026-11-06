@@ -128,7 +128,7 @@ Where the Keystore works nothing changes and no data is moved or lost.
 
 **player**
 - Implements platform-specific audio playback via `PlatformPlayer` interface
-- `PlayerService`: Android foreground service for background playback
+- `PlaybackService`: the foreground service behind all media controls, local and remote
 - `ExoPlatformPlayerModule`: ExoPlayer (Media3) integration with OkHttp for streaming
 - `PlayerServiceEventsEmitter`: Broadcasts player state changes
 - Handles audio streaming from the backend server with proper authentication
@@ -205,6 +205,49 @@ The app implements a robust offline-first synchronization system:
 4. **Conflict resolution**: Server sequence numbers track sync state; full resync on sequence gaps
 5. **Network awareness**: `NetworkConnectivityObserver` triggers sync when connectivity is restored
 6. **Lifecycle awareness**: `AppLifecycleObserver` manages sync timing based on app state
+
+### Multi-device playback
+
+The wire contract (messages, units, command list) lives in
+[`docs/multi-device-playback.md`](../docs/multi-device-playback.md); this section
+only covers the Android side.
+
+- **Device identity**: `AndroidDeviceInfoProvider` creates `android-<uuid>` once and
+  reports it at login with the name `MANUFACTURER MODEL` and the type from
+  `BuildConfig.DEVICE_TYPE` (`android` for the phone flavor, `android_tv` for TV).
+- **Reporting**: `PlaybackSessionHandler` (domain, `playbacksession/`) sends
+  `playback.hello` on every WebSocket connect, then `playback.state` on each player
+  change and every 5 s, and `playback.queue_update` on queue changes. Durations and
+  positions are seconds. The queue is also re-sent whenever reporting (re)starts, so
+  peers never see a state without its queue. It keeps the other visible devices in
+  `connectedDevices`, `otherDeviceStates`, `otherDeviceQueues` and exposes
+  `playback.error` replies through `errors`, shown as snackbars in the Devices and
+  Player screens.
+- **Controller mode** (`PlaybackModeManager`, `PlaybackMode.Remote`): "Control this
+  device" on the Devices screen calls `PlaybackSessionHandler.enterRemoteMode`.
+  `PlaybackRouter` then switches every `PezzottifyPlayer` flow to
+  `RemotePlaybackController` (state derived from the target's broadcasts, controls
+  turned into `playback.command`), `CompositePlaybackMetadataProvider` serves the
+  remote queue through `RemotePlaybackMetadataProvider`, and the local ExoPlayer
+  session is cleared. Leaving (`exitRemoteMode`, also used by `clearSession`) pauses
+  the target first. A controller ignores commands sent to it, since it reports no
+  state. Controller mode survives WebSocket drops: it exits only when a fresh device
+  list from the server (`deviceListFresh`) no longer contains the target. Progress
+  is interpolated from the local arrival time of each state
+  (`receivedAt`), never from the sender's clock.
+- **Foreground service**: `PlaybackService` backs every media control and stays in
+  the foreground while any session has content, playing or paused. In controller
+  mode it hosts a second `MediaSession` around `RemoteSessionPlayer`, which mirrors
+  the target, so the notification, lock screen and headset controls work the same
+  as for local playback. That session is separate because `ExoPlatformPlayer` stays
+  connected to the local one. `WebSocketInitializer` keeps the socket open while
+  `PezzottifyPlayer.isActive`, so a paused device stays reachable in the background.
+- **TV**: the TV flavor is a playback target only. It has no Devices screen; the
+  now-playing screen shows a "waiting for playback" card with the device name and
+  connection status until some other device starts it.
+- **Not supported**: playback transfer. Entering controller mode does not hand the
+  local queue to the target and leaving it does not pull playback back. See the
+  "Known gaps" section of the contract document.
 
 ## Development
 

@@ -162,6 +162,7 @@ internal class QueueMetadataResolver(
             trackName = track.name,
             artistNames = track.artistsIds.mapNotNull { artists[it]?.name },
             primaryArtistId = track.artistsIds.firstOrNull() ?: "",
+            artistIds = track.artistsIds,
             albumId = track.albumId,
             albumName = album?.name ?: "",
             artworkUrl = album?.displayImageId?.let { "$baseUrl/v1/content/image/$it" },

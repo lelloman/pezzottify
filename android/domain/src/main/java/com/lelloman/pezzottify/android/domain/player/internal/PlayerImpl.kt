@@ -719,6 +719,10 @@ class PlayerImpl(
         logger.info("Removed track at index $trackIndex from playlist")
     }
 
+    fun ensureMediaServiceRunning() {
+        platformPlayer.ensureServiceRunning()
+    }
+
     override fun clearSession() {
         cancelRadioRequest()
         loadNexPlaylistJob?.cancel()

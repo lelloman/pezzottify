@@ -114,7 +114,7 @@ class LruCacheTest {
 
     @Test
     fun `evicts LRU entry when max entries exceeded`() {
-        val cache = createCache(maxEntries = 3)
+        val cache = createCache(maxEntries = 3, timeProvider = tickingClock())
 
         cache.put("key1", "value1")
         cache.put("key2", "value2")
@@ -160,7 +160,8 @@ class LruCacheTest {
         val cache = createCache(
             maxEntries = 100,
             maxSizeBytes = 50L,
-            sizeCalculator = { it.length } // Size = string length
+            sizeCalculator = { it.length }, // Size = string length
+            timeProvider = tickingClock()
         )
 
         cache.put("key1", "12345678901234567890") // 20 bytes
@@ -369,6 +370,12 @@ class LruCacheTest {
     }
 
     // Helper function
+
+    /** Every read is later than the last, so LRU order never hangs on the real clock's resolution. */
+    private fun tickingClock(): () -> Long {
+        var time = 0L
+        return { ++time }
+    }
 
     private fun createCache(
         maxEntries: Int = 100,
