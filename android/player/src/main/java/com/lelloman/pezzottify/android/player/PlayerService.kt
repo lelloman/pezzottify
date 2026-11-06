@@ -236,6 +236,7 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    @OptIn(UnstableApi::class)
     private fun releaseRemoteSession() {
         remoteSnapshotsJob?.cancel()
         remoteSnapshotsJob = null

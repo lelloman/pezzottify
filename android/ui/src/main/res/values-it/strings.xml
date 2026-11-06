@@ -720,4 +720,8 @@
     <string name="device_flow_use_password">Usa la password</string>
     <string name="device_flow_qr_description">Codice QR per accedere dal telefono</string>
     <string name="device_flow_apply_host">Applica</string>
+    <string name="playback_error_forbidden">Non hai il permesso di controllare quel dispositivo</string>
+    <string name="playback_error_device_not_found">Quel dispositivo non è più connesso</string>
+    <string name="playback_error_unknown_command">Il server ha rifiutato il comando di riproduzione</string>
+    <string name="playback_error_generic">Comando di riproduzione non riuscito</string>
 </resources>
