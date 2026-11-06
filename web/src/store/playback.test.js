@@ -197,40 +197,15 @@ test("replaced or paused sessions reject delayed results without restarting audi
   }
 });
 
-test("remote playback transports the snapshot and never generates on the controller", async () => {
+test("a greatest hits queue reports its ranked snapshot and needs no generation", async () => {
   const { store, calls } = harness();
-  const commands = [];
-  let stops = 0;
-  const session = {
-    controlledDeviceId: null,
-    sendCommand: (...args) => commands.push(args),
-    notifyStateChanged() {},
-    notifyStopped() {
-      stops++;
-    },
-  };
-  store.setSessionStore(session);
-  store.enterRemoteMode(7);
-  assert.equal(session.controlledDeviceId, 7);
-  assert.equal(stops, 1);
-  assert.equal(store.mode, "remote");
   await store.setArtistGreatestHits("artist");
-  assert.equal(commands[0][0], "loadTrackIds");
-  const payload = commands[0][1];
-  assert.equal(payload.context.continuation.ordered_track_ids.length, 25);
-  store.applyRemoteQueue(
-    payload.trackIds.map((id) => ({ id })),
-    payload.context,
-  );
   await flush();
+  const context = store.snapshotQueueContext();
+  assert.equal(context.continuation.ordered_track_ids.length, 25);
   assert.equal(store.currentPlaylist.continuation.next_index, 10);
   assert.equal(calls.radio, 0);
   assert.equal(calls.smart, 0);
-  store.exitRemoteMode();
-  assert.equal(session.controlledDeviceId, null);
-  assert.equal(store.mode, "local");
-  assert.equal(store.isPlaying, false);
-  store.setSessionStore(null);
   store.stop();
 });
 
@@ -409,11 +384,9 @@ test("editing an album keeps gravity through the mix conversion and radio has no
   store.stop();
 });
 
-test("gravity travels in the queue context and remote controllers send setGravity commands", async () => {
+test("gravity travels in the queue context and destinations resolve their label", async () => {
   const { store } = harness();
-  const commands = [];
   store.setSessionStore({
-    sendCommand: (...args) => commands.push(args),
     notifyStateChanged() {},
     notifyQueueChanged() {},
   });
@@ -421,27 +394,15 @@ test("gravity travels in the queue context and remote controllers send setGravit
   await flush();
   const context = store.snapshotQueueContext();
   assert.ok(context.gravity.auto_track_ids.includes("smart-track-1"));
-  const queue = store.snapshotQueue();
-  store.enterRemoteMode();
-  store.applyRemoteQueue(queue, context);
-  await flush();
-  assert.deepEqual(
-    store.currentPlaylist.gravity.auto_track_ids,
-    context.gravity.auto_track_ids,
-  );
-  assert.equal(store.currentPlaylist.context.gravity, undefined);
   await store.setGravityDestination(
     { entity_type: "artist", entity_id: "a1" },
     7,
   );
-  const command = commands.find(([name]) => name === "setGravity");
-  assert.ok(command);
-  assert.equal(command[1].gravity.destination.length, 1);
-  assert.equal(command[1].gravity.destination[0].entity_id, "a1");
-  assert.equal(command[1].gravity.destination[0].label, "Artist");
-  assert.equal(command[1].gravity.steps_total, 7);
-  assert.equal(store.currentPlaylist.gravity.destination, null);
-  store.exitRemoteMode();
+  const updated = store.snapshotQueueContext().gravity;
+  assert.equal(updated.destination.length, 1);
+  assert.equal(updated.destination[0].entity_id, "a1");
+  assert.equal(updated.destination[0].label, "Artist");
+  assert.equal(updated.steps_total, 7);
   store.setSessionStore(null);
   store.stop();
 });
@@ -644,25 +605,4 @@ test("stop dismisses a pending playback error", async () => {
   assert.match(store.pendingPlayback.message, /Could not create radio/);
   store.stop();
   assert.equal(store.pendingPlayback, null);
-});
-
-test("remote mode shows pending playback here and commits to the target device", async () => {
-  const { store, remote } = harness();
-  const commands = [];
-  store.setSessionStore({
-    sendCommand: (name, payload) => commands.push({ name, payload }),
-  });
-  store.enterRemoteMode();
-  const tracks = deferred();
-  remote.fetchRadioTrackIds = () => tracks.promise;
-  const started = store.setRadioFromItem("artist", "artist-1");
-  assert.equal(store.pendingPlayback.status, "creating");
-  tracks.resolve(ids(2));
-  await started;
-  assert.equal(store.pendingPlayback, null);
-  assert.equal(commands.length, 1);
-  assert.equal(commands[0].name, "loadTrackIds");
-  assert.deepEqual(commands[0].payload.trackIds, ids(2));
-  assert.equal(commands[0].payload.context.seed.label, "Artist");
-  store.exitRemoteMode();
 });

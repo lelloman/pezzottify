@@ -88,7 +88,7 @@ export const useAuthStore = defineStore("auth", {
         playbackSessionStore.initialize();
 
         // Announce persisted playback state (e.g. after page refresh)
-        if (playbackStore.currentTrackId && playbackStore.mode === "local") {
+        if (playbackStore.currentTrackId) {
           playbackSessionStore.notifyPlaybackStarted();
         }
 

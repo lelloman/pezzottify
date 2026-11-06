@@ -38,10 +38,6 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
   const isBroadcasting = ref(false);
   const queueVersion = ref(0);
 
-  // Device this tab is remote-controlling (remote-mode scaffolding; the UI
-  // does not enter remote mode yet). Used as the default command target.
-  const controlledDeviceId = ref(null);
-
   // Last playback.error from the server, surfaced by the Devices UI.
   // { code, message, command, at }
   const lastError = ref(null);
@@ -113,8 +109,7 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
   }
 
   function canBroadcast() {
-    return Boolean(_playbackStore?.currentTrackId) &&
-      _playbackStore?.mode !== "remote";
+    return Boolean(_playbackStore?.currentTrackId);
   }
 
   function broadcastState() {
@@ -179,35 +174,13 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
     });
   }
 
-  /**
-   * Send a command to another device. Without an explicit target the
-   * command goes to the device this tab is controlling.
-   */
-  function sendCommand(command, payload = {}, targetDeviceId = null) {
-    const target = targetDeviceId ?? controlledDeviceId.value;
-    if (target == null) {
-      console.warn("[PlaybackSession] sendCommand without target:", command);
-      lastError.value = {
-        code: "no_target",
-        message: "No device selected for this command",
-        command,
-        at: Date.now(),
-      };
-      return;
-    }
+  /** Send a command to another device. */
+  function sendCommand(command, payload, targetDeviceId) {
     ws.send("playback.command", {
       command,
       payload,
-      target_device_id: target,
+      target_device_id: targetDeviceId,
     });
-  }
-
-  function requestQueue(targetDeviceId = null) {
-    const target = targetDeviceId ?? controlledDeviceId.value;
-    ws.send(
-      "playback.request_queue",
-      target != null ? { target_device_id: target } : null,
-    );
   }
 
   // ============================================
@@ -227,9 +200,6 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
         break;
       case "playback.device_stopped":
         handleDeviceStopped(payload);
-        break;
-      case "playback.queue_sync":
-        handleQueueSync(payload);
         break;
       case "playback.command":
         handleCommand(payload);
@@ -301,10 +271,6 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
         receivedAt: Date.now(),
       },
     };
-
-    if (payload.device_id === controlledDeviceId.value) {
-      _playbackStore?.applyRemoteState?.(payload.state, Date.now());
-    }
   }
 
   function mergeQueue(deviceId, payload) {
@@ -318,9 +284,6 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
         queueVersion: payload.queue_version,
       },
     };
-    if (deviceId === controlledDeviceId.value) {
-      _playbackStore?.applyRemoteQueue?.(payload.queue || [], payload.context);
-    }
   }
 
   function handleDeviceQueue(payload) {
@@ -338,25 +301,6 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
     const newStates = { ...otherDeviceStates.value };
     delete newStates[payload.device_id];
     otherDeviceStates.value = newStates;
-  }
-
-  function handleQueueSync(payload) {
-    const targetDeviceId = payload.device_id ?? controlledDeviceId.value;
-    if (targetDeviceId == null) {
-      console.log(
-        "[PlaybackSession] Queue sync received without device id:",
-        payload,
-      );
-      return;
-    }
-    if (targetDeviceId === myDeviceId.value) return;
-
-    console.debug("[PlaybackSession] queue_sync", {
-      deviceId: targetDeviceId,
-      queueSize: payload.queue?.length || 0,
-      queueVersion: payload.queue_version,
-    });
-    mergeQueue(targetDeviceId, payload);
   }
 
   function handleError(payload) {
@@ -551,11 +495,6 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
 
   async function handleCommand(payload) {
     if (!_playbackStore) return;
-    if (_playbackStore.mode === "remote") {
-      // A controller reports no state; executing here would play unheard audio.
-      console.info("[PlaybackSession] ignoring command while controlling", payload);
-      return;
-    }
 
     const { command, payload: cmdPayload } = payload;
     console.info("[PlaybackSession] command", { command, payload: cmdPayload });
@@ -624,11 +563,7 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
   // While this tab plays or reports, the socket must stay alive in the
   // background so the device stays reachable.
   function needsKeepAlive() {
-    return (
-      isBroadcasting.value ||
-      controlledDeviceId.value != null ||
-      Boolean(_playbackStore?.isPlaying)
-    );
+    return isBroadcasting.value || Boolean(_playbackStore?.isPlaying);
   }
 
   let _connectWatcher = null;
@@ -671,7 +606,6 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
     myDeviceId.value = null;
     devices.value = [];
     otherDeviceStates.value = {};
-    controlledDeviceId.value = null;
     lastError.value = null;
     queueVersion.value = 0;
     _helloAttempts = 0;
@@ -684,7 +618,6 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
     devices,
     isBroadcasting,
     otherDeviceStates,
-    controlledDeviceId,
     lastError,
 
     // Computed
@@ -694,7 +627,6 @@ export const usePlaybackSessionStore = defineStore("playbackSession", () => {
     handleMessage,
     sendHello,
     sendCommand,
-    requestQueue,
     clearError,
 
     // Notifications from playback store

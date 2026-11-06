@@ -3,7 +3,6 @@
  *
  * Single source of truth for all playback state.
  * Uses LocalOutlet (Howler.js) directly for audio playback.
- * Supports local mode (audio plays here) and remote mode (controlling another device).
  */
 
 import { defineStore } from "pinia";
@@ -43,7 +42,6 @@ export const usePlaybackStore = defineStore("playback", () => {
   // Core playback state
   // ============================================
 
-  const mode = ref("local"); // 'local' | 'remote'
   const isPlaying = ref(false);
   setPlaybackActivityProvider(() => isPlaying.value);
   const progressSec = ref(0);
@@ -102,10 +100,8 @@ export const usePlaybackStore = defineStore("playback", () => {
       isPlaying.value = playing;
     },
     onProgressUpdate: (sec, percent) => {
-      if (mode.value === "local") {
-        progressSec.value = sec;
-        progressPercent.value = percent;
-      }
+      progressSec.value = sec;
+      progressPercent.value = percent;
     },
     onTrackLoaded: (duration) => {
       localDuration.value = (duration || 0) * 1000; // Howler returns seconds, store as ms
@@ -148,8 +144,6 @@ export const usePlaybackStore = defineStore("playback", () => {
   // ============================================
 
   const resolveLocalTrack = () => {
-    if (mode.value === "remote") return;
-
     if (!currentTrackId.value) {
       currentTrack.value = null;
       return;
@@ -189,7 +183,6 @@ export const usePlaybackStore = defineStore("playback", () => {
   // Re-resolve when statics data loads (artist/album names become available)
   watch(
     () => {
-      if (mode.value === "remote") return null;
       if (!currentTrackId.value) return null;
       const t = staticsStore.getTrack(currentTrackId.value);
       const track = t?.item;
@@ -275,188 +268,43 @@ export const usePlaybackStore = defineStore("playback", () => {
 
   loadPersistedState();
 
-  // Save state watchers - guarded against remote mode
+  // Save state watchers
   const savePlaylistHistory = (history) =>
     localStorage.setItem("playlistsHistory", JSON.stringify(history));
 
   watch(playlistsHistory, (newHistory) => {
-    if (mode.value === "local") savePlaylistHistory(newHistory);
+    savePlaylistHistory(newHistory);
   });
   watch(muted, (newMuted) => {
-    if (mode.value === "local") localStorage.setItem("muted", newMuted);
+    localStorage.setItem("muted", newMuted);
   });
   watch(volume, (newVolume) => {
-    if (mode.value === "local") localStorage.setItem("volume", newVolume);
+    localStorage.setItem("volume", newVolume);
   });
   watch(currentTrackIndex, (newIndex) => {
-    if (mode.value === "local" && Number.isInteger(newIndex)) {
+    if (Number.isInteger(newIndex)) {
       localStorage.setItem("currentTrackIndex", newIndex);
     }
   });
   watch(currentPlaylistIndex, (newIndex) => {
-    if (mode.value === "local" && Number.isInteger(newIndex)) {
+    if (Number.isInteger(newIndex)) {
       localStorage.setItem("currentPlaylistIndex", newIndex);
     }
   });
 
   let lastSecProgressSaved = 0;
   const persistProgressPercent = () => {
-    if (mode.value !== "local") return;
     localStorage.setItem("progressPercent", progressPercent.value);
     lastSecProgressSaved = progressSec.value || 0;
     localStorage.setItem("progressSec", progressSec.value);
   };
 
   watch(progressSec, (newSec) => {
-    if (mode.value !== "local") return;
     const diff = Math.abs(Math.round(newSec) - lastSecProgressSaved);
     if (diff > 4) {
       persistProgressPercent();
     }
   });
-
-  // ============================================
-  // Remote mode: Position interpolation
-  // ============================================
-
-  // Anchor is the local arrival time of the last remote state, never the
-  // sender's clock (device clocks are not synchronized).
-  let _remoteReceivedAt = 0;
-  let _remotePosition = 0;
-  let _remoteIsPlaying = false;
-  let _interpolationFrame = null;
-
-  function startInterpolation() {
-    stopInterpolation();
-    function tick() {
-      if (mode.value !== "remote") return;
-      if (_remoteIsPlaying) {
-        const elapsed = Math.max(0, (Date.now() - _remoteReceivedAt) / 1000);
-        const interpolated = _remotePosition + elapsed;
-        const durSec = (currentTrack.value?.duration || 0) / 1000;
-        progressSec.value = Math.max(0, Math.min(interpolated, durSec));
-        progressPercent.value = durSec > 0 ? progressSec.value / durSec : 0;
-      }
-      _interpolationFrame = requestAnimationFrame(tick);
-    }
-    _interpolationFrame = requestAnimationFrame(tick);
-  }
-
-  function stopInterpolation() {
-    if (_interpolationFrame) {
-      cancelAnimationFrame(_interpolationFrame);
-      _interpolationFrame = null;
-    }
-  }
-
-  // ============================================
-  // Remote mode: State application
-  // ============================================
-
-  // `receivedAt` is when this tab received the state (local clock).
-  // Wire durations and positions are seconds; the store keeps ms durations.
-  function applyRemoteState(state, receivedAt = Date.now()) {
-    if (mode.value !== "remote") return;
-
-    console.debug("[Playback] applyRemoteState", {
-      trackId: state.current_track?.id,
-      isPlaying: state.is_playing,
-      queuePosition: state.queue_position,
-      queueVersion: state.queue_version,
-      timestamp: state.timestamp,
-    });
-    isPlaying.value = state.is_playing;
-    volume.value = state.volume;
-    muted.value = state.muted;
-    progressSec.value = Math.max(0, state.position || 0);
-
-    // Update interpolation anchor
-    _remoteReceivedAt = receivedAt || Date.now();
-    _remotePosition = Math.max(0, state.position || 0);
-    _remoteIsPlaying = state.is_playing;
-
-    if (state.current_track) {
-      currentTrack.value = {
-        id: state.current_track.id,
-        title: state.current_track.title,
-        artistId: state.current_track.artist_id,
-        artistName: state.current_track.artist_name,
-        albumId: state.current_track.album_id,
-        albumTitle: state.current_track.album_title,
-        duration: (state.current_track.duration || 0) * 1000,
-        trackNumber: state.current_track.track_number,
-        imageId: state.current_track.image_id,
-      };
-      currentTrackId.value = state.current_track.id;
-      localDuration.value = (state.current_track.duration || 0) * 1000;
-    } else {
-      currentTrack.value = null;
-      currentTrackId.value = null;
-    }
-
-    const durSec = state.current_track?.duration || 0;
-    progressPercent.value =
-      durSec > 0 ? Math.max(0, Math.min(progressSec.value / durSec, 1)) : 0;
-  }
-
-  function applyRemoteQueue(queue, context = null) {
-    if (mode.value !== "remote") return;
-
-    console.debug("[Playback] applyRemoteQueue", {
-      queueSize: queue.length,
-    });
-    const trackIds = queue.map((item) => item.id);
-    const isRadio = context?.type === "radio";
-    playlistsHistory.value = [
-      {
-        context: context
-          ? { ...context, continuation: undefined, gravity: undefined }
-          : { name: "Remote", id: null, edited: false },
-        continuation: context?.continuation || null,
-        gravity: isRadio ? null : gravity.normalize(context?.gravity),
-        tracksIds: trackIds,
-        type: isRadio ? PLAYBACK_CONTEXTS.radio : PLAYBACK_CONTEXTS.userMix,
-      },
-    ];
-    currentPlaylistIndex.value = 0;
-  }
-
-  // ============================================
-  // Remote mode: Enter / Exit
-  // ============================================
-
-  // Remote mode is scaffolding for playback transfer; no UI enters it yet.
-  function enterRemoteMode(deviceId = null) {
-    radioCreation.cancel();
-    cancelRadioContinuation();
-    console.info("[Playback] enterRemoteMode", { deviceId });
-    const session = getSessionStore();
-    if (mode.value === "local") session?.notifyStopped?.();
-    localOutlet.stop();
-    isPlaying.value = false;
-    mode.value = "remote";
-    if (session) session.controlledDeviceId = deviceId;
-    startInterpolation();
-  }
-
-  function exitRemoteMode() {
-    radioCreation.cancel();
-    console.info("[Playback] exitRemoteMode");
-    stopInterpolation();
-    const session = getSessionStore();
-    if (session) session.controlledDeviceId = null;
-    // Drop the remote device's state before restoring our own.
-    isPlaying.value = false;
-    currentTrack.value = null;
-    currentTrackId.value = null;
-    currentTrackIndex.value = null;
-    currentPlaylistIndex.value = null;
-    playlistsHistory.value = [];
-    progressSec.value = 0;
-    progressPercent.value = 0;
-    mode.value = "local";
-    loadPersistedState();
-  }
 
   // ============================================
   // Snapshot methods for broadcasting
@@ -604,7 +452,6 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const maybeFetchSmartContinuation = async () => {
-    if (mode.value !== "local") return;
     if (!userStore.isSmartContinuationEnabled) return;
     if (!currentPlaylist.value || currentTrackIndex.value === null) return;
     if (currentPlaylist.value.type === PLAYBACK_CONTEXTS.radio) return;
@@ -633,8 +480,7 @@ export const usePlaybackStore = defineStore("playback", () => {
         await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
       if (
         currentQueueSignature() !== signature ||
-        !userStore.isSmartContinuationEnabled ||
-        mode.value !== "local"
+        !userStore.isSmartContinuationEnabled
       )
         break;
       const result =
@@ -646,7 +492,7 @@ export const usePlaybackStore = defineStore("playback", () => {
 
     if (smartContinuationInFlightSignature.value !== signature) return;
     smartContinuationInFlightSignature.value = null;
-    if (!userStore.isSmartContinuationEnabled || mode.value !== "local") return;
+    if (!userStore.isSmartContinuationEnabled) return;
     if (currentPlaylist.value?.type === PLAYBACK_CONTEXTS.radio) return;
     if (currentQueueSignature() !== signature) return;
     const existingTrackIds = new Set(currentPlaylist.value?.tracksIds || []);
@@ -681,7 +527,6 @@ export const usePlaybackStore = defineStore("playback", () => {
     const index =
       currentTrackIndex.value ?? (playlist?.tracksIds.length === 0 ? 0 : null);
     if (
-      mode.value !== "local" ||
       (!isPlaying.value && !force) ||
       !playlist ||
       index === null ||
@@ -703,7 +548,6 @@ export const usePlaybackStore = defineStore("playback", () => {
     const valid = () =>
       radioRequest === controller &&
       !controller.signal.aborted &&
-      mode.value === "local" &&
       currentPlaylist.value?.continuation === state;
     try {
       let trackIds;
@@ -829,9 +673,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     const trackId = currentPlaylist.value.tracksIds[index];
     currentTrackId.value = trackId;
 
-    if (mode.value === "local") {
-      localOutlet.loadTrack(trackId, false, seekPercent || pendingSeekPercent);
-    }
+    localOutlet.loadTrack(trackId, false, seekPercent || pendingSeekPercent);
     pendingSeekPercent = null;
   };
 
@@ -841,8 +683,6 @@ export const usePlaybackStore = defineStore("playback", () => {
 
   const setAlbumId = async (albumId, discIndex, trackIndex) => {
     radioCreation.cancel();
-    if (mode.value === "remote") return;
-
     const album = await Promise.resolve(staticsStore.waitAlbumData(albumId));
     if (!album) {
       console.error("Album", albumId, "not found in staticsStore");
@@ -861,8 +701,6 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const setTrack = (newTrack) => {
-    if (mode.value === "remote") return;
-
     const trackPlaylist = makePlaylistFromTrackId(newTrack.id);
     setNewPlayingPlaylist(trackPlaylist);
     loadTrack(0);
@@ -870,7 +708,6 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const setUserPlaylist = async (newPlaylist, startIndex = 0) => {
-    if (mode.value === "remote") return;
     if (newPlaylist.tracks.length === 0) return;
 
     const userPlaylistPlaylist = makePlaylistFromUserPlaylist(newPlaylist);
@@ -885,7 +722,6 @@ export const usePlaybackStore = defineStore("playback", () => {
     autoPlay = false,
     playlistContext = null,
   ) => {
-    if (mode.value === "remote") return;
     if (!trackIds || trackIds.length === 0) return;
 
     const playlist =
@@ -900,11 +736,7 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const commitRadio = ({ trackIds, context }) => {
-    if (mode.value === "remote") {
-      getSessionStore()?.sendCommand("loadTrackIds", { trackIds, context });
-    } else {
-      setPlaylistFromTrackIds(trackIds, 0, true, context);
-    }
+    setPlaylistFromTrackIds(trackIds, 0, true, context);
   };
 
   // Starts a radio whose context is known up front. The seed label resolves
@@ -1075,11 +907,6 @@ export const usePlaybackStore = defineStore("playback", () => {
   // ============================================
 
   const play = () => {
-    if (mode.value === "remote") {
-      getSessionStore()?.sendCommand("play");
-      return;
-    }
-
     console.debug("[Playback] play", {
       currentTrackIndex: currentTrackIndex.value,
       hasLoadedSound: localOutlet.hasLoadedSound(),
@@ -1099,11 +926,6 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const pause = () => {
-    if (mode.value === "remote") {
-      getSessionStore()?.sendCommand("pause");
-      return;
-    }
-
     cancelRadioContinuation();
     console.debug("[Playback] pause");
     localOutlet.pause();
@@ -1129,11 +951,6 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const skipNextTrack = () => {
-    if (mode.value === "remote") {
-      getSessionStore()?.sendCommand("next");
-      return;
-    }
-
     console.debug("[Playback] skipNextTrack", {
       currentIndex: currentTrackIndex.value,
       playlistSize: currentPlaylist.value?.tracksIds?.length || 0,
@@ -1157,11 +974,6 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const skipPreviousTrack = () => {
-    if (mode.value === "remote") {
-      getSessionStore()?.sendCommand("prev");
-      return;
-    }
-
     console.debug("[Playback] skipPreviousTrack", {
       currentIndex: currentTrackIndex.value,
     });
@@ -1182,75 +994,36 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const seekToPercentage = (percentage) => {
-    if (mode.value === "remote") {
-      const durMs = currentTrack.value?.duration || 0;
-      getSessionStore()?.sendCommand("seek", {
-        position: (durMs / 1000) * percentage,
-      });
-      return;
-    }
-
     localOutlet.seekToPercentage(percentage);
     persistProgressPercent();
     getSessionStore()?.notifyStateChanged();
   };
 
   const forward10Sec = () => {
-    if (mode.value === "remote") {
-      const pos = progressSec.value;
-      const durMs = currentTrack.value?.duration || 0;
-      if (durMs > 0) {
-        getSessionStore()?.sendCommand("seek", {
-          position: Math.min(pos + 10, durMs / 1000),
-        });
-      }
-      return;
-    }
-
     const pos = localOutlet.getPosition();
     localOutlet.seekTo(pos + 10);
     getSessionStore()?.notifyStateChanged();
   };
 
   const rewind10Sec = () => {
-    if (mode.value === "remote") {
-      const pos = progressSec.value;
-      getSessionStore()?.sendCommand("seek", {
-        position: Math.max(0, pos - 10),
-      });
-      return;
-    }
-
     const pos = localOutlet.getPosition();
     localOutlet.seekTo(Math.max(0, pos - 10));
     getSessionStore()?.notifyStateChanged();
   };
 
   const setVolume = (newVolume) => {
-    if (mode.value === "remote") {
-      getSessionStore()?.sendCommand("setVolume", { volume: newVolume });
-      return;
-    }
-
     volume.value = newVolume;
     localOutlet.setVolume(newVolume);
     getSessionStore()?.notifyStateChanged();
   };
 
   const setMuted = (newMuted) => {
-    if (mode.value === "remote") {
-      getSessionStore()?.sendCommand("setMuted", { muted: newMuted });
-      return;
-    }
-
     muted.value = newMuted;
     localOutlet.setMuted(newMuted, volume.value);
     getSessionStore()?.notifyStateChanged();
   };
 
   const loadTrackIndex = (index) => {
-    if (mode.value === "remote") return;
-
     pendingSeekPercent = null;
     if (
       currentPlaylist.value?.tracksIds.length &&
@@ -1267,8 +1040,6 @@ export const usePlaybackStore = defineStore("playback", () => {
   const stop = () => {
     radioCreation.cancel();
     cancelRadioContinuation();
-    if (mode.value === "remote") return;
-
     localOutlet.stop();
     isPlaying.value = false;
     progressPercent.value = 0.0;
@@ -1286,7 +1057,6 @@ export const usePlaybackStore = defineStore("playback", () => {
   // ============================================
 
   const goToPreviousPlaylist = () => {
-    if (mode.value === "remote") return;
     if (canGoToPreviousPlaylist.value) {
       currentPlaylistIndex.value -= 1;
       loadTrack(0);
@@ -1297,7 +1067,6 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const goToNextPlaylist = () => {
-    if (mode.value === "remote") return;
     if (canGoToNextPlaylist.value) {
       currentPlaylistIndex.value += 1;
       loadTrack(0);
@@ -1312,7 +1081,6 @@ export const usePlaybackStore = defineStore("playback", () => {
   // ============================================
 
   const moveTrack = (fromIndex, toIndex) => {
-    if (mode.value === "remote") return;
     if (fromIndex === toIndex) return;
 
     const newTracks = [...currentPlaylist.value.tracksIds];
@@ -1367,7 +1135,6 @@ export const usePlaybackStore = defineStore("playback", () => {
     automatic = false,
     diagnostics = null,
   ) => {
-    if (mode.value === "remote") return;
     if (!currentPlaylist.value) return;
 
     let pushNewHistory = false;
@@ -1417,7 +1184,6 @@ export const usePlaybackStore = defineStore("playback", () => {
   };
 
   const removeTrackFromPlaylist = (index) => {
-    if (mode.value === "remote") return;
     if (!currentPlaylist.value) return;
     if (
       !Number.isInteger(index) ||
@@ -1491,16 +1257,11 @@ export const usePlaybackStore = defineStore("playback", () => {
   // Gravity (smart continuation steering)
   // ============================================
 
-  // Replace the current playlist's gravity. In remote mode the playing device
-  // owns the queue, so the change is sent as a command instead.
+  // Replace the current playlist's gravity.
   const applyGravity = (nextGravity) => {
     const playlist = currentPlaylist.value;
     if (!playlist || playlist.type === PLAYBACK_CONTEXTS.radio) return;
     const normalized = gravity.normalize(nextGravity);
-    if (mode.value === "remote") {
-      getSessionStore()?.sendCommand("setGravity", { gravity: normalized });
-      return;
-    }
     playlistsHistory.value[currentPlaylistIndex.value] = {
       ...playlist,
       gravity: normalized,
@@ -1577,7 +1338,6 @@ export const usePlaybackStore = defineStore("playback", () => {
       currentPlaylist,
       () => userStore.isSmartContinuationEnabled,
       isPlaying,
-      mode,
     ],
     () => {
       maybeFetchSmartContinuation();
@@ -1591,7 +1351,6 @@ export const usePlaybackStore = defineStore("playback", () => {
 
   return {
     // Core state
-    mode,
     pendingPlayback,
     radioContinuationError,
     retryRadioContinuation,
@@ -1662,11 +1421,7 @@ export const usePlaybackStore = defineStore("playback", () => {
     setGravityStepsTotal,
     setGravitySource,
 
-    // Remote mode
-    enterRemoteMode,
-    exitRemoteMode,
-    applyRemoteState,
-    applyRemoteQueue,
+    // Broadcasting
     snapshotState,
     snapshotQueue,
     snapshotQueueContext,

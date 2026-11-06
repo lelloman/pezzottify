@@ -587,8 +587,6 @@ const errorText = computed(() => {
       return `${what}: that device is no longer connected.`;
     case "unknown_command":
       return `${what}: the server does not know this command.`;
-    case "no_target":
-      return "No device selected for this command.";
     default:
       return `${what}: ${err.message || err.code}`;
   }

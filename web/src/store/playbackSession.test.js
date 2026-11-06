@@ -35,7 +35,6 @@ function harness(t, { playback = {}, remote = {}, statics = {} } = {}) {
       calls.push([name, ...args]);
     };
   const playbackStore = {
-    mode: "local",
     currentTrackId: null,
     currentTrack: null,
     isPlaying: false,
@@ -63,8 +62,6 @@ function harness(t, { playback = {}, remote = {}, statics = {} } = {}) {
     removeTrackFromPlaylist: record("removeTrackFromPlaylist"),
     moveTrack: record("moveTrack"),
     applyGravity: record("applyGravity"),
-    applyRemoteState: record("applyRemoteState"),
-    applyRemoteQueue: record("applyRemoteQueue"),
     ...playback,
   };
   const source = readFileSync(
@@ -290,60 +287,26 @@ test("commands run on the local player and are followed by a state broadcast", a
   assert.equal(ofType("playback.state").length, 6);
 });
 
-test("a controller ignores incoming commands", async (t) => {
-  const { store, calls, playbackStore } = harness(t, {
-    playback: { mode: "remote" },
-  });
-  playbackStore.currentTrackId = "t1";
-  store.handleMessage("playback.command", { command: "play", payload: {} });
-  await flush();
-  assert.equal(calls.length, 0);
-});
-
-test("sendCommand targets the controlled device by default and refuses without one", (t) => {
+test("sendCommand addresses the given device", (t) => {
   const { store, ofType } = harness(t);
-  store.sendCommand("play");
-  assert.equal(ofType("playback.command").length, 0);
-  assert.equal(store.lastError.code, "no_target");
-  store.clearError();
-  store.controlledDeviceId = 9;
-  store.sendCommand("pause");
   store.sendCommand("seek", { position: 3 }, 4);
-  const sent = ofType("playback.command").map((m) => m.payload);
-  assert.deepEqual(sent, [
-    { command: "pause", payload: {}, target_device_id: 9 },
+  assert.deepEqual(ofType("playback.command").map((m) => m.payload), [
     { command: "seek", payload: { position: 3 }, target_device_id: 4 },
   ]);
-  store.handleMessage("playback.welcome", welcome({ device_id: 1 }));
-  store.handleMessage("playback.device_state", {
-    device_id: 9,
-    device_name: "tv",
-    state: { is_playing: true },
-  });
 });
 
-test("the controlled device's state and queue are applied to the playback store", (t) => {
-  t.mock.timers.enable({ apis: ["Date"], now: 42 });
-  const { store, calls } = harness(t);
+test("a device_queue relay is kept with that device's state", (t) => {
+  const { store } = harness(t);
   store.handleMessage("playback.welcome", welcome());
-  store.controlledDeviceId = 2;
-  store.handleMessage("playback.device_state", {
+  store.handleMessage("playback.device_queue", {
     device_id: 2,
-    device_name: "phone",
-    state: { is_playing: true, position: 1 },
-  });
-  assert.deepEqual(calls.at(-1), [
-    "applyRemoteState",
-    { is_playing: true, position: 1 },
-    42,
-  ]);
-  store.handleMessage("playback.queue_sync", {
     queue: [{ id: "q" }],
     queue_version: 2,
     context: { type: "album" },
   });
-  assert.deepEqual(calls.at(-1), ["applyRemoteQueue", [{ id: "q" }], { type: "album" }]);
   assert.equal(store.otherDeviceStates[2].queueVersion, 2);
+  assert.deepEqual(store.otherDeviceStates[2].queue, [{ id: "q" }]);
+  assert.deepEqual(store.otherDeviceStates[2].queueContext, { type: "album" });
 });
 
 test("hello retries stop after an error reply and the keep-alive follows playback", (t) => {
@@ -364,8 +327,6 @@ test("hello retries stop after an error reply and the keep-alive follows playbac
   playbackStore.isPlaying = true;
   assert.equal(keepAlive()(), true);
   playbackStore.isPlaying = false;
-  store.controlledDeviceId = 3;
-  assert.equal(keepAlive()(), true);
   store.cleanup();
   assert.equal(keepAlive(), null);
 });

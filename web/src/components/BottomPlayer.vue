@@ -219,7 +219,6 @@
         </button>
         <DeviceSelector />
         <ControlIconButton
-          v-if="playback.mode === 'local'"
           label="Stop playback"
           :action="handleStop"
           :icon="StopIcon"
@@ -460,25 +459,6 @@ watch(
       artistName.value = null;
       imageUrls.value = [];
       duration.value = "";
-      return;
-    }
-
-    // In remote mode, track data comes directly from the playback store
-    if (playback.mode === "remote") {
-      displayTrack.value = {
-        id: track.id,
-        name: track.title,
-        album_id: track.albumId,
-        artists_ids: track.artistId ? [track.artistId] : [],
-      };
-      artists.value = track.artistId ? [track.artistId] : [];
-      artistName.value = track.artistName;
-      duration.value = track.duration ? formatTime(track.duration / 1000) : "";
-      if (track.imageId) {
-        imageUrls.value = [`/v1/content/image/${track.imageId}`];
-      } else {
-        imageUrls.value = [];
-      }
       return;
     }
 

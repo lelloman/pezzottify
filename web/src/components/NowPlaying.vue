@@ -72,9 +72,6 @@
             <SkipNext />
           </button>
         </div>
-        <p v-if="playback.mode === 'remote'" class="remoteNotice">
-          Controlling playback on your connected device
-        </p>
       </section>
       <div class="lyricsColumn">
         <TrackLyrics
@@ -180,11 +177,6 @@ const time = (value) => {
 .identity,
 .seekRow,
 .transport,
-.remoteNotice {
-  max-width: 440px;
-  margin-left: auto;
-  margin-right: auto;
-}
 .identity h1 {
   margin: 0 0 8px;
   font-size: clamp(24px, 3vw, 40px);
@@ -359,12 +351,6 @@ input:focus-visible {
   color: white;
   background: transparent;
 }
-.remoteNotice {
-  color: #b3b3b3;
-  font-size: 12px;
-  line-height: 1.5;
-  margin-top: 20px;
-}
 @container (max-width: 700px) {
   .nowPlayingHeader {
     padding: 16px 20px 8px;
@@ -401,12 +387,6 @@ input:focus-visible {
   }
   .seekRow,
   .transport,
-  .remoteNotice {
-    grid-column: 1 / -1;
-    margin: 0;
-    width: 100%;
-    max-width: none;
-  }
   .transport .playButton {
     width: 48px;
     height: 48px;

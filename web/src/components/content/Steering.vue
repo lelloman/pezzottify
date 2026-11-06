@@ -118,11 +118,6 @@
             Turn it on
           </button>
         </div>
-        <div v-if="isRemote" class="notice" role="status">
-          <span>
-            You are controlling another device. Changes are sent to it.
-          </span>
-        </div>
         <div class="steeringGrid">
           <GravitySourceCard :gravity="gravity" :tracksIds="tracksIds" />
           <GravityDestinationCard ref="destinationCard" :gravity="gravity" />
@@ -159,7 +154,6 @@ const isRadio = computed(
 );
 const gravity = computed(() => playback.currentGravity);
 const tracksIds = computed(() => playlist.value?.tracksIds || []);
-const isRemote = computed(() => playback.mode === "remote");
 const smartContinuationEnabled = computed(
   () => userStore.isSmartContinuationEnabled,
 );
