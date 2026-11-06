@@ -1580,3 +1580,4 @@ include!("sqlite_devices.rs");
 include!("sqlite_events.rs");
 include!("sqlite_notifications.rs");
 include!("sqlite_push.rs");
+include!("sqlite_user_store_tests.rs");

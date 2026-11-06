@@ -255,6 +255,337 @@ fn identity(proposal: &WorkProposal) -> Result<String> {
     ))?)
 }
 
+fn work_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Work> {
+    let creators: String = row.get(2)?;
+    Ok(Work {
+        id: row.get(0)?,
+        title: row.get(1)?,
+        creators: serde_json::from_str(&creators).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(2, rusqlite::types::Type::Text, Box::new(e))
+        })?,
+        catalog_number: row.get(3)?,
+        kind: row.get(4)?,
+        created_at: row.get(5)?,
+        wikidata_id: row.get(6)?,
+        musicbrainz_id: row.get(7)?,
+    })
+}
+
+impl SqliteEnrichmentStore {
+    pub(super) fn read_work_relations(&self, id: &str) -> Result<Vec<WorkRelation>> {
+        let rows = {
+            let conn = self.read_conn.lock().unwrap();
+            let mut stmt = conn.prepare(
+                "SELECT DISTINCT CASE WHEN source_work_id=?1 THEN target_work_id ELSE source_work_id END,
+                 relationship_type, CASE WHEN source_work_id=?1 THEN 'outgoing' ELSE 'incoming' END, ordering
+                 FROM work_relationships_v1 WHERE source_work_id=?1 OR target_work_id=?1
+                 ORDER BY relationship_type, ordering, 1"
+            )?;
+            let rows = stmt.query_map([id], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, i64>(3)?,
+                ))
+            })?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        rows.into_iter()
+            .filter(|(other, _, _, _)| other != id)
+            .map(|(other, relationship_type, direction, ordering)| {
+                Ok(self.read_work(&other)?.map(|work| WorkRelation {
+                    work,
+                    relationship_type,
+                    direction,
+                    ordering,
+                }))
+            })
+            .collect::<Result<Vec<_>>>()
+            .map(|rows| rows.into_iter().flatten().collect())
+    }
+
+    pub(super) fn read_work_recordings(
+        &self,
+        id: &str,
+        scope: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<WorkRecording>> {
+        let conn = self.read_conn.lock().unwrap();
+        // Deduplicate by node identity to handle cycles and multiple paths.
+        // Related works are one non-parts hop away, plus their contained parts.
+        // Never walk upwards through containment and include sibling movements.
+        let mut stmt = conn.prepare(
+            "WITH RECURSIVE parts(id) AS (
+                SELECT ?1 UNION
+                SELECT r.target_work_id FROM work_relationships_v1 r JOIN parts p ON r.source_work_id=p.id
+                WHERE r.relationship_type='parts'
+             ), related(id) AS (
+                SELECT CASE WHEN r.source_work_id=p.id THEN r.target_work_id ELSE r.source_work_id END
+                FROM work_relationships_v1 r JOIN parts p ON r.source_work_id=p.id OR r.target_work_id=p.id
+                WHERE r.relationship_type!='parts'
+                UNION
+                SELECT r.target_work_id FROM work_relationships_v1 r JOIN related p ON r.source_work_id=p.id
+                WHERE r.relationship_type='parts'
+             ), nodes(id) AS (SELECT id FROM parts UNION SELECT id FROM related)
+             SELECT t.track_id, w.id, w.title,
+                CASE WHEN w.id=?1 THEN 'direct' WHEN w.id IN (SELECT id FROM parts) THEN 'part' ELSE 'related' END AS scope
+             FROM nodes n JOIN work_resolutions_v1 t ON t.work_id=n.id JOIN works_v1 w ON w.id=n.id
+             WHERE ?2='all' OR (?2='parts' AND w.id IN (SELECT id FROM parts))
+                OR (?2='related' AND w.id NOT IN (SELECT id FROM parts))
+             ORDER BY CASE scope WHEN 'direct' THEN 0 WHEN 'part' THEN 1 ELSE 2 END, w.title, w.id, t.track_id
+             LIMIT ?3 OFFSET ?4"
+        )?;
+        let rows = stmt.query_map(
+            params![id, scope, limit.min(100) as i64, offset as i64],
+            |r| {
+                Ok(WorkRecording {
+                    track_id: r.get(0)?,
+                    work_id: r.get(1)?,
+                    work_title: r.get(2)?,
+                    scope: r.get(3)?,
+                })
+            },
+        )?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    /// Composition year range for every track linked to a Work with MusicBrainz evidence.
+    pub(super) fn read_track_composition_years(&self) -> Result<Vec<(String, i32, i32)>> {
+        let conn = self.read_conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT r.track_id, e.evidence_json
+             FROM work_resolutions_v1 r
+             JOIN work_source_evidence_v1 e ON e.work_id = r.work_id AND e.provider = 'musicbrainz'
+             WHERE r.work_id IS NOT NULL",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        let mut years = Vec::new();
+        for row in rows {
+            let (track_id, evidence) = row?;
+            let Ok(evidence) = serde_json::from_str::<serde_json::Value>(&evidence) else {
+                continue;
+            };
+            if let Some((first, last)) = WorkPresentation::composition_year_range(&evidence) {
+                years.push((track_id, first, last));
+            }
+        }
+        Ok(years)
+    }
+
+    pub(super) fn read_work_presentation(&self, id: &str) -> Result<WorkPresentation> {
+        let evidence: Option<String> = self.read_conn.lock().unwrap().query_row(
+            "SELECT evidence_json FROM work_source_evidence_v1 WHERE work_id=?1 AND provider='musicbrainz'",
+            [id], |row| row.get(0),
+        ).optional()?;
+        match evidence {
+            Some(json) => Ok(WorkPresentation::from_evidence(&serde_json::from_str(
+                &json,
+            )?)),
+            None => Ok(WorkPresentation::default()),
+        }
+    }
+    pub(super) fn read_work(&self, id: &str) -> Result<Option<Work>> {
+        Ok(self.read_conn.lock().unwrap().query_row(
+            "SELECT id,title,creators_json,catalog_number,kind,created_at,(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='wikidata'),(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='musicbrainz') FROM works_v1 WHERE id=?1",
+            [id], work_from_row,
+        ).optional()?)
+    }
+
+    pub(super) fn find_works(&self, query: &str, limit: usize) -> Result<Vec<Work>> {
+        // Treat user input as literal terms, never as FTS operators. Prefix matching
+        // supports incomplete words while requiring every term across title/creators.
+        let query = query
+            .split(|c: char| !c.is_alphanumeric() && !matches!(c, '\u{0300}'..='\u{036f}'))
+            .filter(|term| !term.is_empty())
+            .map(|term| format!("\"{term}\"*"))
+            .collect::<Vec<_>>()
+            .join(" AND ");
+        if query.is_empty() || limit == 0 {
+            return Ok(Vec::new());
+        }
+        let conn = self.read_conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT id,works_v1.title,works_v1.creators_json,catalog_number,kind,created_at,(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='wikidata'),(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='musicbrainz') FROM works_v1 JOIN work_search_v1 ON work_search_v1.rowid=works_v1.rowid WHERE work_search_v1 MATCH ?1 ORDER BY bm25(work_search_v1),works_v1.title,id LIMIT ?2")?;
+        let rows = stmt.query_map(params![query, limit.min(100) as i64], work_from_row)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub(super) fn read_work_resolution(&self, track_id: &str) -> Result<Option<WorkResolution>> {
+        let row: Option<(Option<String>, String, String, i64)> = self.read_conn.lock().unwrap().query_row(
+            "SELECT work_id,status,reason,evaluated_at FROM work_resolutions_v1 WHERE track_id=?1", [track_id],
+            |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)),
+        ).optional()?;
+        row.map(|(id, status, reason, evaluated_at)| {
+            Ok(WorkResolution {
+                track_id: track_id.to_owned(),
+                work: id.map(|id| self.read_work(&id)).transpose()?.flatten(),
+                status,
+                reason,
+                evaluated_at,
+            })
+        })
+        .transpose()
+    }
+
+    pub(super) fn work_track_ids(
+        &self,
+        work_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<String>> {
+        let conn = self.read_conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT track_id FROM work_resolutions_v1 WHERE work_id=?1 ORDER BY track_id LIMIT ?2 OFFSET ?3")?;
+        let rows = stmt.query_map(
+            params![work_id, limit.min(100) as i64, offset as i64],
+            |r| r.get(0),
+        )?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub(super) fn resolve_work(
+        &self,
+        track_id: &str,
+        proposal: Option<&WorkProposal>,
+        evidence: &serde_json::Value,
+        unresolved_reason: &str,
+    ) -> Result<WorkResolution> {
+        ensure!(!track_id.trim().is_empty(), "missing track id");
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_secs() as i64;
+        let mut conn = self.write_conn.lock().unwrap();
+        let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        // Retry after a successful write must not change an established identity.
+        let existing: Option<Option<String>> = tx
+            .query_row(
+                "SELECT work_id FROM work_resolutions_v1 WHERE track_id=?1",
+                [track_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        if existing.flatten().is_some() {
+            drop(tx);
+            drop(conn);
+            return self
+                .read_work_resolution(track_id)?
+                .ok_or_else(|| anyhow::anyhow!("resolution disappeared"));
+        }
+        let mut work_id = None;
+        let mut status = "unresolved";
+        let mut reason = unresolved_reason.to_owned();
+        // This evidence is assembled by the server after validating the model's
+        // citation against fetched facts; it is not a model-supplied payload.
+        let wikidata_id = evidence
+            .pointer("/selected_source/qid")
+            .and_then(|v| v.as_str());
+        if let Some(qid) = wikidata_id {
+            ensure!(
+                qid.strip_prefix('Q').is_some_and(|n| !n.is_empty()
+                    && n.len() <= 20
+                    && n.bytes().all(|c| c.is_ascii_digit())),
+                "invalid Wikidata identifier"
+            );
+        }
+        let musicbrainz_id = evidence
+            .pointer("/selected_source/musicbrainz_id")
+            .and_then(|v| v.as_str());
+        if let Some(id) = musicbrainz_id {
+            ensure!(
+                uuid::Uuid::parse_str(id).is_ok(),
+                "invalid MusicBrainz identifier"
+            );
+        }
+        ensure!(
+            wikidata_id.is_none() || musicbrainz_id.is_none(),
+            "multiple unverified source identities"
+        );
+        let (source_provider, source_id) = if let Some(id) = wikidata_id {
+            ("wikidata", Some(id))
+        } else {
+            ("musicbrainz", musicbrainz_id)
+        };
+        // A model-selected Wikidata candidate is only a suggestion. Its existence
+        // does not corroborate the recording's relationship to that composition.
+        let proposal = if wikidata_id.is_some() {
+            reason = "Unverified Work suggestion; no recording-to-Work relationship".into();
+            None
+        } else {
+            proposal
+        };
+        if let Some(proposal) = proposal {
+            match identity(proposal) {
+                Ok(mut key) => {
+                    let by_source: Option<String> = if let Some(qid) = source_id {
+                        tx.query_row("SELECT work_id FROM work_external_ids_v1 WHERE provider=?1 AND external_id=?2", params![source_provider,qid], |r| r.get(0)).optional()?
+                    } else {
+                        None
+                    };
+                    let mut existing: Option<String> = tx
+                        .query_row(
+                            "SELECT id FROM works_v1 WHERE identity_key=?1",
+                            [&key],
+                            |r| r.get(0),
+                        )
+                        .optional()?;
+                    if let Some(source_work) = by_source {
+                        existing = Some(source_work);
+                    } else if let (Some(id), Some(qid)) = (existing.as_ref(), source_id) {
+                        let other_source: Option<String> = tx.query_row("SELECT external_id FROM work_external_ids_v1 WHERE provider=?1 AND work_id=?2", params![source_provider,id], |r| r.get(0)).optional()?;
+                        if other_source.is_some() || tx.query_row("SELECT EXISTS(SELECT 1 FROM work_external_ids_v1 WHERE work_id=?1)", [id], |r| r.get::<_, bool>(0))? {
+                            // Different externally identified works can share a
+                            // title and creator. Do not merge them on text alone.
+                            existing = None;
+                            key = format!("{source_provider}:{qid}");
+                        }
+                    }
+                    if let Some(id) = existing {
+                        work_id = Some(id);
+                        status = "linked";
+                    } else {
+                        let id = uuid::Uuid::new_v4().to_string();
+                        tx.execute("INSERT INTO works_v1(id,title,creators_json,catalog_number,kind,identity_key,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7)",
+                            params![id,proposal.title.trim(),serde_json::to_string(&proposal.creators)?,proposal.catalog_number,proposal.kind,key,now])?;
+                        work_id = Some(id);
+                        status = "created";
+                    }
+                    reason = proposal.rationale.clone();
+                    if let Some(qid) = source_id {
+                        tx.execute("INSERT OR IGNORE INTO work_external_ids_v1(provider,external_id,work_id) VALUES(?1,?2,?3)",params![source_provider,qid,work_id])?;
+                    }
+                }
+                Err(err) => reason = err.to_string(),
+            }
+        }
+        let source_status = if work_id.is_some() && source_id.is_some() {
+            if source_provider == "wikidata" {
+                "wikidata_supported_v1"
+            } else {
+                "musicbrainz_supported_v1"
+            }
+        } else if work_id.is_none()
+            && (wikidata_id.is_some()
+                || evidence["prompt_version"].as_str().is_some_and(|v| {
+                    v.starts_with("work-resolution-v") || v.starts_with("work-research-v")
+                }))
+        {
+            "source_unresolved_v3"
+        } else {
+            "llm_work_v2"
+        };
+        tx.execute("INSERT INTO work_resolutions_v1(track_id,work_id,status,reason,evidence_json,evaluated_at,enriched_at,last_verified_at,source_status)
+            VALUES(?1,?2,?3,?4,?5,?6,?6,?6,?7)
+            ON CONFLICT(track_id) DO UPDATE SET work_id=excluded.work_id,status=excluded.status,reason=excluded.reason,evidence_json=excluded.evidence_json,evaluated_at=excluded.evaluated_at,enriched_at=excluded.enriched_at,last_verified_at=excluded.last_verified_at,source_status=excluded.source_status",
+            params![track_id,work_id,status,reason,serde_json::to_string(evidence)?,now,source_status])?;
+        tx.commit()?;
+        drop(conn);
+        self.read_work_resolution(track_id)?
+            .ok_or_else(|| anyhow::anyhow!("resolution disappeared"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -725,336 +1056,5 @@ mod tests {
             )
             .is_err());
         assert!(store.search_works("Song", 100).unwrap().is_empty());
-    }
-}
-
-fn work_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Work> {
-    let creators: String = row.get(2)?;
-    Ok(Work {
-        id: row.get(0)?,
-        title: row.get(1)?,
-        creators: serde_json::from_str(&creators).map_err(|e| {
-            rusqlite::Error::FromSqlConversionFailure(2, rusqlite::types::Type::Text, Box::new(e))
-        })?,
-        catalog_number: row.get(3)?,
-        kind: row.get(4)?,
-        created_at: row.get(5)?,
-        wikidata_id: row.get(6)?,
-        musicbrainz_id: row.get(7)?,
-    })
-}
-
-impl SqliteEnrichmentStore {
-    pub(super) fn read_work_relations(&self, id: &str) -> Result<Vec<WorkRelation>> {
-        let rows = {
-            let conn = self.read_conn.lock().unwrap();
-            let mut stmt = conn.prepare(
-                "SELECT DISTINCT CASE WHEN source_work_id=?1 THEN target_work_id ELSE source_work_id END,
-                 relationship_type, CASE WHEN source_work_id=?1 THEN 'outgoing' ELSE 'incoming' END, ordering
-                 FROM work_relationships_v1 WHERE source_work_id=?1 OR target_work_id=?1
-                 ORDER BY relationship_type, ordering, 1"
-            )?;
-            let rows = stmt.query_map([id], |r| {
-                Ok((
-                    r.get::<_, String>(0)?,
-                    r.get::<_, String>(1)?,
-                    r.get::<_, String>(2)?,
-                    r.get::<_, i64>(3)?,
-                ))
-            })?;
-            rows.collect::<rusqlite::Result<Vec<_>>>()?
-        };
-        rows.into_iter()
-            .filter(|(other, _, _, _)| other != id)
-            .map(|(other, relationship_type, direction, ordering)| {
-                Ok(self.read_work(&other)?.map(|work| WorkRelation {
-                    work,
-                    relationship_type,
-                    direction,
-                    ordering,
-                }))
-            })
-            .collect::<Result<Vec<_>>>()
-            .map(|rows| rows.into_iter().flatten().collect())
-    }
-
-    pub(super) fn read_work_recordings(
-        &self,
-        id: &str,
-        scope: &str,
-        limit: usize,
-        offset: usize,
-    ) -> Result<Vec<WorkRecording>> {
-        let conn = self.read_conn.lock().unwrap();
-        // Deduplicate by node identity to handle cycles and multiple paths.
-        // Related works are one non-parts hop away, plus their contained parts.
-        // Never walk upwards through containment and include sibling movements.
-        let mut stmt = conn.prepare(
-            "WITH RECURSIVE parts(id) AS (
-                SELECT ?1 UNION
-                SELECT r.target_work_id FROM work_relationships_v1 r JOIN parts p ON r.source_work_id=p.id
-                WHERE r.relationship_type='parts'
-             ), related(id) AS (
-                SELECT CASE WHEN r.source_work_id=p.id THEN r.target_work_id ELSE r.source_work_id END
-                FROM work_relationships_v1 r JOIN parts p ON r.source_work_id=p.id OR r.target_work_id=p.id
-                WHERE r.relationship_type!='parts'
-                UNION
-                SELECT r.target_work_id FROM work_relationships_v1 r JOIN related p ON r.source_work_id=p.id
-                WHERE r.relationship_type='parts'
-             ), nodes(id) AS (SELECT id FROM parts UNION SELECT id FROM related)
-             SELECT t.track_id, w.id, w.title,
-                CASE WHEN w.id=?1 THEN 'direct' WHEN w.id IN (SELECT id FROM parts) THEN 'part' ELSE 'related' END AS scope
-             FROM nodes n JOIN work_resolutions_v1 t ON t.work_id=n.id JOIN works_v1 w ON w.id=n.id
-             WHERE ?2='all' OR (?2='parts' AND w.id IN (SELECT id FROM parts))
-                OR (?2='related' AND w.id NOT IN (SELECT id FROM parts))
-             ORDER BY CASE scope WHEN 'direct' THEN 0 WHEN 'part' THEN 1 ELSE 2 END, w.title, w.id, t.track_id
-             LIMIT ?3 OFFSET ?4"
-        )?;
-        let rows = stmt.query_map(
-            params![id, scope, limit.min(100) as i64, offset as i64],
-            |r| {
-                Ok(WorkRecording {
-                    track_id: r.get(0)?,
-                    work_id: r.get(1)?,
-                    work_title: r.get(2)?,
-                    scope: r.get(3)?,
-                })
-            },
-        )?;
-        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
-    }
-
-    /// Composition year range for every track linked to a Work with MusicBrainz evidence.
-    pub(super) fn read_track_composition_years(&self) -> Result<Vec<(String, i32, i32)>> {
-        let conn = self.read_conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT r.track_id, e.evidence_json
-             FROM work_resolutions_v1 r
-             JOIN work_source_evidence_v1 e ON e.work_id = r.work_id AND e.provider = 'musicbrainz'
-             WHERE r.work_id IS NOT NULL",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })?;
-        let mut years = Vec::new();
-        for row in rows {
-            let (track_id, evidence) = row?;
-            let Ok(evidence) = serde_json::from_str::<serde_json::Value>(&evidence) else {
-                continue;
-            };
-            if let Some((first, last)) = WorkPresentation::composition_year_range(&evidence) {
-                years.push((track_id, first, last));
-            }
-        }
-        Ok(years)
-    }
-
-    pub(super) fn read_work_presentation(&self, id: &str) -> Result<WorkPresentation> {
-        let evidence: Option<String> = self.read_conn.lock().unwrap().query_row(
-            "SELECT evidence_json FROM work_source_evidence_v1 WHERE work_id=?1 AND provider='musicbrainz'",
-            [id], |row| row.get(0),
-        ).optional()?;
-        match evidence {
-            Some(json) => Ok(WorkPresentation::from_evidence(&serde_json::from_str(
-                &json,
-            )?)),
-            None => Ok(WorkPresentation::default()),
-        }
-    }
-    pub(super) fn read_work(&self, id: &str) -> Result<Option<Work>> {
-        Ok(self.read_conn.lock().unwrap().query_row(
-            "SELECT id,title,creators_json,catalog_number,kind,created_at,(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='wikidata'),(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='musicbrainz') FROM works_v1 WHERE id=?1",
-            [id], work_from_row,
-        ).optional()?)
-    }
-
-    pub(super) fn find_works(&self, query: &str, limit: usize) -> Result<Vec<Work>> {
-        // Treat user input as literal terms, never as FTS operators. Prefix matching
-        // supports incomplete words while requiring every term across title/creators.
-        let query = query
-            .split(|c: char| !c.is_alphanumeric() && !matches!(c, '\u{0300}'..='\u{036f}'))
-            .filter(|term| !term.is_empty())
-            .map(|term| format!("\"{term}\"*"))
-            .collect::<Vec<_>>()
-            .join(" AND ");
-        if query.is_empty() || limit == 0 {
-            return Ok(Vec::new());
-        }
-        let conn = self.read_conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT id,works_v1.title,works_v1.creators_json,catalog_number,kind,created_at,(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='wikidata'),(SELECT external_id FROM work_external_ids_v1 WHERE work_id=works_v1.id AND provider='musicbrainz') FROM works_v1 JOIN work_search_v1 ON work_search_v1.rowid=works_v1.rowid WHERE work_search_v1 MATCH ?1 ORDER BY bm25(work_search_v1),works_v1.title,id LIMIT ?2")?;
-        let rows = stmt.query_map(params![query, limit.min(100) as i64], work_from_row)?;
-        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
-    }
-
-    pub(super) fn read_work_resolution(&self, track_id: &str) -> Result<Option<WorkResolution>> {
-        let row: Option<(Option<String>, String, String, i64)> = self.read_conn.lock().unwrap().query_row(
-            "SELECT work_id,status,reason,evaluated_at FROM work_resolutions_v1 WHERE track_id=?1", [track_id],
-            |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)),
-        ).optional()?;
-        row.map(|(id, status, reason, evaluated_at)| {
-            Ok(WorkResolution {
-                track_id: track_id.to_owned(),
-                work: id.map(|id| self.read_work(&id)).transpose()?.flatten(),
-                status,
-                reason,
-                evaluated_at,
-            })
-        })
-        .transpose()
-    }
-
-    pub(super) fn work_track_ids(
-        &self,
-        work_id: &str,
-        limit: usize,
-        offset: usize,
-    ) -> Result<Vec<String>> {
-        let conn = self.read_conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT track_id FROM work_resolutions_v1 WHERE work_id=?1 ORDER BY track_id LIMIT ?2 OFFSET ?3")?;
-        let rows = stmt.query_map(
-            params![work_id, limit.min(100) as i64, offset as i64],
-            |r| r.get(0),
-        )?;
-        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
-    }
-
-    pub(super) fn resolve_work(
-        &self,
-        track_id: &str,
-        proposal: Option<&WorkProposal>,
-        evidence: &serde_json::Value,
-        unresolved_reason: &str,
-    ) -> Result<WorkResolution> {
-        ensure!(!track_id.trim().is_empty(), "missing track id");
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)?
-            .as_secs() as i64;
-        let mut conn = self.write_conn.lock().unwrap();
-        let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-        // Retry after a successful write must not change an established identity.
-        let existing: Option<Option<String>> = tx
-            .query_row(
-                "SELECT work_id FROM work_resolutions_v1 WHERE track_id=?1",
-                [track_id],
-                |r| r.get(0),
-            )
-            .optional()?;
-        if existing.flatten().is_some() {
-            drop(tx);
-            drop(conn);
-            return self
-                .read_work_resolution(track_id)?
-                .ok_or_else(|| anyhow::anyhow!("resolution disappeared"));
-        }
-        let mut work_id = None;
-        let mut status = "unresolved";
-        let mut reason = unresolved_reason.to_owned();
-        // This evidence is assembled by the server after validating the model's
-        // citation against fetched facts; it is not a model-supplied payload.
-        let wikidata_id = evidence
-            .pointer("/selected_source/qid")
-            .and_then(|v| v.as_str());
-        if let Some(qid) = wikidata_id {
-            ensure!(
-                qid.strip_prefix('Q').is_some_and(|n| !n.is_empty()
-                    && n.len() <= 20
-                    && n.bytes().all(|c| c.is_ascii_digit())),
-                "invalid Wikidata identifier"
-            );
-        }
-        let musicbrainz_id = evidence
-            .pointer("/selected_source/musicbrainz_id")
-            .and_then(|v| v.as_str());
-        if let Some(id) = musicbrainz_id {
-            ensure!(
-                uuid::Uuid::parse_str(id).is_ok(),
-                "invalid MusicBrainz identifier"
-            );
-        }
-        ensure!(
-            wikidata_id.is_none() || musicbrainz_id.is_none(),
-            "multiple unverified source identities"
-        );
-        let (source_provider, source_id) = if let Some(id) = wikidata_id {
-            ("wikidata", Some(id))
-        } else {
-            ("musicbrainz", musicbrainz_id)
-        };
-        // A model-selected Wikidata candidate is only a suggestion. Its existence
-        // does not corroborate the recording's relationship to that composition.
-        let proposal = if wikidata_id.is_some() {
-            reason = "Unverified Work suggestion; no recording-to-Work relationship".into();
-            None
-        } else {
-            proposal
-        };
-        if let Some(proposal) = proposal {
-            match identity(proposal) {
-                Ok(mut key) => {
-                    let by_source: Option<String> = if let Some(qid) = source_id {
-                        tx.query_row("SELECT work_id FROM work_external_ids_v1 WHERE provider=?1 AND external_id=?2", params![source_provider,qid], |r| r.get(0)).optional()?
-                    } else {
-                        None
-                    };
-                    let mut existing: Option<String> = tx
-                        .query_row(
-                            "SELECT id FROM works_v1 WHERE identity_key=?1",
-                            [&key],
-                            |r| r.get(0),
-                        )
-                        .optional()?;
-                    if let Some(source_work) = by_source {
-                        existing = Some(source_work);
-                    } else if let (Some(id), Some(qid)) = (existing.as_ref(), source_id) {
-                        let other_source: Option<String> = tx.query_row("SELECT external_id FROM work_external_ids_v1 WHERE provider=?1 AND work_id=?2", params![source_provider,id], |r| r.get(0)).optional()?;
-                        if other_source.is_some() || tx.query_row("SELECT EXISTS(SELECT 1 FROM work_external_ids_v1 WHERE work_id=?1)", [id], |r| r.get::<_, bool>(0))? {
-                            // Different externally identified works can share a
-                            // title and creator. Do not merge them on text alone.
-                            existing = None;
-                            key = format!("{source_provider}:{qid}");
-                        }
-                    }
-                    if let Some(id) = existing {
-                        work_id = Some(id);
-                        status = "linked";
-                    } else {
-                        let id = uuid::Uuid::new_v4().to_string();
-                        tx.execute("INSERT INTO works_v1(id,title,creators_json,catalog_number,kind,identity_key,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7)",
-                            params![id,proposal.title.trim(),serde_json::to_string(&proposal.creators)?,proposal.catalog_number,proposal.kind,key,now])?;
-                        work_id = Some(id);
-                        status = "created";
-                    }
-                    reason = proposal.rationale.clone();
-                    if let Some(qid) = source_id {
-                        tx.execute("INSERT OR IGNORE INTO work_external_ids_v1(provider,external_id,work_id) VALUES(?1,?2,?3)",params![source_provider,qid,work_id])?;
-                    }
-                }
-                Err(err) => reason = err.to_string(),
-            }
-        }
-        let source_status = if work_id.is_some() && source_id.is_some() {
-            if source_provider == "wikidata" {
-                "wikidata_supported_v1"
-            } else {
-                "musicbrainz_supported_v1"
-            }
-        } else if work_id.is_none()
-            && (wikidata_id.is_some()
-                || evidence["prompt_version"].as_str().is_some_and(|v| {
-                    v.starts_with("work-resolution-v") || v.starts_with("work-research-v")
-                }))
-        {
-            "source_unresolved_v3"
-        } else {
-            "llm_work_v2"
-        };
-        tx.execute("INSERT INTO work_resolutions_v1(track_id,work_id,status,reason,evidence_json,evaluated_at,enriched_at,last_verified_at,source_status)
-            VALUES(?1,?2,?3,?4,?5,?6,?6,?6,?7)
-            ON CONFLICT(track_id) DO UPDATE SET work_id=excluded.work_id,status=excluded.status,reason=excluded.reason,evidence_json=excluded.evidence_json,evaluated_at=excluded.evaluated_at,enriched_at=excluded.enriched_at,last_verified_at=excluded.last_verified_at,source_status=excluded.source_status",
-            params![track_id,work_id,status,reason,serde_json::to_string(evidence)?,now,source_status])?;
-        tx.commit()?;
-        drop(conn);
-        self.read_work_resolution(track_id)?
-            .ok_or_else(|| anyhow::anyhow!("resolution disappeared"))
     }
 }

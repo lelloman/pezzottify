@@ -307,7 +307,7 @@ mod tests {
         let task = tokio::spawn(async move {
             let (mut socket, _) = listener.accept().await.unwrap();
             let mut request = [0; 1024];
-            socket.read(&mut request).await.unwrap();
+            let _ = socket.read(&mut request).await.unwrap();
             socket.write_all(format!("HTTP/1.1 302 Found\r\nLocation: http://{address}/must-not-be-requested\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
             // A redirect would create a second connection to this same listener.
             assert!(

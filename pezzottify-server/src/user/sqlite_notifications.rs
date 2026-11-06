@@ -187,5 +187,3 @@ impl crate::notifications::NotificationStore for SqliteUserStore {
         Ok(count as usize)
     }
 }
-
-include!("sqlite_user_store_tests.rs");

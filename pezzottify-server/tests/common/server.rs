@@ -11,7 +11,6 @@ use pezzottify_server::server::state::GuardedSearchVault;
 use pezzottify_server::server::{server::make_app, RequestsLoggingLevel, ServerConfig};
 use pezzottify_server::server_store::{ServerStore, SqliteServerStore};
 use pezzottify_server::user::{FullUserStore, SqliteUserStore, UserManager};
-use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -223,6 +222,8 @@ impl TestServer {
     /// - Port binding fails
     /// - Server fails to start
     /// - Server doesn't become ready within timeout
+    // Not every test binary that compiles this module calls it.
+    #[allow(dead_code)]
     pub async fn spawn() -> Self {
         Self::builder().spawn().await
     }

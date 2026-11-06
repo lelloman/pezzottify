@@ -197,12 +197,12 @@ mod tests {
         let pw = "123mypw";
         let b64_salt = PezzottifyHasher::Argon2.generate_b64_salt();
 
-        println!("salt: \"{}\"", &b64_salt);
+        println!("salt: \"{}\"", b64_salt);
 
         let hash1 = PezzottifyHasher::Argon2
             .hash(pw.as_bytes(), &b64_salt)
             .unwrap();
-        println!("hash1: \"{}\"", &hash1);
+        println!("hash1: \"{}\"", hash1);
 
         let hash2 = PezzottifyHasher::Argon2
             .hash(b"123mypw", &b64_salt)

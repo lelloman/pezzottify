@@ -312,7 +312,6 @@ async fn concurrent_fills_are_deduplicated() {
     for _ in 0..8 {
         let caches = fixture.caches.clone();
         let key = key.clone();
-        let epoch = epoch;
         let opens = opens.clone();
         let barrier = barrier.clone();
         workers.push(std::thread::spawn(move || {

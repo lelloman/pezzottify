@@ -42,7 +42,9 @@ fn queue_timestamp(value: &str) -> Result<i64> {
     // Python stored str(created_at) from the queue API (Unix seconds).
     // New records use RFC3339; compare both formats in microseconds.
     if let Ok(seconds) = value.parse::<i64>() {
-        seconds.checked_mul(1_000_000).context("Queue timestamp overflow")
+        seconds
+            .checked_mul(1_000_000)
+            .context("Queue timestamp overflow")
     } else {
         timestamp(value)
     }
@@ -167,7 +169,7 @@ pub(crate) fn blacklisted(attempts: &[Attempt]) -> HashSet<String> {
                 .filter(|done| {
                     if done.status != "COMPLETED"
                         || done.album == failed.album
-                        || !done.finished.is_some_and(|at| at > failed.started)
+                        || done.finished.is_none_or(|at| at <= failed.started)
                     {
                         return false;
                     }

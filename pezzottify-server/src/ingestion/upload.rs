@@ -31,7 +31,7 @@ impl IngestionManager {
             if existing.iter().any(|file|file.temp_file_path == path_string) { continue; }
             let name = path.file_name().and_then(|n|n.to_str()).unwrap_or("audio");
             let size = tokio::fs::metadata(&path).await.map_err(|error|IngestionError::Store(error.into()))?.len() as i64;
-            self.store.create_file(&IngestionFile::new(&uuid::Uuid::new_v4().to_string(),job_id,name,size,path_string))?;
+            self.store.create_file(&IngestionFile::new(uuid::Uuid::new_v4().to_string(),job_id,name,size,path_string))?;
         }
         self.process_job(job_id).await
     }

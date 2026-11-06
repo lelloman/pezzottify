@@ -221,8 +221,10 @@ mod tests {
     }
 
     fn database(store: Arc<TestStore>, execution_timeout: Duration) -> DbHandle<TestStore> {
-        let mut config = DbExecutorConfig::default();
-        config.worker_threads = 1;
+        let mut config = DbExecutorConfig {
+            worker_threads: 1,
+            ..Default::default()
+        };
         config.interactive.queue_timeout = Duration::from_secs(2);
         config.interactive.execution_timeout = execution_timeout;
         DbHandle::new(store, DbExecutor::new(config), DbLane::Server)

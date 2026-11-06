@@ -150,8 +150,8 @@ impl Worker {
         let attempts = self.history.attempts()?;
         let blocked = album_worker_history::blacklisted(&attempts);
         let quota_micros = album_worker_history::quota_ready_at(&attempts, now * 1_000_000)?;
-        let quota = quota_micros.div_euclid(1_000_000)
-            + i64::from(quota_micros.rem_euclid(1_000_000) != 0);
+        let quota =
+            quota_micros.div_euclid(1_000_000) + i64::from(quota_micros.rem_euclid(1_000_000) != 0);
         let mut ready = Vec::new();
         let mut future: Option<i64> = None;
         // Pagination prevents a large failed queue from hiding newer work.

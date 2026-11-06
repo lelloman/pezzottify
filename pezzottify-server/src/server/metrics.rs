@@ -1542,9 +1542,7 @@ mod tests {
 
         // Verify metrics were registered
         let metrics = REGISTRY.gather();
-        let storage_metrics = metrics
-            .iter()
-            .find(|m| m.get_name() == "storage_bytes");
+        let storage_metrics = metrics.iter().find(|m| m.get_name() == "storage_bytes");
         assert!(storage_metrics.is_some(), "Storage metrics should exist");
     }
 }

@@ -154,7 +154,7 @@ async fn cancel(client: &TestClient, id: &str) -> reqwest::Response {
 #[tokio::test]
 async fn manual_payload_history_and_immediate_retrigger_round_trip() {
     let job = Arc::new(Probe::new("manual"));
-    let (mut server, client) = spawn(&[job.clone()]).await;
+    let (mut server, client) = spawn(std::slice::from_ref(&job)).await;
     for attempt in 1..=6 {
         let payload = json!({"attempt": attempt, "nested": {"x": [1,2,3]}});
         let response = client
@@ -187,7 +187,7 @@ async fn manual_payload_history_and_immediate_retrigger_round_trip() {
 #[tokio::test]
 async fn overlapping_http_triggers_execute_exactly_once() {
     let job = Arc::new(Probe::blocked("unique"));
-    let (mut server, client) = spawn(&[job.clone()]).await;
+    let (mut server, client) = spawn(std::slice::from_ref(&job)).await;
     let responses =
         futures::future::join_all((0..12).map(|_| client.admin_trigger_job("unique"))).await;
     assert_eq!(responses.iter().filter(|r| r.status() == 202).count(), 1);
@@ -201,7 +201,7 @@ async fn overlapping_http_triggers_execute_exactly_once() {
 #[tokio::test]
 async fn cancellation_finishes_history_and_releases_overlap_slot() {
     let job = Arc::new(Probe::blocked("cancel"));
-    let (mut server, client) = spawn(&[job.clone()]).await;
+    let (mut server, client) = spawn(std::slice::from_ref(&job)).await;
     trigger(&client, "cancel").await;
     wait(|| job.count() == 1).await;
     assert_eq!(cancel(&client, "cancel").await.status(), 202);
@@ -410,7 +410,7 @@ async fn shutdown_waits_for_uncooperative_blocking_execution_and_history() {
     let mut job = Probe::blocked("drain");
     job.ignore_cancel = true;
     let job = Arc::new(job);
-    let (mut server, client) = spawn(&[job.clone()]).await;
+    let (mut server, client) = spawn(std::slice::from_ref(&job)).await;
     trigger(&client, "drain").await;
     wait(|| job.count() == 1).await;
     server.request_scheduler_shutdown();
@@ -435,7 +435,7 @@ async fn circuit_threshold_rejection_cooldown_and_successful_recovery() {
     job.policy = JobExecutionPolicy::default().with_circuit_breaker(2, Duration::from_millis(400));
     let job = Arc::new(job);
     job.outcome.store(1, Ordering::SeqCst);
-    let (mut server, client) = spawn(&[job.clone()]).await;
+    let (mut server, client) = spawn(std::slice::from_ref(&job)).await;
     for count in 1..=2 {
         trigger(&client, "breaker").await;
         history(&server, "breaker", count).await;
@@ -513,7 +513,7 @@ async fn hooks_record_trigger_and_do_not_overlap_or_bypass_pause() {
     let mut job = Probe::blocked("hook");
     job.schedule = JobSchedule::Hook(HookEvent::OnCatalogChange);
     let job = Arc::new(job);
-    let (mut server, client) = spawn(&[job.clone()]).await;
+    let (mut server, client) = spawn(std::slice::from_ref(&job)).await;
     server.emit_hook(HookEvent::OnCatalogChange).await;
     wait(|| job.count() == 1).await;
     server.emit_hook(HookEvent::OnCatalogChange).await;
@@ -541,7 +541,7 @@ async fn interval_recurrence_wakes_on_completion_and_never_overlaps() {
     let mut job = Probe::blocked("interval");
     job.schedule = JobSchedule::Interval(Duration::from_millis(150));
     let job = Arc::new(job);
-    let (mut server, client) = spawn(&[job.clone()]).await;
+    let (mut server, client) = spawn(std::slice::from_ref(&job)).await;
     wait(|| job.count() == 1).await;
     assert_eq!(client.admin_trigger_job("interval").await.status(), 409);
     job.release();
@@ -576,7 +576,7 @@ async fn deferred_jittered_schedule_and_manual_reset_survive_restart() {
     };
     let job = Arc::new(job);
     let before = chrono::Utc::now();
-    let (mut first, client) = spawn(&[job.clone()]).await;
+    let (mut first, client) = spawn(std::slice::from_ref(&job)).await;
     assert_eq!(job.count(), 0);
     let initial = first
         .server_store
@@ -624,7 +624,7 @@ async fn deferred_jittered_schedule_and_manual_reset_survive_restart() {
 #[tokio::test]
 async fn rejected_history_insert_never_executes_and_recovers_after_storage_repair() {
     let job = Arc::new(Probe::new("history_failure"));
-    let (mut server, client) = spawn(&[job.clone()]).await;
+    let (mut server, client) = spawn(std::slice::from_ref(&job)).await;
     let db = rusqlite::Connection::open(server.server_db_path()).unwrap();
     db.execute_batch("CREATE TRIGGER reject_start BEFORE INSERT ON job_runs BEGIN SELECT RAISE(FAIL, 'E2E history failure'); END;").unwrap();
     // Existing API acknowledges the trigger even when its subsequent history
@@ -646,7 +646,7 @@ async fn rejected_history_insert_never_executes_and_recovers_after_storage_repai
 #[tokio::test]
 async fn failed_pause_write_does_not_change_live_admission() {
     let job = Arc::new(Probe::new("pause_failure"));
-    let (mut server, client) = spawn(&[job.clone()]).await;
+    let (mut server, client) = spawn(std::slice::from_ref(&job)).await;
     let db = rusqlite::Connection::open(server.server_db_path()).unwrap();
     db.execute_batch("CREATE TRIGGER reject_pause BEFORE INSERT ON server_state WHEN NEW.key = 'background_jobs.pause_state.v1' BEGIN SELECT RAISE(FAIL, 'E2E pause failure'); END;").unwrap();
     assert_eq!(
@@ -734,7 +734,7 @@ async fn combined_startup_hook_and_deferred_interval_keep_trigger_provenance() {
         hooks: vec![HookEvent::OnStartup, HookEvent::OnDownloadComplete],
     };
     let job = Arc::new(job);
-    let (mut server, _client) = spawn(&[job.clone()]).await;
+    let (mut server, _client) = spawn(std::slice::from_ref(&job)).await;
     assert_eq!(
         history(&server, job.id, 1).await[0].triggered_by,
         "hook:OnStartup"
@@ -788,7 +788,7 @@ async fn old_due_schedule_runs_once_then_reschedules_without_replaying_backlog()
 #[tokio::test]
 async fn authentication_and_unknown_pause_scopes_cannot_mutate_controls() {
     let job = Arc::new(Probe::new("protected"));
-    let (mut server, client) = spawn(&[job.clone()]).await;
+    let (mut server, client) = spawn(std::slice::from_ref(&job)).await;
     let anonymous = TestClient::new(server.base_url.clone());
     let regular = TestClient::authenticated(server.base_url.clone()).await;
     for (caller, status) in [(&anonymous, 401), (&regular, 403)] {
