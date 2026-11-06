@@ -269,7 +269,7 @@ test("now playing handles stopped playback without leaving stale lyrics", async 
   }
 });
 
-test("lyrics scroll independently and transport glyphs stay white and proportionate", async () => {
+test("lyrics scroll independently and transport glyphs stay legible and proportionate", async () => {
   const page = await pageWith({
     status: "found",
     plain_lyrics: Array.from({ length: 100 }, (_, i) => `Line ${i}`).join("\n"),
@@ -310,10 +310,16 @@ test("lyrics scroll independently and transport glyphs stay white and proportion
     }
     const play = page.getByRole("button", { name: "Play", exact: true });
     const icon = play.locator("svg");
-    assert.equal((await icon.boundingBox()).width, 32);
+    // The loop leaves the phone width: a 48px button with 13px padding.
+    assert.equal((await icon.boundingBox()).width, 22);
+    // The main button is a white disc, so its glyph is black.
+    assert.equal(
+      await play.evaluate((el) => getComputedStyle(el).backgroundColor),
+      "rgb(255, 255, 255)",
+    );
     assert.equal(
       await icon.locator("path").evaluate((el) => getComputedStyle(el).fill),
-      "rgb(255, 255, 255)",
+      "rgb(0, 0, 0)",
     );
     await play.click();
     assert.equal(
@@ -321,7 +327,7 @@ test("lyrics scroll independently and transport glyphs stay white and proportion
         .getByRole("button", { name: "Pause", exact: true })
         .locator("path")
         .evaluate((el) => getComputedStyle(el).fill),
-      "rgb(255, 255, 255)",
+      "rgb(0, 0, 0)",
     );
   } finally {
     await page.close();
