@@ -1,0 +1,232 @@
+name: Android
+
+# Runs only when Android inputs change, so it cannot be a required check: a
+# required check that never starts would block every other pull request.
+#
+# Repository variables, skipped where they are not set (forks, mirrors):
+#   CI_ANDROID_RUNNER  runner label with room for a full Gradle build
+#   CI_ANDROID_IMAGE   image with JDK 21, the Android SDK and NDK, Rust with the
+#                      Android targets, cargo-ndk, Node and Python
+#   CI_CA_CERT         PEM root the image needs to reach this forge, if any
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "android/**"
+      - "paravoid.rev"
+      - "scripts/checkout-paravoid.sh"
+      - "simple-android-assistant.rev"
+      - "scripts/checkout-simple-android-assistant.sh"
+      - "androidoscopy.rev"
+      - "scripts/prepare-androidoscopy.sh"
+      - "scripts/fetch-robolectric-runtimes.sh"
+      - "scripts/gradle-maven-central-mirror.init.gradle"
+      - ".forgejo/workflows/android.yml"
+  push:
+    branches: [master]
+    paths:
+      - "android/**"
+      - "paravoid.rev"
+      - "scripts/checkout-paravoid.sh"
+      - "simple-android-assistant.rev"
+      - "scripts/checkout-simple-android-assistant.sh"
+      - "androidoscopy.rev"
+      - "scripts/prepare-androidoscopy.sh"
+      - "scripts/fetch-robolectric-runtimes.sh"
+      - "scripts/gradle-maven-central-mirror.init.gradle"
+      - ".forgejo/workflows/android.yml"
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # D8 merges share the Gradle daemon heap: no concurrent app merges, and more
+  # than the 2 GiB default for the complete multi-variant build. The Kotlin
+  # daemon would otherwise inherit the same heap on top of Gradle's.
+  GRADLE: ./gradlew --no-parallel --max-workers=2 -Dorg.gradle.jvmargs=-Xmx4g -Pkotlin.daemon.jvmargs=-Xmx2g
+  # The job has a hard memory limit, and an idle daemon still holds its heap.
+  GRADLE_OPTS: -Dorg.gradle.daemon=false
+
+jobs:
+  # Its own job because a cache is saved only when its job succeeds: the runtimes
+  # are kept even if the build below fails, instead of downloading them again.
+  robolectric-runtimes:
+    name: robolectric-runtimes
+    if: ${{ vars.CI_ANDROID_RUNNER != '' }}
+    runs-on: ${{ vars.CI_ANDROID_RUNNER }}
+    timeout-minutes: 20
+    container:
+      image: ${{ vars.CI_ANDROID_IMAGE }}
+    steps:
+      - name: Trust the forge CA
+        env:
+          CA_CERT: ${{ vars.CI_CA_CERT }}
+        working-directory: /
+        run: |
+          set -eu
+          [ -n "$CA_CERT" ] || exit 0
+          printf '%s\n' "$CA_CERT" > /usr/local/share/ca-certificates/ci-root.crt
+          update-ca-certificates
+
+      - uses: https://data.forgejo.org/actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Cache Robolectric runtimes
+        uses: https://data.forgejo.org/actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-v1-${{ hashFiles('scripts/fetch-robolectric-runtimes.sh') }}
+
+      - name: Fetch Robolectric runtimes
+        working-directory: .
+        timeout-minutes: 15
+        run: |
+          set -eu
+          command -v curl >/dev/null || {
+            apt-get update -qq
+            apt-get install -y -qq --no-install-recommends curl >/dev/null
+          }
+          bash scripts/fetch-robolectric-runtimes.sh
+
+  android:
+    name: android
+    needs: robolectric-runtimes
+    if: ${{ vars.CI_ANDROID_RUNNER != '' }}
+    runs-on: ${{ vars.CI_ANDROID_RUNNER }}
+    # Complete Paravoid packaging shrinks the payload with R8, which is slow.
+    timeout-minutes: 75
+    container:
+      image: ${{ vars.CI_ANDROID_IMAGE }}
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - name: Trust the forge CA
+        env:
+          CA_CERT: ${{ vars.CI_CA_CERT }}
+        working-directory: /
+        run: |
+          set -eu
+          [ -n "$CA_CERT" ] || exit 0
+          printf '%s\n' "$CA_CERT" > /usr/local/share/ca-certificates/ci-root.crt
+          update-ca-certificates
+
+      - uses: https://data.forgejo.org/actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Record memory use
+        working-directory: /
+        run: |
+          nohup sh -c 'while :; do
+            { date +%T
+              grep -E "^(anon|file|shmem) " /sys/fs/cgroup/memory.stat | tr "\n" " "; echo
+              ps -eo rss=,comm= --sort=-rss | head -n 6 | tr -s " " | tr "\n" ";"; echo
+            } >> /tmp/memory.log
+            sleep 15
+          done' >/dev/null 2>&1 &
+
+      - name: Cache Gradle
+        uses: https://data.forgejo.org/actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-v1-${{ runner.os }}-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties', 'android/gradle/libs.versions.toml', 'paravoid.rev') }}
+          restore-keys: |
+            gradle-v1-${{ runner.os }}-
+
+      - name: Cache Robolectric runtimes
+        uses: https://data.forgejo.org/actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-v1-${{ hashFiles('scripts/fetch-robolectric-runtimes.sh') }}
+
+      - name: Use the Maven Central mirror
+        working-directory: .
+        run: |
+          mkdir -p ~/.gradle/init.d
+          cp scripts/gradle-maven-central-mirror.init.gradle ~/.gradle/init.d/
+
+      - name: Check out pinned dependencies
+        working-directory: .
+        run: |
+          set -eu
+          bash scripts/checkout-paravoid.sh
+          bash scripts/checkout-simple-android-assistant.sh
+          bash scripts/prepare-androidoscopy.sh
+          # Androidoscopy's Kotlin daemon has different settings, so the Android
+          # build would start its own beside it. [K] keeps pkill off this shell.
+          pkill -f '[K]otlinCompileDaemon' || true
+
+      - name: Fetch Robolectric runtimes
+        working-directory: .
+        timeout-minutes: 15
+        run: |
+          set -eu
+          command -v curl >/dev/null || {
+            apt-get update -qq
+            apt-get install -y -qq --no-install-recommends curl >/dev/null
+          }
+          bash scripts/fetch-robolectric-runtimes.sh
+
+      - name: Unit tests
+        run: |
+          $GRADLE \
+            testDebugUnitTest \
+            :app:testNormalPhoneDebugUnitTest :app:testParavoidAndroidPhoneDebugUnitTest
+
+      - name: Build
+        run: |
+          $GRADLE \
+            :app:compileNormalPhoneReleaseKotlin :app:assembleNormalPhoneDebug \
+            :app:assembleParavoidAndroidPhoneDebug :player-app:assembleDebug :player-app:assembleRelease
+
+      - name: Lint downstream modules and app variants
+        # Runtime-library lint lacks the plugin-generated shell permissions and API
+        # floor, so paravoid-runtime is left out. Runs after compilation: lint can
+        # otherwise race KAPT-generated variant sources.
+        run: |
+          $GRADLE \
+            :domain:lintDebug :ui:lintDebug :remoteapi:lintDebug :localdata:lintDebug \
+            :debuginterface:lintDebug :player:lintDebug :logger:lintDebug \
+            :equalizer:lintDebug :theme:lintDebug :player-app:lintDebug \
+            :app:lintNormalPhoneDebug :app:lintParavoidAndroidPhoneDebug
+
+      - name: Verify normal and Paravoid APK packaging
+        run: python3 check-paravoid.py
+
+      - name: Prepare disposable complete-payload signing keys
+        run: |
+          set -eu
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends python3-cryptography >/dev/null
+          python3 ../../paravoid-android/packaging-tests/prepare-keys.py \
+            --application-id com.lelloman.pezzottify.android.paravoid \
+            --output "$RUNNER_TEMP/paravoid-keys"
+
+      - name: Build and inspect complete Paravoid packaging
+        run: |
+          $GRADLE :app:assembleParavoidAndroidPhoneDebug \
+            -PparavoidComplete=true \
+            -PparavoidTrustPolicy="$RUNNER_TEMP/paravoid-keys/trust.json" \
+            -PparavoidReleaseKey="$RUNNER_TEMP/paravoid-keys/release.der"
+          python3 check-paravoid-complete.py
+          python3 check-paravoid-services.py app/build/outputs/paravoid/paravoidAndroidPhoneDebug
+
+      - name: Report memory use
+        if: ${{ always() }}
+        working-directory: /
+        run: |
+          grep -E 'MemTotal|MemAvailable' /proc/meminfo || true
+          df -h / /tmp /workspace /root 2>/dev/null || true
+          du -sh ~/.gradle ~/.m2 ~/.cargo ~/.kotlin /tmp /workspace 2>/dev/null || true
+          tail -n 45 /tmp/memory.log 2>/dev/null || true
+          for file in memory.max memory.peak memory.events; do
+            if [ -r "/sys/fs/cgroup/$file" ]; then
+              echo "$file:"
+              cat "/sys/fs/cgroup/$file"
+            fi
+          done

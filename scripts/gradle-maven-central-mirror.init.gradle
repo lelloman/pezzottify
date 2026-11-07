@@ -1,0 +1,22 @@
+// For CI, where Maven Central rate limits the runner's address: sends every
+// mavenCentral() in a build, including Paravoid and the other checkouts, to
+// Google's mirror of it. Install into the init.d of the Gradle user home.
+def mirror = 'https://maven-central.storage-download.googleapis.com/maven2/'
+
+def redirect = { repositories ->
+    repositories.withType(MavenArtifactRepository).configureEach { repository ->
+        if (repository.url.host == 'repo.maven.apache.org') {
+            repository.url = mirror
+        }
+    }
+}
+
+beforeSettings { settings ->
+    redirect(settings.pluginManagement.repositories)
+    redirect(settings.dependencyResolutionManagement.repositories)
+}
+
+allprojects {
+    redirect(buildscript.repositories)
+    redirect(repositories)
+}

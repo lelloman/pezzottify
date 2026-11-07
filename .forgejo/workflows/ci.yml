@@ -1,0 +1,103 @@
+name: CI
+
+# Server and web checks for every pull request, and for master so a bad merge
+# shows up. These two jobs always report, so they can be required for merging.
+#
+# Android lives in android.yml. Everything deployment-specific comes from
+# repository variables, and the jobs are skipped where they are not set (forks,
+# mirrors):
+#   CI_RUNNER    runner label for the server and web jobs
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_BUILD_JOBS: "2"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+
+jobs:
+  server:
+    name: server
+    if: ${{ vars.CI_RUNNER != '' }}
+    runs-on: ${{ vars.CI_RUNNER }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: pezzottify-server
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: https://github.com/dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.96.0
+          components: clippy,rustfmt
+
+      - name: Cache cargo
+        uses: https://data.forgejo.org/actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            pezzottify-server/target
+          key: cargo-v1-${{ runner.os }}-${{ hashFiles('pezzottify-server/Cargo.lock') }}
+          restore-keys: |
+            cargo-v1-${{ runner.os }}-
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Check database execution boundaries
+        run: bash scripts/check-db-boundaries.sh
+
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Run tests
+        run: cargo test --features fast
+
+  web:
+    name: web
+    if: ${{ vars.CI_RUNNER != '' }}
+    runs-on: ${{ vars.CI_RUNNER }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: https://data.forgejo.org/actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint -- --max-warnings 0
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Install Chromium for the browser tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser tests
+        run: npm run test:worker
+
+      - name: Build
+        run: npm run build
