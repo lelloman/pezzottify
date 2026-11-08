@@ -16,13 +16,12 @@
       <component
         :is="item.icon"
         v-if="item.icon"
-        class="smallIcon"
-        style="fill: #ddd"
+        class="menuIcon"
       />
 
       <span>{{ item.name }}</span>
 
-      <ChevronRight v-if="item.subMenu" class="smallIcon" style="fill: #eee" />
+      <ChevronRight v-if="item.subMenu" class="menuIcon" />
 
       <div
         v-if="isSubMenuOpen && currentSubMenu === item"
@@ -199,6 +198,14 @@ defineExpose({
   align-items: center;
   font-size: var(--text-sm);
   padding: 0 8px;
+}
+
+.menuIcon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  fill: var(--text-subdued, #ddd);
+  color: var(--text-subdued, #ddd);
 }
 
 .contextMenuItem span {
