@@ -3,7 +3,6 @@
     class="sliding-container"
     ref="containerRef"
     :style="containerStyle"
-    @click.stop="$emit('click')"
     @mouseenter="handleHover(true)"
     @mouseleave="handleHover(false)"
   >
@@ -25,7 +24,6 @@
 import {
   computed,
   defineProps,
-  defineEmits,
   ref,
   onMounted,
   onUpdated,
@@ -142,7 +140,6 @@ onBeforeUnmount(() => {
 
 onUpdated(checkOverflow);
 
-defineEmits(["click"]);
 </script>
 
 <style scoped>

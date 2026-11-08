@@ -3,9 +3,8 @@
     :infiniteAnimation="props.infiniteAnimation"
     :animateOnHover="props.animateOnHover"
     :data-id="track.id"
-    @click="handleClick"
   >
-    <span class="track-name" :style="colorStyle">{{ sanitizedTrackName }}</span>
+    <span class="track-name" :style="colorStyle" @click.stop="handleClick">{{ sanitizedTrackName }}</span>
   </SlidingText>
 </template>
 
