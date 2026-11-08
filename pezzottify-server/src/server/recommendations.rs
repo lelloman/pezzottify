@@ -492,12 +492,19 @@ async fn get_radio(
         state.config.audio_embeddings.as_ref(),
         &namespace,
     );
+    let settings = state.config.audio_embeddings.clone();
 
     match catalog
         .run(
             DbPriority::Interactive,
             move |catalog_store| match entity_type.as_str() {
-                "track" => track_radio(catalog_store, &namespace, &entity_id, count),
+                "track" => track_radio(
+                    catalog_store,
+                    settings.as_ref(),
+                    &namespace,
+                    &entity_id,
+                    count,
+                ),
                 "album" => album_radio(
                     catalog_store,
                     &namespace,
@@ -1535,7 +1542,7 @@ fn radio_seed_vector(
     track_namespace: &str,
 ) -> anyhow::Result<Option<Vec<f32>>> {
     match seed.entity_type.as_str() {
-        "track" => get_vector(catalog_store, "track", &seed.entity_id, track_namespace),
+        "track" => track_seed_vector(catalog_store, settings, &seed.entity_id, track_namespace),
         "concept" => get_vector(catalog_store, "concept", &seed.entity_id, track_namespace),
         "album" => {
             let album_namespace =
@@ -1555,6 +1562,37 @@ fn radio_seed_vector(
         }
         _ => Ok(None),
     }
+}
+
+/// The track's own embedding, falling back to its album's and then its artists'
+/// when the track has not been embedded yet (e.g. recently added content).
+fn track_seed_vector(
+    catalog_store: &dyn CatalogStore,
+    settings: Option<&AudioEmbeddingsSettings>,
+    track_id: &str,
+    track_namespace: &str,
+) -> anyhow::Result<Option<Vec<f32>>> {
+    if let Some(vector) = get_vector(catalog_store, "track", track_id, track_namespace)? {
+        return Ok(Some(vector));
+    }
+    let Some(resolved) = catalog_store.get_resolved_track(track_id)? else {
+        return Ok(None);
+    };
+    let album_seed = RadioSeed {
+        entity_type: "album".to_string(),
+        entity_id: resolved.album.id.clone(),
+    };
+    if let Some(vector) = radio_seed_vector(catalog_store, settings, &album_seed, track_namespace)?
+    {
+        return Ok(Some(vector));
+    }
+    let mut artist_track_ids = Vec::new();
+    for artist in &resolved.artists {
+        artist_track_ids.extend(
+            catalog_store.get_artist_top_track_ids(&artist.artist.id, ARTIST_SEED_TRACK_LIMIT)?,
+        );
+    }
+    mean_track_vector(catalog_store, track_namespace, &artist_track_ids)
 }
 
 fn album_namespace_for_track_namespace_with_settings(
@@ -1742,6 +1780,7 @@ fn append_radio_recommendations(
 
 fn track_radio(
     catalog_store: &dyn CatalogStore,
+    settings: Option<&AudioEmbeddingsSettings>,
     namespace: &str,
     track_id: &str,
     count: usize,
@@ -1767,7 +1806,7 @@ fn track_radio(
             }
         }
 
-        let Some(seed) = get_vector(catalog_store, "track", track_id, namespace)? else {
+        let Some(seed) = track_seed_vector(catalog_store, settings, track_id, namespace)? else {
             return Ok(result);
         };
         append_radio_recommendations(
@@ -2573,6 +2612,63 @@ mod tests {
             metadata: serde_json::json!({}),
             model: serde_json::json!({}),
         }
+    }
+
+    #[test]
+    fn track_radio_falls_back_to_album_and_artist_vectors_for_unembedded_seed() {
+        use crate::catalog_store::SqliteCatalogStore;
+        let dir = tempfile::tempdir().unwrap();
+        let store = SqliteCatalogStore::new(
+            dir.path().join("catalog.db"),
+            dir.path(),
+            2,
+            &crate::backup::DbRegistry::new(),
+        )
+        .unwrap();
+        let fresh = resolved_track("fresh", "album-seed", &["artist"]);
+        store.create_artist(&fresh.artists[0].artist).unwrap();
+        store
+            .create_album(&fresh.album, &["artist".into()])
+            .unwrap();
+        let other = resolved_track("other", "album-other", &["artist"]);
+        store
+            .create_album(&other.album, &["artist".into()])
+            .unwrap();
+        for track in [fresh, other] {
+            store
+                .create_track(&track.track, &["artist".into()])
+                .unwrap();
+            store
+                .set_track_audio_uri(&track.track.id, "audio.ogg")
+                .unwrap();
+        }
+        // Only the other track is embedded: the seed falls back to its artist's tracks.
+        store
+            .upsert_entity_embedding(&embedding(
+                "track",
+                "other",
+                DEFAULT_TRACK_NAMESPACE,
+                vec![1.0, 0.0],
+            ))
+            .unwrap();
+
+        assert_eq!(
+            track_radio(&store, None, DEFAULT_TRACK_NAMESPACE, "fresh", 10).unwrap(),
+            vec!["fresh", "other"]
+        );
+        let continuation = continue_radio(
+            &store,
+            None,
+            serde_json::from_value(serde_json::json!({
+                "source": "basic",
+                "seed": {"entity_type": "track", "entity_id": "fresh"},
+                "context_track_ids": ["fresh"],
+                "exclude_track_ids": ["fresh"],
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(continuation, vec!["other"]);
     }
 
     #[test]
