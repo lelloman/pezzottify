@@ -21,6 +21,7 @@ impl IngestionManager {
             download_manager,
             notifier: None,
             notification_service: None,
+            embedding_scheduler: None,
         }
     }
 
@@ -41,6 +42,16 @@ impl IngestionManager {
         service: Arc<crate::notifications::NotificationService>,
     ) -> Self {
         self.notification_service = Some(service);
+        self
+    }
+
+    /// Request audio embeddings for converted tracks when a job completes.
+    /// Without it, new tracks wait for the scheduled embedding sync.
+    pub fn with_embedding_scheduler(
+        mut self,
+        scheduler: crate::background_jobs::SchedulerHandle,
+    ) -> Self {
+        self.embedding_scheduler = Some(scheduler);
         self
     }
 

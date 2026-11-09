@@ -34,6 +34,7 @@ impl IngestionManager {
 
         let files = self.store.get_files_for_job(job_id)?;
         let mut converted = 0;
+        let mut converted_track_ids = Vec::new();
 
         for mut file in files {
             // Skip files without a matched track
@@ -57,6 +58,7 @@ impl IngestionManager {
 
             if file.converted {
                 converted += 1;
+                converted_track_ids.push(track_id);
                 continue;
             }
             let extension = if needs_conversion {
@@ -110,6 +112,7 @@ impl IngestionManager {
                     file.converted = true;
                     file.error_message = None;
                     converted += 1;
+                    converted_track_ids.push(track_id);
                 }
                 Err(error) => {
                     file.error_message = Some(error.to_string());
@@ -346,6 +349,14 @@ impl IngestionManager {
                     .await;
                 }
             }
+        }
+
+        // Embed the new tracks now; the scheduled sync retries any that fail.
+        if let Some(scheduler) = &self.embedding_scheduler {
+            crate::background_jobs::jobs::request_track_embeddings(
+                scheduler.clone(),
+                converted_track_ids,
+            );
         }
 
         info!(

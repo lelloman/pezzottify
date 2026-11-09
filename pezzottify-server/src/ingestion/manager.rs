@@ -233,6 +233,8 @@ pub struct IngestionManager {
     download_manager: Option<Arc<dyn DownloadManagerTrait>>,
     notifier: Option<Arc<super::notifier::IngestionNotifier>>,
     notification_service: Option<Arc<crate::notifications::NotificationService>>,
+    /// Scheduler used to embed tracks as soon as an ingestion job completes.
+    embedding_scheduler: Option<crate::background_jobs::SchedulerHandle>,
 }
 
 include!("setup.rs");

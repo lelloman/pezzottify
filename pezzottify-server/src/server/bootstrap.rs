@@ -328,18 +328,20 @@ async fn make_app_with_executor(
                         state.ws_connection_manager.clone(),
                     ));
 
-                let ingestion_manager = Arc::new(
-                    crate::ingestion::IngestionManager::new(
-                        Arc::new(store),
-                        catalog_store.clone(),
-                        search_vault.clone(),
-                        ingestion_config,
-                        manager_traits,
-                    )
-                    .with_media(state.media.clone())
-                    .with_notifier(notifier)
-                    .with_notification_service(notification_service),
-                );
+                let mut ingestion_manager = crate::ingestion::IngestionManager::new(
+                    Arc::new(store),
+                    catalog_store.clone(),
+                    search_vault.clone(),
+                    ingestion_config,
+                    manager_traits,
+                )
+                .with_media(state.media.clone())
+                .with_notifier(notifier)
+                .with_notification_service(notification_service);
+                if let Some(scheduler) = state.scheduler_handle.clone() {
+                    ingestion_manager = ingestion_manager.with_embedding_scheduler(scheduler);
+                }
+                let ingestion_manager = Arc::new(ingestion_manager);
 
                 // Initialize the manager (creates temp directory)
                 if let Err(e) = ingestion_manager.init().await {
