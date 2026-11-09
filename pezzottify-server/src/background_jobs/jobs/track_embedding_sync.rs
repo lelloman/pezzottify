@@ -45,6 +45,54 @@ struct SimpleAiAudioEmbeddingResponse {
     model_info: Value,
 }
 
+/// Why an embedding request did not produce an embedding.
+#[derive(Debug)]
+enum EmbeddingRequestError {
+    /// Simple-AI rejected this input (for example a file over the runner's size
+    /// limit). Retrying will not help and it says nothing about the service.
+    Rejected(String),
+    /// Simple-AI, a runner or the network failed.
+    Failed(String),
+}
+
+impl std::fmt::Display for EmbeddingRequestError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Rejected(msg) => write!(f, "rejected: {msg}"),
+            Self::Failed(msg) => write!(f, "{msg}"),
+        }
+    }
+}
+
+/// HTTP statuses that mean the request itself was unacceptable, as opposed to
+/// authentication, routing, throttling or timeouts.
+fn is_input_rejection_status(code: u16) -> bool {
+    matches!(code, 400 | 413 | 415 | 422)
+}
+
+/// Classify a non-success Simple-AI response. The gateway reports a runner's
+/// 4xx as its own HTTP 500 with "Runner returned HTTP <code>" in the body, so
+/// both the outer status and the wrapped runner status are checked.
+fn classify_http_failure(status: u16, body: &str) -> EmbeddingRequestError {
+    let message = format!("Simple-AI returned HTTP {status}: {body}");
+    let runner_status = body
+        .split_once("Runner returned HTTP ")
+        .and_then(|(_, rest)| rest.get(..3))
+        .and_then(|code| code.parse::<u16>().ok());
+    if is_input_rejection_status(status) || runner_status.is_some_and(is_input_rejection_status) {
+        EmbeddingRequestError::Rejected(message)
+    } else {
+        EmbeddingRequestError::Failed(message)
+    }
+}
+
+/// Whether a run should be reported as failed: it reached Simple-AI or local
+/// storage and hit real failures, yet stored nothing. Input rejections are
+/// excluded so permanently unembeddable tracks cannot fail every run.
+fn run_stored_nothing_despite_failures(embeddings_stored: usize, failures: usize) -> bool {
+    embeddings_stored == 0 && failures > 0
+}
+
 impl TrackEmbeddingSyncJob {
     pub fn new(settings: AudioEmbeddingsSettings) -> Self {
         Self { settings }
@@ -90,21 +138,19 @@ impl TrackEmbeddingSyncJob {
         client: &Client,
         audio: crate::media::LocalAudio,
         spec: &AudioEmbeddingSpec,
-    ) -> Result<SimpleAiAudioEmbeddingResponse, JobError> {
+    ) -> Result<SimpleAiAudioEmbeddingResponse, EmbeddingRequestError> {
+        let failed = |e: &dyn std::fmt::Display| EmbeddingRequestError::Failed(e.to_string());
         let options = json!({
             "model": spec.model,
             "namespace": spec.namespace,
         });
         let (reader, filename) = audio.into_reader();
-        let length = reader
-            .metadata()
-            .map_err(|e| JobError::ExecutionFailed(e.to_string()))?
-            .len();
+        let length = reader.metadata().map_err(|e| failed(&e))?.len();
         let mime = mime_guess::from_path(&filename).first_or_octet_stream();
         let part = multipart::Part::reader_with_length(reader, length)
             .file_name(filename)
             .mime_str(mime.as_ref())
-            .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+            .map_err(|e| failed(&e))?;
         let form = multipart::Form::new()
             .part("file", part)
             .text("options", options.to_string());
@@ -118,19 +164,15 @@ impl TrackEmbeddingSyncJob {
             .bearer_auth(&self.settings.api_key)
             .multipart(form)
             .send()
-            .map_err(|e| JobError::ExecutionFailed(e.to_string()))?;
+            .map_err(|e| failed(&e))?;
 
         if !response.status().is_success() {
-            let status = response.status();
+            let status = response.status().as_u16();
             let body = response.text().unwrap_or_default();
-            return Err(JobError::ExecutionFailed(format!(
-                "Simple-AI returned HTTP {status}: {body}"
-            )));
+            return Err(classify_http_failure(status, &body));
         }
 
-        response
-            .json()
-            .map_err(|e| JobError::ExecutionFailed(e.to_string()))
+        response.json().map_err(|e| failed(&e))
     }
 
     fn execute_inner(
@@ -177,6 +219,7 @@ impl TrackEmbeddingSyncJob {
         let mut tracks_skipped = 0usize;
         let mut embeddings_stored = 0usize;
         let mut failures = 0usize;
+        let mut rejected = 0usize;
 
         for (track_id, audio_uri) in tracks {
             if ctx.is_cancelled() {
@@ -272,6 +315,13 @@ impl TrackEmbeddingSyncJob {
                             }
                         }
                     }
+                    Err(EmbeddingRequestError::Rejected(msg)) => {
+                        rejected += 1;
+                        warn!(
+                            "Simple-AI rejected track {} for namespace {}: {}",
+                            track_id, spec.namespace, msg
+                        );
+                    }
                     Err(e) => {
                         failures += 1;
                         warn!(
@@ -288,22 +338,38 @@ impl TrackEmbeddingSyncJob {
                     "tracks_skipped": tracks_skipped,
                     "embeddings_stored": embeddings_stored,
                     "failures": failures,
+                    "rejected": rejected,
                 }));
             }
         }
 
         let duration_ms = started_at.elapsed().as_millis() as u64;
-        info!(
-            "Track embedding sync completed: processed={} skipped={} stored={} failures={} duration_ms={}",
-            tracks_processed, tracks_skipped, embeddings_stored, failures, duration_ms
-        );
-        audit.log_completed(Some(json!({
+        let summary = json!({
             "duration_ms": duration_ms,
             "tracks_processed": tracks_processed,
             "tracks_skipped": tracks_skipped,
             "embeddings_stored": embeddings_stored,
             "failures": failures,
-        })));
+            "rejected": rejected,
+        });
+
+        // A run that stores nothing while hitting failures means the embedding
+        // pipeline is broken (runner environment, gateway, media mount). Report it
+        // as a failed run so the job failure metric and alert fire.
+        if run_stored_nothing_despite_failures(embeddings_stored, failures) {
+            let msg = format!(
+                "Track embedding sync stored no embeddings: failures={failures} rejected={rejected} processed={tracks_processed}"
+            );
+            warn!("{msg}");
+            audit.log_failed(&msg, Some(summary));
+            return Err(JobError::ExecutionFailed(msg));
+        }
+
+        info!(
+            "Track embedding sync completed: processed={} skipped={} stored={} failures={} rejected={} duration_ms={}",
+            tracks_processed, tracks_skipped, embeddings_stored, failures, rejected, duration_ms
+        );
+        audit.log_completed(Some(summary));
 
         Ok(())
     }
@@ -438,6 +504,47 @@ mod tests {
 
         assert_eq!(params.max_tracks, Some(7));
         assert_eq!(params.force, Some(true));
+    }
+
+    #[test]
+    fn gateway_wrapped_runner_size_rejection_is_not_a_failure() {
+        let body = r#"Runner returned HTTP 400: {"error":{"message":"Invalid request: file exceeds runner audio embedding limit of 104857600 bytes"}}"#;
+        assert!(matches!(
+            classify_http_failure(500, body),
+            EmbeddingRequestError::Rejected(_)
+        ));
+        assert!(matches!(
+            classify_http_failure(413, ""),
+            EmbeddingRequestError::Rejected(_)
+        ));
+    }
+
+    #[test]
+    fn service_auth_and_runner_errors_are_failures() {
+        for (status, body) in [
+            (500, "Runner returned HTTP 500: provider exited"),
+            (500, "Runner returned HTTP 503: draining"),
+            (502, "bad gateway"),
+            (503, ""),
+            (401, "missing key"),
+            (429, "slow down"),
+            (404, "not found"),
+        ] {
+            assert!(
+                matches!(
+                    classify_http_failure(status, body),
+                    EmbeddingRequestError::Failed(_)
+                ),
+                "{status} {body}"
+            );
+        }
+    }
+
+    #[test]
+    fn run_fails_only_when_failures_stored_nothing() {
+        assert!(run_stored_nothing_despite_failures(0, 3));
+        assert!(!run_stored_nothing_despite_failures(1, 3));
+        assert!(!run_stored_nothing_despite_failures(0, 0));
     }
 
     #[test]

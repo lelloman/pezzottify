@@ -817,6 +817,24 @@ pub fn record_background_job_execution(job_id: &str, status: &str, duration: Dur
         .observe(duration.as_secs_f64());
 }
 
+/// Status labels recorded by `record_background_job_execution`.
+pub const BACKGROUND_JOB_STATUSES: [&str; 6] = [
+    "success",
+    "failed",
+    "cancelled",
+    "panic",
+    "timeout",
+    "queue_timeout",
+];
+
+/// Create every execution series for a job at zero, so the first failure is an
+/// observable increase rather than a series appearing with value 1.
+pub fn init_background_job_metrics(job_id: &str) {
+    for status in BACKGROUND_JOB_STATUSES {
+        BACKGROUND_JOB_EXECUTIONS_TOTAL.with_label_values(&[job_id, status]);
+    }
+}
+
 /// Set whether a background job is currently running
 pub fn set_background_job_running(job_id: &str, running: bool) {
     BACKGROUND_JOB_RUNNING

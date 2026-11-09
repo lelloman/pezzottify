@@ -233,6 +233,7 @@ impl JobScheduler {
         }
         let job_id = job.id().to_string();
         info!("Registering job: {} - {}", job_id, job.description());
+        metrics::init_background_job_metrics(&job_id);
         let mut state = self.shared_state.write().await;
         state.jobs.insert(job_id, job);
     }
