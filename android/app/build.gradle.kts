@@ -75,6 +75,9 @@ if (paravoidComplete) {
         // Only disposable acceptance fixtures expose the harness launcher.
         controlsLauncher.set(paravoidAcceptance)
         bootstrap.set("embedded")
+        // Forward ParavoidBusyReporter's playback state to LelloStore, so it holds shell
+        // APK installs while music is playing. Changes the shell manifest (a new shell).
+        busyReportStores.set(listOf("com.lelloman.store"))
         crashRecovery { enabled.set(paravoidProduction); updater.set("default") }
         payloadVersion.set(providers.gradleProperty("paravoidPayloadVersion").map(String::toLong).orElse(1L))
         // Shrink the payload with Paravoid's payload-only R8 (AGP minify stays off for

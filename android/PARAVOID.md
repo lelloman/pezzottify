@@ -217,6 +217,16 @@ hours (6-hour flex) as a fallback for missed hints; background downloads use
 unmetered networks. Acceptance markers remain disabled. Normal production variants
 retain their existing shrinking configuration.
 
+While music plays locally (paused playback and controlling another device don't
+count), `ParavoidBusyReporter` reports the app busy with `ParavoidUpdates.setBusy`
+from the main process: the shell holds automatic restarts and restart prompts, and
+every complete shell forwards the state to LelloStore (`busyReportStores`) so it
+holds shell APK installs. The normal APK answers LelloStore's consent broadcast
+with `UpdateConsentReceiver` instead. This needs a new shell: `setBusy` lives in
+the shell's runtime, and the store list and its `<queries>` entry in the shell
+manifest, so the contract differs from earlier shell baselines and payloads built
+from here on are refused for them. Publish a shell (`kind=apk`) before any payload.
+
 The publish scripts hand the generated artifacts to the update server's publisher,
 a command named by `PARAVOID_PUBLISHER` that implements `upload`, `upload-vpk`,
 `upload-status`, `distribution` and `publish-vpk`. The publisher's own settings
