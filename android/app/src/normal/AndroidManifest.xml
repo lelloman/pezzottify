@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- Lets the store hold an automatic update while music is playing.
+             Only the regular APK declares it: a new component in the Paravoid shell
+             changes its contract and needs a new shell generation. -->
+        <receiver
+            android:name=".updates.UpdateConsentReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.lelloman.store.action.CAN_UPDATE_V1" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>
