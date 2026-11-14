@@ -11,4 +11,7 @@
     <!-- Background Colors -->
     <color name="background_light">#FFFAFDFA</color>
     <color name="background_dark">#FF191C1A</color>
+
+    <!-- Cold-start window background; dark variant in values-night -->
+    <color name="launch_background">@color/background_light</color>
 </resources>

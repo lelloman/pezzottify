@@ -78,6 +78,8 @@ class MainActivity : ComponentActivity() {
                 fontFamily = fontFamily.toAppFontFamily(),
             )
         }
+        // The theme's launch background (logo) only covers cold start; keep a plain color behind the UI.
+        window.setBackgroundDrawableResource(R.color.launch_background)
     }
 
     override fun onNewIntent(intent: Intent) {
