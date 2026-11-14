@@ -28,8 +28,7 @@ contract and runtime projects come from that checkout, along with the core and
 Hilt Gradle plugins.
 
 Use the exact assistant revision in `../simple-android-assistant.rev`; an older
-local checkout can fail both normal and shell compilation. Keep Androidoscopy
-prepared as documented by the existing build setup. No credentials or release
+local checkout can fail both normal and shell compilation. No credentials or release
 signing files are included in this branch.
 
 ```sh

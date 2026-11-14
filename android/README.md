@@ -253,18 +253,8 @@ only covers the Android side.
 
 ### Building
 
-Before building, prepare the pinned Androidoscopy SDK and session UI artifacts:
-
-```bash
-# From the repository root (requires the Android SDK/JDK):
-bash scripts/prepare-androidoscopy.sh
-```
-
-This verifies the sibling `../androidoscopy` checkout against `androidoscopy.rev`
-and publishes SDK/UI 2.0.2 to Maven Local. It never overwrites a dirty or different
-checkout. Set `ANDROIDOSCOPY_CHECKOUT` to use another checkout. CI runs the same
-preparation; the pinned commit must be available in Androidoscopy's remote before
-CI can clone it. Separate builds are required because the projects use different AGP versions.
+The Androidoscopy SDK and session UI come from JitPack, pinned to an Androidoscopy
+commit in `gradle/libs.versions.toml`.
 
 ```bash
 ./gradlew build               # Build all modules

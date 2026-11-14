@@ -17,8 +17,6 @@ on:
       - "scripts/checkout-paravoid.sh"
       - "simple-android-assistant.rev"
       - "scripts/checkout-simple-android-assistant.sh"
-      - "androidoscopy.rev"
-      - "scripts/prepare-androidoscopy.sh"
       - "scripts/fetch-robolectric-runtimes.sh"
       - "scripts/gradle-maven-central-mirror.init.gradle"
       - ".forgejo/workflows/android.yml"
@@ -30,8 +28,6 @@ on:
       - "scripts/checkout-paravoid.sh"
       - "simple-android-assistant.rev"
       - "scripts/checkout-simple-android-assistant.sh"
-      - "androidoscopy.rev"
-      - "scripts/prepare-androidoscopy.sh"
       - "scripts/fetch-robolectric-runtimes.sh"
       - "scripts/gradle-maven-central-mirror.init.gradle"
       - ".forgejo/workflows/android.yml"
@@ -156,10 +152,6 @@ jobs:
           set -eu
           bash scripts/checkout-paravoid.sh
           bash scripts/checkout-simple-android-assistant.sh
-          bash scripts/prepare-androidoscopy.sh
-          # Androidoscopy's Kotlin daemon has different settings, so the Android
-          # build would start its own beside it. [K] keeps pkill off this shell.
-          pkill -f '[K]otlinCompileDaemon' || true
 
       - name: Fetch Robolectric runtimes
         working-directory: .

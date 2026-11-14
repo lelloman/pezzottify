@@ -21,12 +21,6 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven { url = uri("https://jitpack.io") }
-        // Prepared from androidoscopy.rev by scripts/prepare-androidoscopy.sh.
-        // Build separately: Androidoscopy uses a different AGP version.
-        exclusiveContent {
-            forRepository { mavenLocal() }
-            filter { includeGroup("com.github.lelloman.androidoscopy") }
-        }
         mavenLocal()  // For local DuckMapper development
     }
 }
