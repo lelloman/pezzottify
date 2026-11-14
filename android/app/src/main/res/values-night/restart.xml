@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark variant: Base.Theme.Paravoid.Restart already switches to the dark framework theme. -->
+    <style name="Theme.Pezzottify.Restart" parent="Base.Theme.Paravoid.Restart">
+        <item name="android:colorBackground">@color/background_dark</item>
+        <item name="android:colorAccent">@color/primary</item>
+        <item name="android:colorControlActivated">@color/primary</item>
+        <item name="paravoidRestartConfirmTitle">@string/restart_confirm_title</item>
+        <item name="paravoidRestartConfirmMessage">@string/restart_confirm_message</item>
+        <item name="paravoidRestartConfirmButton">@string/restart_confirm_button</item>
+        <item name="paravoidRestartDismissButton">@string/restart_dismiss_button</item>
+        <item name="paravoidRestartProgressTitle">@string/restart_progress_title</item>
+        <item name="paravoidRestartProgressMessage">@string/restart_progress_message</item>
+        <item name="paravoidRestartFailedTitle">@string/restart_failed_title</item>
+        <item name="paravoidRestartFailedMessage">@string/restart_failed_message</item>
+        <item name="paravoidRestartCloseButton">@string/restart_close_button</item>
+    </style>
+</resources>

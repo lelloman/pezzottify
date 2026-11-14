@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="restart_confirm_title">Riavviare per aggiornare?</string>
+    <string name="restart_confirm_message">%1$s si chiuderà e si riaprirà con la nuova versione. La riproduzione si fermerà per un momento.</string>
+    <string name="restart_confirm_button">Riavvia</string>
+    <string name="restart_dismiss_button">Non ora</string>
+    <string name="restart_progress_title">Aggiornamento di %1$s</string>
+    <string name="restart_progress_message">La musica tornerà tra un momento.</string>
+    <string name="restart_failed_title">Riavvio non disponibile</string>
+    <string name="restart_failed_message">Non è stato possibile riavviare %1$s. Puoi riprovare dalle impostazioni degli aggiornamenti.</string>
+    <string name="restart_close_button">Chiudi</string>
+</resources>

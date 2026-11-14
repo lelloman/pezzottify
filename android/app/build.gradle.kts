@@ -69,6 +69,10 @@ if (paravoidProduction) {
     }
 }
 
+// Branded shell restart screen (res/values/restart.xml). Set outside the complete block so the
+// generated base theme exists, and the src/main theme links, in every variant.
+paravoid { updates { restartTheme.set("@style/Theme.Pezzottify.Restart") } }
+
 if (paravoidComplete) {
     paravoid {
         packaging.set("complete")
