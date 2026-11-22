@@ -3,6 +3,7 @@
 use super::{
     session::Session,
     state::{DatabaseHandles, ServerState},
+    ServerConfig,
 };
 use crate::{
     db_executor::DbPriority,
@@ -61,13 +62,14 @@ async fn integrations(Extract(s): Extract<Session>, State(db): State<DatabaseHan
 async fn create(
     Extract(s): Extract<Session>,
     State(db): State<DatabaseHandles>,
+    State(config): State<ServerConfig>,
     Json(input): Json<NewIntegration>,
 ) -> Response {
     if !allowed(&s) {
         return super::report_admission::error(StatusCode::FORBIDDEN);
     }
     match run(db, "create_integration", move |r| {
-        r.create_integration(s.user_id, input)
+        r.create_integration(s.user_id, input, config.allow_private_report_integrations)
     })
     .await
     {
@@ -141,17 +143,22 @@ fn signature(secret: &str, timestamp: i64, body: &str) -> Option<String> {
     mac.update(body.as_bytes());
     Some(format!("v1={:x}", mac.finalize().into_bytes()))
 }
-fn vetted(addresses: Vec<SocketAddr>) -> Result<Vec<SocketAddr>, &'static str> {
+fn vetted(
+    addresses: Vec<SocketAddr>,
+    allow_private: bool,
+) -> Result<Vec<SocketAddr>, &'static str> {
     if addresses.is_empty()
         || addresses.len() > 64
-        || addresses.iter().any(|a| !public_address(a.ip()))
+        || addresses
+            .iter()
+            .any(|a| !destination_address(a.ip(), allow_private))
     {
         Err("destination_rejected")
     } else {
         Ok(addresses)
     }
 }
-async fn resolve(url: &reqwest::Url) -> Result<Vec<SocketAddr>, &'static str> {
+async fn resolve(url: &reqwest::Url, allow_private: bool) -> Result<Vec<SocketAddr>, &'static str> {
     let host = url
         .host_str()
         .ok_or("destination_rejected")?
@@ -166,7 +173,7 @@ async fn resolve(url: &reqwest::Url) -> Result<Vec<SocketAddr>, &'static str> {
             .take(65)
             .collect()
     };
-    vetted(addresses)
+    vetted(addresses, allow_private)
 }
 fn retry_after(value: Option<&str>, now: i64) -> i64 {
     value
@@ -187,12 +194,12 @@ fn transport_builder() -> reqwest::ClientBuilder {
         .timeout(Duration::from_secs(10))
         .connect_timeout(Duration::from_secs(5))
 }
-async fn send(d: &ClaimedDelivery) -> Result<(u16, i64), &'static str> {
-    let url = validate_destination(&d.url).map_err(|_| "destination_rejected")?;
-    let addresses = resolve(&url).await?;
+async fn send(d: &ClaimedDelivery, allow_private: bool) -> Result<(u16, i64), &'static str> {
+    let url = validate_destination(&d.url, allow_private).map_err(|_| "destination_rejected")?;
+    let addresses = resolve(&url, allow_private).await?;
     let host = url.host_str().ok_or("destination_rejected")?;
     let client = transport_builder()
-        .https_only(true)
+        .https_only(!allow_private)
         .resolve_to_addrs(host, &addresses)
         .build()
         .map_err(|_| "transport_error")?;
@@ -239,11 +246,11 @@ async fn inspect_response(
     }
     Ok((status, delay))
 }
-async fn attempt(d: &ClaimedDelivery) -> (bool, i64, String) {
+async fn attempt(d: &ClaimedDelivery, allow_private: bool) -> (bool, i64, String) {
     // A panicking HTTP future also releases its lease through the normal finish path.
     match tokio::time::timeout(
         Duration::from_secs(10),
-        std::panic::AssertUnwindSafe(send(d)).catch_unwind(),
+        std::panic::AssertUnwindSafe(send(d, allow_private)).catch_unwind(),
     )
     .await
     {
@@ -257,7 +264,7 @@ async fn attempt(d: &ClaimedDelivery) -> (bool, i64, String) {
         Err(_) => (false, 0, "deadline".into()),
     }
 }
-async fn worker_step(db: DatabaseHandles) {
+async fn worker_step(db: DatabaseHandles, allow_private: bool) {
     let now = chrono::Utc::now().timestamp();
     let claimed = run(db.clone(), "claim_delivery", move |r| r.claim_delivery(now)).await;
     let d = match claimed {
@@ -265,7 +272,7 @@ async fn worker_step(db: DatabaseHandles) {
         Ok(None) => return,
         Err(_) => return,
     };
-    let (success, delay, outcome) = attempt(&d).await;
+    let (success, delay, outcome) = attempt(&d, allow_private).await;
     tracing::info!(delivery_id=%d.id,event_id=%d.event_id,outcome,"Report delivery attempt finished");
     let id = d.id.clone();
     let saved = run(db, "finish_delivery", move |r| {
@@ -286,12 +293,18 @@ async fn worker_step(db: DatabaseHandles) {
 pub(super) fn start(server: &ServerState) {
     let db = server.database.clone();
     let shutdown = server.runtime_tasks.shutdown.clone();
+    let allow_private = server.config.allow_private_report_integrations;
+    if allow_private {
+        tracing::warn!(
+            "allow_private_report_integrations is enabled: report integrations may deliver to private-network addresses and over plain HTTP"
+        );
+    }
     server.runtime_tasks.tasks.spawn(async move {
         let mut timer = tokio::time::interval(Duration::from_secs(1));
         timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
             tokio::select! { biased; _=shutdown.requested()=>break, _=timer.tick()=>{} }
-            worker_step(db.clone()).await;
+            worker_step(db.clone(), allow_private).await;
         }
     });
 }
@@ -348,11 +361,18 @@ mod tests {
     fn dns_rebinding_mixed_results_and_resolution_bounds_fail_closed() {
         let good = "8.8.8.8:443".parse().unwrap();
         let private = "127.0.0.1:443".parse().unwrap();
-        assert!(vetted(vec![]).is_err());
-        assert!(vetted(vec![good, private]).is_err());
-        assert!(vetted(vec![good; 65]).is_err());
-        assert_eq!(vetted(vec![good]).unwrap(), vec![good]);
-        assert!(vetted(vec!["[::ffff:8.8.8.8]:443".parse().unwrap()]).is_err());
+        assert!(vetted(vec![], false).is_err());
+        assert!(vetted(vec![good, private], false).is_err());
+        assert!(vetted(vec![good; 65], false).is_err());
+        assert_eq!(vetted(vec![good], false).unwrap(), vec![good]);
+        assert!(vetted(vec!["[::ffff:8.8.8.8]:443".parse().unwrap()], false).is_err());
+        // With the opt-in, private and mixed answers pass; metadata endpoints never do.
+        assert_eq!(
+            vetted(vec![good, private], true).unwrap(),
+            vec![good, private]
+        );
+        let metadata = "169.254.169.254:80".parse().unwrap();
+        assert!(vetted(vec![private, metadata], true).is_err());
     }
     #[test]
     fn retry_after_seconds_dates_invalid_and_extremes() {
@@ -431,7 +451,7 @@ mod tests {
                 body: "{}".into(),
                 token: "token".into(),
             };
-            assert_eq!(send(&d).await.unwrap_err(), "destination_rejected");
+            assert_eq!(send(&d, false).await.unwrap_err(), "destination_rejected");
         }
     }
 }

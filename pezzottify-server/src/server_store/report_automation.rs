@@ -146,6 +146,7 @@ pub trait AutomationRepository: Send + Sync {
         &self,
         actor: usize,
         input: NewIntegration,
+        allow_private: bool,
     ) -> ReportResult<CreatedIntegration>;
     fn update_integration(
         &self,
@@ -168,7 +169,10 @@ pub trait AutomationRepository: Send + Sync {
     ) -> ReportResult<()>;
 }
 
-pub fn validate_destination(value: &str) -> ReportResult<reqwest::Url> {
+/// Validate an integration URL. `allow_private` (server config
+/// `allow_private_report_integrations`) additionally admits plain HTTP and
+/// [`private_address`] literals.
+pub fn validate_destination(value: &str, allow_private: bool) -> ReportResult<reqwest::Url> {
     let invalid = || {
         ReportError::Invalid(
             "Destination must be a public HTTPS URL without credentials or fragment".into(),
@@ -178,7 +182,8 @@ pub fn validate_destination(value: &str) -> ReportResult<reqwest::Url> {
         return Err(invalid());
     }
     let url = reqwest::Url::parse(value).map_err(|_| invalid())?;
-    if url.scheme() != "https"
+    let scheme_ok = url.scheme() == "https" || (allow_private && url.scheme() == "http");
+    if !scheme_ok
         || url.host_str().is_none()
         || !url.username().is_empty()
         || url.password().is_some()
@@ -188,12 +193,34 @@ pub fn validate_destination(value: &str) -> ReportResult<reqwest::Url> {
     }
     if let Some(host) = url.host_str() {
         if let Ok(ip) = host.trim_matches(['[', ']']).parse() {
-            if !public_address(ip) {
+            if !destination_address(ip, allow_private) {
                 return Err(invalid());
             }
         }
     }
     Ok(url)
+}
+/// Whether a resolved or literal address may receive deliveries.
+pub fn destination_address(ip: std::net::IpAddr, allow_private: bool) -> bool {
+    public_address(ip) || (allow_private && private_address(ip))
+}
+/// Private-network unicast ranges admitted only when private destinations are
+/// enabled: RFC 1918, CGNAT (100.64/10, used by overlay VPNs), loopback and IPv6
+/// ULA/loopback. Link-local (cloud metadata endpoints), multicast, unspecified and
+/// IPv4-mapped addresses are never admitted.
+pub fn private_address(ip: std::net::IpAddr) -> bool {
+    use std::net::IpAddr;
+    match ip {
+        IpAddr::V4(ip) => {
+            let [a, b, _, _] = ip.octets();
+            a == 10
+                || a == 127
+                || (a == 100 && (64..=127).contains(&b))
+                || (a == 172 && (16..=31).contains(&b))
+                || (a == 192 && b == 168)
+        }
+        IpAddr::V6(ip) => ip.is_loopback() || (ip.segments()[0] & 0xfe00) == 0xfc00,
+    }
 }
 /// Conservative global-unicast allowlist; special-purpose ranges fail closed.
 pub fn public_address(ip: std::net::IpAddr) -> bool {
@@ -359,8 +386,9 @@ impl AutomationRepository for SqliteServerStore {
         &self,
         actor: usize,
         input: NewIntegration,
+        allow_private: bool,
     ) -> ReportResult<CreatedIntegration> {
-        let url = validate_destination(&input.url)?.to_string();
+        let url = validate_destination(&input.url, allow_private)?.to_string();
         let secret = STANDARD.encode(rand::random::<[u8; 32]>());
         let id = uuid::Uuid::new_v4().to_string();
         let mut c = self.conn.lock().map_err(|_| ReportError::Storage)?;
@@ -561,6 +589,7 @@ mod tests {
                 NewIntegration {
                     url: "https://example.invalid/webhook".into(),
                 },
+                false,
             )
             .unwrap();
         s.update_integration(
@@ -589,6 +618,7 @@ mod tests {
                 NewIntegration {
                     url: "https://example.invalid/".into(),
                 },
+                false,
             )
             .unwrap();
         assert!(!d.integration.enabled);
@@ -618,6 +648,7 @@ mod tests {
                 NewIntegration {
                     url: "https://example.invalid/".into(),
                 },
+                false,
             )
             .unwrap();
         }
@@ -626,7 +657,8 @@ mod tests {
                 9,
                 NewIntegration {
                     url: "https://example.invalid/".into()
-                }
+                },
+                false,
             ),
             Err(ReportError::Capacity)
         ));
@@ -1015,7 +1047,7 @@ mod tests {
             "https://[::ffff:8.8.8.8]/",
             "https://[2001:db8::1]/",
         ] {
-            assert!(validate_destination(value).is_err(), "{value}");
+            assert!(validate_destination(value, false).is_err(), "{value}");
         }
         for ip in [
             "0.0.0.0",
@@ -1056,7 +1088,55 @@ mod tests {
         ] {
             assert!(public_address(ip.parse().unwrap()), "{ip}");
         }
-        assert!(validate_destination("https://example.invalid/path").is_ok());
+        assert!(validate_destination("https://example.invalid/path", false).is_ok());
+    }
+    #[test]
+    fn private_destinations_need_the_opt_in_and_keep_metadata_blocked() {
+        for value in [
+            "http://report-hub:8080/v1/apps/pezzottify/events",
+            "http://192.168.1.10/",
+            "https://10.0.0.5/",
+            "http://127.0.0.1:9000/",
+            "http://[fd00::1]/",
+        ] {
+            assert!(validate_destination(value, false).is_err(), "{value}");
+            assert!(validate_destination(value, true).is_ok(), "{value}");
+        }
+        for value in [
+            "http://169.254.169.254/",
+            "http://0.0.0.0/",
+            "http://[fe80::1]/",
+            "http://[::ffff:10.0.0.1]/",
+            "http://224.0.0.1/",
+            "ftp://10.0.0.1/",
+            "http://user:pw@10.0.0.1/",
+        ] {
+            assert!(validate_destination(value, true).is_err(), "{value}");
+        }
+        for ip in [
+            "10.1.2.3",
+            "172.20.0.2",
+            "192.168.0.1",
+            "100.100.1.1",
+            "127.0.0.1",
+            "::1",
+            "fd12::1",
+        ] {
+            assert!(!destination_address(ip.parse().unwrap(), false), "{ip}");
+            assert!(destination_address(ip.parse().unwrap(), true), "{ip}");
+        }
+        for ip in [
+            "169.254.169.254",
+            "0.0.0.0",
+            "224.0.0.1",
+            "fe80::1",
+            "::",
+            "::ffff:10.0.0.1",
+            "ff02::1",
+        ] {
+            assert!(!destination_address(ip.parse().unwrap(), true), "{ip}");
+        }
+        assert!(destination_address("8.8.8.8".parse().unwrap(), true));
     }
     #[test]
     fn v8_migration_preserves_reports_and_configures_no_destinations() {

@@ -441,6 +441,7 @@ pub async fn prepare_server(
     ingestion: crate::config::IngestionSettings,
     audio_embeddings: Option<crate::config::AudioEmbeddingsSettings>,
     push: Option<crate::config::PushSettings>,
+    allow_private_report_integrations: bool,
     db_registry: Arc<crate::backup::DbRegistry>,
     enrichment_store: OptionalEnrichmentStore,
     db_executor: crate::db_executor::DbExecutor,
@@ -475,6 +476,7 @@ pub async fn prepare_server(
         ingestion,
         audio_embeddings,
         push,
+        allow_private_report_integrations,
     };
 
     let app = make_app_with_executor(

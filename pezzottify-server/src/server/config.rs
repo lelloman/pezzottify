@@ -47,6 +47,8 @@ pub struct ServerConfig {
     pub audio_embeddings: Option<AudioEmbeddingsSettings>,
     /// UnifiedPush wake-ups; `None` disables push (routes answer 503).
     pub push: Option<crate::config::PushSettings>,
+    /// Report integrations may target private-network addresses and plain HTTP.
+    pub allow_private_report_integrations: bool,
 }
 
 impl Default for ServerConfig {
@@ -73,6 +75,7 @@ impl Default for ServerConfig {
             ingestion: IngestionSettings::default(),
             audio_embeddings: None,
             push: None,
+            allow_private_report_integrations: false,
         }
     }
 }
