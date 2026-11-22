@@ -321,6 +321,7 @@ impl TestServer {
                     allow_insecure_endpoints: true,
                     ..pezzottify_server::config::PushSettings::with_defaults(temp_db_dir.path())
                 }),
+            allow_private_report_integrations: false,
         };
 
         // Create user manager

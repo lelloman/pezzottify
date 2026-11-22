@@ -128,6 +128,8 @@ pub struct AppConfig {
     pub audio_analysis: Option<AudioAnalysisSettings>,
     pub audio_embeddings: Option<AudioEmbeddingsSettings>,
     pub push: Option<PushSettings>,
+    /// Report integrations may target private-network addresses and plain HTTP.
+    pub allow_private_report_integrations: bool,
 }
 
 /// Resolved UnifiedPush settings. See docs/unifiedpush.md.
@@ -201,6 +203,8 @@ impl AppConfig {
             bail!("session_cookie_max_age_secs must be greater than zero");
         }
         let allow_legacy_raw_authorization = file.allow_legacy_raw_authorization.unwrap_or(true);
+        let allow_private_report_integrations =
+            file.allow_private_report_integrations.unwrap_or(false);
         let login_rate_limit_per_minute = file.login_rate_limit_per_minute.unwrap_or(10);
         let login_rate_limit_per_hour = file.login_rate_limit_per_hour.unwrap_or(100);
         if login_rate_limit_per_minute == 0 || login_rate_limit_per_hour == 0 {
@@ -761,6 +765,7 @@ impl AppConfig {
             audio_analysis,
             audio_embeddings,
             push,
+            allow_private_report_integrations,
         })
     }
 

@@ -862,3 +862,33 @@ async fn submitted_reports_notify_triagers() {
         .iter()
         .any(|n| n["notification_type"] == "bug_report_submitted"));
 }
+
+#[tokio::test]
+async fn legacy_submission_without_title_is_accepted() {
+    let server = TestServer::spawn().await;
+    let user = TestClient::authenticated(server.base_url.clone()).await;
+    let response = user
+        .client
+        .post(format!("{}/v1/user/bug-report", server.base_url))
+        .json(&json!({"description":"no title here","client_type":"android"}))
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let body = response.text().await.unwrap();
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let id = serde_json::from_str::<Value>(&body).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let report: Value = user
+        .client
+        .get(format!("{}/v1/reports/{id}", server.base_url))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(report["description"], "no title here", "{report}");
+}

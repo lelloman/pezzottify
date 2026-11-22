@@ -12,7 +12,10 @@ pub const MAX_INTEGRATIONS: usize = 10;
 pub const MAX_DELIVERIES: usize = 10_000;
 pub const MAX_ATTEMPTS: i64 = 5;
 pub const MAX_MANUAL_RETRIES: i64 = 5;
-pub const MAX_PAYLOAD_BYTES: usize = 256 * 1024;
+/// Bounds one outbound event. A `submitted` body carries the report text and its
+/// attachments (logs up to 1 MiB, assistant diagnostics up to 2 MiB, description
+/// up to 100 KiB); JSON escaping can roughly double that.
+pub const MAX_PAYLOAD_BYTES: usize = 8 * 1024 * 1024;
 pub const LEASE_SECONDS: i64 = 60;
 pub(super) const INTEGRATIONS: Table = Table {
     name: "report_integrations",
@@ -146,6 +149,7 @@ pub trait AutomationRepository: Send + Sync {
         &self,
         actor: usize,
         input: NewIntegration,
+        allow_private: bool,
     ) -> ReportResult<CreatedIntegration>;
     fn update_integration(
         &self,
@@ -168,7 +172,10 @@ pub trait AutomationRepository: Send + Sync {
     ) -> ReportResult<()>;
 }
 
-pub fn validate_destination(value: &str) -> ReportResult<reqwest::Url> {
+/// Validate an integration URL. `allow_private` (server config
+/// `allow_private_report_integrations`) additionally admits plain HTTP and
+/// [`private_address`] literals.
+pub fn validate_destination(value: &str, allow_private: bool) -> ReportResult<reqwest::Url> {
     let invalid = || {
         ReportError::Invalid(
             "Destination must be a public HTTPS URL without credentials or fragment".into(),
@@ -178,7 +185,8 @@ pub fn validate_destination(value: &str) -> ReportResult<reqwest::Url> {
         return Err(invalid());
     }
     let url = reqwest::Url::parse(value).map_err(|_| invalid())?;
-    if url.scheme() != "https"
+    let scheme_ok = url.scheme() == "https" || (allow_private && url.scheme() == "http");
+    if !scheme_ok
         || url.host_str().is_none()
         || !url.username().is_empty()
         || url.password().is_some()
@@ -188,12 +196,34 @@ pub fn validate_destination(value: &str) -> ReportResult<reqwest::Url> {
     }
     if let Some(host) = url.host_str() {
         if let Ok(ip) = host.trim_matches(['[', ']']).parse() {
-            if !public_address(ip) {
+            if !destination_address(ip, allow_private) {
                 return Err(invalid());
             }
         }
     }
     Ok(url)
+}
+/// Whether a resolved or literal address may receive deliveries.
+pub fn destination_address(ip: std::net::IpAddr, allow_private: bool) -> bool {
+    public_address(ip) || (allow_private && private_address(ip))
+}
+/// Private-network unicast ranges admitted only when private destinations are
+/// enabled: RFC 1918, CGNAT (100.64/10, used by overlay VPNs), loopback and IPv6
+/// ULA/loopback. Link-local (cloud metadata endpoints), multicast, unspecified and
+/// IPv4-mapped addresses are never admitted.
+pub fn private_address(ip: std::net::IpAddr) -> bool {
+    use std::net::IpAddr;
+    match ip {
+        IpAddr::V4(ip) => {
+            let [a, b, _, _] = ip.octets();
+            a == 10
+                || a == 127
+                || (a == 100 && (64..=127).contains(&b))
+                || (a == 172 && (16..=31).contains(&b))
+                || (a == 192 && b == 168)
+        }
+        IpAddr::V6(ip) => ip.is_loopback() || (ip.segments()[0] & 0xfe00) == 0xfc00,
+    }
 }
 /// Conservative global-unicast allowlist; special-purpose ranges fail closed.
 pub fn public_address(ip: std::net::IpAddr) -> bool {
@@ -257,10 +287,7 @@ pub(super) fn enqueue(
     if count + destinations.len() > MAX_DELIVERIES {
         return Err(ReportError::Capacity);
     }
-    let body = c.query_row("SELECT kind,category,status,version FROM report_metadata WHERE report_id=?1", [report], |r| {
-        Ok(serde_json::json!({"schema_version":1,"event_id":event_id,"event_type":kind,"created_at":now,
-            "report":{"id":report,"kind":r.get::<_,String>(0)?,"category":r.get::<_,String>(1)?,"status":r.get::<_,String>(2)?,"version":r.get::<_,i64>(3)?}}).to_string())
-    })?;
+    let body = outbound_body(c, report, event_id, kind, now)?;
     if body.len() > MAX_PAYLOAD_BYTES {
         return Err(ReportError::TooLarge);
     }
@@ -269,6 +296,65 @@ pub(super) fn enqueue(
             params![uuid::Uuid::new_v4().to_string(),event_id,integration,body,now])?;
     }
     Ok(())
+}
+/// Outbound event, schema version 2. `submitted` events carry the full report
+/// (text, reporter handle and the attachments the user consented to send), so a
+/// receiver never needs credentials for this server. `updated` events stay
+/// metadata-only: notes and triage details are never forwarded.
+fn outbound_body(
+    c: &Connection,
+    report: &str,
+    event_id: &str,
+    kind: &str,
+    now: i64,
+) -> ReportResult<String> {
+    let mut body = c.query_row(
+        "SELECT kind,category,status,version FROM report_metadata WHERE report_id=?1",
+        [report],
+        |r| {
+            Ok(serde_json::json!({"schema_version":2,"event_id":event_id,"event_type":kind,"created_at":now,
+                "report":{"id":report,"kind":r.get::<_,String>(0)?,"category":r.get::<_,String>(1)?,
+                    "status":r.get::<_,String>(2)?,"version":r.get::<_,i64>(3)?}}))
+        },
+    )?;
+    if kind == "submitted" {
+        let details = c.query_row(
+            "SELECT title,description,client_type,client_version,device_info,user_handle FROM bug_reports WHERE id=?1",
+            [report],
+            |r| {
+                let title: String = r.get(0)?;
+                Ok(serde_json::json!({
+                    "title": (!title.is_empty()).then_some(title),
+                    "description": r.get::<_, String>(1)?,
+                    "client_type": r.get::<_, String>(2)?,
+                    "client_version": r.get::<_, Option<String>>(3)?,
+                    "device_info": r.get::<_, Option<String>>(4)?,
+                    "reporter_handle": r.get::<_, String>(5)?,
+                }))
+            },
+        )?;
+        let mut q = c.prepare(
+            "SELECT kind,content,size_bytes FROM report_attachments
+             WHERE report_id=?1 AND state='active' AND kind IN ('technical_logs','assistant')
+             AND content IS NOT NULL ORDER BY kind",
+        )?;
+        let attachments = q
+            .query_map([report], |r| {
+                Ok(serde_json::json!({
+                    "kind": r.get::<_, String>(0)?,
+                    "content": r.get::<_, String>(1)?,
+                    "size_bytes": r.get::<_, i64>(2)?,
+                    "truncated": false,
+                }))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        let fields = body["report"].as_object_mut().ok_or(ReportError::Storage)?;
+        for (key, value) in details.as_object().ok_or(ReportError::Storage)? {
+            fields.insert(key.clone(), value.clone());
+        }
+        fields.insert("attachments".into(), attachments.into());
+    }
+    Ok(body.to_string())
 }
 fn integration(c: &Connection, id: &str) -> ReportResult<Integration> {
     c.query_row(
@@ -359,8 +445,9 @@ impl AutomationRepository for SqliteServerStore {
         &self,
         actor: usize,
         input: NewIntegration,
+        allow_private: bool,
     ) -> ReportResult<CreatedIntegration> {
-        let url = validate_destination(&input.url)?.to_string();
+        let url = validate_destination(&input.url, allow_private)?.to_string();
         let secret = STANDARD.encode(rand::random::<[u8; 32]>());
         let id = uuid::Uuid::new_v4().to_string();
         let mut c = self.conn.lock().map_err(|_| ReportError::Storage)?;
@@ -520,7 +607,9 @@ impl AutomationRepository for SqliteServerStore {
         let c = self.conn.lock().map_err(|_| ReportError::Storage)?;
         // CAS rejects late workers after another process recovered the lease. Tokens are
         // random per claim; a stale completion cannot overwrite newer state.
-        c.execute("UPDATE report_deliveries SET state=CASE WHEN ?1 THEN 'succeeded' WHEN attempts>=?2+manual_retries THEN 'failed' ELSE 'pending' END,outcome=?3,next_at=?4+CASE WHEN ?1 OR attempts>=?2+manual_retries THEN 0 ELSE MAX(MIN(?5,3600),MIN(3600,30*(1 << MIN(attempts-1,7)))) END,version=version+1,lease_token='' WHERE id=?6 AND lease_token=?7 AND state='leased'",params![success,MAX_ATTEMPTS,outcome,now,retry_after.clamp(0,3600),id,token])?;
+        // A delivered body is never needed again (only failed deliveries can be retried),
+        // and full report bodies are large, so drop it on success.
+        c.execute("UPDATE report_deliveries SET body=CASE WHEN ?1 THEN '' ELSE body END,state=CASE WHEN ?1 THEN 'succeeded' WHEN attempts>=?2+manual_retries THEN 'failed' ELSE 'pending' END,outcome=?3,next_at=?4+CASE WHEN ?1 OR attempts>=?2+manual_retries THEN 0 ELSE MAX(MIN(?5,3600),MIN(3600,30*(1 << MIN(attempts-1,7)))) END,version=version+1,lease_token='' WHERE id=?6 AND lease_token=?7 AND state='leased'",params![success,MAX_ATTEMPTS,outcome,now,retry_after.clamp(0,3600),id,token])?;
         Ok(())
     }
 }
@@ -561,6 +650,7 @@ mod tests {
                 NewIntegration {
                     url: "https://example.invalid/webhook".into(),
                 },
+                false,
             )
             .unwrap();
         s.update_integration(
@@ -589,6 +679,7 @@ mod tests {
                 NewIntegration {
                     url: "https://example.invalid/".into(),
                 },
+                false,
             )
             .unwrap();
         assert!(!d.integration.enabled);
@@ -618,6 +709,7 @@ mod tests {
                 NewIntegration {
                     url: "https://example.invalid/".into(),
                 },
+                false,
             )
             .unwrap();
         }
@@ -626,7 +718,8 @@ mod tests {
                 9,
                 NewIntegration {
                     url: "https://example.invalid/".into()
-                }
+                },
+                false,
             ),
             Err(ReportError::Capacity)
         ));
@@ -810,11 +903,21 @@ mod tests {
         assert_eq!(a.event_id, b.event_id);
         assert_ne!(a.id, b.id);
         assert_eq!(a.body, b.body);
-        assert!(!a.body.contains("PRIVATE"));
         let body: serde_json::Value = serde_json::from_str(&a.body).unwrap();
-        assert_eq!(body["schema_version"], 1);
-        assert_eq!(body["report"]["id"], id);
-        assert_eq!(body["report"].as_object().unwrap().len(), 5);
+        assert_eq!(body["schema_version"], 2);
+        assert_eq!(body["event_type"], "submitted");
+        let r = &body["report"];
+        assert_eq!(r["id"], id);
+        assert_eq!(r["kind"], "feature");
+        assert_eq!(r["title"], "PRIVATE title");
+        assert_eq!(r["description"], "PRIVATE description");
+        assert_eq!(r["reporter_handle"], "PRIVATE user");
+        assert_eq!(r["client_type"], "web");
+        assert!(r["client_version"].is_null());
+        assert_eq!(r["attachments"][0]["kind"], "technical_logs");
+        assert_eq!(r["attachments"][0]["content"], "PRIVATE diagnostic");
+        assert_eq!(r["attachments"][0]["size_bytes"], 18);
+        assert_eq!(r["attachments"][0]["truncated"], false);
         s.update(
             &id,
             9,
@@ -827,6 +930,23 @@ mod tests {
         )
         .unwrap();
         assert_eq!(s.delivery_stats().unwrap().pending, 2); // note itself adds no delivery
+        {
+            let c = s.conn.lock().unwrap();
+            let body: String = c
+                .query_row(
+                    "SELECT body FROM report_deliveries WHERE state='pending' LIMIT 1",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert!(
+                !body.contains("PRIVATE"),
+                "updates stay metadata-only: {body}"
+            );
+            let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+            assert_eq!(body["event_type"], "updated");
+            assert_eq!(body["report"].as_object().unwrap().len(), 5);
+        }
         drop(s);
         let reopened =
             SqliteServerStore::new(dir.path().join("server.db"), &DbRegistry::new()).unwrap();
@@ -1015,7 +1135,7 @@ mod tests {
             "https://[::ffff:8.8.8.8]/",
             "https://[2001:db8::1]/",
         ] {
-            assert!(validate_destination(value).is_err(), "{value}");
+            assert!(validate_destination(value, false).is_err(), "{value}");
         }
         for ip in [
             "0.0.0.0",
@@ -1056,7 +1176,55 @@ mod tests {
         ] {
             assert!(public_address(ip.parse().unwrap()), "{ip}");
         }
-        assert!(validate_destination("https://example.invalid/path").is_ok());
+        assert!(validate_destination("https://example.invalid/path", false).is_ok());
+    }
+    #[test]
+    fn private_destinations_need_the_opt_in_and_keep_metadata_blocked() {
+        for value in [
+            "http://report-hub:8080/v1/apps/pezzottify/events",
+            "http://192.168.1.10/",
+            "https://10.0.0.5/",
+            "http://127.0.0.1:9000/",
+            "http://[fd00::1]/",
+        ] {
+            assert!(validate_destination(value, false).is_err(), "{value}");
+            assert!(validate_destination(value, true).is_ok(), "{value}");
+        }
+        for value in [
+            "http://169.254.169.254/",
+            "http://0.0.0.0/",
+            "http://[fe80::1]/",
+            "http://[::ffff:10.0.0.1]/",
+            "http://224.0.0.1/",
+            "ftp://10.0.0.1/",
+            "http://user:pw@10.0.0.1/",
+        ] {
+            assert!(validate_destination(value, true).is_err(), "{value}");
+        }
+        for ip in [
+            "10.1.2.3",
+            "172.20.0.2",
+            "192.168.0.1",
+            "100.100.1.1",
+            "127.0.0.1",
+            "::1",
+            "fd12::1",
+        ] {
+            assert!(!destination_address(ip.parse().unwrap(), false), "{ip}");
+            assert!(destination_address(ip.parse().unwrap(), true), "{ip}");
+        }
+        for ip in [
+            "169.254.169.254",
+            "0.0.0.0",
+            "224.0.0.1",
+            "fe80::1",
+            "::",
+            "::ffff:10.0.0.1",
+            "ff02::1",
+        ] {
+            assert!(!destination_address(ip.parse().unwrap(), true), "{ip}");
+        }
+        assert!(destination_address("8.8.8.8".parse().unwrap(), true));
     }
     #[test]
     fn v8_migration_preserves_reports_and_configures_no_destinations() {

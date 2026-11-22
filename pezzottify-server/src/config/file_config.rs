@@ -41,6 +41,8 @@ pub struct FileConfig {
     pub audio_analysis: Option<AudioAnalysisConfig>,
     pub audio_embeddings: Option<AudioEmbeddingsConfig>,
     pub push: Option<PushConfig>,
+    /// Let report integrations deliver to private-network addresses (and plain HTTP).
+    pub allow_private_report_integrations: Option<bool>,
 }
 
 /// UnifiedPush / Web Push wake-ups. Push is enabled when this section exists.
