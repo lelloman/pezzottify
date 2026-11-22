@@ -664,6 +664,7 @@ async fn run() -> Result<()> {
         app_config.ingestion.clone(),
         app_config.audio_embeddings.clone(),
         app_config.push.clone(),
+        app_config.allow_private_report_integrations,
         db_registry.clone(),
         enrichment_store
             .clone()

@@ -176,6 +176,14 @@ prevent rebinding. Reject metadata endpoints, loopback/private/link-local/multic
 IPv4-mapped bypasses. Disable destinations immediately for future claims; in-flight
 delivery cannot be retracted. Never fetch links appearing inside a report.
 
+Self-hosted exception: the server config option `allow_private_report_integrations`
+(TOML only, default `false`, never settable through the API) additionally admits
+private-network destinations (RFC 1918, 100.64/10, loopback, IPv6 ULA/loopback) and
+plain `http://` URLs, for a receiver on the same host or LAN. Link-local (including
+cloud metadata endpoints), multicast, unspecified and IPv4-mapped addresses stay
+rejected, DNS answers are still vetted and pinned on every attempt, and the server
+logs a warning at startup while the option is on.
+
 ## Admin and delivery acceptance
 
 Expose filters, versions/conflicts, statuses, internal notes, duplicate links, safe

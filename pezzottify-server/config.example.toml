@@ -28,6 +28,12 @@ allow_legacy_raw_authorization = true
 login_rate_limit_per_minute = 10
 login_rate_limit_per_hour = 100
 
+# Report integrations normally deliver only over HTTPS to public addresses.
+# Set to true to also allow private-network destinations (RFC 1918, CGNAT,
+# loopback, IPv6 ULA) and plain HTTP, e.g. a report receiver on the same host.
+# Link-local (cloud metadata), multicast and unspecified addresses stay blocked.
+# allow_private_report_integrations = false
+
 # Downloader service URL (enables download manager when set)
 # The downloader should be on the same Docker network (pezzottify-internal)
 # downloader_url = "http://downloader:3002"
