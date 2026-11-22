@@ -53,4 +53,13 @@ interface SystemNotificationHelper {
      * (docs/unifiedpush.md, "Test notifications").
      */
     fun showTestPushNotification(title: String, body: String)
+
+    /**
+     * Show a notification to a report triager when a user submits a bug report
+     * or feedback.
+     *
+     * @param notificationId The internal notification ID (marked read on dismiss)
+     * @param reportId The submitted report's ID
+     */
+    fun showBugReportNotification(notificationId: String, reportId: String, title: String, body: String)
 }

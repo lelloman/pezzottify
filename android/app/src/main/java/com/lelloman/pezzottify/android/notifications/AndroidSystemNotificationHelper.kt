@@ -62,6 +62,15 @@ class AndroidSystemNotificationHelper @Inject constructor(
                 description = context.getString(R.string.notification_channel_push_tests_description)
             }
             notificationManager.createNotificationChannel(pushTestsChannel)
+
+            val bugReportsChannel = NotificationChannel(
+                BUG_REPORTS_CHANNEL_ID,
+                context.getString(R.string.notification_channel_bug_reports_name),
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = context.getString(R.string.notification_channel_bug_reports_description)
+            }
+            notificationManager.createNotificationChannel(bugReportsChannel)
         }
     }
 
@@ -296,6 +305,50 @@ class AndroidSystemNotificationHelper @Inject constructor(
         notificationManager.notify(PUSH_TEST_NOTIFICATION_ID, notification)
     }
 
+    @Suppress("NotificationPermission") // Permission is checked manually before notify()
+    override fun showBugReportNotification(
+        notificationId: String,
+        reportId: String,
+        title: String,
+        body: String,
+    ) {
+        val idsArray = arrayOf(notificationId)
+        val requestCode = reportId.hashCode()
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_NOTIFICATION_IDS, idsArray)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(context, BUG_REPORTS_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(pendingIntent)
+            .setDeleteIntent(createDeleteIntent(idsArray, requestCode))
+            .setAutoCancel(true)
+            .build()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
+        }
+
+        notificationManager.notify(requestCode, notification)
+    }
+
     private fun createDeleteIntent(notificationIds: Array<String>, requestCode: Int): PendingIntent {
         val intent = Intent(context, NotificationActionReceiver::class.java).apply {
             action = NotificationActionReceiver.ACTION_NOTIFICATION_DISMISSED
@@ -313,6 +366,7 @@ class AndroidSystemNotificationHelper @Inject constructor(
         const val WHATSNEW_CHANNEL_ID = "whatsnew"
         const val DOWNLOADS_CHANNEL_ID = "downloads"
         const val PUSH_TESTS_CHANNEL_ID = "push_tests"
+        const val BUG_REPORTS_CHANNEL_ID = "bug_reports"
         const val EXTRA_NAVIGATE_TO = "navigate_to"
         const val EXTRA_ALBUM_ID = "album_id"
         const val EXTRA_NOTIFICATION_IDS = "notification_ids"

@@ -877,9 +877,67 @@ class SyncManagerImplTest {
         assertThat(idsSlot.captured).hasSize(1)
     }
 
+    @Test
+    fun `handleSyncMessage shows bug report notification`() = runTest(testDispatcher) {
+        every { syncStateStore.getCurrentCursor() } returns 5L
+        val event = StoredEvent(
+            seq = 6L,
+            type = "notification_created",
+            payload = SyncEventPayload(notification = createBugReportNotification("notif-9")),
+            serverTimestamp = System.currentTimeMillis() / 1000,
+        )
+
+        syncManager.handleSyncMessage(event)
+
+        verify {
+            systemNotificationHelper.showBugReportNotification(
+                "notif-9", "report-1", "New bug report", "alice · playback: Skips tracks"
+            )
+        }
+    }
+
+    @Test
+    fun `showSystemNotificationsForUnread shows unread bug reports`() {
+        syncManager.showSystemNotificationsForUnread(listOf(createBugReportNotification("notif-9")))
+
+        verify { systemNotificationHelper.showBugReportNotification("notif-9", "report-1", any(), any()) }
+        verify(exactly = 0) { systemNotificationHelper.showDownloadsCompletedNotification(any(), any()) }
+    }
+
+    @Test
+    fun `notification with unknown type decodes as Unknown`() {
+        val json = """{"id":"n1","notification_type":"something_new","title":"t","data":{},"created_at":1}"""
+        val notification = kotlinx.serialization.json.Json.decodeFromString(
+            com.lelloman.pezzottify.android.domain.notifications.Notification.serializer(), json
+        )
+        assertThat(notification.notificationType).isEqualTo(NotificationType.Unknown)
+
+        val bugJson = json.replace("something_new", "bug_report_submitted")
+        assertThat(
+            kotlinx.serialization.json.Json.decodeFromString(
+                com.lelloman.pezzottify.android.domain.notifications.Notification.serializer(), bugJson
+            ).notificationType
+        ).isEqualTo(NotificationType.BugReportSubmitted)
+    }
+
     // endregion
 
     // region helper functions
+
+    private fun createBugReportNotification(
+        id: String,
+    ): com.lelloman.pezzottify.android.domain.notifications.Notification =
+        com.lelloman.pezzottify.android.domain.notifications.Notification(
+            id = id,
+            notificationType = NotificationType.BugReportSubmitted,
+            title = "New bug report",
+            body = "alice · playback: Skips tracks",
+            data = kotlinx.serialization.json.Json.parseToJsonElement(
+                """{"report_id":"report-1","kind":"bug","category":"playback","title":"Skips tracks","reporter_handle":"alice"}"""
+            ),
+            readAt = null,
+            createdAt = System.currentTimeMillis() / 1000,
+        )
 
     private fun createSyncStateResponse(
         seq: Long = 0L,
