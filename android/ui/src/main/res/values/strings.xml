@@ -212,7 +212,7 @@
     <string name="bug_report_description">Description</string>
     <string name="bug_report_description_hint">Describe the issue you encountered…</string>
     <string name="bug_report_include_logs">Include logs</string>
-    <string name="bug_report_include_logs_description">Attach app logs to help diagnose the issue</string>
+    <string name="bug_report_include_logs_description">Attach app logs to help diagnose the issue. Reports may be forwarded to the administrators\' private issue tracker.</string>
     <string name="bug_report_submit">Submit Report</string>
     <string name="bug_report_description_required">Description is required</string>
     <string name="bug_report_success">Bug report submitted successfully</string>
@@ -570,7 +570,7 @@
     <string name="feedback_downloads">Downloads</string>
     <string name="feedback_interface">Interface</string>
     <string name="feedback_other">Other</string>
-    <string name="feedback_privacy">Optional local recording keeps up to 2 MB of assistant chat and tool activity, separately from chat history. It is off by default. Clearing chat, switching accounts or disabling recording removes the local copy and unsent previews. Submitted reports remain on the server. Redaction cannot remove every piece of personal information: review attachments before sending.</string>
+    <string name="feedback_privacy">Optional local recording keeps up to 2 MB of assistant chat and tool activity, separately from chat history. It is off by default. Clearing chat, switching accounts or disabling recording removes the local copy and unsent previews. Submitted reports remain on the server and may be forwarded, with the attachments you choose to send, to the administrators\' private issue tracker. Redaction cannot remove every piece of personal information: review attachments before sending.</string>
     <string name="feedback_record">Record assistant diagnostics locally</string>
     <string name="feedback_attach_chat">Attach recorded assistant chat (optional)</string>
     <string name="feedback_all_chats">Include all retained conversations, not only the selected response or current conversation</string>

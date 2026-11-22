@@ -12,7 +12,10 @@ pub const MAX_INTEGRATIONS: usize = 10;
 pub const MAX_DELIVERIES: usize = 10_000;
 pub const MAX_ATTEMPTS: i64 = 5;
 pub const MAX_MANUAL_RETRIES: i64 = 5;
-pub const MAX_PAYLOAD_BYTES: usize = 256 * 1024;
+/// Bounds one outbound event. A `submitted` body carries the report text and its
+/// attachments (logs up to 1 MiB, assistant diagnostics up to 2 MiB, description
+/// up to 100 KiB); JSON escaping can roughly double that.
+pub const MAX_PAYLOAD_BYTES: usize = 8 * 1024 * 1024;
 pub const LEASE_SECONDS: i64 = 60;
 pub(super) const INTEGRATIONS: Table = Table {
     name: "report_integrations",
@@ -284,10 +287,7 @@ pub(super) fn enqueue(
     if count + destinations.len() > MAX_DELIVERIES {
         return Err(ReportError::Capacity);
     }
-    let body = c.query_row("SELECT kind,category,status,version FROM report_metadata WHERE report_id=?1", [report], |r| {
-        Ok(serde_json::json!({"schema_version":1,"event_id":event_id,"event_type":kind,"created_at":now,
-            "report":{"id":report,"kind":r.get::<_,String>(0)?,"category":r.get::<_,String>(1)?,"status":r.get::<_,String>(2)?,"version":r.get::<_,i64>(3)?}}).to_string())
-    })?;
+    let body = outbound_body(c, report, event_id, kind, now)?;
     if body.len() > MAX_PAYLOAD_BYTES {
         return Err(ReportError::TooLarge);
     }
@@ -296,6 +296,65 @@ pub(super) fn enqueue(
             params![uuid::Uuid::new_v4().to_string(),event_id,integration,body,now])?;
     }
     Ok(())
+}
+/// Outbound event, schema version 2. `submitted` events carry the full report
+/// (text, reporter handle and the attachments the user consented to send), so a
+/// receiver never needs credentials for this server. `updated` events stay
+/// metadata-only: notes and triage details are never forwarded.
+fn outbound_body(
+    c: &Connection,
+    report: &str,
+    event_id: &str,
+    kind: &str,
+    now: i64,
+) -> ReportResult<String> {
+    let mut body = c.query_row(
+        "SELECT kind,category,status,version FROM report_metadata WHERE report_id=?1",
+        [report],
+        |r| {
+            Ok(serde_json::json!({"schema_version":2,"event_id":event_id,"event_type":kind,"created_at":now,
+                "report":{"id":report,"kind":r.get::<_,String>(0)?,"category":r.get::<_,String>(1)?,
+                    "status":r.get::<_,String>(2)?,"version":r.get::<_,i64>(3)?}}))
+        },
+    )?;
+    if kind == "submitted" {
+        let details = c.query_row(
+            "SELECT title,description,client_type,client_version,device_info,user_handle FROM bug_reports WHERE id=?1",
+            [report],
+            |r| {
+                let title: String = r.get(0)?;
+                Ok(serde_json::json!({
+                    "title": (!title.is_empty()).then_some(title),
+                    "description": r.get::<_, String>(1)?,
+                    "client_type": r.get::<_, String>(2)?,
+                    "client_version": r.get::<_, Option<String>>(3)?,
+                    "device_info": r.get::<_, Option<String>>(4)?,
+                    "reporter_handle": r.get::<_, String>(5)?,
+                }))
+            },
+        )?;
+        let mut q = c.prepare(
+            "SELECT kind,content,size_bytes FROM report_attachments
+             WHERE report_id=?1 AND state='active' AND kind IN ('technical_logs','assistant')
+             AND content IS NOT NULL ORDER BY kind",
+        )?;
+        let attachments = q
+            .query_map([report], |r| {
+                Ok(serde_json::json!({
+                    "kind": r.get::<_, String>(0)?,
+                    "content": r.get::<_, String>(1)?,
+                    "size_bytes": r.get::<_, i64>(2)?,
+                    "truncated": false,
+                }))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        let fields = body["report"].as_object_mut().ok_or(ReportError::Storage)?;
+        for (key, value) in details.as_object().ok_or(ReportError::Storage)? {
+            fields.insert(key.clone(), value.clone());
+        }
+        fields.insert("attachments".into(), attachments.into());
+    }
+    Ok(body.to_string())
 }
 fn integration(c: &Connection, id: &str) -> ReportResult<Integration> {
     c.query_row(
@@ -548,7 +607,9 @@ impl AutomationRepository for SqliteServerStore {
         let c = self.conn.lock().map_err(|_| ReportError::Storage)?;
         // CAS rejects late workers after another process recovered the lease. Tokens are
         // random per claim; a stale completion cannot overwrite newer state.
-        c.execute("UPDATE report_deliveries SET state=CASE WHEN ?1 THEN 'succeeded' WHEN attempts>=?2+manual_retries THEN 'failed' ELSE 'pending' END,outcome=?3,next_at=?4+CASE WHEN ?1 OR attempts>=?2+manual_retries THEN 0 ELSE MAX(MIN(?5,3600),MIN(3600,30*(1 << MIN(attempts-1,7)))) END,version=version+1,lease_token='' WHERE id=?6 AND lease_token=?7 AND state='leased'",params![success,MAX_ATTEMPTS,outcome,now,retry_after.clamp(0,3600),id,token])?;
+        // A delivered body is never needed again (only failed deliveries can be retried),
+        // and full report bodies are large, so drop it on success.
+        c.execute("UPDATE report_deliveries SET body=CASE WHEN ?1 THEN '' ELSE body END,state=CASE WHEN ?1 THEN 'succeeded' WHEN attempts>=?2+manual_retries THEN 'failed' ELSE 'pending' END,outcome=?3,next_at=?4+CASE WHEN ?1 OR attempts>=?2+manual_retries THEN 0 ELSE MAX(MIN(?5,3600),MIN(3600,30*(1 << MIN(attempts-1,7)))) END,version=version+1,lease_token='' WHERE id=?6 AND lease_token=?7 AND state='leased'",params![success,MAX_ATTEMPTS,outcome,now,retry_after.clamp(0,3600),id,token])?;
         Ok(())
     }
 }
@@ -842,11 +903,21 @@ mod tests {
         assert_eq!(a.event_id, b.event_id);
         assert_ne!(a.id, b.id);
         assert_eq!(a.body, b.body);
-        assert!(!a.body.contains("PRIVATE"));
         let body: serde_json::Value = serde_json::from_str(&a.body).unwrap();
-        assert_eq!(body["schema_version"], 1);
-        assert_eq!(body["report"]["id"], id);
-        assert_eq!(body["report"].as_object().unwrap().len(), 5);
+        assert_eq!(body["schema_version"], 2);
+        assert_eq!(body["event_type"], "submitted");
+        let r = &body["report"];
+        assert_eq!(r["id"], id);
+        assert_eq!(r["kind"], "feature");
+        assert_eq!(r["title"], "PRIVATE title");
+        assert_eq!(r["description"], "PRIVATE description");
+        assert_eq!(r["reporter_handle"], "PRIVATE user");
+        assert_eq!(r["client_type"], "web");
+        assert!(r["client_version"].is_null());
+        assert_eq!(r["attachments"][0]["kind"], "technical_logs");
+        assert_eq!(r["attachments"][0]["content"], "PRIVATE diagnostic");
+        assert_eq!(r["attachments"][0]["size_bytes"], 18);
+        assert_eq!(r["attachments"][0]["truncated"], false);
         s.update(
             &id,
             9,
@@ -859,6 +930,23 @@ mod tests {
         )
         .unwrap();
         assert_eq!(s.delivery_stats().unwrap().pending, 2); // note itself adds no delivery
+        {
+            let c = s.conn.lock().unwrap();
+            let body: String = c
+                .query_row(
+                    "SELECT body FROM report_deliveries WHERE state='pending' LIMIT 1",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert!(
+                !body.contains("PRIVATE"),
+                "updates stay metadata-only: {body}"
+            );
+            let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+            assert_eq!(body["event_type"], "updated");
+            assert_eq!(body["report"].as_object().unwrap().len(), 5);
+        }
         drop(s);
         let reopened =
             SqliteServerStore::new(dir.path().join("server.db"), &DbRegistry::new()).unwrap();

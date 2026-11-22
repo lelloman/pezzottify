@@ -166,10 +166,14 @@ headers X-Pezzottify-Event-ID, X-Pezzottify-Timestamp, X-Pezzottify-Signature (v
 Secrets are generated/returned once, never listed/logged. Honor 429 Retry-After within
 a bounded scheduling horizon. Retry is explicit after exhaustion and remains capped.
 
-Outbound envelope v1 contains only event ID/type/time and report ID/kind/category/status/
-version by default: no free-text description, user identity, notes or diagnostics.
-No diagnostic forwarding in v1; a later explicit per-destination user-consent contract
-is required before extending payloads. Destination admin-only, HTTPS only, no userinfo/
+Outbound envelope (schema version 2): `submitted` events carry the full report, meaning
+title, description, client type/version, device info, reporter handle and the attachments
+the user consented to send (technical logs, assistant diagnostics), so a receiver such as
+an issue-tracker bridge never needs credentials for this server. Both clients disclose
+in the report form that reports, including chosen attachments, may be forwarded to the
+administrators' private issue tracker. `updated` events stay metadata-only (event
+ID/type/time and report ID/kind/category/status/version): notes and triage details are
+never forwarded. Legacy image attachments are not forwarded. Destination admin-only, HTTPS only, no userinfo/
 fragment, no redirects/proxy environment. Resolve DNS on every attempt and reject all
 non-global IPv4/IPv6 addresses; pin vetted DNS addresses into the HTTP connection to
 prevent rebinding. Reject metadata endpoints, loopback/private/link-local/multicast and
@@ -243,9 +247,14 @@ integrations. No deletion/rotation endpoint is provided in v1.
 
 Only `submitted` (including legacy submission) and `updated` events enqueue
 outbound work. Their audit event UUID is the outbound `event_id`; every destination
-has its own stable delivery UUID. Each JSON body contains `schema_version:1`,
+has its own stable delivery UUID. Each JSON body contains `schema_version:2`,
 `event_id`, `event_type`, `created_at` (Unix seconds), and
-`report:{id,kind,category,status,version}`. The exact serialized body is persisted
+`report:{id,kind,category,status,version}`. A `submitted` body also has
+`report.{title (null when empty),description,client_type,client_version,device_info,
+reporter_handle}` and `report.attachments:[{kind,content,size_bytes,truncated}]`
+(`truncated` is always `false`: attachments are already bounded at submission). The
+body of a succeeded delivery is cleared, since only failed deliveries can be retried.
+The exact serialized body is persisted
 with the audit event and report mutation in one transaction, so retries retain
 identical bytes. Reads, notes, attachment access/deletion and administrative audit
 events never enqueue work. Existing immutable events may still describe reports
@@ -285,7 +294,7 @@ budget, and returns JSON null. Stale versions/invalid states/exhausted budgets
 return 409. Report stats include pending/leased/succeeded/failed delivery counts.
 
 The hard bounds are ten integrations, 10,000 total retained deliveries (including
-terminal records), and 256 KiB per outbound event. Terminal delivery records older
+terminal records), and 8 MiB per outbound event. Terminal delivery records older
 than 30 days are pruned when new eligible work is enqueued; pending and leased work
 is never evicted. These limits bound queue storage even if delivery fails. At
 capacity an eligible report mutation fails with the existing structured 503 and
