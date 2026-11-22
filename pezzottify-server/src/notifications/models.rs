@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum NotificationType {
     DownloadCompleted,
+    /// A user submitted a bug report or feedback; sent to report triagers.
+    BugReportSubmitted,
     // Future: DownloadFailed, NewRelease, SystemAnnouncement
 }
 
@@ -32,6 +34,16 @@ pub struct DownloadCompletedData {
     pub request_id: String,
 }
 
+/// Data payload for BugReportSubmitted notifications
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BugReportSubmittedData {
+    pub report_id: String,
+    pub kind: String,
+    pub category: String,
+    pub title: Option<String>,
+    pub reporter_handle: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -44,6 +56,9 @@ mod tests {
 
         let deserialized: NotificationType = serde_json::from_str(&serialized).unwrap();
         assert_eq!(deserialized, NotificationType::DownloadCompleted);
+
+        let serialized = serde_json::to_string(&NotificationType::BugReportSubmitted).unwrap();
+        assert_eq!(serialized, "\"bug_report_submitted\"");
     }
 
     #[test]

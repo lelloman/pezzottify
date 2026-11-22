@@ -1,7 +1,7 @@
 //! Feedback endpoints backed by the versioned report repository.
 use super::{
     session::Session,
-    state::{DatabaseHandles, ServerState},
+    state::{DatabaseHandles, GuardedConnectionManager, ServerState},
 };
 use crate::{db_executor::DbPriority, server_store::reports::*, user::Permission};
 use serde::Serialize;
@@ -80,6 +80,7 @@ pub(super) fn output<T: Serialize>(result: ReportResult<T>) -> Response {
 async fn submit(
     Extract(session): Extract<Session>,
     State(db): State<DatabaseHandles>,
+    State(connections): State<GuardedConnectionManager>,
     Json(input): Json<NewReport>,
 ) -> Response {
     if let Err(r) = permission(&session, false) {
@@ -94,18 +95,57 @@ async fn submit(
         Ok(Some(handle)) => handle,
         _ => return ReportError::Storage.into_response(),
     };
+    let alert = crate::notifications::BugReportSubmittedData {
+        report_id: String::new(),
+        kind: input.kind.clone(),
+        category: input.category.clone(),
+        title: input.title.clone(),
+        reporter_handle: handle.clone(),
+    };
+    let alert_db = db.clone();
     match run(db, move |s| s.create(uid, &handle, input)).await {
-        Ok(receipt) => (
-            if receipt.replayed {
-                StatusCode::OK
-            } else {
-                StatusCode::CREATED
-            },
-            Json(receipt),
-        )
-            .into_response(),
+        Ok(receipt) => {
+            if !receipt.replayed {
+                spawn_report_alert(
+                    &alert_db,
+                    connections,
+                    uid,
+                    crate::notifications::BugReportSubmittedData {
+                        report_id: receipt.id.clone(),
+                        ..alert
+                    },
+                );
+            }
+            (
+                if receipt.replayed {
+                    StatusCode::OK
+                } else {
+                    StatusCode::CREATED
+                },
+                Json(receipt),
+            )
+                .into_response()
+        }
         Err(e) => e.into_response(),
     }
+}
+
+/// Tell report triagers about a new report without delaying the response.
+pub(super) fn spawn_report_alert(
+    db: &DatabaseHandles,
+    connections: GuardedConnectionManager,
+    reporter_id: usize,
+    data: crate::notifications::BugReportSubmittedData,
+) {
+    let service =
+        crate::notifications::NotificationService::new(db.user_store.clone(), connections);
+    let user_manager = db.user_manager.clone();
+    tokio::spawn(crate::notifications::notify_report_triagers(
+        user_manager,
+        service,
+        reporter_id,
+        data,
+    ));
 }
 async fn owner_list(
     Extract(session): Extract<Session>,

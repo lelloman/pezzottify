@@ -360,6 +360,7 @@ use crate::server_store::{
 async fn submit_bug_report(
     Extract(session): Extract<Session>,
     State(database): State<DatabaseHandles>,
+    State(connection_manager): State<GuardedConnectionManager>,
     Json(body): Json<SubmitBugReportBody>,
 ) -> Response {
     // Validate title length
@@ -464,6 +465,14 @@ async fn submit_bug_report(
     // Generate a unique ID
     let id = uuid::Uuid::new_v4().to_string();
 
+    let alert = crate::notifications::BugReportSubmittedData {
+        report_id: id.clone(),
+        kind: "bug".into(),
+        category: "other".into(),
+        title: body.title.clone(),
+        reporter_handle: user_handle.clone(),
+    };
+
     let report = BugReport {
         id: id.clone(),
         user_id: session.user_id,
@@ -478,6 +487,7 @@ async fn submit_bug_report(
         created_at: chrono::Utc::now(),
     };
 
+    let alert_database = database.clone();
     let result = database
         .server
         .run(DbPriority::Interactive, move |store| {
@@ -489,6 +499,13 @@ async fn submit_bug_report(
         Ok(Err(error)) => return error.into_response(),
         Err(_) => return crate::server_store::reports::ReportError::Storage.into_response(),
     }
+
+    super::report_routes::spawn_report_alert(
+        &alert_database,
+        connection_manager,
+        session.user_id,
+        alert,
+    );
 
     Json(SubmitBugReportResponse { id }).into_response()
 }

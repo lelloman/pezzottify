@@ -776,6 +776,93 @@ async fn diagnostic_utf8_boundary_and_invalid_schema_leave_submission_recoverabl
     assert_eq!(uploaded["content"], request["attachments"][0]["content"]);
 }
 
+async fn admin_report_notifications(admin: &TestClient) -> Vec<Value> {
+    let state: Value = admin.get_sync_state().await.json().await.unwrap();
+    state["notifications"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|n| n["notification_type"] == "bug_report_submitted")
+        .cloned()
+        .collect()
+}
+
+async fn wait_for_report_notifications(admin: &TestClient, count: usize) -> Vec<Value> {
+    for _ in 0..50 {
+        let found = admin_report_notifications(admin).await;
+        if found.len() >= count {
+            return found;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    admin_report_notifications(admin).await
+}
+
+#[tokio::test]
+async fn submitted_reports_notify_triagers() {
+    let server = TestServer::spawn().await;
+    let user = TestClient::authenticated(server.base_url.clone()).await;
+    let admin = TestClient::authenticated_admin(server.base_url.clone()).await;
+    let base = &server.base_url;
+
+    let request = json!({"client_request_id":uuid::Uuid::new_v4().to_string(),"kind":"bug","category":"playback","title":"Skips tracks","description":"it skips","client_type":"web"});
+    let url = format!("{base}/v1/reports");
+    let response = user.client.post(&url).json(&request).send().await.unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let receipt: Value = response.json().await.unwrap();
+    // An idempotent replay must not notify again.
+    assert_eq!(
+        user.client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+
+    let legacy = user
+        .client
+        .post(format!("{base}/v1/user/bug-report"))
+        .json(&json!({"title":"Legacy","description":"legacy","client_type":"android"}))
+        .send()
+        .await
+        .unwrap();
+    let legacy_status = legacy.status();
+    let legacy_body = legacy.text().await.unwrap();
+    assert_eq!(legacy_status, StatusCode::OK, "{legacy_body}");
+    let legacy: Value = serde_json::from_str(&legacy_body).unwrap();
+    let legacy_id = legacy["id"].clone();
+
+    let found = wait_for_report_notifications(&admin, 2).await;
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let found_after = admin_report_notifications(&admin).await;
+    assert_eq!(found.len(), 2, "{found:?}");
+    assert_eq!(
+        found_after.len(),
+        2,
+        "replay must not notify: {found_after:?}"
+    );
+
+    let new_report = found
+        .iter()
+        .find(|n| n["data"]["report_id"] == receipt["id"])
+        .expect("notification for versioned report");
+    assert_eq!(new_report["title"], "New bug report");
+    assert_eq!(new_report["data"]["category"], "playback");
+    assert_eq!(new_report["data"]["title"], "Skips tracks");
+    assert!(found.iter().any(|n| n["data"]["report_id"] == legacy_id));
+
+    // Regular users never receive report notifications.
+    let state: Value = user.get_sync_state().await.json().await.unwrap();
+    assert!(!state["notifications"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|n| n["notification_type"] == "bug_report_submitted"));
+}
+
 #[tokio::test]
 async fn legacy_submission_without_title_is_accepted() {
     let server = TestServer::spawn().await;

@@ -3,6 +3,7 @@ package com.lelloman.pezzottify.android.domain.sync
 import com.lelloman.pezzottify.android.domain.remoteapi.PassiveNetworkRequests
 
 import com.lelloman.pezzottify.android.domain.download.DownloadStatusRepository
+import com.lelloman.pezzottify.android.domain.notifications.BugReportSubmittedData
 import com.lelloman.pezzottify.android.domain.notifications.DownloadCompletedData
 import com.lelloman.pezzottify.android.domain.notifications.NotificationRepository
 import com.lelloman.pezzottify.android.domain.notifications.NotificationType
@@ -429,6 +430,8 @@ class SyncManagerImpl internal constructor(
                     } catch (e: Exception) {
                         logger.error("Failed to parse download completed notification data", e)
                     }
+                } else if (event.notification.notificationType == NotificationType.BugReportSubmitted) {
+                    showBugReportNotification(event.notification)
                 }
                 logger.debug("Applied NotificationCreated: ${event.notification.id} ${event.notification.title}")
             }
@@ -496,9 +499,13 @@ class SyncManagerImpl internal constructor(
 
         for (notification in notifications) {
             if (notification.readAt != null) continue
-            if (notification.notificationType != NotificationType.DownloadCompleted) continue
             // Server created_at is in epoch seconds
             if (notification.createdAt * 1000 < cutoffMs) continue
+            if (notification.notificationType == NotificationType.BugReportSubmitted) {
+                showBugReportNotification(notification)
+                continue
+            }
+            if (notification.notificationType != NotificationType.DownloadCompleted) continue
 
             try {
                 downloads.add(
@@ -517,6 +524,26 @@ class SyncManagerImpl internal constructor(
             systemNotificationHelper.showDownloadsCompletedNotification(downloads, notificationIds)
             logger.debug("Showed grouped system notification for ${downloads.size} unread download(s)")
         }
+    }
+
+    private fun showBugReportNotification(
+        notification: com.lelloman.pezzottify.android.domain.notifications.Notification,
+    ) {
+        val reportId = try {
+            kotlinx.serialization.json.Json { ignoreUnknownKeys = true }.decodeFromJsonElement(
+                BugReportSubmittedData.serializer(),
+                notification.data
+            ).reportId
+        } catch (e: Exception) {
+            logger.error("Failed to parse bug report notification data", e)
+            return
+        }
+        systemNotificationHelper.showBugReportNotification(
+            notificationId = notification.id,
+            reportId = reportId,
+            title = notification.title,
+            body = notification.body.orEmpty(),
+        )
     }
 
     private suspend fun applyLikesState(contentIds: List<String>, type: LikedContent.ContentType) {

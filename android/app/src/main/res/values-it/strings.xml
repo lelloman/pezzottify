@@ -33,6 +33,8 @@
     </plurals>
     <string name="notification_channel_push_tests_name">Notifiche di prova</string>
     <string name="notification_channel_push_tests_description">Notifiche di prova inviate da un amministratore del server</string>
+    <string name="notification_channel_bug_reports_name">Segnalazioni di bug</string>
+    <string name="notification_channel_bug_reports_description">Nuove segnalazioni di bug e feedback degli utenti (solo amministratori)</string>
     <string name="notification_channel_sync_name">Sincronizzazione</string>
     <string name="notification_sync_title">Sincronizzazione in corso</string>
 </resources>
