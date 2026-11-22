@@ -544,7 +544,8 @@ impl ServerStore for SqliteServerStore {
                 report.id,
                 report.user_id as i64,
                 report.user_handle,
-                report.title,
+                // Versioned reports store a missing title as "" too; the column is NOT NULL.
+                report.title.as_deref().unwrap_or(""),
                 report.description,
                 report.client_type,
                 report.client_version,
