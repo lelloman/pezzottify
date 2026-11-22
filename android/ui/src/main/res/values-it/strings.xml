@@ -211,7 +211,7 @@
     <string name="bug_report_description">Descrizione</string>
     <string name="bug_report_description_hint">Descrivi il problema riscontrato…</string>
     <string name="bug_report_include_logs">Includi log</string>
-    <string name="bug_report_include_logs_description">Allega i log dell\'app per aiutare a diagnosticare il problema</string>
+    <string name="bug_report_include_logs_description">Allega i log dell\'app per aiutare a diagnosticare il problema. Le segnalazioni possono essere inoltrate al sistema privato di gestione dei problemi degli amministratori.</string>
     <string name="bug_report_submit">Invia segnalazione</string>
     <string name="bug_report_description_required">La descrizione è obbligatoria</string>
     <string name="bug_report_success">Segnalazione inviata con successo</string>
@@ -570,7 +570,7 @@
     <string name="feedback_downloads">Download</string>
     <string name="feedback_interface">Interfaccia</string>
     <string name="feedback_other">Altro</string>
-    <string name="feedback_privacy">La registrazione locale facoltativa conserva fino a 2 MB di chat e attività degli strumenti, separatamente dalla cronologia. È disattivata per impostazione predefinita. Cancellare la chat, cambiare account o disattivare la registrazione elimina la copia locale e le anteprime non inviate. Le segnalazioni inviate restano sul server. La rimozione dei dati sensibili non garantisce anonimato: controlla gli allegati prima di inviare.</string>
+    <string name="feedback_privacy">La registrazione locale facoltativa conserva fino a 2 MB di chat e attività degli strumenti, separatamente dalla cronologia. È disattivata per impostazione predefinita. Cancellare la chat, cambiare account o disattivare la registrazione elimina la copia locale e le anteprime non inviate. Le segnalazioni inviate restano sul server e possono essere inoltrate, con gli allegati che scegli di inviare, al sistema privato di gestione dei problemi degli amministratori. La rimozione dei dati sensibili non garantisce anonimato: controlla gli allegati prima di inviare.</string>
     <string name="feedback_record">Registra localmente la diagnostica della chat</string>
     <string name="feedback_attach_chat">Allega la chat registrata (facoltativo)</string>
     <string name="feedback_all_chats">Includi tutte le conversazioni conservate, non solo la risposta selezionata o la conversazione corrente</string>

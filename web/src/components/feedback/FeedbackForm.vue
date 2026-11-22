@@ -30,7 +30,9 @@ watch(
       <h2>Feedback report</h2>
       <p>
         Attachments can contain personal data. Review the full preview before
-        sending. Local clear does not delete submitted reports.
+        sending. Local clear does not delete submitted reports. Reports,
+        including the attachments you choose to send, may be forwarded to the
+        administrators' private issue tracker.
       </p>
       <p v-if="feedback.error" role="alert">{{ feedback.error }}</p>
       <p v-if="feedback.receipt" role="status">
