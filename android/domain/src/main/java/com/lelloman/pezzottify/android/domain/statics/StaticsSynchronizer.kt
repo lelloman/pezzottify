@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -53,6 +54,13 @@ internal class StaticsSynchronizer @Inject constructor(
         val loadingCount = fetchStateStore.getLoadingItemsCount()
         logger.debug("shouldContinueWhenNoItems() loadingCount=$loadingCount")
         return loadingCount > 0
+    }
+
+    override suspend fun idleWakeUpDelay(): Duration? {
+        // Errored items are skipped by getIdle() until their backoff expires. Without a
+        // timed wake-up the loop would sleep past it and the item would never be retried.
+        val nextRetryTime = fetchStateStore.getNextRetryTime() ?: return null
+        return (nextRetryTime - timeProvider.nowUtcMs()).milliseconds.coerceAtLeast(MIN_SLEEP_DURATION)
     }
 
     override suspend fun processBatch(items: List<StaticItemFetchState>) {

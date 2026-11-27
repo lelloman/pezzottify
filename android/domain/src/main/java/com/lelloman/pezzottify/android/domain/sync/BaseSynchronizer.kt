@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -71,6 +72,14 @@ abstract class BaseSynchronizer<T>(
     protected open suspend fun shouldContinueWhenNoItems(): Boolean = false
 
     /**
+     * Returns how long the loop may sleep when idle before it must check again, or null
+     * to sleep until [wakeUp]. Override when items become processable on their own at a
+     * known time (e.g. a retry backoff expiring), so they are not left waiting for an
+     * unrelated wake-up.
+     */
+    protected open suspend fun idleWakeUpDelay(): Duration? = null
+
+    /**
      * Hook called once before the main loop starts.
      * Override to perform initialization tasks like resetting state.
      */
@@ -106,9 +115,16 @@ abstract class BaseSynchronizer<T>(
             logger.debug("mainLoop() got ${itemsToProcess.size} items to process")
 
             if (itemsToProcess.isEmpty() && !shouldContinueWhenNoItems()) {
-                logger.info("mainLoop() going to sleep")
-                wakeUpSignal.await()
-                wakeUpSignal = CompletableDeferred()
+                val idleDelay = idleWakeUpDelay()
+                if (idleDelay == null) {
+                    logger.info("mainLoop() going to sleep")
+                    wakeUpSignal.await()
+                } else {
+                    logger.info("mainLoop() going to sleep for at most $idleDelay")
+                    withTimeoutOrNull(idleDelay) { wakeUpSignal.await() }
+                }
+                // Keep a pending signal if the timeout fired first, so a wakeUp() is never lost.
+                if (wakeUpSignal.isCompleted) wakeUpSignal = CompletableDeferred()
                 sleepDuration = minSleepDuration
                 continue
             }
