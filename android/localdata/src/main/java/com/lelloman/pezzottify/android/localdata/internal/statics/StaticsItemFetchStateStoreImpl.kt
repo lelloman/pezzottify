@@ -34,6 +34,8 @@ internal class StaticsItemFetchStateStoreImpl(
 
     override suspend fun getLoadingItemsCount(): Int = dao.getLoadingItemsCount()
 
+    override suspend fun getNextRetryTime(): Long? = dao.getNextRetryTime()
+
     override suspend fun delete(itemId: String): Result<Unit> {
         val result = dao.delete(itemId)
         return if (result == 1) Result.success(Unit) else Result.failure(Exception("Could not delete record"))

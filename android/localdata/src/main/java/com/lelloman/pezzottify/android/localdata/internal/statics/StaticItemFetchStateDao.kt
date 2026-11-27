@@ -30,6 +30,10 @@ internal interface StaticItemFetchStateDao {
     suspend fun getAllIdle(currentTime: Long): List<StaticItemFetchStateRecord>
 
     @Suppress("MaxLineLength")
+    @Query("SELECT MIN(${StaticItemFetchStateRecord.COLUMN_TRY_NEXT_TIME}) FROM ${StaticItemFetchStateRecord.TABLE_NAME} WHERE ${StaticItemFetchStateRecord.COLUMN_LOADING} = 0")
+    suspend fun getNextRetryTime(): Long?
+
+    @Suppress("MaxLineLength")
     @Query("DELETE FROM ${StaticItemFetchStateRecord.TABLE_NAME} WHERE ${StaticItemFetchStateRecord.COLUMN_ITEM_ID} = :itemId")
     fun delete(itemId: String): Int
 }

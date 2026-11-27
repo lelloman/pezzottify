@@ -81,6 +81,7 @@ class StaticsSynchronizerTest {
         // Default behavior: no items to fetch, no loading items
         coEvery { fetchStateStore.getIdle() } returns emptyList()
         coEvery { fetchStateStore.getLoadingItemsCount() } returns 0
+        coEvery { fetchStateStore.getNextRetryTime() } returns null
         coEvery { fetchStateStore.resetLoadingStates() } returns Result.success(Unit)
         coEvery { fetchStateStore.store(any()) } returns Result.success(Unit)
         coEvery { fetchStateStore.delete(any()) } returns Result.success(Unit)
@@ -175,6 +176,59 @@ class StaticsSynchronizerTest {
 
         // Should have called getIdle again after waking up
         assertThat(callCount).isEqualTo(2)
+    }
+
+    @Test
+    fun `idle loop wakes up when the earliest retry backoff expires`() = runTest {
+        val trackId = "track-retry"
+        val retryAt = currentTime + 300_000L
+        var idleCalls = 0
+        var retried = false
+        coEvery { fetchStateStore.getIdle() } answers {
+            idleCalls++
+            if (currentTime >= retryAt && !retried) {
+                retried = true
+                listOf(createIdleFetchState(trackId, StaticItemType.Track))
+            } else {
+                emptyList()
+            }
+        }
+        coEvery { fetchStateStore.getNextRetryTime() } answers { if (retried) null else retryAt }
+        coEvery { remoteApiClient.getBatchContent(any()) } returns RemoteApiResponse.Error.Network
+
+        synchronizer = createSynchronizer()
+        synchronizer.initialize()
+        advanceTimeBy(299_000)
+        assertThat(idleCalls).isEqualTo(1)
+        coVerify(exactly = 0) { remoteApiClient.getBatchContent(any()) }
+
+        currentTime = retryAt
+        advanceTimeBy(2_000)
+
+        coVerify(exactly = 1) {
+            remoteApiClient.getBatchContent(match { request -> request.tracks.map { it.id } == listOf(trackId) })
+        }
+    }
+
+    @Test
+    fun `wakeUp still interrupts a timed idle sleep`() = runTest {
+        var idleCalls = 0
+        coEvery { fetchStateStore.getIdle() } answers {
+            idleCalls++
+            emptyList()
+        }
+        // Only the first sleep is timed; afterwards nothing is scheduled, so the loop can go idle.
+        coEvery { fetchStateStore.getNextRetryTime() } returnsMany listOf(currentTime + 300_000L, null)
+
+        synchronizer = createSynchronizer()
+        synchronizer.initialize()
+        advanceTimeBy(1_000)
+        assertThat(idleCalls).isEqualTo(1)
+
+        synchronizer.wakeUp()
+        advanceTimeBy(1_000)
+
+        assertThat(idleCalls).isEqualTo(2)
     }
 
     @Test

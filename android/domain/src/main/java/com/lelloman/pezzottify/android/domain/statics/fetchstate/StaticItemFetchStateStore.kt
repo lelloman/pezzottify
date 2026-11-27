@@ -14,5 +14,8 @@ interface StaticItemFetchStateStore {
 
     suspend fun getLoadingItemsCount(): Int
 
+    /** Earliest scheduled retry time among non-loading items, or null if none is scheduled. */
+    suspend fun getNextRetryTime(): Long?
+
     suspend fun delete(itemId: String): Result<Unit>
 }
