@@ -674,6 +674,27 @@ class StaticsSynchronizerTest {
     // ========== API Dispatch Tests ==========
 
     @Test
+    fun `batch requests stay within the server item limit`() = runTest {
+        // 189 due items, as seen on a device after a server outage: the server rejects
+        // a request with more than 100 artists, albums and tracks combined.
+        val items = (0 until 120).map { createIdleFetchState("track-$it", StaticItemType.Track) } +
+            (0 until 69).map { createIdleFetchState("album-$it", StaticItemType.Album) }
+        val requests = mutableListOf<BatchContentRequest>()
+
+        coEvery { fetchStateStore.getIdle() } returnsMany listOf(items, emptyList())
+        coEvery { remoteApiClient.getBatchContent(capture(requests)) } returns RemoteApiResponse.Error.Network
+
+        synchronizer = createSynchronizer()
+        synchronizer.initialize()
+        advanceUntilIdle()
+
+        val sizes = requests.map { it.artists.size + it.albums.size + it.tracks.size }
+        assertThat(sizes).containsExactly(100, 89).inOrder()
+        val requestedIds = requests.flatMap { r -> (r.artists + r.albums + r.tracks).map { it.id } }
+        assertThat(requestedIds).containsExactlyElementsIn(items.map { it.itemId })
+    }
+
+    @Test
     fun `Artist Album Track items use batch API`() = runTest {
         val artistId = "dispatch-artist"
         val albumId = "dispatch-album"

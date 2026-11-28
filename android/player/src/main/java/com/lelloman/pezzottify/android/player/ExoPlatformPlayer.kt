@@ -347,6 +347,7 @@ internal class ExoPlatformPlayer(
         mutableControllerState.value = MediaControllerState.CONNECTING
         diagnostics.record("connect_begin", mediaController)
         val controllerFuture = MediaController.Builder(context, token)
+            .setConnectionHints(StopPolicy.appControllerHints())
             .setListener(controllerListener).buildAsync()
         controllerFuture.addListener(
             {
@@ -461,6 +462,7 @@ internal class ExoPlatformPlayer(
 
         diagnostics.record("reconnect_begin", mediaController)
         val controllerFuture = MediaController.Builder(context, token)
+            .setConnectionHints(StopPolicy.appControllerHints())
             .setListener(controllerListener).buildAsync()
         controllerFuture.addListener(
             {

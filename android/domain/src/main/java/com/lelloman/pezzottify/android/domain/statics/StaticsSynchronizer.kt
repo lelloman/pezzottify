@@ -78,9 +78,10 @@ internal class StaticsSynchronizer @Inject constructor(
             fetchStateStore.store(loadingState)
         }
 
-        // Process batchable items via batch endpoint
-        if (batchableItems.isNotEmpty()) {
-            processBatchableItems(batchableItems, attemptTime)
+        // Process batchable items via batch endpoint, within the server's per-request limit:
+        // an oversized request is rejected whole, and its items would keep failing together.
+        batchableItems.chunked(MAX_BATCH_ITEMS).forEach { chunk ->
+            processBatchableItems(chunk, attemptTime)
         }
 
         // Process discography items individually (they require pagination)
@@ -331,6 +332,9 @@ internal class StaticsSynchronizer @Inject constructor(
         const val RETRY_DELAY_NOT_FOUND_ERROR_MS = 3_600_000L // 1 hour for 404/not found
         const val RETRY_DELAY_UNKNOWN_ERROR_MS = 300_000L // 5 minutes for unknown errors
         const val RETRY_DELAY_CLIENT_ERROR_MS = 300_000L // 5 minutes for client errors
+
+        // The server's BATCH_MAX_ITEMS: artists, albums and tracks count together.
+        const val MAX_BATCH_ITEMS = 100
 
         // Pagination constants
         const val DISCOGRAPHY_PAGE_SIZE = 50

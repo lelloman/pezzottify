@@ -20,6 +20,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionResult
 import coil3.ImageLoader
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
@@ -106,12 +107,12 @@ class PlaybackService : MediaSessionService() {
 
     private val sessionCallback = object : MediaSession.Callback {
         override fun onPostConnect(session: MediaSession, controller: MediaSession.ControllerInfo) {
-            diagnostics.record("session_controller_connected caller=${controller.packageName}", player)
+            diagnostics.record("session_controller_connected ${describe(session, controller)}", player)
             super.onPostConnect(session, controller)
         }
 
         override fun onDisconnected(session: MediaSession, controller: MediaSession.ControllerInfo) {
-            diagnostics.record("session_controller_disconnected caller=${controller.packageName}", player)
+            diagnostics.record("session_controller_disconnected ${describe(session, controller)}", player)
             super.onDisconnected(session, controller)
         }
 
@@ -124,10 +125,24 @@ class PlaybackService : MediaSessionService() {
             if (playerCommand == Player.COMMAND_STOP ||
                 playerCommand == Player.COMMAND_PLAY_PAUSE ||
                 playerCommand == Player.COMMAND_PREPARE) {
-                diagnostics.record("controller_command command=$playerCommand caller=${controller.packageName}", player)
+                diagnostics.record("controller_command command=$playerCommand ${describe(session, controller)}", player)
+            }
+            if (StopPolicy.stopBecomesPause(playerCommand, isAppController(controller))) {
+                diagnostics.record("stop_as_pause ${describe(session, controller)}", player)
+                session.player.pause()
+                return SessionResult.RESULT_ERROR_NOT_SUPPORTED
             }
             return super.onPlayerCommandRequest(session, controller, playerCommand)
         }
+
+        private fun isAppController(controller: MediaSession.ControllerInfo) =
+            StopPolicy.isAppController(controller.packageName, packageName, controller.connectionHints)
+
+        @OptIn(UnstableApi::class)
+        private fun describe(session: MediaSession, controller: MediaSession.ControllerInfo) =
+            "caller=${controller.packageName} uid=${controller.uid} version=${controller.controllerVersion}" +
+                " app=${isAppController(controller)} notification=${session.isMediaNotificationController(controller)}" +
+                " trusted=${controller.isTrusted}"
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
